@@ -1,0 +1,17 @@
+[package]
+name = "proksi"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1.80"
+bollard = "0.16.1"
+bollard-stubs = "=1.44.0-rc.2"
+bytes = "1.6.0"
+http = "1.1.0"
+pingora = "0.1.1"
+pingora-http = "0.1.1"
+pingora-load-balancing = "0.1.1"
+pingora-pool = "0.1.1"
+pingora-proxy = "0.1.1"
+serde = "1.0.200"

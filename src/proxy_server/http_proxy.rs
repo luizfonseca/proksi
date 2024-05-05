@@ -1,0 +1,101 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use http::{
+    header::{CONTENT_LENGTH, CONTENT_TYPE, LOCATION},
+    uri::Scheme,
+    StatusCode, Uri,
+};
+use pingora::upstreams::peer::HttpPeer;
+use pingora_http::ResponseHeader;
+use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
+use pingora_proxy::{ProxyHttp, Session};
+
+pub struct HttpLB(pub Arc<LoadBalancer<RoundRobin>>);
+
+#[async_trait]
+impl ProxyHttp for HttpLB {
+    type CTX = ();
+
+    fn new_ctx(&self) -> Self::CTX {
+        ()
+    }
+
+    /// Filters based on path (used by LetsEncrypt/ZeroSSL challenges)
+    async fn request_filter(
+        &self,
+        session: &mut Session,
+        _ctx: &mut Self::CTX,
+    ) -> pingora::Result<bool> {
+        // LetsEncrypt/ZeroSSL challenge
+        let req_header = session.req_header();
+        let current_uri = req_header.uri.clone();
+
+        if current_uri
+            .path()
+            .starts_with("/.well-known/acme-challenge")
+        {
+            let sample_body = bytes::Bytes::from_static(b"OK");
+            let mut res_headers = ResponseHeader::build_no_case(StatusCode::OK, Some(2))?;
+            res_headers.append_header(CONTENT_TYPE, "text/plain")?;
+            res_headers.append_header(CONTENT_LENGTH, sample_body.len())?;
+
+            session.write_response_header(Box::new(res_headers)).await?;
+            session.write_response_body(sample_body).await?;
+
+            return Ok(true);
+        }
+
+        let host = get_host(session);
+
+        // Redirect to https
+        let new_uri = Uri::builder()
+            .scheme(Scheme::HTTPS)
+            .authority(host)
+            .path_and_query(current_uri.path_and_query().unwrap().to_owned())
+            .build()
+            .unwrap();
+
+        let mut res_headers =
+            ResponseHeader::build_no_case(StatusCode::PERMANENT_REDIRECT, Some(1))?;
+
+        println!("redirecting to https {new_uri:?}");
+        res_headers.append_header(LOCATION, new_uri.to_string())?;
+        res_headers.append_header(CONTENT_TYPE, "text/plain")?;
+        res_headers.append_header(CONTENT_LENGTH, 0)?;
+
+        session.write_response_header(Box::new(res_headers)).await?;
+        session
+            .write_response_body(bytes::Bytes::from_static(b""))
+            .await?;
+
+        return Ok(true);
+    }
+
+    /// In the case of port 80, we won't have an upstream to choose from.
+    /// We will use request filters to handle LetsEncrypt/ZeroSSL challenges.
+    ///
+    async fn upstream_peer(
+        &self,
+        _session: &mut Session,
+        _ctx: &mut Self::CTX,
+    ) -> pingora::Result<Box<HttpPeer>> {
+        Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)))
+    }
+}
+
+/// Retrieves the host from the request headers based on whether
+/// the request is HTTP/1.1 or HTTP/2
+fn get_host(session: &mut Session) -> String {
+    if let Some(host) = session.get_header(http::header::HOST) {
+        if let Ok(host_str) = host.to_str() {
+            return host_str.to_string();
+        }
+    }
+
+    if let Some(host) = session.req_header().uri.host() {
+        return host.to_string();
+    }
+
+    "".to_string()
+}
