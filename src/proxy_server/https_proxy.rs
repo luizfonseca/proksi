@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use pingora::{
+    listeners::TlsSettings,
     upstreams::peer::{HttpPeer, PeerOptions},
     ErrorType::HTTPStatus,
 };

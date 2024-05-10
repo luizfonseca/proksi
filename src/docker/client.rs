@@ -20,8 +20,8 @@ impl DockerClient {
         let mut default_filters = HashMap::new();
         default_filters.insert("label", vec!["proksi.host", "proksi.port"]);
 
+        println!("Docker running");
         loop {
-            println!("Docker running");
             self.list_containers(default_filters.clone()).await;
 
             sleep(Duration::from_secs(5));
@@ -41,7 +41,6 @@ impl DockerClient {
             .await;
 
         if services.is_err() {
-            println!("Error listing services");
             return;
         }
 

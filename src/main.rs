@@ -1,13 +1,75 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use ::pingora::{server::Server, services::background::background_service};
+use instant_acme::KeyAuthorization;
+use pingora::listeners::TlsSettings;
 use pingora_load_balancing::{health_check::TcpHealthCheck, LoadBalancer};
 use pingora_proxy::http_proxy_service;
 
 mod docker;
 mod proxy_server;
+mod services;
+mod tools;
+
+#[derive(Debug)]
+pub struct Storage {
+    orders: HashMap<String, (String, String, KeyAuthorization)>,
+    certificates: HashMap<String, String>,
+}
+
+pub type StorageArc = Arc<tokio::sync::Mutex<Storage>>;
+
+impl Storage {
+    pub fn new() -> Self {
+        Storage {
+            orders: HashMap::new(),
+            certificates: HashMap::new(),
+        }
+    }
+
+    pub fn add_order(
+        &mut self,
+        identifier: String,
+        token: String,
+        url: String,
+        key_auth: KeyAuthorization,
+    ) {
+        self.orders.insert(identifier, (token, url, key_auth));
+    }
+
+    pub fn add_certificate(&mut self, host: String, certificate: String) {
+        self.certificates.insert(host, certificate);
+    }
+
+    pub fn get_certificate(&self, host: &str) -> Option<&String> {
+        self.certificates.get(host)
+    }
+
+    pub fn get_orders(&self) -> &HashMap<String, (String, String, KeyAuthorization)> {
+        &self.orders
+    }
+
+    pub fn get_order(&self, order: &str) -> Option<&(String, String, KeyAuthorization)> {
+        self.orders.get(order)
+    }
+}
 
 fn main() {
+    let storage = Arc::new(tokio::sync::Mutex::new(Storage::new()));
+
+    let test_hosts = vec![
+        "grafana.test.unwraper.com".to_string(),
+        "prometheus.test.unwraper.com".to_string(),
+        "otel.test.unwrapper.com".to_string(),
+        "personal.test.unwrapper.com".to_string(),
+    ];
+
+    let certificate_store = proxy_server::cert_store::CertStore::new(storage.clone());
+
+    // Setup tls settings
+    let mut tls_settings = TlsSettings::with_callbacks(certificate_store).unwrap();
+    tls_settings.enable_h2();
+
     let mut pingora_server = Server::new(None).unwrap();
 
     let mut router = proxy_server::https_proxy::Router::new();
@@ -26,7 +88,20 @@ fn main() {
     let client = docker::client::create_client();
     let docker_service = background_service("docker", client);
 
-    router.add_route("grafana.dev.localhost".into(), upstreams);
+    let letsencrypt_http = services::http_letsencrypt::HttpLetsencrypt::new(
+        &test_hosts,
+        "contact@vigio.net",
+        storage.clone(),
+    );
+
+    let le_service = background_service("letsencrypt", letsencrypt_http);
+    //     test_hosts.iter().map(|h| h.to_string()).collect(),
+    //     "
+
+    for host in test_hosts {
+        router.add_route(host, upstreams.clone())
+    }
+    // router.add_route("grafana.dev.localhost".into(), upstreams);
 
     // Service: Load Balancer
     let mut http_service = http_proxy_service(
@@ -35,19 +110,14 @@ fn main() {
     );
     let mut https_service = http_proxy_service(&pingora_server.configuration, router);
     http_service.add_tcp("0.0.0.0:80");
-    // https_service.add_tcp("0.0.0.0:443");
-    https_service
-        .add_tls(
-            "0.0.0.0:443",
-            "../test-certs/localhost.crt",
-            "../test-certs/localhost.key",
-        )
-        .unwrap();
+
+    https_service.add_tls_with_settings("0.0.0.0:443", None, tls_settings);
 
     pingora_server.add_service(http_service);
     pingora_server.add_service(https_service);
     pingora_server.add_service(health_check_background_service);
     pingora_server.add_service(docker_service);
+    pingora_server.add_service(le_service);
 
     pingora_server.bootstrap();
     pingora_server.run_forever();

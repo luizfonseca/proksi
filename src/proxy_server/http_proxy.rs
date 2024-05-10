@@ -1,6 +1,11 @@
-use std::sync::Arc;
+use std::{
+    fs::{create_dir_all, read_dir, File},
+    io::Read,
+    sync::Arc,
+};
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use http::{
     header::{CONTENT_LENGTH, CONTENT_TYPE, LOCATION},
     uri::Scheme,
@@ -31,11 +36,45 @@ impl ProxyHttp for HttpLB {
         let req_header = session.req_header();
         let current_uri = req_header.uri.clone();
 
+        let host = get_host(session);
+        if host.is_empty() {
+            return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(400)));
+        }
+
         if current_uri
             .path()
             .starts_with("/.well-known/acme-challenge")
         {
-            let sample_body = bytes::Bytes::from_static(b"OK");
+            let challenge_path = format!("./data/challenges/{}", &host);
+            let folder = std::path::Path::new(&challenge_path);
+            if !folder.is_dir() {
+                // Challenge doesn't exist on disk
+                return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));
+            }
+
+            // open challenge
+            let mut challenge_data = String::from("");
+            let challenge = File::open(format!("{}/meta.csv", challenge_path));
+            if let Ok(mut challenge) = challenge {
+                challenge.read_to_string(&mut challenge_data).unwrap();
+            }
+
+            // Nothing to read;
+            if challenge_data.is_empty() {
+                return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));
+            }
+
+            let token_from_file = challenge_data.split(';').collect::<Vec<&str>>();
+            let token_from_url = current_uri.path().split('/').last().unwrap();
+
+            // Weird token being provided
+            if token_from_file[token_from_file.len() - 1] != token_from_url {
+                return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));
+            }
+
+            let key_auth = token_from_file[1];
+
+            let sample_body = bytes::Bytes::from(key_auth.to_string());
             let mut res_headers = ResponseHeader::build_no_case(StatusCode::OK, Some(2))?;
             res_headers.append_header(CONTENT_TYPE, "text/plain")?;
             res_headers.append_header(CONTENT_LENGTH, sample_body.len())?;
@@ -45,8 +84,6 @@ impl ProxyHttp for HttpLB {
 
             return Ok(true);
         }
-
-        let host = get_host(session);
 
         // Redirect to https
         let new_uri = Uri::builder()
