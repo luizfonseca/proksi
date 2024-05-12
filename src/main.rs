@@ -6,6 +6,7 @@ use pingora::listeners::TlsSettings;
 use pingora_load_balancing::{health_check::TcpHealthCheck, LoadBalancer};
 use pingora_proxy::http_proxy_service;
 
+mod config;
 mod docker;
 mod proxy_server;
 mod services;
@@ -54,7 +55,15 @@ impl Storage {
     }
 }
 
+fn create_tracing_subscriber() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init()
+}
+
 fn main() {
+    create_tracing_subscriber();
+
     let storage = Arc::new(tokio::sync::Mutex::new(Storage::new()));
 
     let test_hosts = vec![
@@ -69,6 +78,9 @@ fn main() {
     // Setup tls settings
     let mut tls_settings = TlsSettings::with_callbacks(certificate_store).unwrap();
     tls_settings.enable_h2();
+    tls_settings
+        .set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))
+        .unwrap();
 
     let mut pingora_server = Server::new(None).unwrap();
 
@@ -90,13 +102,11 @@ fn main() {
 
     let letsencrypt_http = services::http_letsencrypt::HttpLetsencrypt::new(
         &test_hosts,
-        "contact@vigio.net",
+        "youremail@example.com",
         storage.clone(),
     );
 
     let le_service = background_service("letsencrypt", letsencrypt_http);
-    //     test_hosts.iter().map(|h| h.to_string()).collect(),
-    //     "
 
     for host in test_hosts {
         router.add_route(host, upstreams.clone())

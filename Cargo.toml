@@ -10,13 +10,16 @@ bollard-stubs = "=1.44.0-rc.2"
 bytes = "1.6.0"
 http = "1.1.0"
 instant-acme = "0.4.3"
-pingora = "0.1.1"
-pingora-boringssl = "0.1.1"
-pingora-http = "0.1.1"
-pingora-load-balancing = { version = "0.1.1", features = ["boringssl"] }
-pingora-pool = "0.1.1"
-pingora-proxy = { version = "0.1.1", features = ["boringssl"] }
-rcgen = "0.13.1"
+pingora = "0.2.0"
+pingora-boringssl = "0.2.0"
+pingora-http = "0.2.0"
+pingora-load-balancing = { version = "0.2.0", features = ["boringssl"] }
+# pingora-openssl = "0.1.1"
+pingora-pool = "0.2.0"
+pingora-proxy = { version = "0.2.0", features = ["boringssl"] }
+rcgen = { version = "0.13.1", features = ["x509-parser"] }
 serde = "1.0.200"
 serde_json = "1.0.117"
 tokio = { version = "1.37.0", features = ["rt-multi-thread"] }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"

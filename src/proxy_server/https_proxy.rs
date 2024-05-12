@@ -1,13 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use pingora::{
-    listeners::TlsSettings,
-    upstreams::peer::{HttpPeer, PeerOptions},
-    ErrorType::HTTPStatus,
-};
+use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
 use pingora_proxy::{ProxyHttp, Session};
+use tracing::info;
 
 type ArcedLB = Arc<LoadBalancer<RoundRobin>>;
 /// Load balancer proxy struct
@@ -28,6 +25,7 @@ impl Router {
 }
 
 pub struct RouterContext {
+    pub host: String,
     pub current_lb: Option<ArcedLB>,
 }
 
@@ -38,7 +36,10 @@ impl ProxyHttp for Router {
 
     /// Define how the `ctx` should be created.
     fn new_ctx(&self) -> Self::CTX {
-        RouterContext { current_lb: None }
+        RouterContext {
+            host: String::new(),
+            current_lb: None,
+        }
     }
 
     // Define the filter that will be executed before the request is sent to the upstream.
@@ -58,7 +59,8 @@ impl ProxyHttp for Router {
             return Err(pingora::Error::new(HTTPStatus(404)));
         }
 
-        ctx.current_lb = upstream_lb.cloned();
+        ctx.host = host_without_port;
+        ctx.current_lb = Some(upstream_lb.unwrap().clone());
         Ok(false)
     }
 
@@ -68,7 +70,7 @@ impl ProxyHttp for Router {
     /// where and how this request should forwarded to."]
     async fn upstream_peer(
         &self,
-        session: &mut Session,
+        _session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
         let upstream = ctx.current_lb.as_ref();
@@ -84,15 +86,10 @@ impl ProxyHttp for Router {
             return Err(pingora::Error::new(HTTPStatus(503)));
         }
 
-        println!("upstream is {healthy_upstream:?}");
+        info!(host = ctx.host, "Upstream selected");
 
-        let mut peer_ops = PeerOptions::new();
-
-        // Prefer HTTP/2.0 if available
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
-        peer_ops.set_http_version(0, 0);
-        let mut peer = HttpPeer::new(healthy_upstream.unwrap(), false, "localhost".to_string());
-        peer.options = peer_ops;
+        let peer = HttpPeer::new(healthy_upstream.unwrap(), false, ctx.host.clone());
         Ok(Box::new(peer))
     }
 }

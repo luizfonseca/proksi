@@ -8,9 +8,35 @@ use std::{
 use async_trait::async_trait;
 use instant_acme::{AccountCredentials, ChallengeType, LetsEncrypt, Order};
 use pingora::{server::ShutdownWatch, services::background::BackgroundService};
+use rcgen::KeyPair;
+use serde::{Deserialize, Serialize};
+use tracing::{info, instrument};
 
 use crate::StorageArc;
 
+#[derive(Serialize, Deserialize)]
+struct HostCertificate {
+    host: String,
+    cert: String,
+    key: String,
+    expires_at: i64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct HostChallenge {
+    host: String,
+    url: String,
+    token: String,
+    key_auth: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct HostOrder {
+    host: String,
+    url: String,
+}
+
+#[derive(Debug)]
 pub struct HttpLetsencrypt {
     challenge_type: ChallengeType,
     url: String,
@@ -134,6 +160,8 @@ impl HttpLetsencrypt {
                 _ => return Err(()),
             }
 
+            println!("Creating challenges for {:?}", authz.identifier);
+
             let instant_acme::Identifier::Dns(identifier) = &authz.identifier;
             let challenge = authz
                 .challenges
@@ -175,8 +203,9 @@ impl HttpLetsencrypt {
 
 #[async_trait]
 impl BackgroundService for HttpLetsencrypt {
+    #[instrument]
     async fn start(&self, _shutdown: ShutdownWatch) -> () {
-        println!("renew ssl certificates");
+        info!(service = "LetsEncrypt", "Background service started");
 
         // create required folders if they don't exist yet
         create_dir_all(self.challenges_path()).unwrap();
@@ -190,13 +219,13 @@ impl BackgroundService for HttpLetsencrypt {
             let file = std::fs::File::open(format!("./data/challenges/{}/meta.csv", host));
 
             if file.is_ok() {
-                println!("Already found {} in the list of challenges", host);
+                info!("Already found {} in the list of challenges", host);
                 excluded_hosts.push(host.clone());
             }
         }
 
         if excluded_hosts.len() == self.hosts.len() {
-            println!("All hosts have a challenge file");
+            info!("All hosts have a challenge file");
             return;
         }
 
@@ -206,7 +235,7 @@ impl BackgroundService for HttpLetsencrypt {
             .await;
 
         if order.is_err() {
-            println!("No order to check");
+            info!("No order to check");
             return;
         }
 
@@ -221,7 +250,7 @@ impl BackgroundService for HttpLetsencrypt {
         let lkd = self.cert_store.lock().await;
 
         if lkd.get_orders().is_empty() {
-            println!("No orders to check");
+            info!("No orders to check");
             return;
         }
 
@@ -246,11 +275,11 @@ impl BackgroundService for HttpLetsencrypt {
 
         while order.state().status != instant_acme::OrderStatus::Ready {
             if current_retry >= max_retries {
-                println!("Max retries reached");
+                info!("Max retries reached");
                 return;
             }
 
-            println!(
+            info!(
                 "Waiting for order to be ready, attempt #{}...",
                 current_retry
             );
@@ -268,9 +297,15 @@ impl BackgroundService for HttpLetsencrypt {
             .filter(|host| !excluded_hosts.contains(host))
             .collect::<Vec<String>>();
 
-        let csr = rcgen::generate_simple_self_signed(non_excluded_hosts).unwrap();
+        info!("Generating certificates for {:?}", non_excluded_hosts);
 
-        let status = order.finalize(csr.cert.der()).await;
+        let kp = KeyPair::generate().unwrap();
+
+        let mut cert_params = rcgen::CertificateParams::new(non_excluded_hosts.clone()).unwrap();
+        cert_params.distinguished_name = rcgen::DistinguishedName::new();
+        let csr = cert_params.serialize_request(&kp).unwrap();
+
+        let status = order.finalize(csr.der()).await;
         if status.is_err() {
             println!("Failed to finalize order: {:?}", status.err().unwrap());
             return;
@@ -280,15 +315,15 @@ impl BackgroundService for HttpLetsencrypt {
         let cert_chain = loop {
             match order.certificate().await {
                 Ok(Some(cert)) => {
-                    println!("Cert ready");
+                    info!("Cert ready");
                     break cert;
                 }
                 Ok(None) => {
-                    println!("Cert not ready yet, waiting 5 seconds...");
+                    info!("Cert not ready yet, waiting 5 seconds...");
                     sleep(Duration::from_secs(5));
                 }
                 Err(e) => {
-                    println!("Error downloading cert: {:?}", e);
+                    info!("Error downloading cert: {:?}", e);
                     return;
                 }
             }
@@ -296,20 +331,20 @@ impl BackgroundService for HttpLetsencrypt {
 
         // for each host, write the certificate to disk
 
-        for host in self.hosts.iter() {
+        for host in non_excluded_hosts.iter() {
+            //create folder for the certificate
+            create_dir_all(format!("{}/{}", self.certificates_path(), host)).unwrap();
             let mut crt_file =
-                File::create(format!("{}/{}.crt", self.certificates_path(), host)).unwrap();
+                File::create(format!("{}/{}/cert.pem", self.certificates_path(), host)).unwrap();
             let mut key_file =
-                File::create(format!("{}/{}.key", self.certificates_path(), host)).unwrap();
+                File::create(format!("{}/{}/key.pem", self.certificates_path(), host)).unwrap();
 
             crt_file.write_all(cert_chain.as_bytes()).unwrap();
-            key_file
-                .write_all(csr.key_pair.serialize_pem().as_bytes())
-                .unwrap();
+            key_file.write_all(kp.serialize_pem().as_bytes()).unwrap();
             crt_file.flush().unwrap();
             key_file.flush().unwrap();
 
-            println!("Certificate written to disk for {}", host);
+            info!("Certificate written to disk for {}", host);
         }
 
         // write certificate to disk
