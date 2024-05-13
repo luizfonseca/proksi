@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/luizfonseca/proksi/compare/v0.1.0...v0.1.1) (2024-05-13)
+
+
+### Bug Fixes
+
+* **goreleaser:** attempt on fixing the broken build process ([4e4c989](https://github.com/luizfonseca/proksi/commit/4e4c989f4407f15ec91cd178b8355db29655fa61))
+
 ## 0.1.0 (2024-05-13)
 
 
