@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/luizfonseca/proksi/compare/v0.1.1...v0.1.2) (2024-05-13)
+
+
+### Bug Fixes
+
+* **ghactions:** warning on release ([df7e726](https://github.com/luizfonseca/proksi/commit/df7e726be1c7a41e7ed1f0d48ad4f000914b5b32))
+
 ## [0.1.1](https://github.com/luizfonseca/proksi/compare/v0.1.0...v0.1.1) (2024-05-13)
 
 
