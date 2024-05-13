@@ -3,6 +3,46 @@
 
 Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in Rust and uses Pingora as its core networking library.
 
+## Usage
+
+### Docker
+
+Similar to other proxies, Proksi can be run as a Docker container. The following command will run Proksi in a Docker container:
+
+```bash
+docker run -d -p 80:80 -p 443:443 -v /path/to/config:/etc/proksi/config.yaml luizfonseca/proksi
+```
+
+### Binary
+
+You can also run Proksi as a standalone binary. First, you need to build the binary:
+
+```bash
+cargo build --release
+```
+
+Then you can run the binary in your platform:
+
+```bash
+./target/release/proksi
+```
+
+## Running Proksi
+
+### Docker Labels
+
+Proksi can be used in conjunction with Docker to automatically discover services and route traffic to them. To do this, you need to add labels to your Docker containers. The following labels are supported:
+
+- `proksi.enabled`: Whether the service should be proxied or not. By default, Proksi won't discover any services where the value is `false`.
+- `proksi.host`: The hostname that the service should be available at. E.g. `example.com`.
+- `proksi.path_prefix`: The path that the service should be available at. E.g. `/api`.
+- `proksi.path.suffix`: The suffix that the service will use to handle requests. E.g. `.json`.
+- `proksi.headers.add`: An object containing headers to add to the request. Each header should have a `name` and a `value`. E.g. `[{name="X-Forwarded-For", value="my-api"}, {name="X-Api-Version", value="1.0"}]`.
+- `proksi.headers.remove`: A list of comma-separated headers to remove from the request at the end of proxying. E.g. `Server,X-User-Id`.
+- `proksi.port`: The port that the current service is running on.
+
+
+
 ## Jobs to be done
 
 - [x] Automatic Redirect to HTTPS
