@@ -3,6 +3,15 @@ name = "proksi"
 version = "0.1.0"
 edition = "2021"
 
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+strip = "symbols"  # Automatically strip symbols from the binary.
+lto = true  # Enable link-time optimization.
+debug = false
+
 [dependencies]
 async-trait = "0.1.80"
 bollard = "0.16.1"
