@@ -16,7 +16,7 @@ pub struct DockerClient {
 }
 
 impl DockerClient {
-    pub async fn start_service(&self) -> () {
+    pub async fn start_service(&self) {
         let mut default_filters = HashMap::new();
         default_filters.insert("label", vec!["proksi.host", "proksi.port"]);
 
@@ -28,7 +28,7 @@ impl DockerClient {
         }
     }
 
-    async fn list_containers<T>(&self, filters: HashMap<T, Vec<T>>) -> ()
+    async fn list_containers<T>(&self, filters: HashMap<T, Vec<T>>)
     where
         T: Into<String> + Hash + serde::ser::Serialize + Eq,
     {

@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use ::pingora::{server::Server, services::background::background_service};
+use config::load_proxy_config;
 use instant_acme::KeyAuthorization;
 use pingora::listeners::TlsSettings;
 use pingora_load_balancing::{health_check::TcpHealthCheck, LoadBalancer};
@@ -55,6 +56,12 @@ impl Storage {
     }
 }
 
+impl Default for Storage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn create_tracing_subscriber() {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -63,6 +70,8 @@ fn create_tracing_subscriber() {
 
 fn main() {
     create_tracing_subscriber();
+
+    let _proxy_config = load_proxy_config("/etc/proksi/configs");
 
     let storage = Arc::new(tokio::sync::Mutex::new(Storage::new()));
 

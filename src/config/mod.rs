@@ -81,10 +81,10 @@ pub struct ConfigRoute {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum LogLevel {
-    DEBUG,
-    INFO,
-    WARN,
-    ERROR,
+    Debug,
+    Info,
+    Warn,
+    Error,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -160,7 +160,7 @@ impl Default for Config {
             service_name: "proksi".to_string(),
             routes: vec![],
             logging: Some(ConfigLogging {
-                level: LogLevel::INFO,
+                level: LogLevel::Info,
                 access_logs: true,
                 error_logs: false,
             }),
@@ -174,20 +174,20 @@ impl Default for Config {
     }
 }
 
-impl Config {
-    // Allow the configuration to be extracted from any `Provider`.
-    fn from<T: figment::Provider>(provider: T) -> Result<Config, figment::Error> {
-        Figment::from(provider).extract()
-    }
+// impl Config {
+//     // Allow the configuration to be extracted from any `Provider`.
+//     fn from<T: figment::Provider>(provider: T) -> Result<Config, figment::Error> {
+//         Figment::from(provider).extract()
+//     }
 
-    // Provide a default provider, a `Figment`.
-    fn figment() -> Figment {
-        use figment::providers::Env;
+//     // Provide a default provider, a `Figment`.
+//     fn figment() -> Figment {
+//         use figment::providers::Env;
 
-        // In reality, whatever the library desires.
-        Figment::from(Config::default()).merge(Env::prefixed("APP_"))
-    }
-}
+//         // In reality, whatever the library desires.
+//         Figment::from(Config::default()).merge(Env::prefixed("APP_"))
+//     }
+// }
 
 /// Implement the `Provider` trait for the `Config` struct.
 /// This allows the `Config` struct to be used as a configuration provider with *defaults*.
@@ -224,11 +224,11 @@ where
     D: Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
-    match s.to_uppercase().as_str() {
-        "DEBUG" => Ok(LogLevel::DEBUG),
-        "INFO" => Ok(LogLevel::INFO),
-        "WARN" => Ok(LogLevel::WARN),
-        "ERROR" => Ok(LogLevel::ERROR),
+    match s.to_lowercase().as_str() {
+        "debug" => Ok(LogLevel::Debug),
+        "info" => Ok(LogLevel::Info),
+        "warn" => Ok(LogLevel::Warn),
+        "error" => Ok(LogLevel::Error),
         _ => Err(serde::de::Error::custom(
             "expected one of DEBUG, INFO, WARN, ERROR",
         )),
@@ -304,7 +304,7 @@ mod tests {
 
             let proxy_config = config.unwrap();
             assert_eq!(proxy_config.service_name, "new_name");
-            assert_eq!(proxy_config.logging.unwrap().level, LogLevel::WARN);
+            assert_eq!(proxy_config.logging.unwrap().level, LogLevel::Warn);
             assert_eq!(proxy_config.routes[0].host, "changed.example.com");
             assert_eq!(proxy_config.routes[0].upstreams[0].ip, "10.0.1.2/24");
 
@@ -318,7 +318,7 @@ mod tests {
         let proxy_config = config.unwrap();
         let logging = proxy_config.logging.unwrap();
         assert_eq!(proxy_config.service_name, "proksi");
-        assert_eq!(logging.level, LogLevel::INFO);
+        assert_eq!(logging.level, LogLevel::Info);
         assert_eq!(logging.access_logs, true);
         assert_eq!(logging.error_logs, false);
         assert_eq!(proxy_config.routes.len(), 0);
@@ -346,7 +346,7 @@ mod tests {
             let paths = proxy_config.paths.unwrap();
 
             assert_eq!(proxy_config.service_name, "proksi");
-            assert_eq!(logging.level, LogLevel::INFO);
+            assert_eq!(logging.level, LogLevel::Info);
             assert_eq!(logging.access_logs, true);
             assert_eq!(logging.error_logs, false);
             assert_eq!(proxy_config.routes.len(), 1);

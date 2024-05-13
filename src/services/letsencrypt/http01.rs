@@ -46,17 +46,16 @@ pub struct HttpLetsencrypt {
 }
 
 impl HttpLetsencrypt {
-    pub fn new(hosts: &Vec<String>, contact: &str, cert_store: StorageArc) -> Self {
+    pub fn new(hosts: &[String], contact: &str, cert_store: StorageArc) -> Self {
         HttpLetsencrypt {
             challenge_type: ChallengeType::Http01,
             url: LetsEncrypt::Staging.url().to_string(),
             contact: contact.to_string(),
-            hosts: hosts.clone(),
+            hosts: hosts.to_vec(),
             cert_store,
         }
     }
 
-    ///
     async fn create_account(
         &self,
     ) -> Result<(instant_acme::Account, instant_acme::AccountCredentials), ()> {
@@ -103,7 +102,7 @@ impl HttpLetsencrypt {
             }
             Err(e) => {
                 println!("Failed to created account: {:?}", e);
-                return Err(());
+                Err(())
             }
         }
     }
@@ -255,7 +254,7 @@ impl BackgroundService for HttpLetsencrypt {
         }
 
         // write challenges to disk
-        for (key, value) in lkd.get_orders().into_iter() {
+        for (key, value) in lkd.get_orders().iter() {
             let (token, url, key_auth) = value;
             // Create a new folder for the challenge
             create_dir_all(format!("{}/{}", self.challenges_path(), key)).unwrap();
@@ -293,8 +292,8 @@ impl BackgroundService for HttpLetsencrypt {
         let non_excluded_hosts = self
             .hosts
             .iter()
+            .filter(|&host| !excluded_hosts.contains(host))
             .cloned()
-            .filter(|host| !excluded_hosts.contains(host))
             .collect::<Vec<String>>();
 
         info!("Generating certificates for {:?}", non_excluded_hosts);

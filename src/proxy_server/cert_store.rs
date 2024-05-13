@@ -1,35 +1,18 @@
 use async_trait::async_trait;
-use instant_acme::KeyAuthorization;
 use pingora::listeners::TlsAccept;
-use pingora_boringssl::{
-    pkey::{PKey, Private},
-    ssl::NameType,
-    x509::X509,
-};
+use pingora_boringssl::{pkey::PKey, ssl::NameType, x509::X509};
 use tracing::debug;
 
 use crate::StorageArc;
 
 /// Provides the correct certificates when performing the SSL handshake
-#[derive(Debug, Clone)]
-pub struct CertValue {
-    cert: pingora::tls::x509::X509,
-    key: PKey<Private>,
-}
-
-#[derive(Debug)]
-pub struct OrderPayload {
-    url: String,
-    key_auth: KeyAuthorization,
-}
-
 #[derive(Debug)]
 pub struct CertStore {
     /// The path to the directory containing the certificates
     // certs: HashMap<String, CertValue>,
     // orders: HashMap<String, OrderPayload>,
     //
-    storage: StorageArc,
+    pub storage: StorageArc,
 }
 
 impl CertStore {

@@ -1,6 +1,6 @@
 use tracing::info;
 
-pub fn access_log(_attrs: Option<u32>) -> () {
+pub fn _access_log(_attrs: Option<u32>) {
     info!(
         duration = "1ms",
         log = "access.log",

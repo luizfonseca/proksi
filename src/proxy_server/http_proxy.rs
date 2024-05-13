@@ -1,11 +1,6 @@
-use std::{
-    fs::{create_dir_all, read_dir, File},
-    io::Read,
-    sync::Arc,
-};
+use std::{fs::File, io::Read, sync::Arc};
 
 use async_trait::async_trait;
-use bytes::Bytes;
 use http::{
     header::{CONTENT_LENGTH, CONTENT_TYPE, LOCATION},
     uri::Scheme,
@@ -22,9 +17,7 @@ pub struct HttpLB(pub Arc<LoadBalancer<RoundRobin>>);
 impl ProxyHttp for HttpLB {
     type CTX = ();
 
-    fn new_ctx(&self) -> Self::CTX {
-        ()
-    }
+    fn new_ctx(&self) -> Self::CTX {}
 
     /// Filters based on path (used by LetsEncrypt/ZeroSSL challenges)
     async fn request_filter(
