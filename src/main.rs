@@ -100,7 +100,7 @@ fn main() {
     let client = docker::client::create_client();
     let docker_service = background_service("docker", client);
 
-    let letsencrypt_http = services::http_letsencrypt::HttpLetsencrypt::new(
+    let letsencrypt_http = services::letsencrypt::http01::HttpLetsencrypt::new(
         &test_hosts,
         "youremail@example.com",
         storage.clone(),
@@ -111,7 +111,6 @@ fn main() {
     for host in test_hosts {
         router.add_route(host, upstreams.clone())
     }
-    // router.add_route("grafana.dev.localhost".into(), upstreams);
 
     // Service: Load Balancer
     let mut http_service = http_proxy_service(

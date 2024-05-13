@@ -8,13 +8,13 @@ async-trait = "0.1.80"
 bollard = "0.16.1"
 bollard-stubs = "=1.44.0-rc.2"
 bytes = "1.6.0"
+figment = { version = "0.10.18", features = ["toml", "yaml", "env", "test"] }
 http = "1.1.0"
 instant-acme = "0.4.3"
 pingora = "0.2.0"
 pingora-boringssl = "0.2.0"
 pingora-http = "0.2.0"
 pingora-load-balancing = { version = "0.2.0", features = ["boringssl"] }
-# pingora-openssl = "0.1.1"
 pingora-pool = "0.2.0"
 pingora-proxy = { version = "0.2.0", features = ["boringssl"] }
 rcgen = { version = "0.13.1", features = ["x509-parser"] }
