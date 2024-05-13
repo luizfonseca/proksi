@@ -31,6 +31,11 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
+      - name: Setup Cross
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
+
       - name: Checkout
         if: ${{ steps.release.outputs.release_created }}
         uses: actions/checkout@v3

@@ -5,7 +5,8 @@ builds:
       - amd64
     binary: proksi
     hooks:
-      post: sh build-cross-release.sh
+      post:
+        - sh build-cross-release.sh
     targets:
       - linux_amd64_v1
       - darwin_amd64_v1
