@@ -9,6 +9,47 @@ builds:
     targets:
       - linux_amd64_v1
       - darwin_amd64_v1
+dockers:
+  - use: buildx
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "luizfonseca/{{ .ProjectName }}:{{ .Version }}-amd64"
+      - "luizfonseca/{{ .ProjectName }}:latest-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+
+  # - use: buildx
+  #   goos: linux
+  #   goarch: arm64
+  #   image_templates:
+  #     - "luizfonseca/{{ .ProjectName }}:{{ .Version }}-arm64"
+  #     - "luizfonseca/{{ .ProjectName }}:latest-arm64"
+  #   build_flag_templates:
+  #     - "--platform=linux/arm64"
+  #     - "--pull"
+  #     - "--label=org.opencontainers.image.created={{ .Date }}"
+  #     - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+  #     - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+  #     - "--label=org.opencontainers.image.version={{ .Version }}"
+
+
+docker_manifests:
+  - name_template: "luizfonseca/{{ .ProjectName }}:{{ .Version }}"
+    image_templates:
+      - "luizfonseca/{{ .ProjectName }}:{{ .Version }}-amd64"
+      # - "luizfonseca/{{ .ProjectName }}:{{ .Version }}-arm64"
+      # - "luizfonseca/{{ .ProjectName }}:{{ .Version }}-arm"
+  - name_template: "luizfonseca/{{ .ProjectName }}:latest"
+    image_templates:
+      - "luizfonseca/{{ .ProjectName }}:latest-amd64"
+      # - "luizfonseca/{{ .ProjectName }}:latest-arm64"
+      # - "luizfonseca/{{ .ProjectName }}:latest-arm"
 archives:
   - id: tar.gz
     format: tar.gz
