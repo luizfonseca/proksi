@@ -26,33 +26,33 @@ Proksi is designed to be a standalone proxy server that can be used out of the b
 The following features are included or will be included into Proksi without the need of 3rd party plugins:
 
 ### Proxy
-- [] Automatic SSL termination (using LetsEncrypt)
-- [] Automatic HTTP to HTTPS redirection
-- [] Docker Labeling Support (for services discovery)
-- [] Load Balancing (Round Robin, Weighted Round Robin, Least Connections)
-- [] Health Checks
-- [] Storage support for LetsEncrypt certificates (S3, Etcd, Consul, etc)
-- [] Controller <> server support (in order to share certificates)
+- [ ] Automatic SSL termination (using LetsEncrypt)
+- [ ] Automatic HTTP to HTTPS redirection
+- [ ] Docker Labeling Support (for services discovery)
+- [ ] Load Balancing (Round Robin, Weighted Round Robin, Least Connections)
+- [ ] Health Checks
+- [ ] Storage support for LetsEncrypt certificates (S3, Etcd, Consul, etc)
+- [ ] Controller <> server support (in order to share certificates)
 
 ### Middlewares/Plugins
-- [] **Geofence**
-- [] **IP range** blocking
-- [] **IP allowlists/denylists**
-- [] **Basic** Authentication
-- [] **Oauth2** Authentication (Google, Facebook, Github, etc)
-- [] **JWT** Authentication (and thus, passing information downstream)
-- [] **CORS** Middleware
-- [] **Rate Limiting** Middleware
-- [] **Rewrite** Middleware
-- [] **Redirect** Middleware
-- [] **Compression** Middleware
-- [] **Request/Response Logging** Middleware
-- [] **Request/Response Modification** Middleware
-- [] **Request/Response Caching** Middleware
-- [] **Request/Response Filtering** Middleware
-- [] **Request/Response Transformation** Middleware
-- [] **Request/Response Validation** Middleware
-- [] **RequestId** Middleware
+- [ ] **Geofence**
+- [ ] **IP range** blocking
+- [ ] **IP allowlists/denylists**
+- [ ] **Basic** Authentication
+- [ ] **Oauth2** Authentication (Google, Facebook, Github, etc)
+- [ ] **JWT** Authentication (and thus, passing information downstream)
+- [ ] **CORS** Middleware
+- [ ] **Rate Limiting** Middleware
+- [ ] **Rewrite** Middleware
+- [ ] **Redirect** Middleware
+- [ ] **Compression** Middleware
+- [ ] **Request/Response Logging** Middleware
+- [ ] **Request/Response Modification** Middleware
+- [ ] **Request/Response Caching** Middleware
+- [ ] **Request/Response Filtering** Middleware
+- [ ] **Request/Response Transformation** Middleware
+- [ ] **Request/Response Validation** Middleware
+- [ ] **RequestId** Middleware
 
 
 Note that as always, these are mostly opt-in and will be **disabled by default**.
