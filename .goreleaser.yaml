@@ -9,7 +9,6 @@ builds:
         - sh build-cross-release.sh
     targets:
       - linux_amd64_v1
-      - darwin_amd64_v1
 dockers:
   - use: buildx
     goos: linux
