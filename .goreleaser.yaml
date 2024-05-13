@@ -1,19 +1,18 @@
 project_name: proksi
 builds:
-  -
-    main: build.go
+  - main: build.go
     goarch:
       - amd64
     binary: proksi
     hooks:
       post: sh build-cross-release.sh
-archive:
-  replacements:
-    darwin: Darwin
-    linux: Linux
-    windows: Windows
-    386: i386
-    amd64: x86_64
+archives:
+  - id: tar.gz
+    format: tar.gz
+    name_template: '{{ .ProjectName }}_{{ .Os }}_{{ if eq .Arch "386" }}i386{{ else }}{{ .Arch }}{{ end }}'
+  - id: binary
+    format: binary
+    name_template: '{{ .ProjectName }}_{{ .Os }}_{{ if eq .Arch "386" }}i386{{ else }}{{ .Arch }}{{ end }}'
 checksum:
   name_template: 'checksums.txt'
 release:
