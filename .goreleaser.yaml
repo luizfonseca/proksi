@@ -6,13 +6,16 @@ builds:
     binary: proksi
     hooks:
       post: sh build-cross-release.sh
+    targets:
+      - linux_amd64_v1
+      - darwin_amd64_v1
 archives:
   - id: tar.gz
     format: tar.gz
-    name_template: '{{ .ProjectName }}_{{ .Os }}_{{ if eq .Arch "386" }}i386{{ else }}{{ .Arch }}{{ end }}'
+    name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}'
   - id: binary
     format: binary
-    name_template: '{{ .ProjectName }}_{{ .Os }}_{{ if eq .Arch "386" }}i386{{ else }}{{ .Arch }}{{ end }}'
+    name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}'
 checksum:
   name_template: 'checksums.txt'
 release:

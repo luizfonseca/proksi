@@ -1,9 +1,10 @@
-# rustup target add x86_64-apple-darwin
-# rustup target add x86_64-unknown-linux-gnu
-# rustup target add aarch64-apple-darwin
+cargo install cross --git https://github.com/cross-rs/cross
 
-docker run --rm -v `pwd`:/app rust:slim-buster sh -c 'cd /app rustup target x86_64-unknown-linux-gnu && cargo build --release --target=x86_64-unknown-linux-gnu --bin proksi'
-cargo build --release --target=aarch64-apple-darwin --bin proksi
+cross build --release --target=x86_64-unknown-linux-gnu
+cross build --release --target=x86_64-apple-darwin
 
-mkdir -p dist/darwin_amd64 && cp target/x86_64-apple-darwin/release/proksi dist/darwin_amd64
-mkdir -p dist/linux_amd64 && cp target/x86_64-unknown-linux-gnu/release/proksi dist/linux_amd64
+mkdir -p dist/proksi_darwin_amd64_v1
+mkdir -p dist/proksi_linux_amd64_v1
+
+cp target/x86_64-apple-darwin/release/proksi dist/proksi_darwin_amd64
+cp target/x86_64-unknown-linux-gnu/release/proksi dist/proksi_linux_amd64_v1
