@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    name: Release
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release
+        id: release
+        uses: google-github-actions/release-please-action@v4
+        with:
+          release-type: rust
+          package-name: proksi
+
+      - name: Setup Go
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/setup-go@v5
+
+      - name: Setup Rust
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Checkout
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ steps.release.outputs.tag_name }}
+
+      - name: Set up Docker Buildx
+        if: ${{ steps.release.outputs.release_created }}
+        uses: docker/setup-buildx-action@v2
+
+      - name: Set up QEMU
+        if: ${{ steps.release.outputs.release_created }}
+        uses: docker/setup-qemu-action@v2
+
+      - name: Login to Docker Hub
+        if: ${{ steps.release.outputs.release_created }}
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Go Release
+        if: ${{ steps.release.outputs.release_created }}
+        uses: goreleaser/goreleaser-action@v4
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release
+
+      - name: Replace The Relative Path In The README.md
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          sed -E 's#(\[[^]]*\])\(\.\/([^)]+)\)#\1(https://github.com/${{ github.repository }}/raw/${{ steps.release.outputs.tag_name }}/\2)#g' README.md > docker.README.md
+
+      - name: Update Docker Images Description
+        if: ${{ steps.release.outputs.release_created }}
+        uses: peter-evans/dockerhub-description@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: luizfonseca/proksi
+          short-description: LoadBalancer and HTTP Proxy with automatic SSL
+          readme-filepath: docker.README.md
+      # endregion Docker

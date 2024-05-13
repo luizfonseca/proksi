@@ -313,7 +313,6 @@ mod tests {
     }
 
     #[test]
-
     fn test_load_config_with_defaults_only() {
         let config = load_proxy_config("/tmp");
         let proxy_config = config.unwrap();
