@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use pingora::listeners::TlsAccept;
-use pingora_boringssl::{pkey::PKey, ssl::NameType, x509::X509};
+use pingora_openssl::{pkey::PKey, ssl::NameType, x509::X509};
 use tracing::debug;
 
 use crate::StorageArc;

@@ -8,11 +8,14 @@ edition = "2021"
 opt-level = 0
 
 [profile.release]
-strip = "symbols"  # Automatically strip symbols from the binary.
-lto = true  # Enable link-time optimization.
+opt-level = "z"
+strip = "symbols" # Automatically strip symbols from the binary.
+lto = true        # Enable link-time optimization.
 debug = false
+codegen-units = 4
 
 [dependencies]
+anyhow = "1.0.83"
 async-trait = "0.1.80"
 bollard = "0.16.1"
 bollard-stubs = "=1.44.0-rc.2"
@@ -21,11 +24,11 @@ figment = { version = "0.10.18", features = ["toml", "yaml", "env", "test"] }
 http = "1.1.0"
 instant-acme = "0.4.3"
 pingora = "0.2.0"
-pingora-boringssl = "0.2.0"
+pingora-openssl = "0.2.0"
 pingora-http = "0.2.0"
-pingora-load-balancing = { version = "0.2.0", features = ["boringssl"] }
+pingora-load-balancing = { version = "0.2.0" }
 pingora-pool = "0.2.0"
-pingora-proxy = { version = "0.2.0", features = ["boringssl"] }
+pingora-proxy = { version = "0.2.0" }
 rcgen = { version = "0.13.1", features = ["x509-parser"] }
 serde = "1.0.201"
 serde_json = "1.0.117"

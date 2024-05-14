@@ -1,9 +1,9 @@
-FROM rust:slim-buster
+FROM rust:slim-bullseye
 
 RUN set -eux; \
   export DEBIAN_FRONTEND=noninteractive; \
   apt update; \
-  apt install --yes --no-install-recommends openssl; \
+  apt install --yes --no-install-recommends openssl libc6; \
   apt clean autoclean; \
   apt autoremove --yes; \
   rm -rf /var/lib/{apt,dpkg,cache,log}/;
