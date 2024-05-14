@@ -1,5 +1,8 @@
 # Proksi: Automatic SSL, HTTP, and DNS Proxy
 
+![logo](./assets/crabbylogoproksi.png)
+
+
 > ⚠️ Important: this is still a work-in-progress project.
 > It does the basics but everything needs polishing and real production testing.
 > That said, suggestions, issues or PRs are encouraged.
