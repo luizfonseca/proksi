@@ -1,11 +1,30 @@
 # Proksi: Automatic SSL, HTTP, and DNS Proxy
 
-
 > ⚠️ Important: this is still a work-in-progress project.
 > It does the basics but everything needs polishing and real production testing.
 > That said, suggestions, issues or PRs are encouraged.
 
 Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in Rust and uses Pingora as its core networking library.
+
+
+- [Proksi: Automatic SSL, HTTP, and DNS Proxy](#proksi-automatic-ssl-http-and-dns-proxy)
+  - [Usage](#usage)
+    - [Docker](#docker)
+    - [Docker Swarm](#docker-swarm)
+    - [Binary](#binary)
+    - [Command line options](#command-line-options)
+  - [Running Proksi](#running-proksi)
+    - [Docker Labels](#docker-labels)
+  - [Jobs to be done](#jobs-to-be-done)
+  - [Batteries included](#batteries-included)
+    - [Proxy](#proxy)
+    - [Middlewares/Plugins](#middlewaresplugins)
+    - [Extending Proksi](#extending-proksi)
+  - [Configuration](#configuration)
+  - [Examples](#examples)
+  - [Performance \& Benchmarks](#performance--benchmarks)
+  - [Why build another proxy...?](#why-build-another-proxy)
+
 
 ## Usage
 
@@ -16,6 +35,33 @@ Similar to other proxies, Proksi can be run as a Docker container. The following
 ```bash
 docker run -d -p 80:80 -p 443:443 -v /path/to/config:/etc/proksi/config.yaml luizfonseca/proksi
 ```
+
+### Docker Swarm
+One of the main purposes of Proksi is to also enable automatic service discovery and routing. To do this, you can use Proksi in conjunction with Docker Swarm:
+
+```yaml
+# docker-compose.yml
+# This is an example of how to use Proksi with Docker Swarm
+# This will automatically discover services and route traffic to them
+# based on the labels defined in the service.
+
+version: '3.8'
+services:
+  proksi:
+    image: luizfonseca/proksi:latest
+    network:
+      - web # Any service in the same network will be able to communicate with Proksi
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /path/to/config:/etc/proksi/config.yaml
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+```
+
 
 ### Binary
 
