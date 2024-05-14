@@ -4,7 +4,6 @@ description = "A batteries-included reverse proxy with automatic HTTPS using Clo
 version = "0.1.2"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-license-file = "LICENSE"
 keywords = ["proxy", "https", "reverse-proxy", "load-balancer", "pingora"]
 categories = ["web-programming::http-server", "network-programming"]
 exclude = ["examples/", "dist/", "target/", "tests/"]
