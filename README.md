@@ -177,7 +177,7 @@ routes:
 ```
 
 ## Examples
-See (the examples folder)[./examples] to learn about how to use Proksi.
+See [the examples folder](./examples) to learn about how to use Proksi.
 
 
 ## Performance & Benchmarks
