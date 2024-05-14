@@ -81,3 +81,7 @@ jobs:
           short-description: LoadBalancer and HTTP Proxy with automatic SSL
           readme-filepath: docker.README.md
       # endregion Docker
+
+      - name: Publish updated version to crates.io
+        if: ${{ steps.release.outputs.release_created }}
+        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
