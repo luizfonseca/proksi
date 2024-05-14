@@ -32,6 +32,24 @@ Then you can run the binary in your platform:
 proksi -c config.yaml --service_name=proksi
 ```
 
+### Command line options
+Running `proksi --help` will provide you with the available options.
+
+```bash
+A batteries-included reverse proxy with automatic HTTPS using Cloudflare Pingora and Let's Encrypt.
+
+Usage: proksi [OPTIONS]
+
+Options:
+  -s, --service-name <SERVICE_NAME>  The name of the service (will appear as a log property) [default: proksi]
+      --level <LEVEL>                The level of logging to be used [default: info] [possible values: debug, info, warn, error]
+      --access-logs-enabled          Whether to log access logs (request, duration, headers etc)
+      --error-logs-enabled           Whether to log error logs (errors, panics, etc) from the rust runtime
+  -h, --help                         Print help
+  -V, --version                      Print version
+```
+
+
 ## Running Proksi
 
 ### Docker Labels
@@ -149,8 +167,8 @@ You can see below an excerpt of the configuration (generated from Cue). This is 
 service_name: "proksi"
 logging:
   level: "INFO"
-  access_logs: true
-  error_logs: false
+  access_logs_enabled: true
+  error_logs_enabled: false
 paths:
   tls_certificates: "/etc/proksi/certificates"
   tls_challenges: "/etc/proksi/challenges"
