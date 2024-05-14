@@ -1,8 +1,18 @@
 [package]
 name = "proksi"
+description = "A batteries-included reverse proxy with automatic HTTPS using Cloudflare Pingora and Let's Encrypt."
 version = "0.1.2"
 edition = "2021"
-
+license = "MIT OR Apache-2.0"
+license-file = "LICENSE"
+keywords = ["proxy", "https", "reverse-proxy", "load-balancer", "pingora"]
+categories = ["web-programming::http-server", "network-programming"]
+exclude = ["examples/", "dist/", "target/", "tests/"]
+authors = ["The Proksi Contributors <toaster.chicory-0b@icloud.com>"]
+rust-version = "1.78.0"
+readme = "README.md"
+homepage = "https://github.com/luizfonseca/proksi"
+repository = "https://github.com/luizfonseca/proksi"
 
 [profile.dev]
 opt-level = 0
