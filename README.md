@@ -1,6 +1,10 @@
 # Proksi: Automatic SSL, HTTP, and DNS Proxy
 
 
+> ⚠️ Important: this is still a work-in-progress project.
+> It does the basics but everything needs polishing and real production testing.
+> That said, suggestions, issues or PRs are encouraged.
+
 Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in Rust and uses Pingora as its core networking library.
 
 ## Usage
@@ -15,33 +19,64 @@ docker run -d -p 80:80 -p 443:443 -v /path/to/config:/etc/proksi/config.yaml lui
 
 ### Binary
 
-You can also run Proksi as a standalone binary. First, you need to build the binary:
+You can also run Proksi as a standalone binary using rust's `cargo`.
+First, you need to install the binary:
 
 ```bash
-cargo build --release
+cargo install proksi
 ```
 
 Then you can run the binary in your platform:
 
 ```bash
-./target/release/proksi
+proksi -c config.yaml --service_name=proksi
 ```
 
 ## Running Proksi
 
 ### Docker Labels
 
-Proksi can be used in conjunction with Docker to automatically discover services and route traffic to them. To do this, you need to add labels to your Docker containers. The following labels are supported:
+Proksi can be used in conjunction with Docker to automatically discover **services** and route traffic to them. To do this, you need to add labels to your Docker containers.
+The following labels are supported:
 
-- `proksi.enabled`: Whether the service should be proxied or not. By default, Proksi won't discover any services where the value is `false`.
-- `proksi.host`: The hostname that the service should be available at. E.g. `example.com`.
-- `proksi.path_prefix`: The path that the service should be available at. E.g. `/api`.
-- `proksi.path.suffix`: The suffix that the service will use to handle requests. E.g. `.json`.
-- `proksi.headers.add`: An object containing headers to add to the request. Each header should have a `name` and a `value`. E.g. `[{name="X-Forwarded-For", value="my-api"}, {name="X-Api-Version", value="1.0"}]`.
-- `proksi.headers.remove`: A list of comma-separated headers to remove from the request at the end of proxying. E.g. `Server,X-User-Id`.
-- `proksi.port`: The port that the current service is running on.
+```yaml
+# docker-compose.yml
+version: 3.8
+services:
+  my_service:
+    image: your-service:latest
+    ports:
+      - "3000:3000"
+    deploy:
+      labels:
+        # Whether the service should be proxied or not.
+        # By default, Proksi won't discover any services where the value is not explicitly `true`
+        proksi.enable: "true"
 
+        # The hostname that the service should be available at. E.g. `example.com`.
+        proksi.host: "example.com"
 
+        # The port that your service is running on. E.g. `3000`.
+        proksi.port: "3000"
+
+        # (Optional) The path prefix that the service should be available at.
+        # E.g. `/api` will match only requests with "example.com/api*" to this service.
+        proksi.path.prefix: "/api"
+
+        # (Optional) The suffix that the service will use to handle requests.
+        # E.g. `.json` will match only requests with "example.com/*.json"
+        proksi.path.suffix: ".json"
+
+        # (Optional) A dictionary of Headers to add to the response at the end of proxying
+        proksi.headers.add: |
+          [
+            {name="X-Forwarded-For", value="my-api"},
+            {name="X-Api-Version", value="1.0\"}
+          ]
+
+        # A list of comma-separated headers to remove from the response at the end of proxying.
+        proksi.headers.remove: "Server,X-User-Id"
+```
 
 ## Jobs to be done
 
@@ -150,3 +185,13 @@ See (the examples folder)[./examples] to learn about how to use Proksi.
 TBA.
 
 It's based on [Pingora](https://github.com/cloudflare/pingora), so it should be fast if cloudflare is using it.
+
+
+## Why build another proxy...?
+
+Many reasons, but the main one is that I wanted to learn more about how proxies work, and I wanted to build something that I could use in my own projects. I also wanted to build something that was easy to use and configure, and that could be extended with custom plugins AND offered out-of-the-box
+things that other projects needed the community to make.
+
+Also, Rust is a very good use case for proxies (lower CPU usage, lower memory usage etc) and Cloudflare Pingora is basically a mold that you can create things with.
+
+This project will be used in my personal experiments and I welcome you to explore and contribute as you wish.
