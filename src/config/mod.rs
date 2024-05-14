@@ -1,5 +1,6 @@
+use clap::{Args, Parser, ValueEnum};
 use figment::{
-    providers::{Env, Format, Toml, Yaml},
+    providers::{Env, Format, Serialized, Toml, Yaml},
     Figment, Provider,
 };
 use serde::{Deserialize, Deserializer, Serialize};
@@ -15,6 +16,17 @@ pub struct ConfigPath {
     pub tls_order: String,
     /// Path to the account credentials file for let's encrypt
     pub tls_account_credentials: String,
+}
+
+impl Default for ConfigPath {
+    fn default() -> Self {
+        Self {
+            tls_certificates: "/etc/proksi/tls/certificates".to_string(),
+            tls_challenges: "/etc/proksi/tls/challenges".to_string(),
+            tls_order: "/etc/proksi/tls/orders".to_string(),
+            tls_account_credentials: "/etc/proksi/tls/account".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -79,7 +91,7 @@ pub struct ConfigRoute {
     pub upstreams: Vec<ConfigRouteUpstream>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ValueEnum)]
 pub enum LogLevel {
     Debug,
     Info,
@@ -87,17 +99,21 @@ pub enum LogLevel {
     Error,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Args)]
+#[group(id = "logging", requires = "level")]
 pub struct ConfigLogging {
     /// The level of logging to be used.
     #[serde(deserialize_with = "log_level_deser")]
+    #[arg(long, required = false, value_enum, default_value = "info")]
     pub level: LogLevel,
 
-    /// Whether to log access logs (request, duration, headers etc)
-    pub access_logs: bool,
+    /// Whether to log access logs (request, duration, headers etc).
+    #[arg(long, required = false, value_parser, default_value = "true")]
+    pub access_logs_enabled: bool,
 
-    /// Whether to log error logs (errors, panics, etc) from the rust runtime
-    pub error_logs: bool,
+    /// Whether to log error logs (errors, panics, etc) from the Rust runtime.
+    #[arg(long, required = false, value_parser, default_value = "false")]
+    pub error_logs_enabled: bool,
 }
 
 /// The main configuration struct.
@@ -110,8 +126,8 @@ pub struct ConfigLogging {
 /// service_name: "proksi"
 /// logging:
 ///   level: "INFO"
-///   access_logs: true
-///   error_logs: false
+///   access_logs_enabled: true
+///   error_logs_enabled: false
 /// paths:
 ///   config_file: "/etc/proksi/config.toml"
 ///   tls_certificates: "/etc/proksi/certificates"
@@ -138,20 +154,29 @@ pub struct ConfigLogging {
 ///         network: "shared"
 /// ```
 ///
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Parser)]
+#[command(name = "Proksi")]
+#[command(version, about, long_about = None)]
 pub(crate) struct Config {
     /// The name of the service (will appear as a log property)
     #[serde(default)]
+    #[clap(short, long, default_value = "proksi")]
     pub service_name: String,
 
     /// General config
-    pub logging: Option<ConfigLogging>,
+    #[command(flatten)]
+    pub logging: ConfigLogging,
 
     /// Configuration for paths (TLS, config file, etc.)
-    pub paths: Option<ConfigPath>,
+    #[clap(skip)]
+    pub paths: ConfigPath,
 
     /// The routes to be proxied to.
+    #[clap(skip)]
     pub routes: Vec<ConfigRoute>,
+    // Listeners -- a list of specific listeners and upstrems
+    // that don't necessarily need to be HTTP/HTTPS related
+    // pub listeners: Vec<ConfigListener>,
 }
 
 impl Default for Config {
@@ -159,17 +184,12 @@ impl Default for Config {
         Config {
             service_name: "proksi".to_string(),
             routes: vec![],
-            logging: Some(ConfigLogging {
+            logging: ConfigLogging {
                 level: LogLevel::Info,
-                access_logs: true,
-                error_logs: false,
-            }),
-            paths: Some(ConfigPath {
-                tls_certificates: "/etc/proksi/tls/certificates".to_string(),
-                tls_challenges: "/etc/proksi/tls/challenges".to_string(),
-                tls_order: "/etc/proksi/tls/orders".to_string(),
-                tls_account_credentials: "/etc/proksi/tls/account".to_string(),
-            }),
+                access_logs_enabled: true,
+                error_logs_enabled: false,
+            },
+            paths: ConfigPath::default(),
         }
     }
 }
@@ -211,6 +231,7 @@ impl Provider for Config {
 pub fn load_proxy_config(config_path: &str) -> Result<Config, figment::Error> {
     let config: Config = Figment::new()
         .merge(Config::default())
+        .merge(Serialized::defaults(Config::parse()))
         .merge(Yaml::file(format!("{}/proksi-config.yaml", config_path)))
         .merge(Toml::file(format!("{}/proksi-config.toml", config_path)))
         .merge(Env::prefixed("PROKSI_").split("__"))
@@ -244,8 +265,8 @@ mod tests {
         service_name: "proksi"
         logging:
           level: "INFO"
-          access_logs: true
-          error_logs: false
+          access_logs_enabled: true
+          error_logs_enabled: false
 
         routes:
           - host: "example.com"
@@ -304,7 +325,7 @@ mod tests {
 
             let proxy_config = config.unwrap();
             assert_eq!(proxy_config.service_name, "new_name");
-            assert_eq!(proxy_config.logging.unwrap().level, LogLevel::Warn);
+            assert_eq!(proxy_config.logging.level, LogLevel::Warn);
             assert_eq!(proxy_config.routes[0].host, "changed.example.com");
             assert_eq!(proxy_config.routes[0].upstreams[0].ip, "10.0.1.2/24");
 
@@ -316,11 +337,11 @@ mod tests {
     fn test_load_config_with_defaults_only() {
         let config = load_proxy_config("/tmp");
         let proxy_config = config.unwrap();
-        let logging = proxy_config.logging.unwrap();
+        let logging = proxy_config.logging;
         assert_eq!(proxy_config.service_name, "proksi");
         assert_eq!(logging.level, LogLevel::Info);
-        assert_eq!(logging.access_logs, true);
-        assert_eq!(logging.error_logs, false);
+        assert_eq!(logging.access_logs_enabled, true);
+        assert_eq!(logging.error_logs_enabled, false);
         assert_eq!(proxy_config.routes.len(), 0);
     }
 
@@ -342,13 +363,13 @@ mod tests {
 
             let config = load_proxy_config(&tmp_dir);
             let proxy_config = config.unwrap();
-            let logging = proxy_config.logging.unwrap();
-            let paths = proxy_config.paths.unwrap();
+            let logging = proxy_config.logging;
+            let paths = proxy_config.paths;
 
             assert_eq!(proxy_config.service_name, "proksi");
             assert_eq!(logging.level, LogLevel::Info);
-            assert_eq!(logging.access_logs, true);
-            assert_eq!(logging.error_logs, false);
+            assert_eq!(logging.access_logs_enabled, true);
+            assert_eq!(logging.error_logs_enabled, false);
             assert_eq!(proxy_config.routes.len(), 1);
 
             assert_eq!(paths.tls_account_credentials, "/etc/proksi/tls/account");
