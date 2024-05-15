@@ -4,6 +4,7 @@ use figment::{
     Figment, Provider,
 };
 use serde::{Deserialize, Deserializer, Serialize};
+use tracing::level_filters::LevelFilter;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigPath {
@@ -97,6 +98,19 @@ pub enum LogLevel {
     Info,
     Warn,
     Error,
+}
+
+/// Transforms our custom LogLevel enum into a `tracing::level_filters::LevelFilter`
+/// enum used by the `tracing` crate.
+impl From<&LogLevel> for tracing::level_filters::LevelFilter {
+    fn from(val: &LogLevel) -> Self {
+        match val {
+            LogLevel::Debug => LevelFilter::DEBUG,
+            LogLevel::Info => LevelFilter::INFO,
+            LogLevel::Warn => LevelFilter::WARN,
+            LogLevel::Error => LevelFilter::ERROR,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Args)]
@@ -240,9 +254,9 @@ pub fn load_proxy_config(fallback: &str) -> Result<Config, figment::Error> {
     let parsed_commands = Config::parse();
 
     let path_with_fallback = if parsed_commands.config_path.is_empty() {
-        fallback.to_string()
+        fallback
     } else {
-        parsed_commands.config_path.clone()
+        parsed_commands.config_path.as_str()
     };
 
     let config: Config = Figment::new()

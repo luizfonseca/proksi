@@ -2,8 +2,8 @@ service_name = "proksi"
 
 [logging]
 level = "INFO"
-access_logs = true
-error_logs = false
+access_logs_enabled = true
+error_logs_enabled = false
 
 [paths]
 tls_certificates = "/etc/proksi/certificates"
@@ -26,12 +26,12 @@ value = "1.0"
 [[routes.headers.remove]]
 name = "Server"
 
-  [[routes.upstreams]]
-  ip = "10.1.2.24/24"
-  port = 3_000
-  network = "public"
+[[routes.upstreams]]
+ip = "10.1.2.24/24"
+port = 3_000
+network = "public"
 
-  [[routes.upstreams]]
-  ip = "10.1.2.23/24"
-  port = 3_000
-  network = "shared"
+[[routes.upstreams]]
+ip = "10.1.2.23/24"
+port = 3_000
+network = "shared"
