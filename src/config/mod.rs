@@ -163,6 +163,13 @@ pub(crate) struct Config {
     #[clap(short, long, default_value = "proksi")]
     pub service_name: String,
 
+    /// The PATH to the configuration file to be used. The configuration file
+    /// should be named either `proksi.toml`, `proksi.yaml` or `proksi.yml`
+    /// and be present in that path.
+    #[serde(skip)]
+    #[clap(short, long, default_value = "./")]
+    pub config_path: String,
+
     /// General config
     #[command(flatten)]
     pub logging: ConfigLogging,
@@ -182,6 +189,7 @@ pub(crate) struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
+            config_path: "/etc/proksi/config".to_string(),
             service_name: "proksi".to_string(),
             routes: vec![],
             logging: ConfigLogging {
@@ -219,7 +227,7 @@ impl Provider for Config {
     fn data(
         &self,
     ) -> Result<figment::value::Map<figment::Profile, figment::value::Dict>, figment::Error> {
-        figment::providers::Serialized::defaults(Config::default()).data()
+        Serialized::defaults(Config::default()).data()
     }
 }
 
@@ -228,12 +236,20 @@ impl Provider for Config {
 ///
 /// Nested keys can be separated by double underscores (__) in the environment variables.
 /// E.g. `PROKSI__LOGGING__LEVEL=DEBUG` will set the `level` key in the `logging` key in the `proksi` key.
-pub fn load_proxy_config(config_path: &str) -> Result<Config, figment::Error> {
+pub fn load_proxy_config(fallback: &str) -> Result<Config, figment::Error> {
+    let parsed_commands = Config::parse();
+
+    let path_with_fallback = if parsed_commands.config_path.is_empty() {
+        fallback.to_string()
+    } else {
+        parsed_commands.config_path.clone()
+    };
+
     let config: Config = Figment::new()
         .merge(Config::default())
-        .merge(Serialized::defaults(Config::parse()))
-        .merge(Yaml::file(format!("{}/proksi-config.yaml", config_path)))
-        .merge(Toml::file(format!("{}/proksi-config.toml", config_path)))
+        .merge(Serialized::defaults(&parsed_commands))
+        .merge(Yaml::file(format!("{}/proksi.yaml", path_with_fallback)))
+        .merge(Toml::file(format!("{}/proksi.toml", path_with_fallback)))
         .merge(Env::prefixed("PROKSI_").split("__"))
         .extract()?;
 
@@ -291,10 +307,7 @@ mod tests {
         figment::Jail::expect_with(|jail| {
             let tmp_dir = jail.directory().to_string_lossy();
 
-            jail.create_file(
-                format!("{}/proksi-config.yaml", tmp_dir),
-                helper_config_file(),
-            )?;
+            jail.create_file(format!("{}/proksi.yaml", tmp_dir), helper_config_file())?;
 
             let config = load_proxy_config(&tmp_dir);
             let proxy_config = config.unwrap();
@@ -308,7 +321,7 @@ mod tests {
     fn test_load_config_from_yaml_and_env_vars() {
         figment::Jail::expect_with(|jail| {
             jail.create_file(
-                format!("{}/proksi-config.yaml", jail.directory().to_str().unwrap()),
+                format!("{}/proksi.yaml", jail.directory().to_str().unwrap()),
                 helper_config_file(),
             )?;
             jail.set_env("PROKSI_SERVICE_NAME", "new_name");
@@ -335,14 +348,22 @@ mod tests {
 
     #[test]
     fn test_load_config_with_defaults_only() {
-        let config = load_proxy_config("/tmp");
-        let proxy_config = config.unwrap();
-        let logging = proxy_config.logging;
-        assert_eq!(proxy_config.service_name, "proksi");
-        assert_eq!(logging.level, LogLevel::Info);
-        assert_eq!(logging.access_logs_enabled, true);
-        assert_eq!(logging.error_logs_enabled, false);
-        assert_eq!(proxy_config.routes.len(), 0);
+        figment::Jail::expect_with(|_| {
+            let config = load_proxy_config("/non-existent");
+            let proxy_config = config.unwrap();
+
+            let logging = proxy_config.logging;
+            assert_eq!(proxy_config.service_name, "proksi");
+            assert_eq!(logging.level, LogLevel::Info);
+            assert_eq!(logging.access_logs_enabled, true);
+            assert_eq!(logging.error_logs_enabled, false);
+
+            print!("{:?}", proxy_config.routes);
+
+            assert_eq!(proxy_config.routes.len(), 0);
+
+            Ok(())
+        })
     }
 
     #[test]
@@ -351,7 +372,7 @@ mod tests {
             let tmp_dir = jail.directory().to_string_lossy();
 
             jail.create_file(
-                format!("{}/proksi-config.yaml", tmp_dir),
+                format!("{}/proksi.yaml", tmp_dir),
                 r#"
                 routes:
                   - host: "example.com"
