@@ -1,10 +1,47 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+    time::Duration,
+};
 
 use async_trait::async_trait;
-use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
+use pingora::{
+    protocols::ALPN,
+    upstreams::peer::{HttpPeer, PeerOptions, TcpKeepalive},
+    ErrorType::HTTPStatus,
+};
+use pingora_http::ResponseHeader;
 use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
 use pingora_proxy::{ProxyHttp, Session};
 use tracing::info;
+
+/// Default peer options to be used on every upstream connection
+pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
+    verify_hostname: true,
+    read_timeout: Some(Duration::from_secs(30)),
+    connection_timeout: Some(Duration::from_secs(30)),
+    tcp_recv_buf: Some(4096),
+    tcp_keepalive: Some(TcpKeepalive {
+        count: 5,
+        interval: Duration::from_secs(10),
+        idle: Duration::from_secs(60),
+    }),
+    bind_to: None,
+    total_connection_timeout: None,
+    idle_timeout: None,
+    write_timeout: None,
+    verify_cert: false,
+    alternative_cn: None,
+    alpn: ALPN::H2H1,
+    ca: None,
+    no_header_eos: false,
+    h2_ping_interval: None,
+    max_h2_streams: 5,
+    extra_proxy_headers: BTreeMap::new(),
+    curves: None,
+    second_keyshare: true, // default true and noop when not using PQ curves
+    tracer: None,
+};
 
 type ArcedLB = Arc<LoadBalancer<RoundRobin>>;
 /// Load balancer proxy struct
@@ -19,13 +56,19 @@ impl Router {
         }
     }
 
+    /// Adds a new route using a hostname and a LoadBalancer instance wrapped in an `Arc`
     pub fn add_route(&mut self, route: String, upstream: ArcedLB) {
         self.routes.insert(route, upstream);
+    }
+
+    /// Returns all registered routes hosts
+    pub fn get_route_keys(&self) -> Vec<String> {
+        self.routes.keys().cloned().collect()
     }
 }
 
 pub struct RouterContext {
-    pub host: String,
+    pub host: Option<String>,
     pub current_lb: Option<ArcedLB>,
 }
 
@@ -37,7 +80,7 @@ impl ProxyHttp for Router {
     /// Define how the `ctx` should be created.
     fn new_ctx(&self) -> Self::CTX {
         RouterContext {
-            host: String::new(),
+            host: None,
             current_lb: None,
         }
     }
@@ -59,7 +102,7 @@ impl ProxyHttp for Router {
             return Err(pingora::Error::new(HTTPStatus(404)));
         }
 
-        ctx.host = host_without_port;
+        ctx.host = Some(host_without_port);
         ctx.current_lb = Some(upstream_lb.unwrap().clone());
         Ok(false)
     }
@@ -89,23 +132,34 @@ impl ProxyHttp for Router {
         info!(host = ctx.host, "Upstream selected");
 
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
-        let peer = HttpPeer::new(healthy_upstream.unwrap(), false, ctx.host.clone());
+        let host = ctx.host.clone().unwrap();
+        let mut peer = HttpPeer::new(healthy_upstream.unwrap(), false, host);
+        peer.options = DEFAULT_PEER_OPTIONS;
         Ok(Box::new(peer))
+    }
+
+    async fn response_filter(
+        &self,
+        _session: &mut Session,
+        _upstream_response: &mut ResponseHeader,
+        _ctx: &mut Self::CTX,
+    ) -> pingora::Result<()> {
+        // Add custom headers to the response
+
+        Ok(())
     }
 }
 
-/// Retrieves the host from the request headers based on whether
-/// the request is HTTP/1.1 or HTTP/2
-fn get_host(session: &mut Session) -> String {
+/// Retrieves the host from the request headers based on
+/// whether the request is HTTP/1.1 or HTTP/2
+fn get_host(session: &mut Session) -> &str {
     if let Some(host) = session.get_header(http::header::HOST) {
-        if let Ok(host_str) = host.to_str() {
-            return host_str.to_string();
-        }
+        return host.to_str().unwrap_or("");
     }
 
     if let Some(host) = session.req_header().uri.host() {
-        return host.to_string();
+        return host;
     }
 
-    "".to_string()
+    ""
 }
