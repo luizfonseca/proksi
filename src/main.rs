@@ -62,70 +62,81 @@ impl Default for Storage {
     }
 }
 
-fn create_tracing_subscriber() {
+fn init_tracing_subscriber(config: &config::Config) {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(&config.logging.level)
         .init()
 }
 
-fn main() {
-    create_tracing_subscriber();
+fn main() -> Result<(), anyhow::Error> {
+    // Loads configuration from command-line, YAML or TOML sources
+    let proxy_config = load_proxy_config("/etc/proksi/configs")?;
 
-    let _proxy_config = load_proxy_config("/etc/proksi/configs");
+    // Creates a tracing/logging subscriber based on the configuration provided
+    init_tracing_subscriber(&proxy_config);
+
+    // Pingora load balancer server
+    let mut pingora_server = Server::new(None).unwrap();
+
+    // Request router:
+    // Given a host header, the router will return the corresponding upstreams
+    // The router will also handle health checks and failover in case of upstream failure
+    let mut router = proxy_server::https_proxy::Router::new();
+
+    // for each route, build a loadbalancer configuration with the corresponding upstreams
+    for route in proxy_config.routes {
+        // Construct host:port SocketAddr strings for each upstream
+        let addr_upstreams = route
+            .upstreams
+            .iter()
+            .map(|upstr| format!("{}:{}", upstr.ip, upstr.port));
+
+        let mut upstreams = LoadBalancer::try_from_iter(addr_upstreams)?;
+
+        let tcp_health_check = TcpHealthCheck::new();
+        upstreams.set_health_check(tcp_health_check);
+
+        let health_check_service = background_service(&route.host, upstreams);
+
+        let upstreams = health_check_service.task();
+
+        router.add_route(route.host, upstreams);
+
+        pingora_server.add_service(health_check_service);
+    }
 
     let storage = Arc::new(tokio::sync::Mutex::new(Storage::new()));
 
-    let test_hosts = vec![
-        "grafana.test.unwraper.com".to_string(),
-        "prometheus.test.unwraper.com".to_string(),
-        "otel.test.unwrapper.com".to_string(),
-        "personal.test.unwrapper.com".to_string(),
-    ];
-
     let certificate_store = proxy_server::cert_store::CertStore::new(storage.clone());
 
-    // Setup tls settings
+    // Setup tls settings and Enable HTTP/2
     let mut tls_settings = TlsSettings::with_callbacks(certificate_store).unwrap();
     tls_settings.enable_h2();
-    tls_settings
-        .set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))
-        .unwrap();
-
-    let mut pingora_server = Server::new(None).unwrap();
-
-    let mut router = proxy_server::https_proxy::Router::new();
-
-    let mut upstreams = LoadBalancer::try_from_iter(["127.0.0.1:3000", "127.0.0.1:8200"]).unwrap();
-    let insecure_upstreams = LoadBalancer::try_from_iter(["0.0.0.0:80"]).unwrap();
-    // Services
-    // Service: Health check
-    let hc = TcpHealthCheck::new();
-    upstreams.set_health_check(hc);
-    let health_check_background_service = background_service("health_check", upstreams);
-    // Override
-    let upstreams = health_check_background_service.task();
+    tls_settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
 
     // Service: Docker
     let client = docker::client::create_client();
     let docker_service = background_service("docker", client);
 
+    // Service: Lets Encrypt HTTP Challenge/Certificate renewal
     let letsencrypt_http = services::letsencrypt::http01::HttpLetsencrypt::new(
-        &test_hosts,
+        &router.get_route_keys(),
         "youremail@example.com",
         storage.clone(),
     );
-
     let le_service = background_service("letsencrypt", letsencrypt_http);
 
-    for host in test_hosts {
-        router.add_route(host, upstreams.clone())
-    }
-
-    // Service: Load Balancer
+    // Service: HTTP Load Balancer (only used by acme-challenges)
+    // As we don't necessarily need an upstream to handle the acme-challenges,
+    // we can use a simple mock LoadBalancer
     let mut http_service = http_proxy_service(
         &pingora_server.configuration,
-        proxy_server::http_proxy::HttpLB(Arc::new(insecure_upstreams)),
+        proxy_server::http_proxy::HttpLB(Arc::new(
+            LoadBalancer::try_from_iter(["127.0.0.1:80"]).unwrap(),
+        )),
     );
+
+    // Service: HTTPS Load Balancer (main service)
     let mut https_service = http_proxy_service(&pingora_server.configuration, router);
     http_service.add_tcp("0.0.0.0:80");
 
@@ -133,7 +144,6 @@ fn main() {
 
     pingora_server.add_service(http_service);
     pingora_server.add_service(https_service);
-    pingora_server.add_service(health_check_background_service);
     pingora_server.add_service(docker_service);
     pingora_server.add_service(le_service);
 
