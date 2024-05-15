@@ -209,11 +209,14 @@ If you have any ideas for new features or plugins, that could benefit the projec
 
 ## Configuration
 
+
+### YAML/TOML Configuration
 You can see below an excerpt of the configuration (generated from Cue). This is still a work in progress, and the configuration format may change in the future.
 
 ```yaml
 # Example configuration file
 service_name: "proksi"
+worker_threads: 4
 logging:
   level: "INFO"
   access_logs_enabled: true
@@ -242,6 +245,25 @@ routes:
         port: 3000
         network: "shared"
 ```
+
+
+### Environment variables
+
+Proksi can be configured using environment variables. They are mapped to the configuration file,  always start with `PROKSI_` and can be used to override the default values.
+For nested keys, use the `__` character.
+
+Example:
+- For the key `service_name`, the environment variable `PROKSI_SERVICE_NAME` can used
+- For the key `worker_threads`, the environment variable `PROKSI_WORKER_THREADS` can be used
+- For the key `logging.level`, the environment variable `PROKSI_LOGGING__LEVEL` can be used (note the `__` separator due to the nested key)
+- For keys that accept a list of values, e.g. `routes`, the environment variable `PROKSI_ROUTES` can be used with a string value like this:
+
+```bash
+export PROKSI_ROUTES='[{host="example.com", upstreams=[{ip="10.0.1.24", port=3001}]'
+```
+
+In the future you might be able to use `PROKSI_ROUTES__0__HOST` to set the host of the first route (or any other), but this is not yet implemented.
+
 
 ## Examples
 See [the examples folder](./examples) to learn about how to use Proksi.
