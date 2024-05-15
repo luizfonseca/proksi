@@ -177,9 +177,17 @@ pub(crate) struct Config {
     #[clap(short, long, default_value = "proksi")]
     pub service_name: String,
 
-    /// The PATH to the configuration file to be used. The configuration file
-    /// should be named either `proksi.toml`, `proksi.yaml` or `proksi.yml`
-    /// and be present in that path.
+    /// The number of worker threads to be used by the HTTPS proxy service.
+    ///
+    /// For background services the default is always (1) and cannot be changed.
+    #[clap(short, long, default_value = "1")]
+    pub worker_threads: Option<usize>,
+
+    /// The PATH to the configuration file to be used.
+    ///
+    /// The configuration file should be named either `proksi.toml`, `proksi.yaml` or `proksi.yml`
+    ///
+    /// and be present in that path. Defaults to the current directory.
     #[serde(skip)]
     #[clap(short, long, default_value = "./")]
     pub config_path: String,
@@ -205,6 +213,7 @@ impl Default for Config {
         Config {
             config_path: "/etc/proksi/config".to_string(),
             service_name: "proksi".to_string(),
+            worker_threads: Some(1),
             routes: vec![],
             logging: ConfigLogging {
                 level: LogLevel::Info,

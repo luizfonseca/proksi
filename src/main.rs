@@ -140,6 +140,8 @@ fn main() -> Result<(), anyhow::Error> {
     let mut https_service = http_proxy_service(&pingora_server.configuration, router);
     http_service.add_tcp("0.0.0.0:80");
 
+    // Worker threads per configuration
+    https_service.threads = proxy_config.worker_threads;
     https_service.add_tls_with_settings("0.0.0.0:443", None, tls_settings);
 
     pingora_server.add_service(http_service);
