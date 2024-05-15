@@ -2,3 +2,6 @@
 .DS_Store
 /data
 /dist
+proksi.yaml
+.zed/
+.vscode/
