@@ -10,6 +10,7 @@ use pingora::upstreams::peer::HttpPeer;
 use pingora_http::ResponseHeader;
 use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
 use pingora_proxy::{ProxyHttp, Session};
+use tracing::info;
 
 pub struct HttpLB(pub Arc<LoadBalancer<RoundRobin>>);
 
@@ -32,6 +33,18 @@ impl ProxyHttp for HttpLB {
         let host = get_host(session);
         if host.is_empty() {
             return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(400)));
+        }
+
+        if current_uri.path() == "/ping" {
+            info!("Ping request received");
+            let sample_body = bytes::Bytes::from("pong");
+            let mut res_headers = ResponseHeader::build_no_case(StatusCode::OK, Some(2))?;
+            res_headers.append_header(CONTENT_TYPE, "text/plain")?;
+            res_headers.append_header(CONTENT_LENGTH, sample_body.len())?;
+
+            session.write_response_header(Box::new(res_headers)).await?;
+            session.write_response_body(sample_body).await?;
+            return Ok(true);
         }
 
         if current_uri
