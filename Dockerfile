@@ -1,4 +1,4 @@
-FROM debian:slim-bullseye
+FROM debian:bullseye-slim
 
 RUN set -eux; \
   export DEBIAN_FRONTEND=noninteractive; \

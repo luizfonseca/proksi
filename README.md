@@ -200,10 +200,10 @@ The following features are included or will be included into Proksi without the 
 
 ### Proxy
 - [ ] Automatic SSL termination (using LetsEncrypt)
-- [ ] Automatic HTTP to HTTPS redirection
+- [X] Automatic HTTP to HTTPS redirection
 - [ ] Docker Labeling Support (for services discovery)
 - [ ] Load Balancing (Round Robin, Weighted Round Robin, Least Connections)
-- [ ] Health Checks
+- [X] Health Checks
 - [ ] Storage support for LetsEncrypt certificates (S3, Etcd, Consul, etc)
 - [ ] Controller <> server support (in order to share certificates)
 
