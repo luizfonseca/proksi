@@ -8,7 +8,9 @@ use once_cell::sync::Lazy;
 use pingora::listeners::TlsSettings;
 use pingora_load_balancing::{health_check::TcpHealthCheck, LoadBalancer};
 use pingora_proxy::http_proxy_service;
+use services::logger::{ProxyLogger, ProxyLoggerReceiver};
 use stores::{certificates::CertificatesStore, routes::RouteStore};
+use tokio::sync::mpsc;
 
 mod config;
 mod docker;
@@ -29,13 +31,14 @@ fn main() -> Result<(), anyhow::Error> {
     let proxy_config = load_proxy_config("/etc/proksi/configs")?;
 
     // let file_appender = tracing_appender::rolling::hourly("./tmp", "proksi.log");
-    let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout());
+    let (log_sender, log_receiver) = mpsc::unbounded_channel::<Vec<u8>>();
+    let proxy_logger = ProxyLogger::new(log_sender);
 
     // Creates a tracing/logging subscriber based on the configuration provided
     tracing_subscriber::fmt()
         .with_max_level(&proxy_config.logging.level)
         .compact()
-        .with_writer(non_blocking)
+        .with_writer(proxy_logger)
         .init();
 
     // Pingora load balancer server
@@ -107,7 +110,7 @@ fn main() -> Result<(), anyhow::Error> {
     pingora_server.add_service(https_service);
     pingora_server.add_service(docker_service);
     pingora_server.add_service(le_service);
-    // pingora_server.add_service(logger_service);
+    pingora_server.add_service(ProxyLoggerReceiver(log_receiver));
 
     pingora_server.bootstrap();
     pingora_server.run_forever();

@@ -92,7 +92,7 @@ pub struct ConfigRoute {
     pub upstreams: Vec<ConfigRouteUpstream>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ValueEnum)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, ValueEnum)]
 pub enum LogLevel {
     Debug,
     Info,
