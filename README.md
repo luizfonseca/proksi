@@ -1,9 +1,9 @@
 # Proksi: Automatic SSL, HTTP, and DNS Proxy
 
-![GitHub Release](https://img.shields.io/github/v/release/luizfonseca/proksi)
-![Crates.io MSRV](https://img.shields.io/crates/msrv/proksi)
-![Crates.io License](https://img.shields.io/crates/l/proksi)
-![Crates.io Total Downloads](https://img.shields.io/crates/d/proksi)
+![GitHub Release](https://img.shields.io/github/v/release/luizfonseca/proksi?style=for-the-badge)
+![Crates.io MSRV](https://img.shields.io/crates/msrv/proksi?style=for-the-badge)
+![Crates.io License](https://img.shields.io/crates/l/proksi?style=for-the-badge)
+![Crates.io Total Downloads](https://img.shields.io/crates/d/proksi?style=for-the-badge)
 
 
 ![logo](./assets/crabbylogoproksi.png)
