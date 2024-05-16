@@ -134,7 +134,7 @@ Options:
 
 ### Docker Labels
 
-Proksi can be used in conjunction with Docker to automatically discover **services** and route traffic to them. To do this, you need to add labels to your Docker containers.
+Proksi can be used in conjunction with Docker to automatically discover **services** and route traffic to them. To do this, you need to add labels to your Docker services (*swarm* or not).
 The following labels are supported:
 
 ```yaml
