@@ -307,6 +307,8 @@ Early tests are promising, but we need to do more testing to see how Proksi perf
 An sample run from the `wrk` benchmark on the simple `/ping` endpoint shows the following results:
 
 ```bash
+# Apple M1 Pro, 16GB
+# Memory Usage: 15MB, CPU Usage: 13%, 12 threads
 # Ran at 2024-05-16T23:47
 wrk -c 50 -t 4 -d 30s http://127.0.0.1/ping
 
