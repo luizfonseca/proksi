@@ -6,3 +6,5 @@
 .zed/
 .vscode/
 /tmp
+docker.README.md
+/proksi
