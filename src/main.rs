@@ -30,7 +30,6 @@ fn main() -> Result<(), anyhow::Error> {
     // Loads configuration from command-line, YAML or TOML sources
     let proxy_config = load_proxy_config("/etc/proksi/configs")?;
 
-    // let file_appender = tracing_appender::rolling::hourly("./tmp", "proksi.log");
     let (log_sender, log_receiver) = mpsc::unbounded_channel::<Vec<u8>>();
     let proxy_logger = ProxyLogger::new(log_sender);
 

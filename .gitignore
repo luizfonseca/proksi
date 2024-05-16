@@ -2,7 +2,7 @@
 .DS_Store
 /data
 /dist
-proksi.yaml
+/proksi.yaml
 .zed/
 .vscode/
 /tmp

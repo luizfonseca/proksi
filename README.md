@@ -26,7 +26,7 @@ Proksi is a simple, lightweight, and easy-to-use proxy server that automatically
   - [Configuration](#configuration)
     - [YAML/TOML Configuration](#yamltoml-configuration)
     - [Environment variables](#environment-variables)
-  - [Examples](#examples)
+  - [Configuration Examples](#examples)
   - [Performance \& Benchmarks](#performance--benchmarks)
   - [Why build another proxy...?](#why-build-another-proxy)
 
@@ -296,7 +296,7 @@ export PROKSI_ROUTES='[{host="example.com", upstreams=[{ip="10.0.1.24", port=300
 In the future you might be able to use `PROKSI_ROUTES__0__HOST` to set the host of the first route (or any other), but this is not yet implemented.
 
 
-## Examples
+## Configuration Examples
 See [the examples folder](./examples) to learn about how to use Proksi.
 
 
@@ -308,8 +308,9 @@ An sample run from the `wrk` benchmark on the simple `/ping` endpoint shows the 
 
 ```bash
 # Apple M1 Pro, 16GB
-# Memory Usage: 15MB, CPU Usage: 13%, 12 threads
-# Ran at 2024-05-16T23:47
+# Memory Usage: 15MB, CPU Usage: 13%, 4 worker threads
+# at 2024-05-16T23:47
+# Wrk > 50 connections, 4 threads, 30s duration
 wrk -c 50 -t 4 -d 30s http://127.0.0.1/ping
 
 Running 30s test @ http://127.0.0.1/ping

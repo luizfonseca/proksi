@@ -19,10 +19,10 @@ incremental = true
 
 [profile.release]
 opt-level = 2
-strip = "symbols" # Automatically strip symbols from the binary.
-lto = true        # Enable link-time optimization.
+strip = "symbols"  # Automatically strip symbols from the binary.
+lto = true         # Enable link-time optimization.
 debug = false
-codegen-units = 4
+codegen-units = 12
 
 [dependencies]
 anyhow = "1.0.83"

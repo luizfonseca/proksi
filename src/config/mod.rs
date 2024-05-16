@@ -6,6 +6,27 @@ use figment::{
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConfigLetsEncrypt {
+    /// The email to use for the let's encrypt account
+    pub email: String,
+    /// Whether to enable the background service that renews the certificates (default: true)
+    pub enabled: Option<bool>,
+
+    /// Use the staging let's encrypt server (default: true)
+    pub staging: Option<bool>,
+}
+
+impl Default for ConfigLetsEncrypt {
+    fn default() -> Self {
+        Self {
+            email: "contact@example.com".to_string(),
+            enabled: Some(true),
+            staging: Some(true),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigPath {
     // TLS
@@ -142,6 +163,10 @@ pub struct ConfigLogging {
 ///   level: "INFO"
 ///   access_logs_enabled: true
 ///   error_logs_enabled: false
+/// letsencrypt:
+///   enabled: true
+///   email: "youremail@example.com"
+///   production: true
 /// paths:
 ///   config_file: "/etc/proksi/config.toml"
 ///   tls_certificates: "/etc/proksi/certificates"
@@ -196,6 +221,9 @@ pub(crate) struct Config {
     #[command(flatten)]
     pub logging: ConfigLogging,
 
+    #[clap(skip)]
+    pub letsencrypt: ConfigLetsEncrypt,
+
     /// Configuration for paths (TLS, config file, etc.)
     #[clap(skip)]
     pub paths: ConfigPath,
@@ -214,6 +242,7 @@ impl Default for Config {
             config_path: "/etc/proksi/config".to_string(),
             service_name: "proksi".to_string(),
             worker_threads: Some(1),
+            letsencrypt: ConfigLetsEncrypt::default(),
             routes: vec![],
             logging: ConfigLogging {
                 level: LogLevel::Info,
@@ -349,6 +378,8 @@ mod tests {
             )?;
             jail.set_env("PROKSI_SERVICE_NAME", "new_name");
             jail.set_env("PROKSI_LOGGING__LEVEL", "warn");
+            jail.set_env("PROKSI_LETSENCRYPT__STAGING", "false");
+            jail.set_env("PROKSI_LETSENCRYPT__EMAIL", "my-real-email@domain.com");
             jail.set_env(
                 "PROKSI_ROUTES",
                 r#"[{
@@ -362,6 +393,10 @@ mod tests {
             let proxy_config = config.unwrap();
             assert_eq!(proxy_config.service_name, "new_name");
             assert_eq!(proxy_config.logging.level, LogLevel::Warn);
+
+            assert_eq!(proxy_config.letsencrypt.staging, Some(false));
+            assert_eq!(proxy_config.letsencrypt.email, "my-real-email@domain.com");
+
             assert_eq!(proxy_config.routes[0].host, "changed.example.com");
             assert_eq!(proxy_config.routes[0].upstreams[0].ip, "10.0.1.2/24");
 
@@ -409,12 +444,17 @@ mod tests {
             let proxy_config = config.unwrap();
             let logging = proxy_config.logging;
             let paths = proxy_config.paths;
+            let letsencrypt = proxy_config.letsencrypt;
 
             assert_eq!(proxy_config.service_name, "proksi");
             assert_eq!(logging.level, LogLevel::Info);
             assert_eq!(logging.access_logs_enabled, true);
             assert_eq!(logging.error_logs_enabled, false);
             assert_eq!(proxy_config.routes.len(), 1);
+
+            assert_eq!(letsencrypt.email, "contact@example.com");
+            assert_eq!(letsencrypt.enabled, Some(true));
+            assert_eq!(letsencrypt.staging, Some(true));
 
             assert_eq!(paths.tls_account_credentials, "/etc/proksi/tls/account");
             assert_eq!(paths.tls_certificates, "/etc/proksi/tls/certificates");
