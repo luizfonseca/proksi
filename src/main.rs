@@ -1,14 +1,14 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use ::pingora::{server::Server, services::background::background_service};
 use arc_swap::ArcSwap;
 use config::load_proxy_config;
-use instant_acme::KeyAuthorization;
+
 use once_cell::sync::Lazy;
 use pingora::listeners::TlsSettings;
 use pingora_load_balancing::{health_check::TcpHealthCheck, LoadBalancer};
 use pingora_proxy::http_proxy_service;
-use stores::routes::RouteStore;
+use stores::{certificates::CertificatesStore, routes::RouteStore};
 
 mod config;
 mod docker;
@@ -17,58 +17,12 @@ mod services;
 mod stores;
 mod tools;
 
-#[derive(Debug)]
-pub struct Storage {
-    orders: HashMap<String, (String, String, KeyAuthorization)>,
-    certificates: HashMap<String, String>,
-}
-
 /// Static reference to the route store that can be shared across threads
 pub static ROUTE_STORE: Lazy<ArcSwap<RouteStore>> =
-    Lazy::new(|| ArcSwap::new(Arc::new(RouteStore::new())));
+    Lazy::new(|| ArcSwap::from_pointee(RouteStore::new()));
 
-pub type StorageArc = Arc<tokio::sync::Mutex<Storage>>;
-
-impl Storage {
-    pub fn new() -> Self {
-        Storage {
-            orders: HashMap::new(),
-            certificates: HashMap::new(),
-        }
-    }
-
-    pub fn add_order(
-        &mut self,
-        identifier: String,
-        token: String,
-        url: String,
-        key_auth: KeyAuthorization,
-    ) {
-        self.orders.insert(identifier, (token, url, key_auth));
-    }
-
-    pub fn add_certificate(&mut self, host: String, certificate: String) {
-        self.certificates.insert(host, certificate);
-    }
-
-    pub fn get_certificate(&self, host: &str) -> Option<&String> {
-        self.certificates.get(host)
-    }
-
-    pub fn get_orders(&self) -> &HashMap<String, (String, String, KeyAuthorization)> {
-        &self.orders
-    }
-
-    pub fn get_order(&self, order: &str) -> Option<&(String, String, KeyAuthorization)> {
-        self.orders.get(order)
-    }
-}
-
-impl Default for Storage {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+pub static CERT_STORE: Lazy<ArcSwap<CertificatesStore>> =
+    Lazy::new(|| ArcSwap::from_pointee(CertificatesStore::new()));
 
 fn main() -> Result<(), anyhow::Error> {
     // Loads configuration from command-line, YAML or TOML sources
@@ -110,9 +64,7 @@ fn main() -> Result<(), anyhow::Error> {
         pingora_server.add_service(health_check_service);
     }
 
-    let storage = Arc::new(tokio::sync::Mutex::new(Storage::new()));
-
-    let certificate_store = proxy_server::cert_store::CertStore::new(storage.clone());
+    let certificate_store = proxy_server::cert_store::CertStore::new();
 
     // Setup tls settings and Enable HTTP/2
     let mut tls_settings = TlsSettings::with_callbacks(certificate_store).unwrap();
@@ -125,9 +77,8 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Service: Lets Encrypt HTTP Challenge/Certificate renewal
     let letsencrypt_http = services::letsencrypt::http01::HttpLetsencrypt::new(
-        &ROUTE_STORE.load().get_route_keys(),
+        &router_store.get_route_keys(),
         "youremail@example.com",
-        storage.clone(),
     );
     let le_service = background_service("letsencrypt", letsencrypt_http);
 

@@ -3,21 +3,13 @@ use pingora::listeners::TlsAccept;
 use pingora_openssl::{pkey::PKey, ssl::NameType, x509::X509};
 use tracing::debug;
 
-use crate::StorageArc;
-
 /// Provides the correct certificates when performing the SSL handshake
 #[derive(Debug)]
-pub struct CertStore {
-    /// The path to the directory containing the certificates
-    // certs: HashMap<String, CertValue>,
-    // orders: HashMap<String, OrderPayload>,
-    //
-    pub storage: StorageArc,
-}
+pub struct CertStore {}
 
 impl CertStore {
-    pub fn new(storage: StorageArc) -> Box<Self> {
-        Box::new(CertStore { storage })
+    pub fn new() -> Box<Self> {
+        Box::new(CertStore {})
     }
 }
 

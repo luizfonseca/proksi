@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::{create_dir_all, File},
     io::{Read, Write},
     thread::sleep,
@@ -6,13 +7,42 @@ use std::{
 };
 
 use async_trait::async_trait;
-use instant_acme::{AccountCredentials, ChallengeType, LetsEncrypt, Order};
+use instant_acme::{AccountCredentials, ChallengeType, KeyAuthorization, LetsEncrypt, Order};
 use pingora::{server::ShutdownWatch, services::background::BackgroundService};
 use rcgen::KeyPair;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::StorageArc;
+#[derive(Debug)]
+struct Storage {
+    orders: HashMap<String, (String, String, KeyAuthorization)>,
+}
+
+impl Storage {
+    pub fn new() -> Self {
+        Storage {
+            orders: HashMap::new(),
+        }
+    }
+
+    pub fn add_order(
+        &mut self,
+        identifier: String,
+        token: String,
+        url: String,
+        key_auth: KeyAuthorization,
+    ) {
+        self.orders.insert(identifier, (token, url, key_auth));
+    }
+
+    pub fn get_orders(&self) -> &HashMap<String, (String, String, KeyAuthorization)> {
+        &self.orders
+    }
+
+    pub fn _get_order(&self, order: &str) -> Option<&(String, String, KeyAuthorization)> {
+        self.orders.get(order)
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 struct HostCertificate {
@@ -37,22 +67,22 @@ struct HostOrder {
 }
 
 #[derive(Debug)]
-pub struct HttpLetsencrypt {
+pub struct HttpLetsencryptService {
     challenge_type: ChallengeType,
     url: String,
     contact: String,
     hosts: Vec<String>,
-    cert_store: StorageArc,
+    cert_store: Storage,
 }
 
-impl HttpLetsencrypt {
-    pub fn new(hosts: &[String], contact: &str, cert_store: StorageArc) -> Self {
-        HttpLetsencrypt {
+impl HttpLetsencryptService {
+    pub fn new(hosts: &[String], contact: &str) -> Self {
+        HttpLetsencryptService {
             challenge_type: ChallengeType::Http01,
             url: LetsEncrypt::Staging.url().to_string(),
             contact: contact.to_string(),
             hosts: hosts.to_vec(),
-            cert_store,
+            cert_store: Storage::new(),
         }
     }
 
@@ -141,7 +171,10 @@ impl HttpLetsencrypt {
     }
 
     /// Create challenges for the order
-    async fn create_challenges_from_order(&self, excluded_hosts: Vec<String>) -> Result<Order, ()> {
+    async fn create_challenges_from_order(
+        &mut self,
+        excluded_hosts: Vec<String>,
+    ) -> Result<Order, ()> {
         println!("Creating challenges from order");
         let order = self.create_order(excluded_hosts).await;
         if order.is_err() {
@@ -171,8 +204,9 @@ impl HttpLetsencrypt {
 
             let key_auth = order_result.key_authorization(challenge);
 
-            let mut lkd = self.cert_store.lock().await;
-            lkd.add_order(
+            // let mut store = self.cert_store;
+
+            self.cert_store.add_order(
                 identifier.clone(),
                 challenge.token.clone(),
                 challenge.url.clone(),
@@ -200,20 +234,37 @@ impl HttpLetsencrypt {
     }
 }
 
+#[derive(Debug)]
+pub struct HttpLetsencrypt {
+    contact: String,
+    hosts: Vec<String>,
+}
+
+impl HttpLetsencrypt {
+    pub fn new(hosts: &[String], contact: &str) -> Self {
+        HttpLetsencrypt {
+            contact: contact.to_string(),
+            hosts: hosts.to_vec(),
+        }
+    }
+}
+
 #[async_trait]
 impl BackgroundService for HttpLetsencrypt {
     async fn start(&self, _shutdown: ShutdownWatch) -> () {
         info!(service = "LetsEncrypt", "Background service started");
 
+        let mut svc = HttpLetsencryptService::new(&self.hosts, &self.contact);
+
         // create required folders if they don't exist yet
-        create_dir_all(self.challenges_path()).unwrap();
-        create_dir_all(self.certificates_path()).unwrap();
-        create_dir_all(self.account_path()).unwrap();
-        create_dir_all(self.orders_path()).unwrap();
+        create_dir_all(svc.challenges_path()).unwrap();
+        create_dir_all(svc.certificates_path()).unwrap();
+        create_dir_all(svc.account_path()).unwrap();
+        create_dir_all(svc.orders_path()).unwrap();
 
         // Check if we already have a challenge file
         let mut excluded_hosts = Vec::new();
-        for host in self.hosts.iter() {
+        for host in svc.hosts.iter() {
             let file = std::fs::File::open(format!("./data/challenges/{}/meta.csv", host));
 
             if file.is_ok() {
@@ -222,13 +273,13 @@ impl BackgroundService for HttpLetsencrypt {
             }
         }
 
-        if excluded_hosts.len() == self.hosts.len() {
+        if excluded_hosts.len() == svc.hosts.len() {
             info!("All hosts have a challenge file");
             return;
         }
 
         // Creates order if there are outstanding hosts to check
-        let order = self
+        let order = svc
             .create_challenges_from_order(excluded_hosts.clone())
             .await;
 
@@ -240,23 +291,21 @@ impl BackgroundService for HttpLetsencrypt {
         let mut order = order.unwrap();
 
         // 1. persist order to disk
-        let mut file = File::create(format!("{}/meta.txt", self.orders_path())).unwrap();
+        let mut file = File::create(format!("{}/meta.txt", svc.orders_path())).unwrap();
         let contents = format!("{:?}", order.url());
         file.write_all(contents.as_bytes()).unwrap();
         file.flush().unwrap();
 
-        let lkd = self.cert_store.lock().await;
-
-        if lkd.get_orders().is_empty() {
+        if svc.cert_store.get_orders().is_empty() {
             info!("No orders to check");
             return;
         }
 
         // write challenges to disk
-        for (key, value) in lkd.get_orders().iter() {
+        for (key, value) in svc.cert_store.get_orders().iter() {
             let (token, url, key_auth) = value;
             // Create a new folder for the challenge
-            create_dir_all(format!("{}/{}", self.challenges_path(), key)).unwrap();
+            create_dir_all(format!("{}/{}", svc.challenges_path(), key)).unwrap();
             let mut file = File::create(format!("./data/challenges/{}/meta.csv", key)).unwrap();
             let contents = format!("{};{};{}", url, key_auth.as_str(), token);
 
@@ -288,7 +337,7 @@ impl BackgroundService for HttpLetsencrypt {
             retry_delay *= 2;
         }
 
-        let non_excluded_hosts = self
+        let non_excluded_hosts = svc
             .hosts
             .iter()
             .filter(|&host| !excluded_hosts.contains(host))
@@ -331,11 +380,11 @@ impl BackgroundService for HttpLetsencrypt {
 
         for host in non_excluded_hosts.iter() {
             //create folder for the certificate
-            create_dir_all(format!("{}/{}", self.certificates_path(), host)).unwrap();
+            create_dir_all(format!("{}/{}", svc.certificates_path(), host)).unwrap();
             let mut crt_file =
-                File::create(format!("{}/{}/cert.pem", self.certificates_path(), host)).unwrap();
+                File::create(format!("{}/{}/cert.pem", svc.certificates_path(), host)).unwrap();
             let mut key_file =
-                File::create(format!("{}/{}/key.pem", self.certificates_path(), host)).unwrap();
+                File::create(format!("{}/{}/key.pem", svc.certificates_path(), host)).unwrap();
 
             crt_file.write_all(cert_chain.as_bytes()).unwrap();
             key_file.write_all(kp.serialize_pem().as_bytes()).unwrap();
