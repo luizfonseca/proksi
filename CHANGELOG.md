@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/luizfonseca/proksi/compare/v0.1.3...v0.1.4) (2024-05-16)
+
+
+### Bug Fixes
+
+* **dockerfile:** incorrect image used ([dd44443](https://github.com/luizfonseca/proksi/commit/dd444436a3bcf0dc9815c3cf3e771ef31c3ecded))
+
 ## [0.1.3](https://github.com/luizfonseca/proksi/compare/v0.1.2...v0.1.3) (2024-05-16)
 
 
