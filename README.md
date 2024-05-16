@@ -1,5 +1,11 @@
 # Proksi: Automatic SSL, HTTP, and DNS Proxy
 
+![GitHub Release](https://img.shields.io/github/v/release/luizfonseca/proksi)
+![Crates.io MSRV](https://img.shields.io/crates/msrv/proksi)
+![Crates.io License](https://img.shields.io/crates/l/proksi)
+![Crates.io Total Downloads](https://img.shields.io/crates/d/proksi)
+
+
 ![logo](./assets/crabbylogoproksi.png)
 
 
@@ -26,7 +32,7 @@ Proksi is a simple, lightweight, and easy-to-use proxy server that automatically
   - [Configuration](#configuration)
     - [YAML/TOML Configuration](#yamltoml-configuration)
     - [Environment variables](#environment-variables)
-  - [Configuration Examples](#examples)
+  - [Configuration Examples](#configuration-examples)
   - [Performance \& Benchmarks](#performance--benchmarks)
   - [Why build another proxy...?](#why-build-another-proxy)
 
