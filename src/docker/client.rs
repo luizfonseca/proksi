@@ -3,6 +3,7 @@ use std::{collections::HashMap, hash::Hash, thread::sleep, time::Duration};
 use async_trait::async_trait;
 use bollard::{service::ListServicesOptions, Docker};
 use pingora::{server::ShutdownWatch, services::background::BackgroundService};
+use tracing::info;
 
 pub fn create_client() -> DockerClient {
     let docker = Docker::connect_with_local_defaults();
@@ -20,7 +21,7 @@ impl DockerClient {
         let mut default_filters = HashMap::new();
         default_filters.insert("label", vec!["proksi.host", "proksi.port"]);
 
-        println!("Docker running");
+        info!("Docker running");
         loop {
             self.list_containers(default_filters.clone()).await;
 

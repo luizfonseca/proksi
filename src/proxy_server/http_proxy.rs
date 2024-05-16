@@ -127,18 +127,16 @@ impl ProxyHttp for HttpLB {
     }
 }
 
-/// Retrieves the host from the request headers based on whether
-/// the request is HTTP/1.1 or HTTP/2
-fn get_host(session: &mut Session) -> String {
+/// Retrieves the host from the request headers based on
+/// whether the request is HTTP/1.1 or HTTP/2
+fn get_host(session: &mut Session) -> &str {
     if let Some(host) = session.get_header(http::header::HOST) {
-        if let Ok(host_str) = host.to_str() {
-            return host_str.to_string();
-        }
+        return host.to_str().unwrap_or("");
     }
 
     if let Some(host) = session.req_header().uri.host() {
-        return host.to_string();
+        return host;
     }
 
-    "".to_string()
+    ""
 }

@@ -1909,6 +1909,7 @@ name = "proksi"
 version = "0.1.2"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "async-trait",
  "bollard",
  "bollard-stubs",
@@ -1917,6 +1918,7 @@ dependencies = [
  "figment",
  "http 1.1.0",
  "instant-acme",
+ "once_cell",
  "pingora",
  "pingora-http",
  "pingora-load-balancing",
@@ -1928,6 +1930,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "tracing-appender",
  "tracing-subscriber",
 ]
 
@@ -2918,6 +2921,18 @@ dependencies = [
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
+]
+
+[[package]]
+name = "tracing-appender"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3566e8ce28cc0a3fe42519fc80e6b4c943cc4c8cef275620eb8dac2d3d4e06cf"
+dependencies = [
+ "crossbeam-channel",
+ "thiserror",
+ "time",
+ "tracing-subscriber",
 ]
 
 [[package]]

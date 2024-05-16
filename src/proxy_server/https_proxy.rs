@@ -1,8 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use pingora::{
@@ -14,6 +10,8 @@ use pingora_http::ResponseHeader;
 use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
 use pingora_proxy::{ProxyHttp, Session};
 use tracing::info;
+
+use crate::ROUTE_STORE;
 
 /// Default peer options to be used on every upstream connection
 pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
@@ -45,27 +43,7 @@ pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
 
 type ArcedLB = Arc<LoadBalancer<RoundRobin>>;
 /// Load balancer proxy struct
-pub struct Router {
-    routes: HashMap<String, Arc<LoadBalancer<RoundRobin>>>,
-}
-
-impl Router {
-    pub fn new() -> Self {
-        Router {
-            routes: HashMap::new(),
-        }
-    }
-
-    /// Adds a new route using a hostname and a LoadBalancer instance wrapped in an `Arc`
-    pub fn add_route(&mut self, route: String, upstream: ArcedLB) {
-        self.routes.insert(route, upstream);
-    }
-
-    /// Returns all registered routes hosts
-    pub fn get_route_keys(&self) -> Vec<String> {
-        self.routes.keys().cloned().collect()
-    }
-}
+pub struct Router;
 
 pub struct RouterContext {
     pub host: Option<String>,
@@ -97,7 +75,7 @@ impl ProxyHttp for Router {
         let host_without_port = req_host.split(':').collect::<Vec<&str>>()[0].to_string();
 
         // If there's no host matching, returns a 404
-        let upstream_lb = self.routes.get(&host_without_port);
+        let upstream_lb = ROUTE_STORE.load().get_route(&host_without_port);
         if upstream_lb.is_none() {
             return Err(pingora::Error::new(HTTPStatus(404)));
         }

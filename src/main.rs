@@ -1,16 +1,20 @@
 use std::{collections::HashMap, sync::Arc};
 
 use ::pingora::{server::Server, services::background::background_service};
+use arc_swap::ArcSwap;
 use config::load_proxy_config;
 use instant_acme::KeyAuthorization;
+use once_cell::sync::Lazy;
 use pingora::listeners::TlsSettings;
 use pingora_load_balancing::{health_check::TcpHealthCheck, LoadBalancer};
 use pingora_proxy::http_proxy_service;
+use stores::routes::RouteStore;
 
 mod config;
 mod docker;
 mod proxy_server;
 mod services;
+mod stores;
 mod tools;
 
 #[derive(Debug)]
@@ -18,6 +22,10 @@ pub struct Storage {
     orders: HashMap<String, (String, String, KeyAuthorization)>,
     certificates: HashMap<String, String>,
 }
+
+/// Static reference to the route store that can be shared across threads
+pub static ROUTE_STORE: Lazy<ArcSwap<RouteStore>> =
+    Lazy::new(|| ArcSwap::new(Arc::new(RouteStore::new())));
 
 pub type StorageArc = Arc<tokio::sync::Mutex<Storage>>;
 
@@ -62,26 +70,26 @@ impl Default for Storage {
     }
 }
 
-fn init_tracing_subscriber(config: &config::Config) {
-    tracing_subscriber::fmt()
-        .with_max_level(&config.logging.level)
-        .init()
-}
-
 fn main() -> Result<(), anyhow::Error> {
     // Loads configuration from command-line, YAML or TOML sources
     let proxy_config = load_proxy_config("/etc/proksi/configs")?;
 
+    // let file_appender = tracing_appender::rolling::hourly("./tmp", "proksi.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout());
+
     // Creates a tracing/logging subscriber based on the configuration provided
-    init_tracing_subscriber(&proxy_config);
+    tracing_subscriber::fmt()
+        .with_max_level(&proxy_config.logging.level)
+        .compact()
+        .with_writer(non_blocking)
+        .init();
 
     // Pingora load balancer server
-    let mut pingora_server = Server::new(None).unwrap();
+    let mut pingora_server = Server::new(None)?;
 
     // Request router:
     // Given a host header, the router will return the corresponding upstreams
-    // The router will also handle health checks and failover in case of upstream failure
-    let mut router = proxy_server::https_proxy::Router::new();
+    let mut router_store = RouteStore::new();
 
     // for each route, build a loadbalancer configuration with the corresponding upstreams
     for route in proxy_config.routes {
@@ -92,16 +100,13 @@ fn main() -> Result<(), anyhow::Error> {
             .map(|upstr| format!("{}:{}", upstr.ip, upstr.port));
 
         let mut upstreams = LoadBalancer::try_from_iter(addr_upstreams)?;
-
         let tcp_health_check = TcpHealthCheck::new();
         upstreams.set_health_check(tcp_health_check);
 
         let health_check_service = background_service(&route.host, upstreams);
-
         let upstreams = health_check_service.task();
 
-        router.add_route(route.host, upstreams);
-
+        router_store.add_route(route.host, upstreams);
         pingora_server.add_service(health_check_service);
     }
 
@@ -120,7 +125,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Service: Lets Encrypt HTTP Challenge/Certificate renewal
     let letsencrypt_http = services::letsencrypt::http01::HttpLetsencrypt::new(
-        &router.get_route_keys(),
+        &ROUTE_STORE.load().get_route_keys(),
         "youremail@example.com",
         storage.clone(),
     );
@@ -137,6 +142,9 @@ fn main() -> Result<(), anyhow::Error> {
     );
 
     // Service: HTTPS Load Balancer (main service)
+    // The router will also handle health checks and failover in case of upstream failure
+    ROUTE_STORE.swap(Arc::new(router_store));
+    let router = proxy_server::https_proxy::Router {};
     let mut https_service = http_proxy_service(&pingora_server.configuration, router);
     http_service.add_tcp("0.0.0.0:80");
 
@@ -148,6 +156,7 @@ fn main() -> Result<(), anyhow::Error> {
     pingora_server.add_service(https_service);
     pingora_server.add_service(docker_service);
     pingora_server.add_service(le_service);
+    // pingora_server.add_service(logger_service);
 
     pingora_server.bootstrap();
     pingora_server.run_forever();

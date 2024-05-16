@@ -10,7 +10,7 @@ use instant_acme::{AccountCredentials, ChallengeType, LetsEncrypt, Order};
 use pingora::{server::ShutdownWatch, services::background::BackgroundService};
 use rcgen::KeyPair;
 use serde::{Deserialize, Serialize};
-use tracing::{info, instrument};
+use tracing::info;
 
 use crate::StorageArc;
 
@@ -202,7 +202,6 @@ impl HttpLetsencrypt {
 
 #[async_trait]
 impl BackgroundService for HttpLetsencrypt {
-    #[instrument]
     async fn start(&self, _shutdown: ShutdownWatch) -> () {
         info!(service = "LetsEncrypt", "Background service started");
 
