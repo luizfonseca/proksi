@@ -307,16 +307,17 @@ Early tests are promising, but we need to do more testing to see how Proksi perf
 An sample run from the `wrk` benchmark on the simple `/ping` endpoint shows the following results:
 
 ```bash
+# Ran at 2024-05-16T23:47
 wrk -c 50 -t 4 -d 30s http://127.0.0.1/ping
 
 Running 30s test @ http://127.0.0.1/ping
   4 threads and 50 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency   813.86us  157.65us   2.63ms   93.02%
-    Req/Sec    14.76k   276.97    15.82k    83.14%
-  1768084 requests in 30.10s, 217.52MB read
-Requests/sec:  58740.48
-Transfer/sec:      7.23MB
+    Latency   561.57us  218.11us  14.91ms   84.14%
+    Req/Sec    21.43k     3.53k   24.72k    79.32%
+  2566858 requests in 30.10s, 315.79MB read
+Requests/sec:  85274.55
+Transfer/sec:     10.49MB
 ```
 
 It's also based on [Pingora](https://github.com/cloudflare/pingora), so it should be fast if cloudflare is using it.
