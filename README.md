@@ -86,7 +86,8 @@ cargo install proksi
 Then you can run the binary in your platform:
 
 ```bash
-proksi -c config.yaml --service_name=proksi
+# Proksi will try to find proksi.yaml or proksi.toml in this path
+proksi -c /config-path/ --service_name=proksi
 ```
 
 ### Command line options
