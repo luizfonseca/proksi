@@ -1,4 +1,9 @@
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{
+    borrow::{Borrow, Cow},
+    collections::BTreeMap,
+    sync::Arc,
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use pingora::{
@@ -46,7 +51,7 @@ type ArcedLB = Arc<LoadBalancer<RoundRobin>>;
 pub struct Router;
 
 pub struct RouterContext {
-    pub host: Option<String>,
+    pub host: Option<Cow<'static, str>>,
     pub current_lb: Option<ArcedLB>,
 }
 
@@ -72,15 +77,15 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
         let req_host = get_host(session);
-        let host_without_port = req_host.split(':').collect::<Vec<&str>>()[0].to_string();
+        let host_without_port = req_host.split(':').collect::<Vec<_>>()[0];
 
         // If there's no host matching, returns a 404
-        let upstream_lb = ROUTE_STORE.load().get_route(&host_without_port);
+        let upstream_lb = ROUTE_STORE.get(host_without_port);
         if upstream_lb.is_none() {
             return Err(pingora::Error::new(HTTPStatus(404)));
         }
 
-        ctx.host = Some(host_without_port);
+        ctx.host = Some(Cow::Owned(host_without_port.to_string()));
         ctx.current_lb = Some(upstream_lb.unwrap().clone());
         Ok(false)
     }
@@ -107,11 +112,14 @@ impl ProxyHttp for Router {
             return Err(pingora::Error::new(HTTPStatus(503)));
         }
 
-        info!(host = ctx.host, "Upstream selected");
+        let host = ctx.host.as_ref().unwrap();
+
+        let b: &str = &host.borrow();
+        info!(host = b, "Upstream selected");
 
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
         let host = ctx.host.clone().unwrap();
-        let mut peer = HttpPeer::new(healthy_upstream.unwrap(), false, host);
+        let mut peer = HttpPeer::new(healthy_upstream.unwrap(), false, host.into_owned());
         peer.options = DEFAULT_PEER_OPTIONS;
         Ok(Box::new(peer))
     }

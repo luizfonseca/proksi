@@ -26,7 +26,6 @@ codegen-units = 12
 
 [dependencies]
 anyhow = "1.0.83"
-arc-swap = "1.7.1"
 async-trait = "0.1.80"
 bollard = "0.16.1"
 bollard-stubs = "=1.44.0-rc.2"
@@ -48,3 +47,4 @@ serde_json = "1.0.117"
 tokio = { version = "1.37.0", features = ["rt-multi-thread"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
+dashmap = "5.5.3"

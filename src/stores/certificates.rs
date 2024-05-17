@@ -1,28 +1,16 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, sync::Arc};
+
+use dashmap::DashMap;
 
 pub struct Certificate {
     pub key: String,
     pub certificate: String,
 }
 
-pub struct CertificatesStore {
-    /// holds host + certificate + key
-    certificates: HashMap<String, Certificate>,
-}
-
-impl CertificatesStore {
-    pub fn new() -> Self {
-        CertificatesStore {
-            certificates: HashMap::new(),
-        }
-    }
-
-    pub fn add_certificate(&mut self, host: String, certificate: String, key: String) {
-        self.certificates
-            .insert(host, Certificate { key, certificate });
-    }
-
-    pub fn get_certificate(&self, host: &str) -> Option<&Certificate> {
-        self.certificates.get(host)
+impl Certificate {
+    pub fn new(key: String, certificate: String) -> Self {
+        Certificate { key, certificate }
     }
 }
+
+pub type CertificateStore = Arc<DashMap<Cow<'static, str>, Certificate>>;

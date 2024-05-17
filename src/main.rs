@@ -1,15 +1,16 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use ::pingora::{server::Server, services::background::background_service};
-use arc_swap::ArcSwap;
+use anyhow::anyhow;
 use config::load_proxy_config;
+use dashmap::DashMap;
 
 use once_cell::sync::Lazy;
 use pingora::listeners::TlsSettings;
 use pingora_load_balancing::{health_check::TcpHealthCheck, LoadBalancer};
 use pingora_proxy::http_proxy_service;
 use services::logger::{ProxyLogger, ProxyLoggerReceiver};
-use stores::{certificates::CertificatesStore, routes::RouteStore};
+use stores::{certificates::CertificateStore, routes::RouteStore};
 use tokio::sync::mpsc;
 
 mod config;
@@ -20,15 +21,15 @@ mod stores;
 mod tools;
 
 /// Static reference to the route store that can be shared across threads
-pub static ROUTE_STORE: Lazy<ArcSwap<RouteStore>> =
-    Lazy::new(|| ArcSwap::from_pointee(RouteStore::new()));
+pub static ROUTE_STORE: Lazy<RouteStore> = Lazy::new(|| Arc::new(DashMap::new()));
 
-pub static CERT_STORE: Lazy<ArcSwap<CertificatesStore>> =
-    Lazy::new(|| ArcSwap::from_pointee(CertificatesStore::new()));
+/// Static reference to the certificate store that can be shared across threads
+pub static CERT_STORE: Lazy<CertificateStore> = Lazy::new(|| Arc::new(DashMap::new()));
 
 fn main() -> Result<(), anyhow::Error> {
     // Loads configuration from command-line, YAML or TOML sources
-    let proxy_config = load_proxy_config("/etc/proksi/configs")?;
+    let proxy_config = load_proxy_config("/etc/proksi/configs")
+        .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
 
     let (log_sender, log_receiver) = mpsc::unbounded_channel::<Vec<u8>>();
     let proxy_logger = ProxyLogger::new(log_sender);
@@ -45,7 +46,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Request router:
     // Given a host header, the router will return the corresponding upstreams
-    let mut router_store = RouteStore::new();
+    // let mut router_store = RouteStore::new();
 
     // for each route, build a loadbalancer configuration with the corresponding upstreams
     for route in proxy_config.routes {
@@ -58,11 +59,12 @@ fn main() -> Result<(), anyhow::Error> {
         let mut upstreams = LoadBalancer::try_from_iter(addr_upstreams)?;
         let tcp_health_check = TcpHealthCheck::new();
         upstreams.set_health_check(tcp_health_check);
+        upstreams.health_check_frequency = Some(Duration::from_secs(15));
 
         let health_check_service = background_service(&route.host, upstreams);
         let upstreams = health_check_service.task();
 
-        router_store.add_route(route.host, upstreams);
+        ROUTE_STORE.insert(route.host, upstreams);
         pingora_server.add_service(health_check_service);
     }
 
@@ -79,8 +81,11 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Service: Lets Encrypt HTTP Challenge/Certificate renewal
     let letsencrypt_http = services::letsencrypt::http01::HttpLetsencrypt::new(
-        &router_store.get_route_keys(),
-        "youremail@example.com",
+        &ROUTE_STORE
+            .iter()
+            .map(|s| s.key().clone().into_owned())
+            .collect::<Vec<_>>(),
+        &proxy_config.letsencrypt.email,
     );
     let le_service = background_service("letsencrypt", letsencrypt_http);
 
@@ -96,7 +101,6 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Service: HTTPS Load Balancer (main service)
     // The router will also handle health checks and failover in case of upstream failure
-    ROUTE_STORE.swap(Arc::new(router_store));
     let router = proxy_server::https_proxy::Router {};
     let mut https_service = http_proxy_service(&pingora_server.configuration, router);
     http_service.add_tcp("0.0.0.0:80");
