@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use clap::{Args, Parser, ValueEnum};
 use figment::{
     providers::{Env, Format, Serialized, Toml, Yaml},
@@ -9,7 +11,7 @@ use tracing::level_filters::LevelFilter;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigLetsEncrypt {
     /// The email to use for the let's encrypt account
-    pub email: String,
+    pub email: Cow<'static, str>,
     /// Whether to enable the background service that renews the certificates (default: true)
     pub enabled: Option<bool>,
 
@@ -20,7 +22,7 @@ pub struct ConfigLetsEncrypt {
 impl Default for ConfigLetsEncrypt {
     fn default() -> Self {
         Self {
-            email: "contact@example.com".to_string(),
+            email: Cow::Borrowed("contact@example.com"),
             enabled: Some(true),
             staging: Some(true),
         }
@@ -31,22 +33,22 @@ impl Default for ConfigLetsEncrypt {
 pub struct ConfigPath {
     // TLS
     /// Path to the certificates directory (where the certificates are stored)
-    pub tls_certificates: String,
+    pub tls_certificates: Cow<'static, str>,
     /// Path to the challenges directory (where the challenges are stored)
-    pub tls_challenges: String,
+    pub tls_challenges: Cow<'static, str>,
     /// Path to the order file for let's encrypt (JSON with a URL)
-    pub tls_order: String,
+    pub tls_order: Cow<'static, str>,
     /// Path to the account credentials file for let's encrypt
-    pub tls_account_credentials: String,
+    pub tls_account_credentials: Cow<'static, str>,
 }
 
 impl Default for ConfigPath {
     fn default() -> Self {
         Self {
-            tls_certificates: "/etc/proksi/tls/certificates".to_string(),
-            tls_challenges: "/etc/proksi/tls/challenges".to_string(),
-            tls_order: "/etc/proksi/tls/orders".to_string(),
-            tls_account_credentials: "/etc/proksi/tls/account".to_string(),
+            tls_certificates: Cow::Borrowed("/etc/proksi/tls/certificates"),
+            tls_challenges: Cow::Borrowed("/etc/proksi/tls/challenges"),
+            tls_order: Cow::Borrowed("/etc/proksi/tls/orders"),
+            tls_account_credentials: Cow::Borrowed("/etc/proksi/tls/account"),
         }
     }
 }
@@ -54,16 +56,16 @@ impl Default for ConfigPath {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigRouteHeaderAdd {
     /// The name of the header
-    pub name: String,
+    pub name: Cow<'static, str>,
 
     /// The value of the header
-    pub value: String,
+    pub value: Cow<'static, str>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigRouteHeaderRemove {
     /// The name of the header to remove (ex.: "Server")
-    pub name: String,
+    pub name: Cow<'static, str>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,7 +80,7 @@ pub struct ConfigRouteHeader {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigRouteUpstream {
     /// The TCP address of the upstream (ex. 10.0.0.1/24 etc)
-    pub ip: String,
+    pub ip: Cow<'static, str>,
 
     /// The port of the upstream (ex: 3000, 5000, etc.)
     pub port: i16,
@@ -99,15 +101,15 @@ pub struct ConfigRoute {
     ///
     /// This is the host header that the proxy will match and will
     /// also be used to create the certificate for the domain when `letsencrypt` is enabled.
-    pub host: String,
+    pub host: Cow<'static, str>,
 
     pub headers: Option<ConfigRouteHeader>,
 
     /// Optional: will route to hostname IF path *ends* with the given suffix.
-    pub path_suffix: Option<String>,
+    pub path_suffix: Option<Cow<'static, str>>,
 
     /// Optional: will route to hostname IF path *starts* with the given prefix.
-    pub path_prefix: Option<String>,
+    pub path_prefix: Option<Cow<'static, str>>,
 
     /// The upstreams to which the request will be proxied,
     pub upstreams: Vec<ConfigRouteUpstream>,
@@ -200,7 +202,7 @@ pub(crate) struct Config {
     /// The name of the service (will appear as a log property)
     #[serde(default)]
     #[clap(short, long, default_value = "proksi")]
-    pub service_name: String,
+    pub service_name: Cow<'static, str>,
 
     /// The number of worker threads to be used by the HTTPS proxy service.
     ///
@@ -215,7 +217,7 @@ pub(crate) struct Config {
     /// and be present in that path. Defaults to the current directory.
     #[serde(skip)]
     #[clap(short, long, default_value = "./")]
-    pub config_path: String,
+    pub config_path: Cow<'static, str>,
 
     /// General config
     #[command(flatten)]
@@ -239,8 +241,8 @@ pub(crate) struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            config_path: "/etc/proksi/config".to_string(),
-            service_name: "proksi".to_string(),
+            config_path: Cow::Borrowed("/etc/proksi/config"),
+            service_name: Cow::Borrowed("proksi"),
             worker_threads: Some(1),
             letsencrypt: ConfigLetsEncrypt::default(),
             routes: vec![],
@@ -294,7 +296,7 @@ pub fn load_proxy_config(fallback: &str) -> Result<Config, figment::Error> {
     let path_with_fallback = if parsed_commands.config_path.is_empty() {
         fallback
     } else {
-        parsed_commands.config_path.as_str()
+        &parsed_commands.config_path
     };
 
     let config: Config = Figment::new()
