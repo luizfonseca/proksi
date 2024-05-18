@@ -259,11 +259,14 @@ logging:
   level: "INFO"
   access_logs_enabled: true
   error_logs_enabled: false
+lets_encrypt:
+  enabled: true
+  # This issues temporary certificates for testing. Flip it to `false` to use
+  # production certificates.
+  staging: true
+  email: "your-email@example.com"
 paths:
-  tls_certificates: "/etc/proksi/certificates"
-  tls_challenges: "/etc/proksi/challenges"
-  tls_order: "/etc/proksi/orders"
-  tls_account_credentials: "/etc/proksi/account-credentials"
+  lets_encrypt: "./my-lets_encrypt-folder"
 routes:
   - host: "example.com"
     path_prefix: "/api"
