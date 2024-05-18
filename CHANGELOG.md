@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.5](https://github.com/luizfonseca/proksi/compare/v0.1.4...v0.1.5) (2024-05-18)
+
+
+### Features
+
+* **letsencrypt:** add daily certificate renewal check ([90c14c6](https://github.com/luizfonseca/proksi/commit/90c14c63be0e9595ddca15250e4c20ae3c1a6cec))
+* **letsencrypt:** refactor and improve background service logic to handle existing certificates ([27e2564](https://github.com/luizfonseca/proksi/commit/27e2564ff097718324f55bc77e57fd47aa56f404))
+* **proxy:** use dashmap for route/cert thread access ([bf55ce8](https://github.com/luizfonseca/proksi/commit/bf55ce8ce44278ba774e0496155d84c9d8d5f05a))
+
+
+### Bug Fixes
+
+* remove todo from logger flush() ([796b8ef](https://github.com/luizfonseca/proksi/commit/796b8ef6f3493b48543f1298e507424bfd79056f))
+
+
+### Miscellaneous Chores
+
+* release 0.1.5 ([57cf174](https://github.com/luizfonseca/proksi/commit/57cf174b2d4fa5ae6f043044113975bf7712c4a6))
+
 ## [0.1.4](https://github.com/luizfonseca/proksi/compare/v0.1.3...v0.1.4) (2024-05-16)
 
 
