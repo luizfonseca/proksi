@@ -44,7 +44,7 @@ Proksi is a simple, lightweight, and easy-to-use proxy server that automatically
 Similar to other proxies, Proksi can be run as a Docker container. The following command will run Proksi in a Docker container:
 
 ```bash
-docker run -d -p 80:80 -p 443:443 -v /path/to/config:/etc/proksi/config.yaml luizfonseca/proksi
+docker run -d -p 80:80 -p 443:443 -v /path/to/config:/etc/proksi/ luizfonseca/proksi
 ```
 
 ### Docker Swarm
