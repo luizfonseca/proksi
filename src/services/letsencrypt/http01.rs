@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fs::create_dir_all, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
 
 use acme_lib::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
 use async_trait::async_trait;
@@ -8,7 +8,8 @@ use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
-use tracing::info;
+use tokio::time;
+use tracing::{debug, info};
 
 use crate::{config::Config, stores::certificates::Certificate, CERT_STORE};
 
@@ -113,6 +114,47 @@ impl LetsencryptService {
         );
         Ok(())
     }
+
+    async fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) -> () {
+        let acc = account.clone();
+        let hosts = self.hosts.clone();
+        let mut interval = time::interval(Duration::from_secs(84_600));
+        let le_service = Self::new(
+            self.hosts.clone(),
+            self.config.clone(),
+            self.challenge_store.clone(),
+        );
+
+        tokio::spawn(async move {
+            loop {
+                interval.tick().await;
+
+                for domain in &hosts {
+                    match acc.certificate(domain) {
+                        Ok(Some(cert)) => {
+                            let expiry = cert.valid_days_left();
+
+                            if expiry < 5 {
+                                info!(
+                                    "Certificate for domain {} expires in {} days",
+                                    domain, expiry
+                                );
+                                le_service
+                                    .create_order_for_domain(domain, acc.clone())
+                                    .expect("Failed to create order for domain");
+                            } else {
+                                debug!(
+                                    "Certificate for domain {} expires in {} days",
+                                    domain, expiry
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        });
+    }
 }
 
 #[async_trait]
@@ -160,6 +202,11 @@ impl Service for LetsencryptService {
                 _ => {}
             }
         }
+
+        // Check if any certificate needs renewal
+        let every_day = self.check_for_certificates_expiration(&account);
+
+        every_day.await;
     }
 
     fn name(&self) -> &'static str {

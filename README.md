@@ -206,7 +206,7 @@ Proksi is designed to be a standalone proxy server that can be used out of the b
 The following features are included or will be included into Proksi without the need of 3rd party plugins:
 
 ### Proxy
-- [ ] Automatic SSL termination (using LetsEncrypt)
+- [X] Automatic SSL termination (using LetsEncrypt)
 - [X] Automatic HTTP to HTTPS redirection
 - [ ] Docker Labeling Support (for services discovery)
 - [ ] Load Balancing (Round Robin, Weighted Round Robin, Least Connections)
