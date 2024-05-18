@@ -21,7 +21,7 @@ service_name: "proksi"
 worker_threads: 4
 
 # The configuration for the Let's Encrypt integration.
-letsencrypt:
+lets_encrypt:
 
   # Whether the Let's Encrypt integration is enabled
   # (the background service will run and issue certificates for your routes).
@@ -56,19 +56,9 @@ logging:
 # You can override any, these are the current defaults.
 paths:
 
-  # The path where the TLS certificates will be stored in JSON format
-  tls_certificates: "/etc/proksi/certificates"
-
-  # The path where the TLS challenges will be stored in JSON format
-  tls_challenges: "/etc/proksi/challenges"
-
-  # The path where the TLS orders will be stored in JSON format
-  tls_order: "/etc/proksi/orders"
-
-  # The path where the TLS account credentials will be stored in JSON format
-  # This is used to register an account with Let's Encrypt and it's reused as
-  # long as the folder is not deleted.
-  tls_account_credentials: "/etc/proksi/account-credentials"
+  # The path where the TLS certificates will be stored.
+  # If the path doesn't exist, it will be created if the binary has the right permissions.
+  lets_encrypt: "/etc/proksi/certificates"
 
 
 # The list of routes that the server will use to route incoming requests
