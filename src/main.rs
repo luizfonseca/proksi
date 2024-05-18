@@ -9,7 +9,10 @@ use once_cell::sync::Lazy;
 use pingora::listeners::TlsSettings;
 use pingora_load_balancing::{health_check::TcpHealthCheck, LoadBalancer};
 use pingora_proxy::http_proxy_service;
-use services::logger::{ProxyLogger, ProxyLoggerReceiver};
+use services::{
+    letsencrypt::http01::LetsencryptService,
+    logger::{ProxyLogger, ProxyLoggerReceiver},
+};
 use stores::{certificates::CertificateStore, routes::RouteStore};
 use tokio::sync::mpsc;
 
@@ -28,8 +31,10 @@ pub static CERT_STORE: Lazy<CertificateStore> = Lazy::new(|| Arc::new(DashMap::n
 
 fn main() -> Result<(), anyhow::Error> {
     // Loads configuration from command-line, YAML or TOML sources
-    let proxy_config = load_proxy_config("/etc/proksi/configs")
-        .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+    let proxy_config = Arc::new(
+        load_proxy_config("/etc/proksi/configs")
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?,
+    );
 
     let (log_sender, log_receiver) = mpsc::unbounded_channel::<Vec<u8>>();
     let proxy_logger = ProxyLogger::new(log_sender);
@@ -49,7 +54,7 @@ fn main() -> Result<(), anyhow::Error> {
     // let mut router_store = RouteStore::new();
 
     // for each route, build a loadbalancer configuration with the corresponding upstreams
-    for route in proxy_config.routes {
+    for route in &proxy_config.routes {
         // Construct host:port SocketAddr strings for each upstream
         let addr_upstreams = route
             .upstreams
@@ -64,7 +69,7 @@ fn main() -> Result<(), anyhow::Error> {
         let health_check_service = background_service(&route.host, upstreams);
         let upstreams = health_check_service.task();
 
-        ROUTE_STORE.insert(route.host, upstreams);
+        ROUTE_STORE.insert(route.host.clone(), upstreams);
         pingora_server.add_service(health_check_service);
     }
 
@@ -80,23 +85,22 @@ fn main() -> Result<(), anyhow::Error> {
     let docker_service = background_service("docker", client);
 
     // Service: Lets Encrypt HTTP Challenge/Certificate renewal
-    let letsencrypt_http = services::letsencrypt::http01::HttpLetsencrypt::new(
-        &ROUTE_STORE
-            .iter()
-            .map(|s| s.key().clone().into_owned())
-            .collect::<Vec<_>>(),
-        &proxy_config.letsencrypt.email,
-    );
-    let le_service = background_service("letsencrypt", letsencrypt_http);
+    let challenge_store = Arc::new(DashMap::<String, (String, String)>::new());
+    let domains: Vec<String> = ROUTE_STORE
+        .as_ref()
+        .into_iter()
+        .map(|k| k.key().to_string())
+        .collect();
+
+    let letsencrypt_service =
+        LetsencryptService::new(domains, proxy_config.clone(), challenge_store.clone());
 
     // Service: HTTP Load Balancer (only used by acme-challenges)
     // As we don't necessarily need an upstream to handle the acme-challenges,
     // we can use a simple mock LoadBalancer
     let mut http_service = http_proxy_service(
         &pingora_server.configuration,
-        proxy_server::http_proxy::HttpLB(Arc::new(
-            LoadBalancer::try_from_iter(["127.0.0.1:80"]).unwrap(),
-        )),
+        proxy_server::http_proxy::HttpLB { challenge_store },
     );
 
     // Service: HTTPS Load Balancer (main service)
@@ -112,7 +116,7 @@ fn main() -> Result<(), anyhow::Error> {
     pingora_server.add_service(http_service);
     pingora_server.add_service(https_service);
     pingora_server.add_service(docker_service);
-    pingora_server.add_service(le_service);
+    pingora_server.add_service(letsencrypt_service);
     pingora_server.add_service(ProxyLoggerReceiver(log_receiver));
 
     pingora_server.bootstrap();

@@ -1,6 +1,7 @@
-use std::{fs::File, io::Read, sync::Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
+use dashmap::DashMap;
 use http::{
     header::{CONTENT_LENGTH, CONTENT_TYPE, LOCATION},
     uri::Scheme,
@@ -8,11 +9,13 @@ use http::{
 };
 use pingora::upstreams::peer::HttpPeer;
 use pingora_http::ResponseHeader;
-use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
+
 use pingora_proxy::{ProxyHttp, Session};
 use tracing::info;
 
-pub struct HttpLB(pub Arc<LoadBalancer<RoundRobin>>);
+pub struct HttpLB {
+    pub(crate) challenge_store: Arc<DashMap<String, (String, String)>>,
+}
 
 #[async_trait]
 impl ProxyHttp for HttpLB {
@@ -51,36 +54,25 @@ impl ProxyHttp for HttpLB {
             .path()
             .starts_with("/.well-known/acme-challenge")
         {
-            let challenge_path = format!("./data/challenges/{}", &host);
-            let folder = std::path::Path::new(&challenge_path);
-            if !folder.is_dir() {
-                // Challenge doesn't exist on disk
+            let challenge_from_host = self.challenge_store.get(host);
+
+            if challenge_from_host.is_none() {
                 return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));
             }
 
-            // open challenge
-            let mut challenge_data = String::from("");
-            let challenge = File::open(format!("{}/meta.csv", challenge_path));
-            if let Ok(mut challenge) = challenge {
-                challenge.read_to_string(&mut challenge_data).unwrap();
-            }
+            let challenge_from_host = challenge_from_host.unwrap();
 
-            // Nothing to read;
-            if challenge_data.is_empty() {
-                return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));
-            }
-
-            let token_from_file = challenge_data.split(';').collect::<Vec<&str>>();
+            // Get the token and proof from the challenge store
+            let (token, proof) = challenge_from_host.value();
+            // Get the token from the URL
             let token_from_url = current_uri.path().split('/').last().unwrap();
 
-            // Weird token being provided
-            if token_from_file[token_from_file.len() - 1] != token_from_url {
+            // Token is not the same as the one provided
+            if token != token_from_url {
                 return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));
             }
 
-            let key_auth = token_from_file[1];
-
-            let sample_body = bytes::Bytes::from(key_auth.to_string());
+            let sample_body = bytes::Bytes::from(proof.clone());
             let mut res_headers = ResponseHeader::build_no_case(StatusCode::OK, Some(2))?;
             res_headers.append_header(CONTENT_TYPE, "text/plain")?;
             res_headers.append_header(CONTENT_LENGTH, sample_body.len())?;
@@ -102,7 +94,7 @@ impl ProxyHttp for HttpLB {
         let mut res_headers =
             ResponseHeader::build_no_case(StatusCode::PERMANENT_REDIRECT, Some(1))?;
 
-        println!("redirecting to https {new_uri:?}");
+        info!("redirecting to https {new_uri:?}");
         res_headers.append_header(LOCATION, new_uri.to_string())?;
         res_headers.append_header(CONTENT_TYPE, "text/plain")?;
         res_headers.append_header(CONTENT_LENGTH, 0)?;

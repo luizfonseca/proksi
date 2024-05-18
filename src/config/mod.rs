@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, path::PathBuf};
 
 use clap::{Args, Parser, ValueEnum};
 use figment::{
@@ -29,26 +29,17 @@ impl Default for ConfigLetsEncrypt {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigPath {
     // TLS
     /// Path to the certificates directory (where the certificates are stored)
-    pub tls_certificates: Cow<'static, str>,
-    /// Path to the challenges directory (where the challenges are stored)
-    pub tls_challenges: Cow<'static, str>,
-    /// Path to the order file for let's encrypt (JSON with a URL)
-    pub tls_order: Cow<'static, str>,
-    /// Path to the account credentials file for let's encrypt
-    pub tls_account_credentials: Cow<'static, str>,
+    pub lets_encrypt: PathBuf,
 }
 
 impl Default for ConfigPath {
     fn default() -> Self {
         Self {
-            tls_certificates: Cow::Borrowed("/etc/proksi/tls/certificates"),
-            tls_challenges: Cow::Borrowed("/etc/proksi/tls/challenges"),
-            tls_order: Cow::Borrowed("/etc/proksi/tls/orders"),
-            tls_account_credentials: Cow::Borrowed("/etc/proksi/tls/account"),
+            lets_encrypt: PathBuf::from("/etc/proksi/letsencrypt"),
         }
     }
 }
@@ -171,10 +162,7 @@ pub struct ConfigLogging {
 ///   production: true
 /// paths:
 ///   config_file: "/etc/proksi/config.toml"
-///   tls_certificates: "/etc/proksi/certificates"
-///   tls_challenges: "/etc/proksi/challenges"
-///   tls_order: "/etc/proksi/orders"
-///   tls_account_credentials: "/etc/proksi/account"
+///   lets_encrypt: "/etc/proksi/letsencrypt"
 /// routes:
 ///   - host: "example.com"
 ///     path_prefix: "/api"
@@ -224,7 +212,7 @@ pub(crate) struct Config {
     pub logging: ConfigLogging,
 
     #[clap(skip)]
-    pub letsencrypt: ConfigLetsEncrypt,
+    pub lets_encrypt: ConfigLetsEncrypt,
 
     /// Configuration for paths (TLS, config file, etc.)
     #[clap(skip)]
@@ -244,7 +232,7 @@ impl Default for Config {
             config_path: Cow::Borrowed("/etc/proksi/config"),
             service_name: Cow::Borrowed("proksi"),
             worker_threads: Some(1),
-            letsencrypt: ConfigLetsEncrypt::default(),
+            lets_encrypt: ConfigLetsEncrypt::default(),
             routes: vec![],
             logging: ConfigLogging {
                 level: LogLevel::Info,
@@ -310,6 +298,7 @@ pub fn load_proxy_config(fallback: &str) -> Result<Config, figment::Error> {
     Ok(config)
 }
 
+/// Deserialize function to convert a string to a LogLevel Enum
 fn log_level_deser<'de, D>(deserializer: D) -> Result<LogLevel, D::Error>
 where
     D: Deserializer<'de>,
@@ -337,7 +326,8 @@ mod tests {
           level: "INFO"
           access_logs_enabled: true
           error_logs_enabled: false
-
+        paths:
+          lets_encrypt: "/test/letsencrypt"
         routes:
           - host: "example.com"
             path_prefix: "/api"
@@ -380,8 +370,8 @@ mod tests {
             )?;
             jail.set_env("PROKSI_SERVICE_NAME", "new_name");
             jail.set_env("PROKSI_LOGGING__LEVEL", "warn");
-            jail.set_env("PROKSI_LETSENCRYPT__STAGING", "false");
-            jail.set_env("PROKSI_LETSENCRYPT__EMAIL", "my-real-email@domain.com");
+            jail.set_env("PROKSI_LETS_ENCRYPT__STAGING", "false");
+            jail.set_env("PROKSI_LETS_ENCRYPT__EMAIL", "my-real-email@domain.com");
             jail.set_env(
                 "PROKSI_ROUTES",
                 r#"[{
@@ -396,12 +386,16 @@ mod tests {
             assert_eq!(proxy_config.service_name, "new_name");
             assert_eq!(proxy_config.logging.level, LogLevel::Warn);
 
-            assert_eq!(proxy_config.letsencrypt.staging, Some(false));
-            assert_eq!(proxy_config.letsencrypt.email, "my-real-email@domain.com");
+            assert_eq!(proxy_config.lets_encrypt.staging, Some(false));
+            assert_eq!(proxy_config.lets_encrypt.email, "my-real-email@domain.com");
 
             assert_eq!(proxy_config.routes[0].host, "changed.example.com");
             assert_eq!(proxy_config.routes[0].upstreams[0].ip, "10.0.1.2/24");
 
+            assert_eq!(
+                proxy_config.paths.lets_encrypt,
+                PathBuf::from("/test/letsencrypt")
+            );
             Ok(())
         });
     }
@@ -446,7 +440,7 @@ mod tests {
             let proxy_config = config.unwrap();
             let logging = proxy_config.logging;
             let paths = proxy_config.paths;
-            let letsencrypt = proxy_config.letsencrypt;
+            let letsencrypt = proxy_config.lets_encrypt;
 
             assert_eq!(proxy_config.service_name, "proksi");
             assert_eq!(logging.level, LogLevel::Info);
@@ -458,8 +452,7 @@ mod tests {
             assert_eq!(letsencrypt.enabled, Some(true));
             assert_eq!(letsencrypt.staging, Some(true));
 
-            assert_eq!(paths.tls_account_credentials, "/etc/proksi/tls/account");
-            assert_eq!(paths.tls_certificates, "/etc/proksi/tls/certificates");
+            assert_eq!(paths.lets_encrypt.as_os_str(), "/etc/proksi/letsencrypt");
 
             Ok(())
         });

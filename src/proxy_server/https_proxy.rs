@@ -23,7 +23,7 @@ pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
     verify_hostname: true,
     read_timeout: Some(Duration::from_secs(30)),
     connection_timeout: Some(Duration::from_secs(30)),
-    tcp_recv_buf: Some(4096),
+    tcp_recv_buf: Some(2048),
     tcp_keepalive: Some(TcpKeepalive {
         count: 5,
         interval: Duration::from_secs(10),
@@ -99,7 +99,7 @@ impl ProxyHttp for Router {
         _session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
-        let upstream = ctx.current_lb.as_ref();
+        let upstream = ctx.current_lb.clone();
 
         // No upstream found (should never happen, but just in case)
         if upstream.is_none() {
@@ -114,7 +114,7 @@ impl ProxyHttp for Router {
 
         let host = ctx.host.as_ref().unwrap();
 
-        let b: &str = &host.borrow();
+        let b: &str = host.borrow();
         info!(host = b, "Upstream selected");
 
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
