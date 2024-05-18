@@ -187,9 +187,9 @@ services:
 
 - [x] Automatic Redirect to HTTPS
 - [ ] Docker Labeling Support
-- [X] Automatic SSL termination
-- [ ] Automatic SSL certificate renewal
-- [X] Extensible through configuration
+- [x] Automatic SSL termination
+- [x] Automatic SSL certificate renewal
+- [x] Extensible through configuration
 - [ ] Path matcher (regex, prefix and suffix)
 - [ ] Default middlewares implemented
   - [ ] RateLimiter,
