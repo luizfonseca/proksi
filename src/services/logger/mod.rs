@@ -23,7 +23,7 @@ impl io::Write for StdoutLogger {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        todo!()
+        Ok(())
     }
 }
 
