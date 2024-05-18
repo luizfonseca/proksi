@@ -39,7 +39,6 @@ impl ProxyHttp for HttpLB {
         }
 
         if current_uri.path() == "/ping" {
-            info!("Ping request received");
             let sample_body = bytes::Bytes::from("pong");
             let mut res_headers = ResponseHeader::build_no_case(StatusCode::OK, Some(2))?;
             res_headers.append_header(CONTENT_TYPE, "text/plain")?;

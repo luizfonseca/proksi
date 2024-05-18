@@ -27,7 +27,7 @@ pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
     tcp_keepalive: Some(TcpKeepalive {
         count: 5,
         interval: Duration::from_secs(10),
-        idle: Duration::from_secs(60),
+        idle: Duration::from_secs(30),
     }),
     bind_to: None,
     total_connection_timeout: None,
