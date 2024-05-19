@@ -3,76 +3,195 @@ name: Release
 on:
   push:
     branches:
-      - main
+      # - main
+      - ci
 
 jobs:
-  release:
-    name: Release
-    permissions:
-      contents: write
-      pull-requests: write
-    runs-on: ubuntu-latest
-    steps:
-      - name: Release
-        id: release
-        uses: google-github-actions/release-please-action@v4
-        with:
-          release-type: rust
 
-      - name: Setup Go
-        if: ${{ steps.release.outputs.release_created }}
-        uses: actions/setup-go@v5
+  # release:
+  #   name: Release
+  #   permissions:
+  #     contents: write
+  #     pull-requests: write
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Release
+  #       id: release
+  #       uses: google-github-actions/release-please-action@v4
+  #       with:
+  #         release-type: rust
+
+  build:
+    # needs: release
+    name: Build binary -- ${{ matrix.platform.os_name }}
+    # if: ${{ needs.release.outputs.release_created }}
+    strategy:
+      matrix:
+        platform:
+          - name: proksi-linux-musl-x86_64
+            os: ubuntu-latest
+            image: rust:latest
+            bin: proksi
+            cross: true
+            args: x86_64-unknown-linux-musl
+            cargo_command: cross
+          #
+          - name: proksi-linux-musl-aarch64
+            os: ubuntu-latest
+            image: rust:latest
+            cross: true
+            bin: proksi
+            args: aarch64-unknown-linux-musl
+            cargo_command: cross
+          #
+          - name: proksi-linux-gnu-aarch64
+            os: ubuntu-latest
+            image: rust:latest
+            cross: true
+            bin: proksi
+            args: aarch64-unknown-linux-musl
+            cargo_command: cross
+          #
+          - name: proksi-linux-gnu-x86_64
+            os: ubuntu-latest
+            image: rust:latest
+            bin: proksi
+            cross: true
+            args: x86_64-unknown-linux-gnu
+            cargo_command: cross
+          #
+          - name: proksi-macos-x86_64
+            os: macos-latest
+            image: rust:latest
+            bin: proksi
+            cross: false
+            args: x86_64-apple-darwin
+            cargo_command: cargo
+          #
+          - name: proksi-macos-aarch64
+            os: macos-latest
+            image: rust:latest
+            cross: false
+            bin: proksi
+            args: aarch64-apple-darwin
+            cargo_command: cargo
+    runs-on: ${{ matrix.platform.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ steps.release.outputs.tag_name }}
 
       - name: Setup Rust
-        if: ${{ steps.release.outputs.release_created }}
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          components: rustfmt, clippy
+          components: rustfmt,clippy
+          target: ${{ matrix.platform.args }}
 
       - name: Setup Cross
-        if: ${{ steps.release.outputs.release_created }}
+        run: cargo install cross --git https://github.com/cross-rs/cross
+        if: ${{ matrix.platform.cross }}
+
+      - name: Install musl-tools on Linux
+        run: sudo apt-get update --yes && sudo apt-get install --yes musl-tools
+        if: contains(matrix.platform.os, 'ubuntu')
+
+      - name: Build binary (*nix)
+        shell: bash
+        if: contains(matrix.platform.os, 'ubuntu')
         run: |
-          cargo install cross --git https://github.com/cross-rs/cross
+          ${{ matrix.platform.cargo_command }} build --locked --release --target ${{ matrix.platform.target }}
+
+      - name: Build binary (OSX)
+        shell: bash
+        if: contains(matrix.platform.os, 'macos')
+        run: |
+          ${{ matrix.platform.cargo_command }} build --locked --release --target ${{ matrix.platform.target }}
+
+      - name: Package as archive
+        shell: bash
+        run: |
+          cd target/${{ matrix.platform.target }}/release
+          tar czvf ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
+          cp ${{ matrix.platform.bin }} ${{ matrix.platform.name }}
+
+      - name: Upload artifacts (tar.gz)
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.platform.name }}.tar.gz
+          path: "proksi*"
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.platform.name }}
+          path: "target/${{ matrix.platform.target }}/release"
+
+
+  publish:
+    name: Publish
+    needs:
+      # - release
+      - build
+    permissions:
+      contents: write
+      pull-requests: write
+    # if: ${{ needs.release.outputs.release_created }} && ${{ needs.build.result == 'success' }}
+    if: ${{ needs.build.result == 'success' }}
+    runs-on: macos-latest
+    steps:
+      # - name: Setup Go
+      #   uses: actions/setup-go@v5
 
       - name: Checkout
-        if: ${{ steps.release.outputs.release_created }}
         uses: actions/checkout@v3
         with:
           ref: ${{ steps.release.outputs.tag_name }}
 
       - name: Set up Docker Buildx
-        if: ${{ steps.release.outputs.release_created }}
         uses: docker/setup-buildx-action@v2
 
       - name: Set up QEMU
-        if: ${{ steps.release.outputs.release_created }}
         uses: docker/setup-qemu-action@v2
 
       - name: Login to Docker Hub
-        if: ${{ steps.release.outputs.release_created }}
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Go Release
-        if: ${{ steps.release.outputs.release_created }}
-        uses: goreleaser/goreleaser-action@v4
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release
+      - name: Download workflow arteifacts
+        uses: actions/download-artifact@v4
+
+      - name: x86_64 Build MacOS image
+        run: |
+          cp proksi-macos-x86_64 proksi
+          docker buildx build --platform darwin/amd64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
+
+      - name: aarch64 Build MacOS image
+        run: |
+          rm proksi
+          cp proksi-macos-aarch64 proksi
+          docker buildx build --platform darwin/arm64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
+
+      - name: x86_64 Build Linux image
+        run: |
+          rm proksi
+          cp proksi-linux-gnu-x86_64 proksi
+          docker buildx build --platform linux/amd64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
+
+      - name: aarch64 Build Linux image
+        run: |
+          rm proksi
+          cp proksi-linux-gnu-aarch64 proksi
+          docker buildx build --platform linux/arm64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
 
       - name: Replace The Relative Path In The README.md
-        if: ${{ steps.release.outputs.release_created }}
         run: |
           sed -E 's#(\[[^]]*\])\(\.\/([^)]+)\)#\1(https://github.com/${{ github.repository }}/raw/${{ steps.release.outputs.tag_name }}/\2)#g' README.md > docker.README.md
 
       - name: Update Docker Images Description
-        if: ${{ steps.release.outputs.release_created }}
         uses: peter-evans/dockerhub-description@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -80,8 +199,24 @@ jobs:
           repository: luizfonseca/proksi
           short-description: LoadBalancer and HTTP Proxy with automatic SSL
           readme-filepath: docker.README.md
-      # endregion Docker
 
-      - name: Publish updated version to crates.io
-        if: ${{ steps.release.outputs.release_created }}
-        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+  publish-cargo:
+    name: Publish to crates.io
+    needs:
+      - publish
+    if: ${{ needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ steps.release.outputs.tag_name }}
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt,clippy
+
+      - name: Publish to crates.io
+        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }} --dry-run
