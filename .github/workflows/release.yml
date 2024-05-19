@@ -23,7 +23,7 @@ jobs:
 
   build:
     # needs: release
-    name: Build binary -- ${{ matrix.platform.os_name }}
+    name: Build binary -- ${{ matrix.platform.name }}
     # if: ${{ needs.release.outputs.release_created }}
     strategy:
       matrix:
