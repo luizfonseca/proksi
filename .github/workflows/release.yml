@@ -151,6 +151,10 @@ jobs:
     if: ${{ needs.build.result == 'success' }}
     runs-on: macos-latest
     steps:
+      - name: Setup docker (missing on MacOS)
+        if: runner.os == 'macos'
+        run: |
+          brew install docker
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 
