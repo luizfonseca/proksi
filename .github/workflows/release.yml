@@ -114,19 +114,18 @@ jobs:
         run: |
           cd target/${{ matrix.platform.target }}/release
           tar czvf ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
-          cp ${{ matrix.platform.bin }} ${{ matrix.platform.name }}
 
       - name: Upload artifacts (tar.gz)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform.name }}.tar.gz
           path: "proksi*"
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform.name }}
-          path: "target/${{ matrix.platform.target }}/release"
+          path: "target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}"
 
 
   publish:
