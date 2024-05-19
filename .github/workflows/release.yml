@@ -89,6 +89,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
+          key: ${{ matrix.platform.target }}
           cache-provider: github
 
       - name: Setup Rust
@@ -153,6 +154,8 @@ jobs:
       #   uses: actions/setup-go@v5
       - name: Setup docker (missing on MacOS)
         if: runner.os == 'macos'
+        env:
+            GH_TOKEN: ${{ github.token }}
         run: |
           COLIMA_VERSION=$(gh release -R abiosoft/colima view --json tagName -q ".tagName")
 
