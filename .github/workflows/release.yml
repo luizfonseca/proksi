@@ -178,29 +178,31 @@ jobs:
       - name: x86_64 Build MacOS image
         run: |
           cp ./data/proksi-macos-x86_64/proksi proksi
-          docker buildx build --platform darwin/amd64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
+          docker buildx build --platform darwin/amd64 -t luizfonseca/proksi:${{ needs.release.outputs.tag_name }} -f Dockerfile .
+
+     # ${{ needs.release.outputs.tag_name }}
 
       - name: aarch64 Build MacOS image
         run: |
           rm proksi
           cp ./data/proksi-macos-aarch64/proksi proksi
-          docker buildx build --platform darwin/arm64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
+          docker buildx build --platform darwin/arm64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile .
 
       - name: x86_64 Build Linux image
         run: |
           rm proksi
           cp ./data/proksi-linux-gnu-x86_64/proksi proksi
-          docker buildx build --platform linux/amd64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
+          docker buildx build --platform linux/amd64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile .
 
       - name: aarch64 Build Linux image
         run: |
           rm proksi
           cp ./data/proksi-linux-gnu-aarch64/proksi proksi
-          docker buildx build --platform linux/arm64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
+          docker buildx build --platform linux/arm64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile .
 
-      - name: Replace The Relative Path In The README.md
-        run: |
-          sed -E 's#(\[[^]]*\])\(\.\/([^)]+)\)#\1(https://github.com/${{ github.repository }}/raw/${{ steps.release.outputs.tag_name }}/\2)#g' README.md > docker.README.md
+      # - name: Replace The Relative Path In The README.md
+      #   run: |
+      #     sed -E 's#(\[[^]]*\])\(\.\/([^)]+)\)#\1(https://github.com/${{ github.repository }}/raw/${{ needs.release.outputs.tag_name }}/\2)#g' README.md > docker.README.md
 
       - name: Update Docker Images Description
         uses: peter-evans/dockerhub-description@v3
