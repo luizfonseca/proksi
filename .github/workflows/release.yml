@@ -169,7 +169,7 @@ jobs:
       - name: Download workflow artifacts
         uses: actions/download-artifact@v4
         with:
-          name: ./data
+          path: ./data
 
       - name: x86_64 Build MacOS image
         run: |
