@@ -177,7 +177,7 @@ jobs:
 
       - name: x86_64 Build MacOS image
         run: |
-          cp ./data/proksi-macos-x86_6/proksi proksi
+          cp ./data/proksi-macos-x86_64/proksi proksi
           docker buildx build --platform darwin/amd64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
 
       - name: aarch64 Build MacOS image
