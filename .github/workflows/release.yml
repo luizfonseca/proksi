@@ -178,7 +178,7 @@ jobs:
       - name: x86_64 Build MacOS image
         run: |
           cp ./data/proksi-macos-x86_64/proksi proksi
-          docker buildx build --platform darwin/amd64 -t luizfonseca/proksi:${{ needs.release.outputs.tag_name }} -f Dockerfile .
+          docker buildx build --platform darwin/amd64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile . --load
 
      # ${{ needs.release.outputs.tag_name }}
 
@@ -186,19 +186,19 @@ jobs:
         run: |
           rm proksi
           cp ./data/proksi-macos-aarch64/proksi proksi
-          docker buildx build --platform darwin/arm64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile .
+          docker buildx build --platform darwin/arm64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile . --load
 
       - name: x86_64 Build Linux image
         run: |
           rm proksi
           cp ./data/proksi-linux-gnu-x86_64/proksi proksi
-          docker buildx build --platform linux/amd64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile .
+          docker buildx build --platform linux/amd64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile . --load
 
       - name: aarch64 Build Linux image
         run: |
           rm proksi
           cp ./data/proksi-linux-gnu-aarch64/proksi proksi
-          docker buildx build --platform linux/arm64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile .
+          docker buildx build --platform linux/arm64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile . --load
 
       # - name: Replace The Relative Path In The README.md
       #   run: |
