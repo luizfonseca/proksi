@@ -33,7 +33,7 @@ jobs:
             image: rust:latest
             bin: proksi
             cross: true
-            args: x86_64-unknown-linux-musl
+            target: x86_64-unknown-linux-musl
             cargo_command: cross
           #
           - name: proksi-linux-musl-aarch64
@@ -41,7 +41,7 @@ jobs:
             image: rust:latest
             cross: true
             bin: proksi
-            args: aarch64-unknown-linux-musl
+            target: aarch64-unknown-linux-musl
             cargo_command: cross
           #
           - name: proksi-linux-gnu-aarch64
@@ -49,7 +49,7 @@ jobs:
             image: rust:latest
             cross: true
             bin: proksi
-            args: aarch64-unknown-linux-musl
+            target: aarch64-unknown-linux-musl
             cargo_command: cross
           #
           - name: proksi-linux-gnu-x86_64
@@ -57,7 +57,7 @@ jobs:
             image: rust:latest
             bin: proksi
             cross: true
-            args: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-gnu
             cargo_command: cross
           #
           - name: proksi-macos-x86_64
@@ -65,7 +65,7 @@ jobs:
             image: rust:latest
             bin: proksi
             cross: false
-            args: x86_64-apple-darwin
+            target: x86_64-apple-darwin
             cargo_command: cargo
           #
           - name: proksi-macos-aarch64
@@ -73,7 +73,7 @@ jobs:
             image: rust:latest
             cross: false
             bin: proksi
-            args: aarch64-apple-darwin
+            target: aarch64-apple-darwin
             cargo_command: cargo
     runs-on: ${{ matrix.platform.os }}
     steps:
@@ -87,7 +87,7 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt,clippy
-          target: ${{ matrix.platform.args }}
+          target: ${{ matrix.platform.target }}
 
       - name: Setup Cross
         run: cargo install cross --git https://github.com/cross-rs/cross
