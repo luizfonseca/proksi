@@ -168,28 +168,30 @@ jobs:
 
       - name: Download workflow artifacts
         uses: actions/download-artifact@v4
+        with:
+          path: ./data
 
       - name: x86_64 Build MacOS image
         run: |
-          cp proksi-macos-x86_64 proksi
+          cp ./data/proksi-macos-x86_64/proksi-macos-x86_64 proksi
           docker buildx build --platform darwin/amd64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
 
       - name: aarch64 Build MacOS image
         run: |
           rm proksi
-          cp proksi-macos-aarch64 proksi
+          cp ./data/proksi-macos-aarch64/proksi-macos-aarch64 proksi
           docker buildx build --platform darwin/arm64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
 
       - name: x86_64 Build Linux image
         run: |
           rm proksi
-          cp proksi-linux-gnu-x86_64 proksi
+          cp ./data/proksi-linux-gnu-x86_64/proksi-linux-gnu-x86_64 proksi
           docker buildx build --platform linux/amd64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
 
       - name: aarch64 Build Linux image
         run: |
           rm proksi
-          cp proksi-linux-gnu-aarch64 proksi
+          cp ./data/proksi-linux-gnu-aarch64/proksi-linux-gnu-aarch64 proksi
           docker buildx build --platform linux/arm64 -t luizfonseca/proksi:${{ steps.release.outputs.tag_name }} -f Dockerfile .
 
       - name: Replace The Relative Path In The README.md
