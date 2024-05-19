@@ -142,7 +142,7 @@ jobs:
   publish:
     name: Publish
     needs:
-      - release
+      # - release
       - build
     permissions:
       contents: write
