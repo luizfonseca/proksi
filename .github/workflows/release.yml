@@ -165,7 +165,7 @@ jobs:
         run: |
           brew install colima
           brew install docker
-          colima start
+          colima start --cpu 3 --memory 6 --disk 100 --vm-type=qemu --mount-type=sshfs --dns=1.1.1.1
 
       - name: Checkout
         uses: actions/checkout@v4
