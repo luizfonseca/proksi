@@ -156,7 +156,6 @@ jobs:
         shell: bash
         run: |
           brew install lima
-          limactl start
       - name: Setup docker (missing on MacOS)
         if: runner.os == 'macos'
         run: |
