@@ -98,6 +98,7 @@ jobs:
           toolchain: stable
           components: rustfmt,clippy
           target: ${{ matrix.platform.target }}
+          cache: false
 
       - name: Setup Cross
         run: cargo install cross --git https://github.com/cross-rs/cross
