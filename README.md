@@ -17,6 +17,7 @@ Proksi is a simple, lightweight, and easy-to-use proxy server that automatically
 
 
 - [Proksi: Automatic SSL, HTTP, and DNS Proxy](#proksi-automatic-ssl-http-and-dns-proxy)
+  - [Getting started](#getting-started)
   - [Usage](#usage)
     - [Docker](#docker)
     - [Docker Swarm](#docker-swarm)
@@ -35,6 +36,9 @@ Proksi is a simple, lightweight, and easy-to-use proxy server that automatically
   - [Configuration Examples](#configuration-examples)
   - [Performance \& Benchmarks](#performance--benchmarks)
   - [Why build another proxy...?](#why-build-another-proxy)
+
+## Getting started
+[![asciicast](https://asciinema.org/a/ORhG5Na2SHIBI8TH2mPPUHMVZ.svg)](https://asciinema.org/a/ORhG5Na2SHIBI8TH2mPPUHMVZ)
 
 
 ## Usage
