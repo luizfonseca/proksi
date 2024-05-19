@@ -188,7 +188,7 @@ jobs:
 
       - name: Multi arch image
         run: |
-          docker buildx imagetools create -t luizfonseca/proksi:latest,luizfonseca/proksi:${{ github.sha }} local/proksi:linux-amd64 local/proksi:linux-aarch64
+          docker buildx imagetools create -t luizfonseca/proksi:${{ github.sha }} local/proksi:linux-amd64 local/proksi:linux-aarch64
 
 
       # steps.release.outputs.tag_name
