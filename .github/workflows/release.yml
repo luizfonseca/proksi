@@ -175,18 +175,18 @@ jobs:
         run: |
           ls -R ./data
 
-      - name: x86_64 Build MacOS image
-        run: |
-          cp ./data/proksi-macos-x86_64/proksi proksi
-          docker buildx build --platform darwin/amd64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile . --load
+     #  - name: x86_64 Build MacOS image
+     #    run: |
+     #      cp ./data/proksi-macos-x86_64/proksi proksi
+     #      docker buildx build --platform darwin/amd64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile . --load
 
-     # ${{ needs.release.outputs.tag_name }}
+     # # ${{ needs.release.outputs.tag_name }}
 
-      - name: aarch64 Build MacOS image
-        run: |
-          rm proksi
-          cp ./data/proksi-macos-aarch64/proksi proksi
-          docker buildx build --platform darwin/arm64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile . --load
+     #  - name: aarch64 Build MacOS image
+     #    run: |
+     #      rm proksi
+     #      cp ./data/proksi-macos-aarch64/proksi proksi
+     #      docker buildx build --platform darwin/arm64 -t luizfonseca/proksi:${{ github.sha }} -f Dockerfile . --load
 
       - name: x86_64 Build Linux image
         run: |
