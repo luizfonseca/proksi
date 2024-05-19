@@ -87,6 +87,10 @@ jobs:
         with:
           ref: ${{ steps.release.outputs.tag_name }}
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: github
+
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -150,7 +154,16 @@ jobs:
       - name: Setup docker (missing on MacOS)
         if: runner.os == 'macos'
         run: |
+          COLIMA_VERSION=$(gh release -R abiosoft/colima view --json tagName -q ".tagName")
+
           brew install docker
+
+          echo "::group::Installing Colima version $COLIMA_VERSION"
+          curl -LO https://github.com/abiosoft/colima/releases/download/${COLIMA_VERSION}/colima-$(uname)-$(uname -m)
+
+          # install in $PATH
+          install colima-$(uname)-$(uname -m) /usr/local/bin/colima
+          echo "::endgroup::"
           colima start
 
       - name: Checkout
