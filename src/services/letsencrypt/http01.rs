@@ -114,7 +114,7 @@ impl LetsencryptService {
         Ok(())
     }
 
-    async fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) -> () {
+    async fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) {
         let acc = account.clone();
         let hosts = self.hosts.clone();
         let mut interval = time::interval(Duration::from_secs(84_600));
@@ -129,26 +129,23 @@ impl LetsencryptService {
                 interval.tick().await;
 
                 for domain in &hosts {
-                    match acc.certificate(domain) {
-                        Ok(Some(cert)) => {
-                            let expiry = cert.valid_days_left();
+                    if let Some(cert) = acc.certificate(domain).unwrap() {
+                        let expiry = cert.valid_days_left();
 
-                            if expiry < 5 {
-                                info!(
-                                    "Certificate for domain {} expires in {} days",
-                                    domain, expiry
-                                );
-                                le_service
-                                    .create_order_for_domain(domain, acc.clone())
-                                    .expect("Failed to create order for domain");
-                            } else {
-                                debug!(
-                                    "Certificate for domain {} expires in {} days",
-                                    domain, expiry
-                                );
-                            }
+                        if expiry < 5 {
+                            info!(
+                                "Certificate for domain {} expires in {} days",
+                                domain, expiry
+                            );
+                            le_service
+                                .create_order_for_domain(domain, acc.clone())
+                                .expect("Failed to create order for domain");
+                        } else {
+                            debug!(
+                                "Certificate for domain {} expires in {} days",
+                                domain, expiry
+                            );
                         }
-                        _ => {}
                     }
                 }
             }
