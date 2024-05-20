@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.7](https://github.com/luizfonseca/proksi/compare/v0.1.6...v0.1.7) (2024-05-20)
+
+
+### Bug Fixes
+
+* **ci:** missing release outputs ([4028460](https://github.com/luizfonseca/proksi/commit/4028460811bffa94a0628a9710105a4d4b2675d2))
+
+
+### Miscellaneous Chores
+
+* release 0.1.7 ([d867ea4](https://github.com/luizfonseca/proksi/commit/d867ea41bb57a4a105630d05c116577e9bb124f4))
+
 ## [0.1.6](https://github.com/luizfonseca/proksi/compare/v0.1.5...v0.1.6) (2024-05-20)
 
 
