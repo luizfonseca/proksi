@@ -26,7 +26,7 @@ codegen-units = 12
 
 [dependencies]
 acme-lib = "0.9.1"
-anyhow = "1.0.83"
+anyhow = "1.0.86"
 async-trait = "0.1.80"
 bollard = "0.16.1"
 bollard-stubs = "=1.44.0-rc.2"
