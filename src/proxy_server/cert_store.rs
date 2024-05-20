@@ -10,8 +10,8 @@ use crate::CERT_STORE;
 pub struct CertStore {}
 
 impl CertStore {
-    pub fn new() -> Box<Self> {
-        Box::new(CertStore {})
+    pub fn new() -> Self {
+        CertStore {}
     }
 }
 
@@ -41,10 +41,10 @@ impl TlsAccept for CertStore {
         let result = certificate.unwrap();
         let cert = &result.value();
 
-        let crt = X509::from_pem(&cert.certificate).unwrap();
-        let key = PKey::private_key_from_pem(&cert.key).unwrap();
+        let crt_value = X509::from_pem(&cert.certificate).unwrap();
+        let key_value = PKey::private_key_from_pem(&cert.key).unwrap();
 
-        ext::ssl_use_certificate(ssl, &crt).unwrap();
-        ext::ssl_use_private_key(ssl, &key).unwrap();
+        ext::ssl_use_certificate(ssl, &crt_value).unwrap();
+        ext::ssl_use_private_key(ssl, &key_value).unwrap();
     }
 }

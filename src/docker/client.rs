@@ -5,18 +5,18 @@ use bollard::{service::ListServicesOptions, Docker};
 use pingora::{server::ShutdownWatch, services::background::BackgroundService};
 use tracing::info;
 
-pub fn create_client() -> DockerClient {
+pub fn create() -> DockerService {
     let docker = Docker::connect_with_local_defaults();
-    DockerClient {
+    DockerService {
         inner: docker.unwrap(),
     }
 }
 
-pub struct DockerClient {
+pub struct DockerService {
     inner: Docker,
 }
 
-impl DockerClient {
+impl DockerService {
     pub async fn start_service(&self) {
         let mut default_filters = HashMap::new();
         default_filters.insert("label", vec!["proksi.host", "proksi.port"]);
@@ -52,7 +52,7 @@ impl DockerClient {
 }
 
 #[async_trait]
-impl BackgroundService for DockerClient {
+impl BackgroundService for DockerService {
     async fn start(&self, _shutdown: ShutdownWatch) -> () {
         self.start_service().await;
     }

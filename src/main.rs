@@ -2,16 +2,17 @@ use std::{sync::Arc, time::Duration};
 
 use ::pingora::{server::Server, services::background::background_service};
 use anyhow::anyhow;
-use config::load_proxy_config;
+use config::load;
 use dashmap::DashMap;
 
 use once_cell::sync::Lazy;
 use pingora::listeners::TlsSettings;
 use pingora_load_balancing::{health_check::TcpHealthCheck, LoadBalancer};
 use pingora_proxy::http_proxy_service;
+use proxy_server::cert_store;
 use services::{
     letsencrypt::http01::LetsencryptService,
-    logger::{ProxyLogger, ProxyLoggerReceiver},
+    logger::{ProxyLog, ProxyLoggerReceiver},
 };
 use stores::{certificates::CertificateStore, routes::RouteStore};
 use tokio::sync::mpsc;
@@ -29,16 +30,14 @@ pub static ROUTE_STORE: Lazy<RouteStore> = Lazy::new(|| Arc::new(DashMap::new())
 /// Static reference to the certificate store that can be shared across threads
 pub static CERT_STORE: Lazy<CertificateStore> = Lazy::new(|| Arc::new(DashMap::new()));
 
-#[deny(unsafe_code)]
 fn main() -> Result<(), anyhow::Error> {
     // Loads configuration from command-line, YAML or TOML sources
     let proxy_config = Arc::new(
-        load_proxy_config("/etc/proksi/configs")
-            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?,
+        load("/etc/proksi/configs").map_err(|e| anyhow!("Failed to load configuration: {}", e))?,
     );
 
     let (log_sender, log_receiver) = mpsc::unbounded_channel::<Vec<u8>>();
-    let proxy_logger = ProxyLogger::new(log_sender);
+    let proxy_logger = ProxyLog::new(&log_sender);
 
     // Creates a tracing/logging subscriber based on the configuration provided
     tracing_subscriber::fmt()
@@ -74,7 +73,7 @@ fn main() -> Result<(), anyhow::Error> {
         pingora_server.add_service(health_check_service);
     }
 
-    let certificate_store = proxy_server::cert_store::CertStore::new();
+    let certificate_store = Box::new(cert_store::CertStore::new());
 
     // Setup tls settings and Enable HTTP/2
     let mut tls_settings = TlsSettings::with_callbacks(certificate_store).unwrap();
@@ -83,7 +82,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Service: Docker
     if proxy_config.docker.enabled.unwrap_or(false) {
-        let client = docker::client::create_client();
+        let client = docker::client::create();
         let docker_service = background_service("docker", client);
         pingora_server.add_service(docker_service);
     }
@@ -105,7 +104,7 @@ fn main() -> Result<(), anyhow::Error> {
     // Service: HTTP Load Balancer (only used by acme-challenges)
     // As we don't necessarily need an upstream to handle the acme-challenges,
     // we can use a simple mock LoadBalancer
-    let mut http_service = http_proxy_service(
+    let mut http_public_service = http_proxy_service(
         &pingora_server.configuration,
         proxy_server::http_proxy::HttpLB { challenge_store },
     );
@@ -113,15 +112,15 @@ fn main() -> Result<(), anyhow::Error> {
     // Service: HTTPS Load Balancer (main service)
     // The router will also handle health checks and failover in case of upstream failure
     let router = proxy_server::https_proxy::Router {};
-    let mut https_service = http_proxy_service(&pingora_server.configuration, router);
-    http_service.add_tcp("0.0.0.0:80");
+    let mut https_secure_service = http_proxy_service(&pingora_server.configuration, router);
+    http_public_service.add_tcp("0.0.0.0:80");
 
     // Worker threads per configuration
-    https_service.threads = proxy_config.worker_threads;
-    https_service.add_tls_with_settings("0.0.0.0:443", None, tls_settings);
+    https_secure_service.threads = proxy_config.worker_threads;
+    https_secure_service.add_tls_with_settings("0.0.0.0:443", None, tls_settings);
 
-    pingora_server.add_service(http_service);
-    pingora_server.add_service(https_service);
+    pingora_server.add_service(http_public_service);
+    pingora_server.add_service(https_secure_service);
     pingora_server.add_service(ProxyLoggerReceiver(log_receiver));
 
     pingora_server.bootstrap();

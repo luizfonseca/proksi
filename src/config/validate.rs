@@ -4,7 +4,7 @@ use super::Config;
 
 /// given a Config struct, validate the values to ensure
 /// That we program won't panic when we try to use them
-pub fn validate_config(config: &Config) -> Result<(), anyhow::Error> {
+pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
     // Validate if worker threads is greater than 0
     if config.worker_threads.unwrap() == 0 {
         return Err(anyhow!("Worker threads must be greater than 0"));

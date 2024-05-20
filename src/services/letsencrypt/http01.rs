@@ -1,6 +1,7 @@
 use std::{borrow::Cow, fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
 
 use acme_lib::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
+use anyhow::anyhow;
 use async_trait::async_trait;
 use bytes::Bytes;
 use dashmap::DashMap;
@@ -13,7 +14,7 @@ use tracing::{debug, info};
 
 use crate::{config::Config, stores::certificates::Certificate, CERT_STORE};
 
-/// A service that handles the creation of certificates using the LetsEncrypt API
+/// A service that handles the creation of certificates using the Let's Encrypt API
 pub struct LetsencryptService {
     config: Arc<Config>,
     hosts: Vec<String>,
@@ -76,9 +77,9 @@ impl LetsencryptService {
     fn create_order_for_domain(
         &self,
         domain: &str,
-        account: Account<FilePersist>,
-    ) -> Result<(), anyhow::Error> {
-        let mut order = account.new_order(domain, &[]).unwrap();
+        account: &Account<FilePersist>,
+    ) -> Result<bool, anyhow::Error> {
+        let mut order = account.new_order(domain, &[])?;
 
         let order_csr = loop {
             // Break if we are done confirming validations
@@ -89,17 +90,17 @@ impl LetsencryptService {
             // Get the possible authorizations (for a single domain
             // this will only be one element).
             self.handle_http_01_challenge(&mut order)
-                .expect("Failed to handle HTTP-01 challenge");
+                .map_err(|err| anyhow!("Failed to handle HTTP-01 challenge: {err}"))?;
 
             order.refresh().unwrap_or_default();
         };
 
         // Order OK
         let pkey = acme_lib::create_p384_key();
-        let order_cert = order_csr.finalize_pkey(pkey, 5000).unwrap();
+        let order_cert = order_csr.finalize_pkey(pkey, 5000)?;
 
         info!("Certificate created for order {:?}", order_cert.api_order());
-        let cert = order_cert.download_and_save_cert().unwrap();
+        let cert = order_cert.download_and_save_cert()?;
 
         let crt_bytes = Bytes::from(cert.certificate().to_string()).to_vec();
         let key_bytes = Bytes::from(cert.private_key().to_string()).to_vec();
@@ -111,10 +112,11 @@ impl LetsencryptService {
                 certificate: crt_bytes,
             },
         );
-        Ok(())
+
+        Ok(true)
     }
 
-    async fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) {
+    fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) {
         let acc = account.clone();
         let hosts = self.hosts.clone();
         let mut interval = time::interval(Duration::from_secs(84_600));
@@ -138,7 +140,7 @@ impl LetsencryptService {
                                 domain, expiry
                             );
                             le_service
-                                .create_order_for_domain(domain, acc.clone())
+                                .create_order_for_domain(domain, &acc)
                                 .expect("Failed to create order for domain");
                         } else {
                             debug!(
@@ -192,7 +194,7 @@ impl Service for LetsencryptService {
                     continue;
                 }
                 Ok(None) => {
-                    self.create_order_for_domain(domain, account.clone())
+                    self.create_order_for_domain(domain, &account)
                         .expect("Failed to create order for domain");
                 }
                 _ => {}
@@ -200,9 +202,7 @@ impl Service for LetsencryptService {
         }
 
         // Check if any certificate needs renewal
-        let every_day = self.check_for_certificates_expiration(&account);
-
-        every_day.await;
+        self.check_for_certificates_expiration(&account);
     }
 
     fn name(&self) -> &'static str {

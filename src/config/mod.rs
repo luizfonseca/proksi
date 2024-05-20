@@ -11,7 +11,7 @@ use tracing::level_filters::LevelFilter;
 mod validate;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ConfigDocker {
+pub(crate) struct Docker {
     /// The interval (in seconds) to check for label updates
     /// (default: every 15 seconds)
     pub interval_secs: Option<u64>,
@@ -21,7 +21,7 @@ pub struct ConfigDocker {
     pub enabled: Option<bool>,
 }
 
-impl Default for ConfigDocker {
+impl Default for Docker {
     fn default() -> Self {
         Self {
             interval_secs: Some(15),
@@ -31,7 +31,7 @@ impl Default for ConfigDocker {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ConfigLetsEncrypt {
+pub struct LetsEncrypt {
     /// The email to use for the let's encrypt account
     pub email: Cow<'static, str>,
     /// Whether to enable the background service that renews the certificates (default: true)
@@ -41,7 +41,7 @@ pub struct ConfigLetsEncrypt {
     pub staging: Option<bool>,
 }
 
-impl Default for ConfigLetsEncrypt {
+impl Default for LetsEncrypt {
     fn default() -> Self {
         Self {
             email: Cow::Borrowed("contact@example.com"),
@@ -52,13 +52,13 @@ impl Default for ConfigLetsEncrypt {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ConfigPath {
+pub struct Path {
     // TLS
     /// Path to the certificates directory (where the certificates are stored)
     pub lets_encrypt: PathBuf,
 }
 
-impl Default for ConfigPath {
+impl Default for Path {
     fn default() -> Self {
         Self {
             lets_encrypt: PathBuf::from("/etc/proksi/letsencrypt"),
@@ -67,7 +67,7 @@ impl Default for ConfigPath {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ConfigRouteHeaderAdd {
+pub struct RouteHeaderAdd {
     /// The name of the header
     pub name: Cow<'static, str>,
 
@@ -76,22 +76,22 @@ pub struct ConfigRouteHeaderAdd {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ConfigRouteHeaderRemove {
+pub struct RouteHeaderRemove {
     /// The name of the header to remove (ex.: "Server")
     pub name: Cow<'static, str>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ConfigRouteHeader {
+pub struct RouteHeader {
     /// The name of the header
-    pub add: Vec<ConfigRouteHeaderAdd>,
+    pub add: Vec<RouteHeaderAdd>,
 
     /// The value of the header
-    pub remove: Vec<ConfigRouteHeaderRemove>,
+    pub remove: Vec<RouteHeaderRemove>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ConfigRouteUpstream {
+pub struct RouteUpstream {
     /// The TCP address of the upstream (ex. 10.0.0.1/24 etc)
     pub ip: Cow<'static, str>,
 
@@ -107,7 +107,7 @@ pub struct ConfigRouteUpstream {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ConfigRoute {
+pub struct Route {
     /// The hostname that the proxy will accept
     /// requests for the upstreams in the route.
     /// (ex: 'example.com', 'www.example.com', etc.)
@@ -116,7 +116,7 @@ pub struct ConfigRoute {
     /// also be used to create the certificate for the domain when `letsencrypt` is enabled.
     pub host: Cow<'static, str>,
 
-    pub headers: Option<ConfigRouteHeader>,
+    pub headers: Option<RouteHeader>,
 
     /// Optional: will route to hostname IF path *ends* with the given suffix.
     pub path_suffix: Option<Cow<'static, str>>,
@@ -125,7 +125,7 @@ pub struct ConfigRoute {
     pub path_prefix: Option<Cow<'static, str>>,
 
     /// The upstreams to which the request will be proxied,
-    pub upstreams: Vec<ConfigRouteUpstream>,
+    pub upstreams: Vec<RouteUpstream>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, ValueEnum)]
@@ -136,7 +136,7 @@ pub enum LogLevel {
     Error,
 }
 
-/// Transforms our custom LogLevel enum into a `tracing::level_filters::LevelFilter`
+/// Transforms our custom `LogLevel` enum into a `tracing::level_filters::LevelFilter`
 /// enum used by the `tracing` crate.
 impl From<&LogLevel> for tracing::level_filters::LevelFilter {
     fn from(val: &LogLevel) -> Self {
@@ -151,7 +151,7 @@ impl From<&LogLevel> for tracing::level_filters::LevelFilter {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Args)]
 #[group(id = "logging", requires = "level")]
-pub struct ConfigLogging {
+pub struct Logging {
     /// The level of logging to be used.
     #[serde(deserialize_with = "log_level_deser")]
     #[arg(long, required = false, value_enum, default_value = "info")]
@@ -227,25 +227,26 @@ pub(crate) struct Config {
     /// and be present in that path. Defaults to the current directory.
     #[serde(skip)]
     #[clap(short, long, default_value = "./")]
+    #[allow(clippy::struct_field_names)]
     pub config_path: Cow<'static, str>,
 
     /// General config
     #[command(flatten)]
-    pub logging: ConfigLogging,
+    pub logging: Logging,
 
     #[clap(skip)]
-    pub docker: ConfigDocker,
+    pub docker: Docker,
 
     #[clap(skip)]
-    pub lets_encrypt: ConfigLetsEncrypt,
+    pub lets_encrypt: LetsEncrypt,
 
     /// Configuration for paths (TLS, config file, etc.)
     #[clap(skip)]
-    pub paths: ConfigPath,
+    pub paths: Path,
 
     /// The routes to be proxied to.
     #[clap(skip)]
-    pub routes: Vec<ConfigRoute>,
+    pub routes: Vec<Route>,
     // Listeners -- a list of specific listeners and upstrems
     // that don't necessarily need to be HTTP/HTTPS related
     // pub listeners: Vec<ConfigListener>,
@@ -257,15 +258,15 @@ impl Default for Config {
             config_path: Cow::Borrowed("/etc/proksi/config"),
             service_name: Cow::Borrowed("proksi"),
             worker_threads: Some(1),
-            docker: ConfigDocker::default(),
-            lets_encrypt: ConfigLetsEncrypt::default(),
+            docker: Docker::default(),
+            lets_encrypt: LetsEncrypt::default(),
             routes: vec![],
-            logging: ConfigLogging {
+            logging: Logging {
                 level: LogLevel::Info,
                 access_logs_enabled: true,
                 error_logs_enabled: false,
             },
-            paths: ConfigPath::default(),
+            paths: Path::default(),
         }
     }
 }
@@ -305,7 +306,7 @@ impl Provider for Config {
 /// Nested keys can be separated by double underscores (__) in the environment variables.
 /// E.g. `PROKSI__LOGGING__LEVEL=DEBUG` will set the `level` key in the
 /// `logging` key in the `proksi` key.
-pub fn load_proxy_config(fallback: &str) -> Result<Config, figment::Error> {
+pub fn load(fallback: &str) -> Result<Config, figment::Error> {
     let parsed_commands = Config::parse();
 
     let path_with_fallback = if parsed_commands.config_path.is_empty() {
@@ -317,18 +318,18 @@ pub fn load_proxy_config(fallback: &str) -> Result<Config, figment::Error> {
     let config: Config = Figment::new()
         .merge(Config::default())
         .merge(Serialized::defaults(&parsed_commands))
-        .merge(Yaml::file(format!("{}/proksi.yaml", path_with_fallback)))
-        .merge(Toml::file(format!("{}/proksi.toml", path_with_fallback)))
+        .merge(Yaml::file(format!("{path_with_fallback}/proksi.yaml")))
+        .merge(Toml::file(format!("{path_with_fallback}/proksi.toml")))
         .merge(Env::prefixed("PROKSI_").split("__"))
         .extract()?;
 
     // validate configuration and throw error upwards
-    validate::validate_config(&config).map_err(|err| figment::Error::from(err.to_string()))?;
+    validate::check_config(&config).map_err(|err| figment::Error::from(err.to_string()))?;
 
     Ok(config)
 }
 
-/// Deserialize function to convert a string to a LogLevel Enum
+/// Deserialize function to convert a string to a `LogLevel` Enum
 fn log_level_deser<'de, D>(deserializer: D) -> Result<LogLevel, D::Error>
 where
     D: Deserializer<'de>,
@@ -385,7 +386,7 @@ mod tests {
 
             jail.create_file(format!("{}/proksi.yaml", tmp_dir), helper_config_file())?;
 
-            let config = load_proxy_config(&tmp_dir);
+            let config = load(&tmp_dir);
             let proxy_config = config.unwrap();
             assert_eq!(proxy_config.service_name, "proksi");
 
@@ -414,7 +415,7 @@ mod tests {
             "#,
             );
 
-            let config = load_proxy_config(jail.directory().to_str().unwrap());
+            let config = load(jail.directory().to_str().unwrap());
 
             let proxy_config = config.unwrap();
             assert_eq!(proxy_config.service_name, "new_name");
@@ -441,7 +442,7 @@ mod tests {
     fn test_load_config_with_defaults_only() {
         figment::Jail::expect_with(|jail| {
             jail.set_env("PROKSI_LETS_ENCRYPT__EMAIL", "my-real-email@domain.com");
-            let config = load_proxy_config("/non-existent");
+            let config = load("/non-existent");
             let proxy_config = config.unwrap();
 
             let logging = proxy_config.logging;
@@ -476,7 +477,7 @@ mod tests {
                 "#,
             )?;
 
-            let config = load_proxy_config(&tmp_dir);
+            let config = load(&tmp_dir);
             let proxy_config = config.unwrap();
             let logging = proxy_config.logging;
             let paths = proxy_config.paths;
