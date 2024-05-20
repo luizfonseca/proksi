@@ -20,6 +20,18 @@ service_name: "proksi"
 # (and other background services) is single threaded.
 worker_threads: 4
 
+# The configuration for the Docker integration
+docker:
+  # Whether the Docker integration is enabled
+  # (the background service will run and listen for Docker events).
+  # Default value is <false>.
+  enabled: false
+
+  # The interval in seconds at which the Docker integration will check for new containers.
+  # The default value is 15 seconds.
+  interval_secs: 15
+
+
 # The configuration for the Let's Encrypt integration.
 lets_encrypt:
 
