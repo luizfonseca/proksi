@@ -42,7 +42,6 @@ impl LetsencryptService {
     }
 
     fn get_lets_encrypt_directory(&self) -> PathBuf {
-        info!("PATH {:?}", self.config.paths.lets_encrypt);
         match self.config.lets_encrypt.staging {
             Some(false) => self.config.paths.lets_encrypt.join("production"),
             _ => self.config.paths.lets_encrypt.join("staging"),

@@ -8,6 +8,8 @@ use figment::{
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
+mod validate;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigDocker {
     /// The interval (in seconds) to check for label updates
@@ -301,7 +303,8 @@ impl Provider for Config {
 /// In theory one could create all 3 configurations formats and they will overlap each other
 ///
 /// Nested keys can be separated by double underscores (__) in the environment variables.
-/// E.g. `PROKSI__LOGGING__LEVEL=DEBUG` will set the `level` key in the `logging` key in the `proksi` key.
+/// E.g. `PROKSI__LOGGING__LEVEL=DEBUG` will set the `level` key in the
+/// `logging` key in the `proksi` key.
 pub fn load_proxy_config(fallback: &str) -> Result<Config, figment::Error> {
     let parsed_commands = Config::parse();
 
@@ -318,6 +321,9 @@ pub fn load_proxy_config(fallback: &str) -> Result<Config, figment::Error> {
         .merge(Toml::file(format!("{}/proksi.toml", path_with_fallback)))
         .merge(Env::prefixed("PROKSI_").split("__"))
         .extract()?;
+
+    // validate configuration and throw error upwards
+    validate::validate_config(&config).map_err(|err| figment::Error::from(err.to_string()))?;
 
     Ok(config)
 }
@@ -346,6 +352,8 @@ mod tests {
     fn helper_config_file() -> &'static str {
         r#"
         service_name: "proksi"
+        lets_encrypt:
+          email: "user@domain.net"
         logging:
           level: "INFO"
           access_logs_enabled: true
@@ -431,7 +439,8 @@ mod tests {
 
     #[test]
     fn test_load_config_with_defaults_only() {
-        figment::Jail::expect_with(|_| {
+        figment::Jail::expect_with(|jail| {
+            jail.set_env("PROKSI_LETS_ENCRYPT__EMAIL", "my-real-email@domain.com");
             let config = load_proxy_config("/non-existent");
             let proxy_config = config.unwrap();
 
@@ -457,6 +466,8 @@ mod tests {
             jail.create_file(
                 format!("{}/proksi.yaml", tmp_dir),
                 r#"
+                lets_encrypt:
+                  email: "domain@valid.com"
                 routes:
                   - host: "example.com"
                     upstreams:
@@ -480,7 +491,7 @@ mod tests {
             assert_eq!(proxy_config.docker.enabled, Some(false));
             assert_eq!(proxy_config.docker.interval_secs, Some(15));
 
-            assert_eq!(letsencrypt.email, "contact@example.com");
+            assert_eq!(letsencrypt.email, "domain@valid.com");
             assert_eq!(letsencrypt.enabled, Some(true));
             assert_eq!(letsencrypt.staging, Some(true));
 
