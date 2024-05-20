@@ -201,6 +201,7 @@ jobs:
 
 
   publish-cargo:
+    continue-on-error: true
     name: Publish to crates.io
     needs:
       - release
@@ -223,6 +224,7 @@ jobs:
         run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
 
   upload-artifacts:
+    continue-on-error: true
     needs:
       - release
       - build
