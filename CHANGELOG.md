@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.6](https://github.com/luizfonseca/proksi/compare/v0.1.5...v0.1.6) (2024-05-20)
+
+
+### Features
+
+* **config:** allow users to disable/enable background services ([224c99d](https://github.com/luizfonseca/proksi/commit/224c99d28126ba8cf367d7f0f9ad4c073431798d))
+* **config:** validate provided config with sane defaults ([e2727c7](https://github.com/luizfonseca/proksi/commit/e2727c794d755f0d8a76e56053b0049644f48f74))
+
+
+### Miscellaneous Chores
+
+* marker for release 0.1.6 ([06d57cf](https://github.com/luizfonseca/proksi/commit/06d57cfeb1bdde8ab30732e931943ef10cc204b0))
+
 ## [0.1.5](https://github.com/luizfonseca/proksi/compare/v0.1.4...v0.1.5) (2024-05-18)
 
 
