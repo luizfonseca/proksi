@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/luizfonseca/proksi/compare/v0.1.7...v0.1.7) (2024-05-20)
+
+
+### Bug Fixes
+
+* **ci:** split build steps ([ef85925](https://github.com/luizfonseca/proksi/commit/ef8592582b87ecfca86ecbc831f82f9b8a33e41a))
+
 ## [0.1.7](https://github.com/luizfonseca/proksi/compare/v0.1.6...v0.1.7) (2024-05-20)
 
 
