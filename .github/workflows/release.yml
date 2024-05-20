@@ -125,12 +125,12 @@ jobs:
         shell: bash
         run: |
           cd target/${{ matrix.platform.target }}/release
-          tar czvf ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
+          tar czvf ../../../${{ matrix.platform.name }}.tar.gz ${{ matrix.platform.bin }}
 
       - name: Upload artifacts (tar.gz)
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform.name }}.tar.gz
+          name: ${{ matrix.platform.name }}
           path: "proksi*"
 
   publish:
@@ -169,13 +169,13 @@ jobs:
 
       - name: x86_64 Build Linux image
         run: |
-          tar -xzvf ./data/proksi-linux-gnu-x86_64.tar.gz/proksi-linux-gnu-x86_64 proksi
+          tar -xzvf ./data/proksi-linux-gnu-x86_64.tar.gz/proksi-linux-gnu-x86_64.tar.gz proksi
           docker buildx build --platform linux/amd64 -t luizfonseca/proksi:${{needs.release.outputs.tag_name}}-amd64 -f Dockerfile . --push
 
       - name: aarch64 Build Linux image
         run: |
           rm proksi
-          tar -xzvf ./data/proksi-linux-gnu-aarch64.tar.gz/proksi-linux-gnu-aarch64 proksi
+          tar -xzvf ./data/proksi-linux-gnu-aarch64.tar.gz/proksi-linux-gnu-aarch64.tar.gz proksi
           docker buildx build --platform linux/arm64 -t luizfonseca/proksi:${{needs.release.outputs.tag_name}}-arm64 -f Dockerfile . --push
 
       - name: Docker (latest)
@@ -199,20 +199,13 @@ jobs:
           short-description: LoadBalancer and HTTP Proxy with automatic SSL
           readme-filepath: docker.README.md
 
-      - name: Upload Release Artifacts
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload ${{ needs.release.outputs.tag_name }} \
-          ./data/proksi-linux-gnu-x86_64.tar.gz ./data/proksi-linux-gnu-aarch64.tar.gz  \
-          ./data/proksi-macos-x86_64.tar.gz ./data/proksi-macos-aarch64.tar.gz \
-          ./data/proksi-linux-musl-x86_64.tar.gz ./data/proksi-linux-musl-aarch64.tar.gz
 
   publish-cargo:
     name: Publish to crates.io
     needs:
-      - publish
-    if: ${{ needs.publish.result == 'success' }}
+      - release
+      - build
+    if: ${{ needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -228,3 +221,29 @@ jobs:
 
       - name: Publish to crates.io
         run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+
+  upload-artifacts:
+    needs:
+      - release
+      - build
+    if: ${{ needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag_name }}
+
+      - name: Download workflow artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./data
+
+      - name: Upload Release Artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ needs.release.outputs.tag_name }} \
+          ./data/proksi-linux-gnu-x86_64.tar.gz/proksi-linux-gnu-x86_64.tar.gz ./data/proksi-linux-gnu-aarch64.tar.gz/proksi-linux-gnu-aarch64.tar.gz  \
+          ./data/proksi-macos-x86_64.tar.gz/proksi-macos-x86_64.tar.gz ./data/proksi-macos-aarch64.tar.gz/proksi-macos-aarch64.tar.gz \
+          ./data/proksi-linux-musl-x86_64.tar.gz/proksi-linux-musl-x86_64.tar.gz ./data/proksi-linux-musl-aarch64.tar.gz/proksi-linux-musl-aarch64.tar.gz

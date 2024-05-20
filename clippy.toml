@@ -1,5 +1,8 @@
 disallowed-methods = [
-    { path = "std::path::Path::display", reason = "incorrect handling of non-Unicode paths, use path.to_utf8() or debug (`{path:?}`) instead" },
+  { path = "std::path::Path::display", reason = "incorrect handling of non-Unicode paths, use path.to_utf8() or debug (`{path:?}`) instead" },
 ]
 allow-unwrap-in-tests = true
+cognitive-complexity-threshold = 15
+excessive-nesting-threshold = 5
+max-fn-params-bools = 2
 msrv = "1.78.0"
