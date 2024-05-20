@@ -9,6 +9,26 @@ use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConfigDocker {
+    /// The interval (in seconds) to check for label updates
+    /// (default: every 15 seconds)
+    pub interval_secs: Option<u64>,
+
+    /// Enables the docker label service
+    /// (default: false)
+    pub enabled: Option<bool>,
+}
+
+impl Default for ConfigDocker {
+    fn default() -> Self {
+        Self {
+            interval_secs: Some(15),
+            enabled: Some(false),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigLetsEncrypt {
     /// The email to use for the let's encrypt account
     pub email: Cow<'static, str>,
@@ -212,6 +232,9 @@ pub(crate) struct Config {
     pub logging: ConfigLogging,
 
     #[clap(skip)]
+    pub docker: ConfigDocker,
+
+    #[clap(skip)]
     pub lets_encrypt: ConfigLetsEncrypt,
 
     /// Configuration for paths (TLS, config file, etc.)
@@ -232,6 +255,7 @@ impl Default for Config {
             config_path: Cow::Borrowed("/etc/proksi/config"),
             service_name: Cow::Borrowed("proksi"),
             worker_threads: Some(1),
+            docker: ConfigDocker::default(),
             lets_encrypt: ConfigLetsEncrypt::default(),
             routes: vec![],
             logging: ConfigLogging {
@@ -370,6 +394,8 @@ mod tests {
             )?;
             jail.set_env("PROKSI_SERVICE_NAME", "new_name");
             jail.set_env("PROKSI_LOGGING__LEVEL", "warn");
+            jail.set_env("PROKSI_DOCKER__ENABLED", "true");
+            jail.set_env("PROKSI_DOCKER__INTERVAL_SECS", "30");
             jail.set_env("PROKSI_LETS_ENCRYPT__STAGING", "false");
             jail.set_env("PROKSI_LETS_ENCRYPT__EMAIL", "my-real-email@domain.com");
             jail.set_env(
@@ -385,6 +411,9 @@ mod tests {
             let proxy_config = config.unwrap();
             assert_eq!(proxy_config.service_name, "new_name");
             assert_eq!(proxy_config.logging.level, LogLevel::Warn);
+
+            assert_eq!(proxy_config.docker.enabled, Some(true));
+            assert_eq!(proxy_config.docker.interval_secs, Some(30));
 
             assert_eq!(proxy_config.lets_encrypt.staging, Some(false));
             assert_eq!(proxy_config.lets_encrypt.email, "my-real-email@domain.com");
@@ -447,6 +476,9 @@ mod tests {
             assert_eq!(logging.access_logs_enabled, true);
             assert_eq!(logging.error_logs_enabled, false);
             assert_eq!(proxy_config.routes.len(), 1);
+
+            assert_eq!(proxy_config.docker.enabled, Some(false));
+            assert_eq!(proxy_config.docker.interval_secs, Some(15));
 
             assert_eq!(letsencrypt.email, "contact@example.com");
             assert_eq!(letsencrypt.enabled, Some(true));

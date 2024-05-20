@@ -81,19 +81,25 @@ fn main() -> Result<(), anyhow::Error> {
     tls_settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
 
     // Service: Docker
-    let client = docker::client::create_client();
-    let docker_service = background_service("docker", client);
+    if proxy_config.docker.enabled.unwrap_or(false) {
+        let client = docker::client::create_client();
+        let docker_service = background_service("docker", client);
+        pingora_server.add_service(docker_service);
+    }
 
     // Service: Lets Encrypt HTTP Challenge/Certificate renewal
     let challenge_store = Arc::new(DashMap::<String, (String, String)>::new());
-    let domains: Vec<String> = ROUTE_STORE
-        .as_ref()
-        .into_iter()
-        .map(|k| k.key().to_string())
-        .collect();
+    if proxy_config.lets_encrypt.enabled.unwrap_or(false) {
+        let domains: Vec<String> = ROUTE_STORE
+            .as_ref()
+            .into_iter()
+            .map(|k| k.key().to_string())
+            .collect();
 
-    let letsencrypt_service =
-        LetsencryptService::new(domains, proxy_config.clone(), challenge_store.clone());
+        let letsencrypt_service =
+            LetsencryptService::new(domains, proxy_config.clone(), challenge_store.clone());
+        pingora_server.add_service(letsencrypt_service);
+    }
 
     // Service: HTTP Load Balancer (only used by acme-challenges)
     // As we don't necessarily need an upstream to handle the acme-challenges,
@@ -115,8 +121,6 @@ fn main() -> Result<(), anyhow::Error> {
 
     pingora_server.add_service(http_service);
     pingora_server.add_service(https_service);
-    pingora_server.add_service(docker_service);
-    pingora_server.add_service(letsencrypt_service);
     pingora_server.add_service(ProxyLoggerReceiver(log_receiver));
 
     pingora_server.bootstrap();
