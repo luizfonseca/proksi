@@ -16,6 +16,9 @@ pub(crate) struct Docker {
     /// (default: every 15 seconds)
     pub interval_secs: Option<u64>,
 
+    /// The docker endpoint to connect to (can be a unix socket or a tcp address)
+    pub endpoint: Option<Cow<'static, str>>,
+
     /// Enables the docker label service
     /// (default: false)
     pub enabled: Option<bool>,
@@ -25,6 +28,7 @@ impl Default for Docker {
     fn default() -> Self {
         Self {
             interval_secs: Some(15),
+            endpoint: Some(Cow::Borrowed("unix:///var/run/docker.sock")),
             enabled: Some(false),
         }
     }
@@ -407,6 +411,7 @@ mod tests {
             jail.set_env("PROKSI_DOCKER__INTERVAL_SECS", "30");
             jail.set_env("PROKSI_LETS_ENCRYPT__STAGING", "false");
             jail.set_env("PROKSI_LETS_ENCRYPT__EMAIL", "my-real-email@domain.com");
+            jail.set_env("PROKSI_DOCKER__ENDPOINT", "http://localhost:2375");
             jail.set_env(
                 "PROKSI_ROUTES",
                 r#"[{
@@ -423,6 +428,10 @@ mod tests {
 
             assert_eq!(proxy_config.docker.enabled, Some(true));
             assert_eq!(proxy_config.docker.interval_secs, Some(30));
+            assert_eq!(
+                proxy_config.docker.endpoint,
+                Some(Cow::Borrowed("http://localhost:2375"))
+            );
 
             assert_eq!(proxy_config.lets_encrypt.staging, Some(false));
             assert_eq!(proxy_config.lets_encrypt.email, "my-real-email@domain.com");
@@ -491,6 +500,10 @@ mod tests {
 
             assert_eq!(proxy_config.docker.enabled, Some(false));
             assert_eq!(proxy_config.docker.interval_secs, Some(15));
+            assert_eq!(
+                proxy_config.docker.endpoint,
+                Some(Cow::Borrowed("unix:///var/run/docker.sock"))
+            );
 
             assert_eq!(letsencrypt.email, "domain@valid.com");
             assert_eq!(letsencrypt.enabled, Some(true));
