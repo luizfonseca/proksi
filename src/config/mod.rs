@@ -10,27 +10,52 @@ use tracing::level_filters::LevelFilter;
 
 mod validate;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
 pub(crate) enum DockerServiceMode {
     Swarm,
     Standalone,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct Docker {
+#[derive(Debug, Serialize, Deserialize, Clone, Args)]
+#[group(id = "docker", requires = "level")]
+pub struct Docker {
     /// The interval (in seconds) to check for label updates
     /// (default: every 15 seconds)
+    #[arg(
+        long = "docker.interval_secs",
+        required = false,
+        value_parser,
+        default_value = "15"
+    )]
     pub interval_secs: Option<u64>,
 
     /// The docker endpoint to connect to (can be a unix socket or a tcp address)
+    #[arg(
+        long = "docker.endpoint",
+        required = false,
+        value_parser,
+        default_value = "unix:///var/run/docker.sock"
+    )]
     pub endpoint: Option<Cow<'static, str>>,
 
     /// Enables the docker label service
     /// (default: false)
+    #[arg(
+        long = "docker.enabled",
+        required = false,
+        value_parser,
+        default_value = "false"
+    )]
     pub enabled: Option<bool>,
 
-    /// Mode
+    /// Mode to use for the docker service
     #[serde(deserialize_with = "docker_mode_deser")]
+    #[arg(
+        long = "docker.mode",
+        required = false,
+        value_enum,
+        default_value = "standalone"
+    )]
     pub mode: DockerServiceMode,
 }
 
@@ -169,15 +194,30 @@ impl From<&LogLevel> for tracing::level_filters::LevelFilter {
 pub struct Logging {
     /// The level of logging to be used.
     #[serde(deserialize_with = "log_level_deser")]
-    #[arg(long, required = false, value_enum, default_value = "info")]
+    #[arg(
+        long = "log.level",
+        required = false,
+        value_enum,
+        default_value = "info"
+    )]
     pub level: LogLevel,
 
     /// Whether to log access logs (request, duration, headers etc).
-    #[arg(long, required = false, value_parser, default_value = "true")]
+    #[arg(
+        long = "log.access_logs_enabled",
+        required = false,
+        value_parser,
+        default_value = "true"
+    )]
     pub access_logs_enabled: bool,
 
     /// Whether to log error logs (errors, panics, etc) from the Rust runtime.
-    #[arg(long, required = false, value_parser, default_value = "false")]
+    #[arg(
+        long = "log.error_logs_enabled",
+        required = false,
+        value_parser,
+        default_value = "false"
+    )]
     pub error_logs_enabled: bool,
 }
 
@@ -249,7 +289,7 @@ pub(crate) struct Config {
     #[command(flatten)]
     pub logging: Logging,
 
-    #[clap(skip)]
+    #[command(flatten)]
     pub docker: Docker,
 
     #[clap(skip)]
@@ -333,6 +373,7 @@ pub fn load(fallback: &str) -> Result<Config, figment::Error> {
     let config: Config = Figment::new()
         .merge(Config::default())
         .merge(Serialized::defaults(&parsed_commands))
+        .merge(Yaml::file(format!("{path_with_fallback}/proksi.yml")))
         .merge(Yaml::file(format!("{path_with_fallback}/proksi.yaml")))
         .merge(Toml::file(format!("{path_with_fallback}/proksi.toml")))
         .merge(Env::prefixed("PROKSI_").split("__"))

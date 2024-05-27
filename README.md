@@ -139,45 +139,68 @@ Running `proksi --help` will provide you with the available options.
 
 ```bash
 Usage: proksi [OPTIONS]
+
 Options:
-  -s, --service-name <SERVICE_NAME>
-          The name of the service (will appear as a log property)
+-s, --service-name <SERVICE_NAME>
+      The name of the service (will appear as a log property)
 
-          [default: proksi]
+      [default: proksi]
 
-  -w, --worker-threads <WORKER_THREADS>
-          The number of worker threads to be used by the HTTPS proxy service.
+-w, --worker-threads <WORKER_THREADS>
+      The number of worker threads to be used by the HTTPS proxy service.
 
-          For background services the default is always (1) and cannot be changed.
+      For background services the default is always (1) and cannot be changed.
 
-          [default: 1]
+      [default: 1]
 
-  -c, --config-path <CONFIG_PATH>
-          The PATH to the configuration file to be used.
+-c, --config-path <CONFIG_PATH>
+      The PATH to the configuration file to be used.
 
-          The configuration file should be named either proksi.toml, proksi.yaml or proksi.yml
+      The configuration file should be named either `proksi.toml`, `proksi.yaml` or `proksi.yml`
 
-          and be present in that path. Defaults to the current directory.
+      and be present in that path. Defaults to the current directory.
 
-          [default: ./]
+      [default: ./]
 
-      --level <LEVEL>
-          The level of logging to be used
+  --log.level <LEVEL>
+      The level of logging to be used
 
-          [default: info]
-          [possible values: debug, info, warn, error]
+      [default: info]
+      [possible values: debug, info, warn, error]
 
-      --access-logs-enabled
-          Whether to log access logs (request, duration, headers etc)
+  --log.access_logs_enabled
+      Whether to log access logs (request, duration, headers etc)
 
-      --error-logs-enabled
-          Whether to log error logs (errors, panics, etc) from the Rust runtime
+  --log.error_logs_enabled
+      Whether to log error logs (errors, panics, etc) from the Rust runtime
 
-  -h, --help
-          Print help (see a summary with '-h')
+  --docker.interval_secs <INTERVAL_SECS>
+      The interval (in seconds) to check for label updates (default: every 15 seconds)
 
-  -V, --version
-          Print version
+      [default: 15]
+
+  --docker.endpoint <ENDPOINT>
+      The docker endpoint to connect to (can be a unix socket or a tcp address)
+
+      [default: unix:///var/run/docker.sock]
+
+  --docker.enabled <ENABLED>
+      Enables the docker label service (default: false)
+
+      [default: false]
+      [possible values: true, false]
+
+  --docker.mode <MODE>
+      Mode to use for the docker service
+
+      [default: standalone]
+      [possible values: swarm, standalone]
+
+-h, --help
+      Print help (see a summary with '-h')
+
+-V, --version
+      Print version
 ```
 
 
