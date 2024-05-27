@@ -54,13 +54,21 @@ impl<'a> MakeWriter<'a> for ProxyLog {
 
 /// A background service that receives logs from the main thread and writes them to stdout
 /// TODO: implement log rotation/write to disk (or use an existing lightweight crate)
-pub struct ProxyLoggerReceiver(pub UnboundedReceiver<Vec<u8>>);
+pub struct ProxyLoggerReceiver {
+    receiver: UnboundedReceiver<Vec<u8>>,
+}
+
+impl ProxyLoggerReceiver {
+    pub fn new(receiver: UnboundedReceiver<Vec<u8>>) -> Self {
+        ProxyLoggerReceiver { receiver }
+    }
+}
 
 #[async_trait]
 impl Service for ProxyLoggerReceiver {
     async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
         loop {
-            if let Some(buf) = self.0.recv().await {
+            if let Some(buf) = self.receiver.recv().await {
                 let buf = std::str::from_utf8(&buf).unwrap();
                 // TODO: flush/rotate logs to disk
                 print!("{buf}");

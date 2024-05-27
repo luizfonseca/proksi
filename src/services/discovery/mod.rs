@@ -38,6 +38,7 @@ impl RoutingService {
         }
     }
 
+    /// Watch for new routes being added and update the Router Store
     fn watch_for_route_changes(&self) -> tokio::task::JoinHandle<()> {
         let mut receiver = self.broadcast.subscribe();
 
@@ -80,6 +81,7 @@ where
 {
     let mut upstreams = LoadBalancer::<RoundRobin>::try_from_iter(upstreams).unwrap();
 
+    // TODO: support defining health checks in the configuration file
     let tcp_health_check = TcpHealthCheck::new();
     upstreams.set_health_check(tcp_health_check);
     upstreams.health_check_frequency = Some(Duration::from_secs(15));

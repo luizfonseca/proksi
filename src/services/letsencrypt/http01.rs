@@ -36,6 +36,7 @@ impl LetsencryptService {
         }
     }
 
+    /// Return the appropriate Let's Encrypt directories for certificates based on the environment
     fn get_lets_encrypt_directory(&self) -> PathBuf {
         match self.config.lets_encrypt.staging {
             Some(false) => self.config.paths.lets_encrypt.join("production"),
@@ -43,6 +44,7 @@ impl LetsencryptService {
         }
     }
 
+    /// Start an HTTP-01 challenge for a given order
     fn handle_http_01_challenge(
         &self,
         order: &mut NewOrder<FilePersist>,
@@ -59,15 +61,14 @@ impl LetsencryptService {
                 ),
             );
 
-            // Assuming you have a way to serve the challenge token on your web server
-            // e.g., by writing it to the appropriate file path
-
+            // Let's Encrypt will check the domain's URL to validate the challenge
             info!("HTTP-01 validating (retry: 5s)...");
             challenge.validate(5000)?; // Retry every 5000 ms
         }
         Ok(())
     }
 
+    /// Create a new order for a domain (HTTP-01 challenge)
     fn create_order_for_domain(
         &self,
         domain: &str,
@@ -110,6 +111,7 @@ impl LetsencryptService {
         Ok(true)
     }
 
+    /// Watch for route changes and create or update certificates for new routes
     fn watch_for_route_changes(
         &self,
         account: &Account<FilePersist>,
@@ -132,37 +134,38 @@ impl LetsencryptService {
         })
     }
 
+    /// Check for certificates expiration and renew them if needed
     fn check_for_certificates_expiration(
         &self,
         account: &Account<FilePersist>,
     ) -> tokio::task::JoinHandle<()> {
         let acc = account.clone();
         let mut interval = time::interval(Duration::from_secs(84_600));
-        let le_service = Self::new(self.config.clone(), self.challenge_store.clone());
+        let service = Self::new(self.config.clone(), self.challenge_store.clone());
 
         tokio::spawn(async move {
             loop {
                 interval.tick().await;
                 for value in ROUTE_STORE.iter() {
                     let domain = value.key();
-                    if let Some(cert) = acc.certificate(domain).unwrap() {
-                        let expiry = cert.valid_days_left();
+                    let cert = acc.certificate(domain).unwrap();
 
-                        if expiry < 5 {
-                            info!(
-                                "Certificate for domain {} expires in {} days",
-                                domain, expiry
-                            );
-                            le_service
-                                .create_order_for_domain(domain, &acc)
-                                .expect("Failed to create order for domain");
-                        } else {
-                            info!(
-                                "Certificate for domain {} expires in {} days",
-                                domain, expiry
-                            );
-                        }
+                    if cert.is_none() {
+                        continue;
                     }
+
+                    let valid_days_left = cert.unwrap().valid_days_left();
+                    info!("Certificate for domain {domain} expires in {valid_days_left} days",);
+
+                    // Nothing to do
+                    if valid_days_left > 5 {
+                        continue;
+                    }
+
+                    service
+                        .create_order_for_domain(domain, &acc)
+                        .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
+                        .unwrap();
                 }
             }
         })
@@ -207,7 +210,7 @@ impl Service for LetsencryptService {
         let dir = self.get_lets_encrypt_directory();
         let certificates_dir = dir.as_os_str();
 
-        info!("Creating certificates in {:?}", certificates_dir);
+        info!("Creating certificates in {certificates_dir:?}");
         // Ensure the directories exist before we start creating certificates
         create_dir_all(certificates_dir).unwrap_or_default();
 
@@ -228,7 +231,7 @@ impl Service for LetsencryptService {
     }
 
     fn name(&self) -> &'static str {
-        "HttpLetsencrypt"
+        "lets_encrypt_service"
     }
 
     fn threads(&self) -> Option<usize> {

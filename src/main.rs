@@ -11,7 +11,7 @@ use pingora_proxy::http_proxy_service;
 use proxy_server::cert_store;
 use services::{
     discovery::RoutingService,
-    docker::client::DockerService,
+    docker::DockerService,
     health_check::HealthService,
     letsencrypt::http01::LetsencryptService,
     logger::{ProxyLog, ProxyLoggerReceiver},
@@ -111,10 +111,12 @@ fn main() -> Result<(), anyhow::Error> {
     https_secure_service.add_tls_with_settings("0.0.0.0:443", None, tls_settings);
 
     pingora_server.add_service(RoutingService::new(proxy_config.clone(), sender.clone()));
+    pingora_server.add_service(HealthService::new());
+    pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver));
+
+    // Listen on HTTP and HTTPS ports
     pingora_server.add_service(http_public_service);
     pingora_server.add_service(https_secure_service);
-    pingora_server.add_service(HealthService {});
-    pingora_server.add_service(ProxyLoggerReceiver(log_receiver));
 
     pingora_server.bootstrap();
     pingora_server.run_forever();

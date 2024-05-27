@@ -476,9 +476,9 @@ mod tests {
             jail.set_env("PROKSI_LOGGING__LEVEL", "warn");
             jail.set_env("PROKSI_DOCKER__ENABLED", "true");
             jail.set_env("PROKSI_DOCKER__INTERVAL_SECS", "30");
+            jail.set_env("PROKSI_DOCKER__ENDPOINT", "http://localhost:2375");
             jail.set_env("PROKSI_LETS_ENCRYPT__STAGING", "false");
             jail.set_env("PROKSI_LETS_ENCRYPT__EMAIL", "my-real-email@domain.com");
-            jail.set_env("PROKSI_DOCKER__ENDPOINT", "http://localhost:2375");
             jail.set_env(
                 "PROKSI_ROUTES",
                 r#"[{

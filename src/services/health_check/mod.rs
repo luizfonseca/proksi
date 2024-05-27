@@ -9,7 +9,16 @@ use tracing::debug;
 
 use crate::ROUTE_STORE;
 
+/// Health check service that will run health checks on all upstreams
+/// And update the route store with the new healthy upstreams.
+/// This service will run in a separate thread.
 pub struct HealthService {}
+
+impl HealthService {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 #[async_trait]
 impl Service for HealthService {
@@ -24,10 +33,12 @@ impl Service for HealthService {
             let store_clone = ROUTE_STORE.clone();
 
             for route in store_clone.iter() {
-                debug!("Running health check on {}", route.key());
+                debug!("Running health check for host {}", route.key());
                 let upstream = route.value();
                 upstream.backends().run_health_check(false).await;
                 upstream.update().await.unwrap();
+
+                // TODO: only update if the upstream has changed
                 ROUTE_STORE.insert(route.key().to_string(), upstream.clone());
             }
         }
