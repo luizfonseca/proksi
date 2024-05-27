@@ -5,7 +5,7 @@ use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
-use tracing::info;
+use tracing::debug;
 
 use crate::ROUTE_STORE;
 
@@ -24,7 +24,7 @@ impl Service for HealthService {
             let store_clone = ROUTE_STORE.clone();
 
             for route in store_clone.iter() {
-                info!("Running health check on {}", route.key());
+                debug!("Running health check on {}", route.key());
                 let upstream = route.value();
                 upstream.backends().run_health_check(false).await;
                 upstream.update().await.unwrap();
@@ -34,7 +34,7 @@ impl Service for HealthService {
     }
 
     fn name(&self) -> &str {
-        "healthservice"
+        "health_check_service"
     }
 
     fn threads(&self) -> Option<usize> {

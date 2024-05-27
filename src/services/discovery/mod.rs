@@ -8,7 +8,7 @@ use pingora::{
 };
 use pingora_load_balancing::{health_check::TcpHealthCheck, selection::RoundRobin, LoadBalancer};
 use tokio::sync::broadcast::Sender;
-use tracing::info;
+use tracing::debug;
 
 use crate::{config::Config, MsgProxy, ROUTE_STORE};
 
@@ -34,7 +34,7 @@ impl RoutingService {
 
             add_route_to_router(&route.host, upstream_backends);
 
-            info!("Added route: {}, {:?}", route.host, route.upstreams);
+            debug!("Added route: {}, {:?}", route.host, route.upstreams);
         }
     }
 
@@ -64,7 +64,7 @@ impl Service for RoutingService {
     }
 
     fn name(&self) -> &str {
-        "ProxyServiceDiscovery"
+        "proxy_service_discovery"
     }
 
     fn threads(&self) -> Option<usize> {
