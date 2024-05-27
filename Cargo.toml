@@ -42,7 +42,7 @@ pingora-http = "0.2.0"
 pingora-load-balancing = { version = "0.2.0" }
 pingora-pool = "0.2.0"
 pingora-proxy = { version = "0.2.0" }
-serde = "1.0.202"
+serde = "1.0.203"
 serde_json = "1.0.117"
 tokio = { version = "1.37.0", features = ["sync"] }
 tracing = "0.1.40"
