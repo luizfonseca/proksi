@@ -35,19 +35,19 @@ fn connect_to_docker(endpoint: &str) -> Result<Docker, bollard::errors::Error> {
 /// A service that will list all services in a Swarm OR containers through the Docker API
 /// and update the route store with the new services.
 /// This service will run in a separate thread.
-pub struct DockerService {
+pub struct LabelService {
     config: Arc<Config>,
     inner: Docker,
     sender: Sender<MsgProxy>,
 }
 
-impl DockerService {
+impl LabelService {
     pub fn new(config: Arc<Config>, sender: Sender<MsgProxy>) -> Self {
         let endpoint = config.docker.endpoint.clone().unwrap_or_default();
 
         let docker = connect_to_docker(&endpoint);
 
-        DockerService {
+        Self {
             config,
             sender,
             inner: docker
@@ -169,7 +169,7 @@ impl DockerService {
 }
 
 #[async_trait]
-impl Service for DockerService {
+impl Service for LabelService {
     async fn start_service(&mut self, _fds: Option<ListenFds>, mut _shutdown: ShutdownWatch) {
         info!(service = "docker", "Started Docker service");
 

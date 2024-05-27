@@ -11,7 +11,7 @@ use pingora_proxy::http_proxy_service;
 use proxy_server::cert_store;
 use services::{
     discovery::RoutingService,
-    docker::DockerService,
+    docker::{self},
     health_check::HealthService,
     letsencrypt::http01::LetsencryptService,
     logger::{ProxyLog, ProxyLoggerReceiver},
@@ -80,7 +80,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Service: Docker
     if proxy_config.docker.enabled.unwrap_or(false) {
-        let docker_service = DockerService::new(proxy_config.clone(), sender.clone());
+        let docker_service = docker::LabelService::new(proxy_config.clone(), sender.clone());
         pingora_server.add_service(docker_service);
     }
 
