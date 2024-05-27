@@ -56,7 +56,7 @@ fn main() -> Result<(), anyhow::Error> {
     let (sdr, rcv) = crossbeam_channel::unbounded::<MsgProxy>();
 
     // Receiver channel for non-blocking logging
-    let (log_sender, log_receiver) = crossbeam_channel::unbounded::<Vec<u8>>();
+    let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
     let proxy_logger = ProxyLog::new(&log_sender);
 
     // Creates a tracing/logging subscriber based on the configuration provided

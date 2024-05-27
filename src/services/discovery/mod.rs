@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{net::ToSocketAddrs, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
@@ -9,7 +9,7 @@ use pingora::{
 use pingora_load_balancing::{health_check::TcpHealthCheck, selection::RoundRobin, LoadBalancer};
 use tracing::info;
 
-use crate::{config::Config, MsgProxy, MsgRoute, ROUTE_STORE};
+use crate::{config::Config, MsgProxy, ROUTE_STORE};
 
 // Service discovery for load balancers
 pub struct RoutingService {
@@ -34,13 +34,7 @@ impl RoutingService {
                 .iter()
                 .map(|upstr| format!("{}:{}", upstr.ip, upstr.port));
 
-            let mut upstreams =
-                LoadBalancer::<RoundRobin>::try_from_iter(upstream_backends).unwrap();
-            let tcp_health_check = TcpHealthCheck::new();
-            upstreams.set_health_check(tcp_health_check);
-            upstreams.health_check_frequency = Some(Duration::from_secs(15));
-
-            ROUTE_STORE.insert(route.host.to_string(), Arc::new(upstreams));
+            add_route_to_router(&route.host, upstream_backends);
 
             info!("Added route: {}, {:?}", route.host, route.upstreams);
         }
@@ -53,8 +47,8 @@ impl RoutingService {
         tokio::spawn(async move {
             loop {
                 interval.tick().await;
-                if let Ok(MsgProxy::NewRoute(route)) = receiver.try_recv() {
-                    add_route_from_hook(route);
+                if let Ok(MsgProxy::NewRoute(route)) = receiver.recv() {
+                    add_route_to_router(&route.host, route.upstreams);
                 }
             }
         })
@@ -83,12 +77,16 @@ impl Service for RoutingService {
 }
 
 // TODO: find if host already exists but new/old upstreams have changed
-fn add_route_from_hook(route: MsgRoute) {
-    let mut upstreams = LoadBalancer::<RoundRobin>::try_from_iter(route.upstreams).unwrap();
+fn add_route_to_router<A, T>(host: &str, upstreams: T)
+where
+    T: IntoIterator<Item = A>,
+    A: ToSocketAddrs,
+{
+    let mut upstreams = LoadBalancer::<RoundRobin>::try_from_iter(upstreams).unwrap();
 
     let tcp_health_check = TcpHealthCheck::new();
     upstreams.set_health_check(tcp_health_check);
     upstreams.health_check_frequency = Some(Duration::from_secs(15));
 
-    ROUTE_STORE.insert(route.host.to_string(), Arc::new(upstreams));
+    ROUTE_STORE.insert(host.to_string(), Arc::new(upstreams));
 }

@@ -14,6 +14,7 @@ use pingora::{
 use pingora_http::ResponseHeader;
 use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
 use pingora_proxy::{ProxyHttp, Session};
+use tracing::info;
 
 use crate::ROUTE_STORE;
 
@@ -106,7 +107,13 @@ impl ProxyHttp for Router {
         }
 
         // No healthy upstream found
-        let healthy_upstream = upstream.unwrap().select(b"", 32);
+        let healthy_upstream = upstream.unwrap().select_with(b"", 32, |be, healthy| {
+            info!("Selecting upstream {}, {}", healthy, be.addr);
+            if healthy {
+                return true;
+            }
+            false
+        });
         if healthy_upstream.is_none() {
             return Err(pingora::Error::new(HTTPStatus(503)));
         }

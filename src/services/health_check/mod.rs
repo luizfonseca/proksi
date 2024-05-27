@@ -16,22 +16,24 @@ impl Service for HealthService {
     async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
         // TODO: create multiple interval checks
         let mut interval = tokio::time::interval(Duration::from_secs(15));
+        interval.tick().await;
 
         loop {
             interval.tick().await;
 
-            for route in ROUTE_STORE.iter_mut() {
-                info!("Running health check");
-                let upstream = route.value();
-                upstream.backends().run_health_check(true).await;
-                upstream.update().await.ok();
-                // upstream.backends().run_health_check(true).await;
-                // upstream.update().await.ok();
-            }
+            let store_clone = ROUTE_STORE.clone();
 
-            // upstream.backends().run_health_check(true).await;
-            // upstream.update().await.ok();
-            // info!("Running health check");
+            for route in store_clone.iter() {
+                info!("Running health check on {}", route.key());
+                let upstream = route.value();
+                upstream.backends().run_health_check(false).await;
+                let updated_from_last_check = upstream.backends().update().await.unwrap();
+
+                if updated_from_last_check {
+                    upstream.update().await.unwrap();
+                    ROUTE_STORE.insert(route.key().to_string(), upstream.clone());
+                }
+            }
         }
     }
 
