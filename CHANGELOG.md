@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.10](https://github.com/luizfonseca/proksi/compare/v0.1.9...v0.1.10) (2024-05-27)
+
+
+### Bug Fixes
+
+* clippy ([b50a511](https://github.com/luizfonseca/proksi/commit/b50a511fc92c141161310589c32ff23ed134ca53))
+* small refactorings to services ([606b8dc](https://github.com/luizfonseca/proksi/commit/606b8dcd209122fae20bf8aafbf39fa88a7dbc8f))
+
+
+### Miscellaneous Chores
+
+* release 0.1.10 ([b852f41](https://github.com/luizfonseca/proksi/commit/b852f41660c56f85abadb5b2debdc1259cd1a586))
+
 ## [0.1.9](https://github.com/luizfonseca/proksi/compare/v0.1.8...v0.1.9) (2024-05-27)
 
 
