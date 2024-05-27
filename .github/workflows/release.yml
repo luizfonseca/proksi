@@ -169,13 +169,13 @@ jobs:
 
       - name: x86_64 Build Linux image
         run: |
-          tar -xzvf ./data/proksi-linux-gnu-x86_64.tar.gz/proksi-linux-gnu-x86_64.tar.gz proksi
+          tar -xzvf ./data/proksi-linux-gnu-x86_64/proksi-linux-gnu-x86_64.tar.gz proksi
           docker buildx build --platform linux/amd64 -t luizfonseca/proksi:${{needs.release.outputs.tag_name}}-amd64 -f Dockerfile . --push
 
       - name: aarch64 Build Linux image
         run: |
           rm proksi
-          tar -xzvf ./data/proksi-linux-gnu-aarch64.tar.gz/proksi-linux-gnu-aarch64.tar.gz proksi
+          tar -xzvf ./data/proksi-linux-gnu-aarch64/proksi-linux-gnu-aarch64.tar.gz proksi
           docker buildx build --platform linux/arm64 -t luizfonseca/proksi:${{needs.release.outputs.tag_name}}-arm64 -f Dockerfile . --push
 
       - name: Docker (latest)
@@ -246,6 +246,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload ${{ needs.release.outputs.tag_name }} \
-          ./data/proksi-linux-gnu-x86_64.tar.gz/proksi-linux-gnu-x86_64.tar.gz ./data/proksi-linux-gnu-aarch64.tar.gz/proksi-linux-gnu-aarch64.tar.gz  \
-          ./data/proksi-macos-x86_64.tar.gz/proksi-macos-x86_64.tar.gz ./data/proksi-macos-aarch64.tar.gz/proksi-macos-aarch64.tar.gz \
-          ./data/proksi-linux-musl-x86_64.tar.gz/proksi-linux-musl-x86_64.tar.gz ./data/proksi-linux-musl-aarch64.tar.gz/proksi-linux-musl-aarch64.tar.gz
+          ./data/proksi-linux-gnu-x86_64/proksi-linux-gnu-x86_64.tar.gz ./data/proksi-linux-gnu-aarch64/proksi-linux-gnu-aarch64.tar.gz  \
+          ./data/proksi-macos-x86_64/proksi-macos-x86_64.tar.gz ./data/proksi-macos-aarch64/proksi-macos-aarch64.tar.gz \
+          ./data/proksi-linux-musl-x86_64/proksi-linux-musl-x86_64.tar.gz ./data/proksi-linux-musl-aarch64/proksi-linux-musl-aarch64.tar.gz
