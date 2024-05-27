@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.9](https://github.com/luizfonseca/proksi/compare/v0.1.8...v0.1.9) (2024-05-27)
+
+
+### Bug Fixes
+
+* **docker:** incorrect label logic ([63e9dfb](https://github.com/luizfonseca/proksi/commit/63e9dfbb6cf68c468dacb6ae43cf0ca6947d7e7c))
+
+
+### Miscellaneous Chores
+
+* release 0.1.9 ([185af43](https://github.com/luizfonseca/proksi/commit/185af43de32d180398d1bf4070785d005974ab95))
+
 ## [0.1.8](https://github.com/luizfonseca/proksi/compare/v0.1.7...v0.1.8) (2024-05-27)
 
 
