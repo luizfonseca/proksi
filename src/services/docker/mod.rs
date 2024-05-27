@@ -63,7 +63,7 @@ impl LabelService {
     where
         T: Into<String> + Hash + serde::ser::Serialize + Eq,
     {
-        let host_map = HashMap::<String, Vec<String>>::new();
+        let mut host_map = HashMap::<String, Vec<String>>::new();
         let services = self
             .inner
             .list_services(Some(ListServicesOptions {
@@ -77,8 +77,53 @@ impl LabelService {
             return host_map;
         }
 
-        for service in services.unwrap() {
-            println!("Found service {}", service.id.unwrap());
+        let services = services.unwrap();
+
+        for service in &services {
+            let service_id = service.id.as_ref().unwrap();
+            let service_name = service.spec.as_ref().unwrap().name.as_ref();
+
+            if service_name.is_none() {
+                info!("Service {service_id:?} does not have a name");
+                continue;
+            }
+
+            let service_name = service_name.unwrap();
+
+            let falsy_string = String::from("false");
+            let service_labels = service.spec.as_ref().unwrap().labels.as_ref().unwrap();
+            let proksi_enabled = service_labels
+                .get("proksi.enabled")
+                .unwrap_or(&falsy_string);
+
+            let empty_string = String::new();
+            let proksi_host = service_labels.get("proksi.host").unwrap_or(&empty_string);
+            let proksi_port = service_labels.get("proksi.port").unwrap_or(&empty_string);
+
+            if proksi_enabled != "true" {
+                info!(
+                    "Service {service_name:?} does not have the label
+                    proksi.enabled set to `true`"
+                );
+                continue;
+            }
+
+            if proksi_host.is_empty() || proksi_port.is_empty() {
+                info!(
+                    "Service {service_name:?} does not have the label
+                    proksi.host set to a valid host or proksi.port set to a valid port"
+                );
+                continue;
+            }
+
+            // TODO offer an option to load balance directly to the container IPs
+            // of the service instead of through the docker dns
+            if !host_map.contains_key(proksi_host) {
+                host_map.insert(
+                    proksi_host.clone(),
+                    vec![format!("tasks.{service_name}:{proksi_port}")],
+                );
+            }
         }
 
         host_map

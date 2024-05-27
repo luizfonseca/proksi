@@ -1,4 +1,4 @@
-use std::{net::ToSocketAddrs, sync::Arc, time::Duration};
+use std::{fmt::Debug, net::ToSocketAddrs, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 
@@ -30,9 +30,10 @@ impl RoutingService {
             let upstream_backends = route
                 .upstreams
                 .iter()
-                .map(|upstr| format!("{}:{}", upstr.ip, upstr.port));
+                .map(|upstr| format!("{}:{}", upstr.ip, upstr.port))
+                .collect::<Vec<String>>();
 
-            add_route_to_router(&route.host, upstream_backends);
+            add_route_to_router(&route.host, &upstream_backends);
 
             debug!("Added route: {}, {:?}", route.host, route.upstreams);
         }
@@ -45,7 +46,7 @@ impl RoutingService {
         tokio::spawn(async move {
             loop {
                 if let Ok(MsgProxy::NewRoute(route)) = receiver.recv().await {
-                    add_route_to_router(&route.host, route.upstreams);
+                    add_route_to_router(&route.host, &route.upstreams);
                 }
             }
         })
@@ -74,12 +75,21 @@ impl Service for RoutingService {
 }
 
 // TODO: find if host already exists but new/old upstreams have changed
-fn add_route_to_router<A, T>(host: &str, upstreams: T)
+fn add_route_to_router<A, T>(host: &str, upstream_input: T)
 where
-    T: IntoIterator<Item = A>,
+    T: IntoIterator<Item = A> + Debug + Clone + Copy,
     A: ToSocketAddrs,
 {
-    let mut upstreams = LoadBalancer::<RoundRobin>::try_from_iter(upstreams).unwrap();
+    let upstreams = LoadBalancer::<RoundRobin>::try_from_iter(upstream_input);
+    if upstreams.is_err() {
+        debug!(
+            "Could not create upstreams for host: {}, upstreams {:?}",
+            host, upstream_input
+        );
+        return;
+    }
+
+    let mut upstreams = upstreams.unwrap();
 
     // TODO: support defining health checks in the configuration file
     let tcp_health_check = TcpHealthCheck::new();

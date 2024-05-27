@@ -19,10 +19,12 @@ incremental = true
 
 [profile.release]
 opt-level = 2
-strip = "symbols"  # Automatically strip symbols from the binary.
+strip = true       # Automatically strip symbols from the binary.
 lto = true         # Enable link-time optimization.
 debug = false
 codegen-units = 12
+incremental = true
+panic = "abort"    # Abort on panic.
 
 [dependencies]
 acme-lib = "0.9.1"
