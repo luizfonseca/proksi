@@ -28,7 +28,22 @@ enabled = true
 
 # The interval in seconds at which the Docker integration will check for new containers.
 # The default value is 15 seconds.
+# important: the lower the value, the more work Proksi has to do.
 interval_secs = 15
+
+# The mode of the Docker integration.
+# The mode can be "standalone" or "swarm".
+# When the mode is set to "standalone", the integration will only
+# listen for labels in Docker containers
+# When the mode is set to "swarm", the integration will listen for Docker
+# events in a Docker Swarm cluster (service labels).
+# Default value is <standalone>.
+mode = "standalone"
+
+# The endpoint for the Docker API.
+# This can be a TCP endpoint or a Unix socket.
+# The default value is "unix:///var/run/docker.sock".
+endpoint = "unix:///var/run/docker.sock"
 
 # The configuration for the Let's Encrypt integration.
 [lets_encrypt]

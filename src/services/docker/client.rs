@@ -173,6 +173,10 @@ impl Service for DockerService {
             "label",
             vec!["proksi.enabled=true", "proksi.host", "proksi.port"],
         );
+        filters.insert(
+            "label",
+            vec!["proksi.enable=true", "proksi.host", "proksi.port"], // in case you typo-it
+        );
 
         let mut interval = tokio::time::interval(Duration::from_secs(15));
         loop {

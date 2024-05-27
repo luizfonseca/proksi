@@ -20,6 +20,7 @@ Proksi is a simple, lightweight, and easy-to-use proxy server that automatically
   - [Getting started](#getting-started)
   - [Usage](#usage)
     - [Docker](#docker)
+    - [Docker Containers](#docker-containers)
     - [Docker Swarm](#docker-swarm)
     - [Binary](#binary)
     - [Command line options](#command-line-options)
@@ -51,6 +52,46 @@ Similar to other proxies, Proksi can be run as a Docker container. The following
 docker run -d -p 80:80 -p 443:443 -v /path/to/config:/etc/proksi/ luizfonseca/proksi
 ```
 
+
+### Docker Containers
+Proksi also supports non-swarm Docker containers. To use Proksi with Docker containers, you need to add labels to your Docker containers. The following labels are supported:
+
+```yaml
+# docker-compose.yml
+# This is an example of how to use Proksi with Docker containers
+# This will automatically discover services and route traffic to them
+# based on the labels defined in the container.
+
+networks:
+  web:
+    name: web
+
+services:
+  # Proksi itself -- the only service that needs the `ports` directive
+  proksi:
+    image: luizfonseca/proksi:latest
+    networks:
+      - web # Proksi needs to be in the same network as the services it will proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /path/to/config:/etc/proksi/config.yaml
+
+  # Your service
+  # This service will be automatically discovered by Proksi and doesn't need
+  # to expose any ports to the host, only to proksi
+  web:
+    image: nginxdemos/hello # This container exposes port 80
+    networks:
+      - web
+    labels:
+      proksi.enabled: "true"
+      proksi.host: "myhost.example.com"
+      proksi.port: "80"
+```
+
+
 ### Docker Swarm
 One of the main purposes of Proksi is to also enable automatic service discovery and routing. To do this, you can use Proksi in conjunction with Docker Swarm:
 
@@ -60,7 +101,6 @@ One of the main purposes of Proksi is to also enable automatic service discovery
 # This will automatically discover services and route traffic to them
 # based on the labels defined in the service.
 
-version: '3.8'
 services:
   proksi:
     image: luizfonseca/proksi:latest
@@ -190,7 +230,7 @@ services:
 ## Jobs to be done
 
 - [x] Automatic Redirect to HTTPS
-- [ ] Docker Labeling Support
+- [x] Docker Labeling Support
 - [x] Automatic SSL termination
 - [x] Automatic SSL certificate renewal
 - [x] Extensible through configuration
@@ -212,7 +252,7 @@ The following features are included or will be included into Proksi without the 
 ### Proxy
 - [X] Automatic SSL termination (using LetsEncrypt)
 - [X] Automatic HTTP to HTTPS redirection
-- [ ] Docker Labeling Support (for services discovery)
+- [x] Docker Labeling Support (for services discovery)
 - [ ] Load Balancing (Round Robin, Weighted Round Robin, Least Connections)
 - [X] Health Checks
 - [ ] Storage support for LetsEncrypt certificates (S3, Etcd, Consul, etc)
