@@ -200,7 +200,7 @@ services:
       labels:
         # Whether the service should be proxied or not.
         # By default, Proksi won't discover any services where the value is not explicitly `true`
-        proksi.enable: "true"
+        proksi.enabled: "true"
 
         # The hostname that the service should be available at. E.g. `example.com`.
         proksi.host: "example.com"
