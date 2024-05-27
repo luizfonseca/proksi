@@ -1,12 +1,13 @@
 use std::{net::ToSocketAddrs, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use crossbeam_channel::{Receiver, Sender};
+
 use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
 use pingora_load_balancing::{health_check::TcpHealthCheck, selection::RoundRobin, LoadBalancer};
+use tokio::sync::broadcast::Sender;
 use tracing::info;
 
 use crate::{config::Config, MsgProxy, ROUTE_STORE};
@@ -14,15 +15,12 @@ use crate::{config::Config, MsgProxy, ROUTE_STORE};
 // Service discovery for load balancers
 pub struct RoutingService {
     config: Arc<Config>,
-    receiver: crossbeam_channel::Receiver<MsgProxy>,
+    broadcast: Sender<MsgProxy>,
 }
 
 impl RoutingService {
-    pub fn new(config: Arc<Config>, chan: (Sender<MsgProxy>, Receiver<MsgProxy>)) -> Self {
-        Self {
-            config,
-            receiver: chan.1,
-        }
+    pub fn new(config: Arc<Config>, broadcast: Sender<MsgProxy>) -> Self {
+        Self { config, broadcast }
     }
 
     /// From a given configuration file, create the static load balancing configuration
@@ -41,13 +39,11 @@ impl RoutingService {
     }
 
     fn watch_for_route_changes(&self) -> tokio::task::JoinHandle<()> {
-        let receiver = self.receiver.clone();
-        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        let mut receiver = self.broadcast.subscribe();
 
         tokio::spawn(async move {
             loop {
-                interval.tick().await;
-                if let Ok(MsgProxy::NewRoute(route)) = receiver.recv() {
+                if let Ok(MsgProxy::NewRoute(route)) = receiver.recv().await {
                     add_route_to_router(&route.host, route.upstreams);
                 }
             }

@@ -8,11 +8,11 @@ use async_trait::async_trait;
 use bollard::{
     container::ListContainersOptions, service::ListServicesOptions, Docker, API_DEFAULT_VERSION,
 };
-use crossbeam_channel::Sender;
 use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
+use tokio::sync::broadcast::Sender;
 use tracing::{debug, info};
 
 use crate::{
@@ -192,7 +192,7 @@ impl Service for DockerService {
 
                 // Notify the route store of the new host
                 self.sender
-                    .try_send(MsgProxy::NewRoute(MsgRoute {
+                    .send(MsgProxy::NewRoute(MsgRoute {
                         host: host_value,
                         upstreams: ips,
                     }))

@@ -4,7 +4,6 @@ use acme_lib::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use bytes::Bytes;
-use crossbeam_channel::Receiver;
 use dashmap::DashMap;
 use pingora::{
     server::{ListenFds, ShutdownWatch},
@@ -13,25 +12,19 @@ use pingora::{
 use tokio::time;
 use tracing::info;
 
-use crate::{config::Config, stores::certificates::Certificate, MsgProxy, CERT_STORE, ROUTE_STORE};
+use crate::{config::Config, stores::certificates::Certificate, CERT_STORE, ROUTE_STORE};
 
 /// A service that handles the creation of certificates using the Let's Encrypt API
 pub struct LetsencryptService {
     config: Arc<Config>,
     challenge_store: Arc<DashMap<String, (String, String)>>,
-    receiver: Receiver<MsgProxy>,
 }
 
 impl LetsencryptService {
-    pub fn new(
-        config: Arc<Config>,
-        store: Arc<DashMap<String, (String, String)>>,
-        receiver: Receiver<MsgProxy>,
-    ) -> Self {
+    pub fn new(config: Arc<Config>, store: Arc<DashMap<String, (String, String)>>) -> Self {
         Self {
             config,
             challenge_store: store,
-            receiver,
         }
     }
 
@@ -122,12 +115,8 @@ impl LetsencryptService {
         account: &Account<FilePersist>,
     ) -> tokio::task::JoinHandle<()> {
         let acc = account.clone();
-        let mut interval = time::interval(Duration::from_secs(10));
-        let service = Self::new(
-            self.config.clone(),
-            self.challenge_store.clone(),
-            self.receiver.clone(),
-        );
+        let mut interval = time::interval(Duration::from_secs(30));
+        let service = Self::new(self.config.clone(), self.challenge_store.clone());
 
         tokio::spawn(async move {
             loop {
@@ -149,11 +138,7 @@ impl LetsencryptService {
     ) -> tokio::task::JoinHandle<()> {
         let acc = account.clone();
         let mut interval = time::interval(Duration::from_secs(84_600));
-        let le_service = Self::new(
-            self.config.clone(),
-            self.challenge_store.clone(),
-            self.receiver.clone(),
-        );
+        let le_service = Self::new(self.config.clone(), self.challenge_store.clone());
 
         tokio::spawn(async move {
             loop {

@@ -107,14 +107,9 @@ impl ProxyHttp for Router {
         }
 
         // No healthy upstream found
-        let healthy_upstream = upstream.unwrap().select_with(b"", 32, |be, healthy| {
-            info!("Selecting upstream {}, {}", healthy, be.addr);
-            if healthy {
-                return true;
-            }
-            false
-        });
+        let healthy_upstream = upstream.unwrap().select(b"", 32);
         if healthy_upstream.is_none() {
+            info!("No healthy upstream found");
             return Err(pingora::Error::new(HTTPStatus(503)));
         }
 

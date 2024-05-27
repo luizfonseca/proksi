@@ -27,12 +27,8 @@ impl Service for HealthService {
                 info!("Running health check on {}", route.key());
                 let upstream = route.value();
                 upstream.backends().run_health_check(false).await;
-                let updated_from_last_check = upstream.backends().update().await.unwrap();
-
-                if updated_from_last_check {
-                    upstream.update().await.unwrap();
-                    ROUTE_STORE.insert(route.key().to_string(), upstream.clone());
-                }
+                upstream.update().await.unwrap();
+                ROUTE_STORE.insert(route.key().to_string(), upstream.clone());
             }
         }
     }

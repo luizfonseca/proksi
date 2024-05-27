@@ -1824,7 +1824,6 @@ dependencies = [
  "bollard-stubs",
  "bytes",
  "clap 4.5.4",
- "crossbeam-channel",
  "dashmap",
  "figment",
  "http 1.1.0",

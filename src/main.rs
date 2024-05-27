@@ -31,16 +31,18 @@ pub static ROUTE_STORE: Lazy<RouteStore> = Lazy::new(|| Arc::new(DashMap::new())
 /// Static reference to the certificate store that can be shared across threads
 pub static CERT_STORE: Lazy<CertificateStore> = Lazy::new(|| Arc::new(DashMap::new()));
 
+#[derive(Clone)]
 pub struct MsgRoute {
     host: Cow<'static, str>,
     upstreams: Vec<String>,
 }
-
+#[derive(Clone)]
 pub struct MsgCert {
     _cert: Vec<u8>,
     _key: Vec<u8>,
 }
 
+#[derive(Clone)]
 pub enum MsgProxy {
     NewRoute(MsgRoute),
     NewCertificate(MsgCert),
@@ -53,7 +55,7 @@ fn main() -> Result<(), anyhow::Error> {
     );
 
     // Receiver channel for Routes/Certificates/etc
-    let (sdr, rcv) = crossbeam_channel::unbounded::<MsgProxy>();
+    let (sender, mut _receiver) = tokio::sync::broadcast::channel::<MsgProxy>(100);
 
     // Receiver channel for non-blocking logging
     let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
@@ -78,7 +80,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Service: Docker
     if proxy_config.docker.enabled.unwrap_or(false) {
-        let docker_service = DockerService::new(proxy_config.clone(), sdr.clone());
+        let docker_service = DockerService::new(proxy_config.clone(), sender.clone());
         pingora_server.add_service(docker_service);
     }
 
@@ -86,7 +88,7 @@ fn main() -> Result<(), anyhow::Error> {
     let challenge_store = Arc::new(DashMap::<String, (String, String)>::new());
     if proxy_config.lets_encrypt.enabled.unwrap_or(false) {
         let letsencrypt_service =
-            LetsencryptService::new(proxy_config.clone(), challenge_store.clone(), rcv.clone());
+            LetsencryptService::new(proxy_config.clone(), challenge_store.clone());
         pingora_server.add_service(letsencrypt_service);
     }
 
@@ -108,10 +110,7 @@ fn main() -> Result<(), anyhow::Error> {
     https_secure_service.threads = proxy_config.worker_threads;
     https_secure_service.add_tls_with_settings("0.0.0.0:443", None, tls_settings);
 
-    pingora_server.add_service(RoutingService::new(
-        proxy_config.clone(),
-        (sdr.clone(), rcv.clone()),
-    ));
+    pingora_server.add_service(RoutingService::new(proxy_config.clone(), sender.clone()));
     pingora_server.add_service(http_public_service);
     pingora_server.add_service(https_secure_service);
     pingora_server.add_service(HealthService {});
