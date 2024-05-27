@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.1.8](https://github.com/luizfonseca/proksi/compare/v0.1.7...v0.1.8) (2024-05-27)
+
+
+### Features
+
+* **docker:** add route discovery and container discovery ([61975ec](https://github.com/luizfonseca/proksi/commit/61975ec877a8c2a8a717708542a2c2500dbaf854))
+* **docker:** allow proksi.enabled and proksi.enable as possible labels for discovery ([c0384a1](https://github.com/luizfonseca/proksi/commit/c0384a1d2752a99b6c5a0280a4e987b970d0f5c4))
+* introduce docker configuration ([780a301](https://github.com/luizfonseca/proksi/commit/780a30177c4edcc119070540a41ea69692c25279))
+* **routing:** use tokio broadcast instead of crossbeam ([c3ec7e2](https://github.com/luizfonseca/proksi/commit/c3ec7e2c8e73ec831db5635b53349aa2ff8a00cc))
+
+
+### Bug Fixes
+
+* **ci:** split build steps ([ef85925](https://github.com/luizfonseca/proksi/commit/ef8592582b87ecfca86ecbc831f82f9b8a33e41a))
+* clippy warnings on usize ([1865999](https://github.com/luizfonseca/proksi/commit/1865999671a94903c3f029fec2fca6471b1bca0e))
+* correct clippy issues and add makefile ([85ce9aa](https://github.com/luizfonseca/proksi/commit/85ce9aa83e66e3caeda0324678c8fed3be7c1d20))
+* high cpu usage on log stream / health checks updating service discovery ([bc80bdf](https://github.com/luizfonseca/proksi/commit/bc80bdf509cd665262d20161321262d32d7b74de))
+* incorrect release target on CI ([a4eec6d](https://github.com/luizfonseca/proksi/commit/a4eec6d2065ee299e7269ae82c02b38c0801f396))
+
+
+### Miscellaneous Chores
+
+* release 0.1.8 ([547e1ed](https://github.com/luizfonseca/proksi/commit/547e1ed7cdea483acd9828bc5290cf1a41eae6b5))
+
 ## [0.1.7](https://github.com/luizfonseca/proksi/compare/v0.1.7...v0.1.7) (2024-05-20)
 
 
