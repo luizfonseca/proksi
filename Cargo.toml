@@ -32,6 +32,7 @@ bollard = "0.16.1"
 bollard-stubs = "=1.44.0-rc.2"
 bytes = "1.6.0"
 clap = { version = "4.5.4", features = ["derive"] }
+crossbeam-channel = "0.5.13"
 dashmap = "5.5.3"
 figment = { version = "0.10.19", features = ["toml", "yaml", "env"] }
 http = "1.1.0"
@@ -47,6 +48,7 @@ serde_json = "1.0.117"
 tokio = { version = "1.37.0", features = ["sync"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
+itertools = "0.13.0"
 
 [dev-dependencies]
 figment = { version = "0.10.19", features = ["toml", "yaml", "env", "test"] }

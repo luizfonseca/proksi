@@ -11,6 +11,12 @@ use tracing::level_filters::LevelFilter;
 mod validate;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) enum DockerServiceMode {
+    Swarm,
+    Standalone,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct Docker {
     /// The interval (in seconds) to check for label updates
     /// (default: every 15 seconds)
@@ -22,6 +28,10 @@ pub(crate) struct Docker {
     /// Enables the docker label service
     /// (default: false)
     pub enabled: Option<bool>,
+
+    /// Mode
+    #[serde(deserialize_with = "docker_mode_deser")]
+    pub mode: DockerServiceMode,
 }
 
 impl Default for Docker {
@@ -30,6 +40,7 @@ impl Default for Docker {
             interval_secs: Some(15),
             endpoint: Some(Cow::Borrowed("unix:///var/run/docker.sock")),
             enabled: Some(false),
+            mode: DockerServiceMode::Standalone,
         }
     }
 }
@@ -346,6 +357,21 @@ where
         "error" => Ok(LogLevel::Error),
         _ => Err(serde::de::Error::custom(
             "expected one of DEBUG, INFO, WARN, ERROR",
+        )),
+    }
+}
+
+/// Deserialize function to convert a string to a `DockerServiceMode` Enum
+fn docker_mode_deser<'de, D>(deserializer: D) -> Result<DockerServiceMode, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    match s.to_lowercase().as_str() {
+        "swarm" => Ok(DockerServiceMode::Swarm),
+        "standalone" => Ok(DockerServiceMode::Standalone),
+        _ => Err(serde::de::Error::custom(
+            "expected one of ENABLED, DISABLED",
         )),
     }
 }

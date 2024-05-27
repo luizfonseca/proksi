@@ -29,9 +29,8 @@ impl ProxyHttp for HttpLB {
         session: &mut Session,
         _ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
-        // LetsEncrypt/ZeroSSL challenge
         let req_header = session.req_header();
-        let current_uri = req_header.uri.clone();
+        let current_uri = &req_header.uri;
 
         let host = get_host(session);
         if host.is_empty() {
@@ -40,7 +39,7 @@ impl ProxyHttp for HttpLB {
 
         if current_uri.path() == "/ping" {
             let sample_body = bytes::Bytes::from("pong");
-            let mut res_headers = ResponseHeader::build_no_case(StatusCode::OK, Some(2))?;
+            let mut res_headers = ResponseHeader::build_no_case(StatusCode::OK, None)?;
             res_headers.append_header(CONTENT_TYPE, "text/plain")?;
             res_headers.append_header(CONTENT_LENGTH, sample_body.len())?;
 
@@ -49,6 +48,7 @@ impl ProxyHttp for HttpLB {
             return Ok(true);
         }
 
+        // LetsEncrypt/ZeroSSL challenge
         if current_uri
             .path()
             .starts_with("/.well-known/acme-challenge")
@@ -120,7 +120,7 @@ impl ProxyHttp for HttpLB {
 
 /// Retrieves the host from the request headers based on
 /// whether the request is HTTP/1.1 or HTTP/2
-fn get_host(session: &mut Session) -> &str {
+fn get_host(session: &Session) -> &str {
     if let Some(host) = session.get_header(http::header::HOST) {
         return host.to_str().unwrap_or("");
     }

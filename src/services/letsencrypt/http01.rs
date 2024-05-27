@@ -1,36 +1,37 @@
-use std::{borrow::Cow, fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
+use std::{fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
 
 use acme_lib::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use bytes::Bytes;
+use crossbeam_channel::Receiver;
 use dashmap::DashMap;
 use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
 use tokio::time;
-use tracing::{debug, info};
+use tracing::info;
 
-use crate::{config::Config, stores::certificates::Certificate, CERT_STORE};
+use crate::{config::Config, stores::certificates::Certificate, MsgProxy, CERT_STORE, ROUTE_STORE};
 
 /// A service that handles the creation of certificates using the Let's Encrypt API
 pub struct LetsencryptService {
     config: Arc<Config>,
-    hosts: Vec<String>,
     challenge_store: Arc<DashMap<String, (String, String)>>,
+    receiver: Receiver<MsgProxy>,
 }
 
 impl LetsencryptService {
     pub fn new(
-        hosts: Vec<String>,
         config: Arc<Config>,
         store: Arc<DashMap<String, (String, String)>>,
+        receiver: Receiver<MsgProxy>,
     ) -> Self {
         Self {
             config,
-            hosts,
             challenge_store: store,
+            receiver,
         }
     }
 
@@ -106,7 +107,7 @@ impl LetsencryptService {
         let key_bytes = Bytes::from(cert.private_key().to_string()).to_vec();
 
         CERT_STORE.insert(
-            Cow::Owned(domain.to_string()),
+            domain.to_string(),
             Certificate {
                 key: key_bytes,
                 certificate: crt_bytes,
@@ -116,21 +117,49 @@ impl LetsencryptService {
         Ok(true)
     }
 
-    fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) {
+    fn watch_for_route_changes(
+        &self,
+        account: &Account<FilePersist>,
+    ) -> tokio::task::JoinHandle<()> {
         let acc = account.clone();
-        let hosts = self.hosts.clone();
-        let mut interval = time::interval(Duration::from_secs(84_600));
-        let le_service = Self::new(
-            self.hosts.clone(),
+        let mut interval = time::interval(Duration::from_secs(10));
+        let service = Self::new(
             self.config.clone(),
             self.challenge_store.clone(),
+            self.receiver.clone(),
         );
 
         tokio::spawn(async move {
             loop {
                 interval.tick().await;
+                for route in ROUTE_STORE.iter() {
+                    if CERT_STORE.contains_key(route.key()) {
+                        continue;
+                    }
 
-                for domain in &hosts {
+                    service.handle_certificate_for_domain(route.key(), &acc);
+                }
+            }
+        })
+    }
+
+    fn check_for_certificates_expiration(
+        &self,
+        account: &Account<FilePersist>,
+    ) -> tokio::task::JoinHandle<()> {
+        let acc = account.clone();
+        let mut interval = time::interval(Duration::from_secs(84_600));
+        let le_service = Self::new(
+            self.config.clone(),
+            self.challenge_store.clone(),
+            self.receiver.clone(),
+        );
+
+        tokio::spawn(async move {
+            loop {
+                interval.tick().await;
+                for value in ROUTE_STORE.iter() {
+                    let domain = value.key();
                     if let Some(cert) = acc.certificate(domain).unwrap() {
                         let expiry = cert.valid_days_left();
 
@@ -143,7 +172,7 @@ impl LetsencryptService {
                                 .create_order_for_domain(domain, &acc)
                                 .expect("Failed to create order for domain");
                         } else {
-                            debug!(
+                            info!(
                                 "Certificate for domain {} expires in {} days",
                                 domain, expiry
                             );
@@ -151,13 +180,43 @@ impl LetsencryptService {
                     }
                 }
             }
-        });
+        })
+    }
+
+    fn handle_certificate_for_domain(&self, domain: &str, account: &Account<FilePersist>) {
+        match account.certificate(domain) {
+            Ok(Some(cert)) => {
+                // Certificate already exists
+                if CERT_STORE.contains_key(domain) {
+                    return;
+                }
+
+                let crt_bytes = Bytes::from(cert.certificate().to_string()).to_vec();
+                let key_bytes = Bytes::from(cert.private_key().to_string()).to_vec();
+
+                CERT_STORE.insert(
+                    domain.to_string(),
+                    Certificate {
+                        certificate: crt_bytes,
+                        key: key_bytes,
+                    },
+                );
+            }
+            Ok(None) => {
+                // TODO create self signed certificate if no certificate is found
+                self.create_order_for_domain(domain, account)
+                    .expect("Failed to create order for domain");
+            }
+            _ => {}
+        }
     }
 }
 
 #[async_trait]
 impl Service for LetsencryptService {
     async fn start_service(&mut self, _fds: Option<ListenFds>, mut _shutdown: ShutdownWatch) {
+        info!(service = "letsencrypt", "Started LetsEncrypt service");
+
         // Get directory based on whether we are running on staging/production
         // LetsEncrypt configurations
         let dir = self.get_lets_encrypt_directory();
@@ -177,32 +236,10 @@ impl Service for LetsencryptService {
             .account(&self.config.lets_encrypt.email)
             .expect("Failed to create or retrieve existing account");
 
-        for domain in &self.hosts {
-            match account.certificate(domain) {
-                Ok(Some(cert)) => {
-                    info!("Certificate already issued for domain: {}", domain);
-                    let crt_bytes = Bytes::from(cert.certificate().to_string()).to_vec();
-                    let key_bytes = Bytes::from(cert.private_key().to_string()).to_vec();
-
-                    CERT_STORE.insert(
-                        Cow::Owned(domain.to_string()),
-                        Certificate {
-                            certificate: crt_bytes,
-                            key: key_bytes,
-                        },
-                    );
-                    continue;
-                }
-                Ok(None) => {
-                    self.create_order_for_domain(domain, &account)
-                        .expect("Failed to create order for domain");
-                }
-                _ => {}
-            }
+        tokio::select! {
+            _ = self.watch_for_route_changes(&account) => {}
+            _ = self.check_for_certificates_expiration(&account) => {}
         }
-
-        // Check if any certificate needs renewal
-        self.check_for_certificates_expiration(&account);
     }
 
     fn name(&self) -> &'static str {

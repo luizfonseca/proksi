@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 use dashmap::DashMap;
 
@@ -7,4 +7,4 @@ pub struct Certificate {
     pub certificate: Vec<u8>,
 }
 
-pub type CertificateStore = Arc<DashMap<Cow<'static, str>, Certificate>>;
+pub type CertificateStore = Arc<DashMap<String, Certificate>>;

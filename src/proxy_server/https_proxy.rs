@@ -14,7 +14,6 @@ use pingora::{
 use pingora_http::ResponseHeader;
 use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
 use pingora_proxy::{ProxyHttp, Session};
-use tracing::info;
 
 use crate::ROUTE_STORE;
 
@@ -107,15 +106,15 @@ impl ProxyHttp for Router {
         }
 
         // No healthy upstream found
-        let healthy_upstream = upstream.unwrap().select(b"", 256);
+        let healthy_upstream = upstream.unwrap().select(b"", 32);
         if healthy_upstream.is_none() {
             return Err(pingora::Error::new(HTTPStatus(503)));
         }
 
         let host = ctx.host.as_ref().unwrap();
 
-        let b: &str = host.borrow();
-        info!(host = b, "Upstream selected");
+        let _b: &str = host.borrow();
+        // info!(host = b, "Upstream selected");
 
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
         let host = ctx.host.clone().unwrap();
