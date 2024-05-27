@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.11](https://github.com/luizfonseca/proksi/compare/v0.1.10...v0.1.11) (2024-05-27)
+
+
+### Features
+
+* **docker:** add support for docker swarm service discovery ([185cab3](https://github.com/luizfonseca/proksi/commit/185cab35420bdd8ea91c3ac3725e8badda57b0c9))
+
+
+### Miscellaneous Chores
+
+* release 0.1.11 ([7f8d3e1](https://github.com/luizfonseca/proksi/commit/7f8d3e16bbab8d045da309ce037d643f0c77a1fc))
+
 ## [0.1.10](https://github.com/luizfonseca/proksi/compare/v0.1.9...v0.1.10) (2024-05-27)
 
 
