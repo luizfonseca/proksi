@@ -71,13 +71,6 @@ fn main() -> Result<(), anyhow::Error> {
     // Pingora load balancer server
     let mut pingora_server = Server::new(None)?;
 
-    let certificate_store = Box::new(cert_store::CertStore::new());
-
-    // Setup tls settings and Enable HTTP/2
-    let mut tls_settings = TlsSettings::with_callbacks(certificate_store).unwrap();
-    tls_settings.enable_h2();
-    tls_settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
-
     // Service: Docker
     if proxy_config.docker.enabled.unwrap_or(false) {
         let docker_service = docker::LabelService::new(proxy_config.clone(), sender.clone());
@@ -108,8 +101,25 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Worker threads per configuration
     https_secure_service.threads = proxy_config.worker_threads;
+
+    // Setup tls settings and Enable HTTP/2
+    let certificate_store = Box::new(cert_store::CertStore::new());
+    let mut tls_settings = TlsSettings::with_callbacks(certificate_store).unwrap();
+    tls_settings.enable_h2();
+    tls_settings.set_servername_callback(|ssl_ref, _| {
+        cert_store::CertStore::sni_callback(ssl_ref, CERT_STORE.clone())
+    });
+
+    // For now this is a hardcoded recommendation based on
+    // https://developers.cloudflare.com/ssl/reference/protocols/
+    // but will be made configurable in the future
+    tls_settings.set_min_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_2))?;
+    tls_settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
+
+    // Add TLS settings to the HTTPS service
     https_secure_service.add_tls_with_settings("0.0.0.0:443", None, tls_settings);
 
+    // Built-in services for health checks, logging, and routing
     pingora_server.add_service(RoutingService::new(proxy_config.clone(), sender.clone()));
     pingora_server.add_service(HealthService::new());
     pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver));
