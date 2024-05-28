@@ -107,7 +107,7 @@ fn main() -> Result<(), anyhow::Error> {
     let mut tls_settings = TlsSettings::with_callbacks(certificate_store).unwrap();
     tls_settings.enable_h2();
     tls_settings.set_servername_callback(|ssl_ref, _| {
-        cert_store::CertStore::sni_callback(ssl_ref, CERT_STORE.clone())
+        cert_store::CertStore::sni_callback(ssl_ref, &CERT_STORE)
     });
 
     // For now this is a hardcoded recommendation based on

@@ -18,11 +18,11 @@ impl CertStore {
     // It is used to check if the server name is in the certificate store
     // If it is, the handshake continues, otherwise it is aborted
     // and the client is disconnected
-    pub fn sni_callback(ssl_ref: &mut SslRef, store: CertificateStore) -> Result<(), SniError> {
+    pub fn sni_callback(ssl_ref: &mut SslRef, store: &CertificateStore) -> Result<(), SniError> {
         let servername = ssl_ref.servername(NameType::HOST_NAME).unwrap_or("");
         tracing::debug!("Received SNI: {}", servername);
 
-        if let Some(_) = store.get(servername) {
+        if store.get(servername).is_some() {
             return Ok(());
         }
 
