@@ -40,6 +40,7 @@ http = "1.1.0"
 once_cell = "1.19.0"
 pingora = "0.2.0"
 pingora-openssl = "0.2.0"
+openssl = { version = "0.10", features = ["vendored"] }
 pingora-http = "0.2.0"
 pingora-load-balancing = { version = "0.2.0" }
 pingora-pool = "0.2.0"
