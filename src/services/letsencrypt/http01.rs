@@ -73,7 +73,7 @@ impl LetsencryptService {
         &self,
         domain: &str,
         account: &Account<FilePersist>,
-    ) -> Result<bool, anyhow::Error> {
+    ) -> Result<(), anyhow::Error> {
         let mut order = account.new_order(domain, &[])?;
 
         let order_csr = loop {
@@ -108,7 +108,49 @@ impl LetsencryptService {
             },
         );
 
-        Ok(true)
+        Ok(())
+    }
+
+    /// Creates an in-memory self-signed certificate for a domain if let's encrypt
+    /// cannot be used.
+    /// Note this is only useful for local development or testing purposes
+    /// and should be used sparingly
+    fn create_self_signed_certificate(&self, domain: &str) -> Result<(), anyhow::Error> {
+        let rsa = openssl::rsa::Rsa::generate(2048)?;
+        let mut openssl_cert = openssl::x509::X509Builder::new()?;
+        let mut x509_name = openssl::x509::X509NameBuilder::new()?;
+
+        x509_name.append_entry_by_text("CN", domain)?;
+        x509_name.append_entry_by_text("ST", "TX")?;
+        x509_name.append_entry_by_text("O", "Proksi")?;
+        x509_name.append_entry_by_text("CN", "Test")?;
+        let x509_name = x509_name.build();
+
+        let hash = pingora_openssl::hash::MessageDigest::sha256();
+        let key = pingora_openssl::pkey::PKey::from_rsa(rsa)?;
+        let one_year = openssl::asn1::Asn1Time::days_from_now(365)?;
+        let today = openssl::asn1::Asn1Time::days_from_now(0)?;
+        openssl_cert.set_version(2)?;
+        openssl_cert.set_subject_name(&x509_name)?;
+        openssl_cert.set_issuer_name(&x509_name)?;
+        openssl_cert.set_pubkey(&key)?;
+        openssl_cert.set_not_before(&today)?;
+        openssl_cert.set_not_after(&one_year)?;
+        openssl_cert.sign(&key, hash)?;
+
+        let openssl_cert = openssl_cert.build();
+        let key_bytes = key.private_key_to_pem_pkcs8()?;
+        let crt_bytes = openssl_cert.to_pem()?;
+
+        CERT_STORE.insert(
+            domain.to_string(),
+            Certificate {
+                key: key_bytes,
+                certificate: crt_bytes,
+            },
+        );
+
+        Ok(())
     }
 
     /// Watch for route changes and create or update certificates for new routes
@@ -192,8 +234,14 @@ impl LetsencryptService {
             }
             Ok(None) => {
                 // TODO create self signed certificate if no certificate is found
-                self.create_order_for_domain(domain, account)
-                    .expect("Failed to create order for domain");
+                let order = self.create_order_for_domain(domain, account);
+                if order.is_err() {
+                    info!("Failed to create order for domain {domain}");
+                    info!("Creating a temporary self-signed certificate for {domain}");
+
+                    // Create self signed certificate
+                    self.create_self_signed_certificate(domain).unwrap();
+                }
             }
             _ => {}
         }
