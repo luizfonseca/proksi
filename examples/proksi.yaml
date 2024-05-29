@@ -14,7 +14,8 @@ service_name: "proksi"
 # This can be adjusted based on the number of CPU cores available on the server.
 # The default value is 1.
 #
-# Note: Increasing the number of threads can improve the performance of the server, but it can also increase the memory usage.
+# Note: Increasing the number of threads can improve the performance of the server,
+# but it can also increase the memory usage.
 #
 # Note 2: This only affect the HTTPS service, the HTTP service
 # (and other background services) is single threaded.
@@ -101,6 +102,22 @@ routes:
     #   - "www.example.com"
     #   - "api.example.com"
 
+    # Match a given request path with the route.
+    # You can have multiple matchers:
+    # Path related
+    # Header related
+    match_with:
+      path:
+        prefix: "/api"
+        suffix: ".json"
+        regex: |
+          ^/api/v1/[a-z]+\.*$
+      header:
+        - name: "X-User-Agent"
+          value: "123"
+      ip:
+        - 192.168.1.1 # only this IP will be allowed to access this host
+
     # SSL configuration for the route.
     # The ssl attribute is optional.
     ssl_certificate:
@@ -139,10 +156,6 @@ routes:
         # The private key file should be in PEM format.
         # key: "/etc/proksi/letsencrypt/certs/example.com/privkey.pem"
 
-
-
-    # The path_prefix attribute specifies the path prefix that the route will match.
-    path_prefix: "/api"
 
     # The headers attribute specifies the headers that will
     # be added or removed at the end of the response
