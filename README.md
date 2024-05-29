@@ -337,6 +337,8 @@ paths:
 routes:
   - host: "example.com"
     path_prefix: "/api"
+    ssl_certificate:
+      self_signed_on_failure: true
     headers:
       add:
         - name: "X-Forwarded-For"

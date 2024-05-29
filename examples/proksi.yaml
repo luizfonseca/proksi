@@ -97,6 +97,49 @@ routes:
   # This can be a domain name or an IP address. For IP address, no certificate will be issued.
   # The host attribute is required.
   - host: "example.com"
+    # additional_hosts:
+    #   - "www.example.com"
+    #   - "api.example.com"
+
+    # SSL configuration for the route.
+    # The ssl attribute is optional.
+    ssl_certificate:
+      # If the self_signed_on_fail attribute is set to <true>,
+      # the server will use a self-signed certificate if the Let's Encrypt certificate
+      # issuance fails. This is useful for development and testing purposes.
+      #
+      # If the self_signed_on_fail attribute is set to <false>
+      # and let's encrypt fails to issue a certificate,
+      # the server will respond with a SNI error that closes the connection.
+      #
+      # The default value is <true>.
+      self_signed_on_failure: true
+
+      # object_storage:
+        # The object_storage attribute specifies the object storage
+        # that will be used to store the certificates.
+        # This can be "s3" or "gcs".
+        # s3:
+          # The s3 attribute specifies the configuration for the S3 object storage.
+          # The configuration includes the bucket name, region, access key, and secret key.
+          # bucket: "proksi-letsencrypt"
+          # region: "us-east-1"
+          # access_key: "<access_key>"
+          # secret_key: "<secret_key>"
+
+      # path:
+        # The certificate attribute specifies the path to the certificate file.
+        # This is the certificate that will be used to secure the connection.
+        # The certificate file should be in PEM format.
+        # In the near future you will be able to pass a s3 link or any other storage link.
+        # crt: "/etc/proksi/letsencrypt/certs/example.com/cert.pem"
+
+        # The key attribute specifies the path to the private key file.
+        # This is the private key that will be used to secure the connection.
+        # The private key file should be in PEM format.
+        # key: "/etc/proksi/letsencrypt/certs/example.com/privkey.pem"
+
+
 
     # The path_prefix attribute specifies the path prefix that the route will match.
     path_prefix: "/api"

@@ -194,11 +194,8 @@ impl LetsencryptService {
                 // TODO create self signed certificate if no certificate is found
                 let order = self.create_order_for_domain(domain, account);
                 if order.is_err() {
-                    info!("Failed to create order for domain {domain}");
-                    info!("Creating a temporary self-signed certificate for {domain}");
-
                     // Create self signed certificate
-                    create_self_signed_certificate(domain).unwrap();
+                    create_self_signed_certificate(domain, &self.config).unwrap();
                 }
             }
             _ => {}
@@ -249,7 +246,25 @@ impl Service for LetsencryptService {
 /// cannot be used.
 /// Note this is only useful for local development or testing purposes
 /// and should be used sparingly
-fn create_self_signed_certificate(domain: &str) -> Result<(), anyhow::Error> {
+fn create_self_signed_certificate(domain: &str, config: &Config) -> Result<(), anyhow::Error> {
+    // find route in config
+    let route = config.routes.iter().find(|r| r.host == domain);
+
+    if route.is_none() || route.unwrap().ssl_certificate.is_none() {
+        // Nothing to do
+        return Ok(());
+    }
+
+    // Generate self-signed certificate only if self_signed_on_failure is set to true
+    // If not provided, default to true
+    let route = route.unwrap();
+    let ssl_cert = route.ssl_certificate.as_ref().unwrap();
+    if !ssl_cert.self_signed_on_failure.unwrap_or(true) {
+        return Ok(());
+    }
+
+    tracing::info!("Creating a temporary self-signed certificate for {domain}");
+
     let rsa = openssl::rsa::Rsa::generate(2048)?;
     let mut openssl_cert = openssl::x509::X509Builder::new()?;
     let mut x509_name = openssl::x509::X509NameBuilder::new()?;

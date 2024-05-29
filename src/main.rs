@@ -6,7 +6,7 @@ use config::load;
 use dashmap::DashMap;
 
 use once_cell::sync::Lazy;
-use pingora::listeners::TlsSettings;
+use pingora::{listeners::TlsSettings, server::configuration::Opt};
 use pingora_proxy::http_proxy_service;
 use proxy_server::cert_store;
 use services::{
@@ -69,7 +69,7 @@ fn main() -> Result<(), anyhow::Error> {
         .init();
 
     // Pingora load balancer server
-    let mut pingora_server = Server::new(None)?;
+    let mut pingora_server = Server::new(Some(Opt::default()))?;
 
     // Service: Docker
     if proxy_config.docker.enabled.unwrap_or(false) {

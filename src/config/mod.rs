@@ -147,6 +147,14 @@ pub struct RouteUpstream {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct RouteSslCertificate {
+    /// Whether to use a self-signed certificate if the certificate can't be
+    /// retrieved from the path or object storage (or generated from letsencrypt)
+    /// (defaults to true)
+    pub self_signed_on_failure: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Route {
     /// The hostname that the proxy will accept
     /// requests for the upstreams in the route.
@@ -155,6 +163,10 @@ pub struct Route {
     /// This is the host header that the proxy will match and will
     /// also be used to create the certificate for the domain when `letsencrypt` is enabled.
     pub host: Cow<'static, str>,
+
+    /// SSL certificate configurations for the given host
+    /// (ex: self-signed, path/object storage, etc.)
+    pub ssl_certificate: Option<RouteSslCertificate>,
 
     pub headers: Option<RouteHeader>,
 

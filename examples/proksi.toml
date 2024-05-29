@@ -96,6 +96,22 @@ host = "example.com"
 # The path_prefix attribute specifies the path prefix that the route will match.
 path_prefix = "/api"
 
+
+# SSL certificate configuration for the route.
+
+[[routes.ssl_certificate]]
+
+# If the self_signed_on_fail attribute is set to <true>,
+# the server will use a self-signed certificate if the Let's Encrypt certificate
+# issuance fails. This is useful for development and testing purposes.
+#
+# If the self_signed_on_fail attribute is set to <false>
+# and let's encrypt fails to issue a certificate,
+# the server will respond with a SNI error that closes the connection.
+#
+# The default value is <true>.
+self_signed_on_failure = true
+
 # The headers attribute specifies the headers that will
 # be added or removed at the *end* of the response
 # --
