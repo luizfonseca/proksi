@@ -257,7 +257,7 @@ services:
 - [x] Automatic SSL termination
 - [x] Automatic SSL certificate renewal
 - [x] Extensible through configuration
-- [ ] Path matcher (regex, prefix and suffix)
+- [x] ~Path matcher (regex, prefix and suffix)~ Pattern-based for high performance and flexibility
 - [ ] Default middlewares implemented
   - [ ] RateLimiter,
   - [ ] GeoIp/Ip whitelisting
@@ -336,7 +336,11 @@ paths:
   lets_encrypt: "./my-lets_encrypt-folder"
 routes:
   - host: "example.com"
-    path_prefix: "/api"
+    match_with:
+      path:
+        patterns:
+          - "/api/*"
+          - "*.js"
     ssl_certificate:
       self_signed_on_failure: true
     headers:
