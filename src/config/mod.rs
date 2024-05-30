@@ -156,20 +156,14 @@ pub struct RouteSslCertificate {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RoutePathMatcher {
-    /// Optional: will route to hostname IF path *ends* with the given suffix.
-    pub suffix: Option<Cow<'static, str>>,
-
-    /// Optional: will route to hostname IF path *starts* with the given prefix.
-    pub prefix: Option<Cow<'static, str>>,
-
-    /// Optional: regex to match the path
-    /// (ex: ^/api/v1/.*$)
-    pub regex: Option<Cow<'static, str>>,
+    /// Optional: pattern to match the path
+    /// (ex: /api/v1/*)
+    pub patterns: Vec<Cow<'static, str>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteMatcher {
-    path: Option<RoutePathMatcher>,
+    pub path: Option<RoutePathMatcher>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -510,7 +504,7 @@ mod tests {
                 "PROKSI_ROUTES",
                 r#"[{
               host="changed.example.com",
-              match_with={ path={ prefix="/api", suffix=".json", regex="^/api/v1/.*$" } },
+              match_with={ path={ prefix="/api", suffix=".json", patterns=["/api/v1/:entity/:action*"] } },
               upstreams=[{ ip="10.0.1.2/24", port=3000, weight=1 }] }]
             "#,
             );
@@ -535,17 +529,10 @@ mod tests {
             assert_eq!(proxy_config.routes[0].upstreams[0].ip, "10.0.1.2/24");
 
             let matcher = proxy_config.routes[0].match_with.as_ref().unwrap();
+
             assert_eq!(
-                matcher.path.as_ref().unwrap().prefix,
-                Some(Cow::Borrowed("/api"))
-            );
-            assert_eq!(
-                matcher.path.as_ref().unwrap().suffix,
-                Some(Cow::Borrowed(".json"))
-            );
-            assert_eq!(
-                matcher.path.as_ref().unwrap().regex,
-                Some(Cow::Borrowed("^/api/v1/.*$"))
+                matcher.path.as_ref().unwrap().patterns,
+                vec![Cow::Borrowed("/api/v1/:entity/:action*")]
             );
 
             assert_eq!(

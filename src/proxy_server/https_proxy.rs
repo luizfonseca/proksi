@@ -76,17 +76,30 @@ impl ProxyHttp for Router {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
-        let req_host = get_host(session);
+        let req_host = get_host(&session);
         let host_without_port = req_host.split(':').collect::<Vec<_>>()[0];
 
         // If there's no host matching, returns a 404
-        let upstream_lb = ROUTE_STORE.get(host_without_port);
-        if upstream_lb.is_none() {
-            return Err(pingora::Error::new(HTTPStatus(404)));
+        let route_container = ROUTE_STORE.get(host_without_port);
+        if route_container.is_none() {
+            session.respond_error(404).await;
+            return Ok(true);
+        }
+
+        // Match request pattern based on the URI
+        let uri = session.req_header().uri.clone();
+        let route_container = route_container.unwrap();
+
+        match &route_container.path_matcher.pattern {
+            Some(pattern) if pattern.find(uri.path()).is_none() => {
+                session.respond_error(404).await;
+                return Ok(true);
+            }
+            _ => {}
         }
 
         ctx.host = Some(Cow::Owned(host_without_port.to_string()));
-        ctx.current_lb = Some(upstream_lb.unwrap().clone());
+        ctx.current_lb = Some(route_container.load_balancer.clone());
         Ok(false)
     }
 
@@ -139,7 +152,7 @@ impl ProxyHttp for Router {
 
 /// Retrieves the host from the request headers based on
 /// whether the request is HTTP/1.1 or HTTP/2
-fn get_host(session: &mut Session) -> &str {
+fn get_host(session: &Session) -> &str {
     if let Some(host) = session.get_header(http::header::HOST) {
         return host.to_str().unwrap_or("");
     }

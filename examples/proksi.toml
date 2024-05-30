@@ -93,8 +93,11 @@ lets_encrypt = "/etc/proksi/certificates"
 # The host attribute is required.
 host = "example.com"
 
-# The path_prefix attribute specifies the path prefix that the route will match.
-path_prefix = "/api"
+# The path matcher attribute specifies the URL pattern that the route will match.
+# This can also be used on upstream (as in, a pattern per upstream)
+# Routes that are not matched will return a 404 error.
+[[routes.match_with.path]]
+pattern = "/api/*" # Reads as "anything starting with /api/"
 
 
 # SSL certificate configuration for the route.

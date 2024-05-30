@@ -6,7 +6,16 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 keywords = ["proxy", "https", "reverse-proxy", "load-balancer", "pingora"]
 categories = ["web-programming::http-server", "network-programming"]
-exclude = ["examples/", "dist/", "target/", "tests/", "assets/", "tmp/", "Makefile", "Dockerfile"]
+exclude = [
+  "examples/",
+  "dist/",
+  "target/",
+  "tests/",
+  "assets/",
+  "tmp/",
+  "Makefile",
+  "Dockerfile",
+]
 authors = ["The Proksi Contributors <toaster.chicory-0b@icloud.com>"]
 rust-version = "1.78.0"
 readme = "README.md"
@@ -51,6 +60,7 @@ tokio = { version = "1.37.0", features = ["sync"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 itertools = "0.13.0"
+path-tree = "0.7.7"
 
 [dev-dependencies]
 figment = { version = "0.10.19", features = ["toml", "yaml", "env", "test"] }

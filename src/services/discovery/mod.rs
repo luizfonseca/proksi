@@ -10,7 +10,11 @@ use pingora_load_balancing::{health_check::TcpHealthCheck, selection::RoundRobin
 use tokio::sync::broadcast::Sender;
 use tracing::debug;
 
-use crate::{config::Config, MsgProxy, ROUTE_STORE};
+use crate::{
+    config::{Config, RouteMatcher},
+    stores::routes::RouteStoreContainer,
+    MsgProxy, ROUTE_STORE,
+};
 
 // Service discovery for load balancers
 pub struct RoutingService {
@@ -33,7 +37,7 @@ impl RoutingService {
                 .map(|upstr| format!("{}:{}", upstr.ip, upstr.port))
                 .collect::<Vec<String>>();
 
-            add_route_to_router(&route.host, &upstream_backends);
+            add_route_to_router(&route.host, &upstream_backends, route.match_with.clone());
 
             debug!("Added route: {}, {:?}", route.host, route.upstreams);
         }
@@ -46,7 +50,7 @@ impl RoutingService {
         tokio::spawn(async move {
             loop {
                 if let Ok(MsgProxy::NewRoute(route)) = receiver.recv().await {
-                    add_route_to_router(&route.host, &route.upstreams);
+                    add_route_to_router(&route.host, &route.upstreams, None);
                 }
             }
         })
@@ -75,7 +79,7 @@ impl Service for RoutingService {
 }
 
 // TODO: find if host already exists but new/old upstreams have changed
-fn add_route_to_router<A, T>(host: &str, upstream_input: T)
+fn add_route_to_router<A, T>(host: &str, upstream_input: T, match_with: Option<RouteMatcher>)
 where
     T: IntoIterator<Item = A> + Debug + Clone + Copy,
     A: ToSocketAddrs,
@@ -96,5 +100,22 @@ where
     upstreams.set_health_check(tcp_health_check);
     upstreams.health_check_frequency = Some(Duration::from_secs(15));
 
-    ROUTE_STORE.insert(host.to_string(), Arc::new(upstreams));
+    // Create new routing container
+    let mut route_store_container = RouteStoreContainer::new(Arc::new(upstreams));
+
+    // Prepare route matchers
+    // TODO: enable matchers for upstreams for true load balancing based on path
+    if let Some(match_with) = match_with {
+        // Path matchers
+        match match_with.path {
+            Some(path_matcher) if path_matcher.patterns.len() > 0 => {
+                let pattern = path_matcher.patterns;
+                route_store_container.path_matcher.with_pattern(pattern);
+            }
+            Some(_) => {}
+            None => {}
+        }
+    }
+
+    ROUTE_STORE.insert(host.to_string(), Arc::new(route_store_container));
 }

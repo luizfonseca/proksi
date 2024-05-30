@@ -34,12 +34,16 @@ impl Service for HealthService {
 
             for route in store_clone.iter() {
                 debug!("Running health check for host {}", route.key());
-                let upstream = route.value();
-                upstream.backends().run_health_check(false).await;
-                upstream.update().await.unwrap();
+                let route_container = route.value();
+                route_container
+                    .load_balancer
+                    .backends()
+                    .run_health_check(false)
+                    .await;
+                route_container.load_balancer.update().await.unwrap();
 
                 // TODO: only update if the upstream has changed
-                ROUTE_STORE.insert(route.key().to_string(), upstream.clone());
+                ROUTE_STORE.insert(route.key().to_string(), route_container.clone());
             }
         }
     }

@@ -108,15 +108,7 @@ routes:
     # Header related
     match_with:
       path:
-        prefix: "/api"
-        suffix: ".json"
-        regex: |
-          ^/api/v1/[a-z]+\.*$
-      header:
-        - name: "X-User-Agent"
-          value: "123"
-      ip:
-        - 192.168.1.1 # only this IP will be allowed to access this host
+        pattern: "/api/*"
 
     # SSL configuration for the route.
     # The ssl attribute is optional.
@@ -183,10 +175,15 @@ routes:
       - ip: "10.1.2.24/24"
         # The port of the upstream server (can be any port).
         port: 3000
+        # match_with:
+        #   pattern: "/api/users/*"
 
         # The network attribute specifies the network that the upstream server is part of.
         # This is mostly important for Docker containers, but it can be used for other purposes.
         network: "public"
+
       - ip: "10.1.2.23/24"
         port: 3000
         network: "shared"
+        # match_with:
+        #   pattern: "/api/billing/*"

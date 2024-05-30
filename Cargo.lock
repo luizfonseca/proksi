@@ -1441,6 +1441,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
 
 [[package]]
+name = "path-tree"
+version = "0.7.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02bcb8f8cf1dee5acae79493abe06a4dfb40e34406a420e929ffb8dce1e06cdd"
+dependencies = [
+ "smallvec",
+]
+
+[[package]]
 name = "pear"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1830,6 +1839,7 @@ dependencies = [
  "itertools",
  "once_cell",
  "openssl",
+ "path-tree",
  "pingora",
  "pingora-http",
  "pingora-load-balancing",
