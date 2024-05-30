@@ -32,13 +32,13 @@ enabled = true
 interval_secs = 15
 
 # The mode of the Docker integration.
-# The mode can be "standalone" or "swarm".
-# When the mode is set to "standalone", the integration will only
+# The mode can be "container" or "swarm".
+# When the mode is set to "container", the integration will only
 # listen for labels in Docker containers
 # When the mode is set to "swarm", the integration will listen for Docker
 # events in a Docker Swarm cluster (service labels).
-# Default value is <standalone>.
-mode = "standalone"
+# Default value is <container>.
+mode = "container"
 
 # The endpoint for the Docker API.
 # This can be a TCP endpoint or a Unix socket.

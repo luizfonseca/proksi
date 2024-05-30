@@ -193,8 +193,8 @@ Options:
   --docker.mode <MODE>
       Mode to use for the docker service
 
-      [default: standalone]
-      [possible values: swarm, standalone]
+      [default: container]
+      [possible values: swarm, container]
 
 -h, --help
       Print help (see a summary with '-h')

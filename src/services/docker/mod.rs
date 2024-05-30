@@ -233,11 +233,11 @@ impl Service for LabelService {
 
             let hosts = match self.config.docker.mode {
                 DockerServiceMode::Swarm => self.list_services(filters.clone()).await,
-                DockerServiceMode::Standalone => self.list_containers(filters.clone()).await,
+                DockerServiceMode::Container => self.list_containers(filters.clone()).await,
             };
 
             for (host, ips) in hosts {
-                // If no upstreams are found, skip adding the route
+                // If no upstreams can be found, skip adding the route
                 if ips.is_empty() {
                     continue;
                 }

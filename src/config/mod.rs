@@ -13,7 +13,7 @@ mod validate;
 #[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
 pub(crate) enum DockerServiceMode {
     Swarm,
-    Standalone,
+    Container,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Args)]
@@ -54,7 +54,7 @@ pub struct Docker {
         long = "docker.mode",
         required = false,
         value_enum,
-        default_value = "standalone"
+        default_value = "container"
     )]
     pub mode: DockerServiceMode,
 }
@@ -65,7 +65,7 @@ impl Default for Docker {
             interval_secs: Some(15),
             endpoint: Some(Cow::Borrowed("unix:///var/run/docker.sock")),
             enabled: Some(false),
-            mode: DockerServiceMode::Standalone,
+            mode: DockerServiceMode::Container,
         }
     }
 }
@@ -432,9 +432,9 @@ where
     let s = String::deserialize(deserializer)?;
     match s.to_lowercase().as_str() {
         "swarm" => Ok(DockerServiceMode::Swarm),
-        "standalone" => Ok(DockerServiceMode::Standalone),
+        "container" => Ok(DockerServiceMode::Container),
         _ => Err(serde::de::Error::custom(
-            "expected one of ENABLED, DISABLED",
+            "expected one of: Swarm, Container",
         )),
     }
 }
