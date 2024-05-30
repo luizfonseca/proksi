@@ -4,10 +4,11 @@ use dashmap::DashMap;
 use path_tree::PathTree;
 use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
 
+#[derive(Debug, Default)]
 pub struct RouteStorePathMatcher {
     pub prefix: Option<String>,
     pub suffix: Option<String>,
-    pub pattern: Option<PathTree<i32>>,
+    pub pattern: Option<PathTree<usize>>,
 }
 
 impl RouteStorePathMatcher {
@@ -17,14 +18,14 @@ impl RouteStorePathMatcher {
 
     // From a given list of patterns, generate a tree structure
     // to match against incoming requests
-    pub fn with_pattern(&mut self, pattern: Vec<Cow<'_, str>>) -> &mut Self {
+    pub fn with_pattern(&mut self, pattern: &[Cow<'_, str>]) -> &mut Self {
         if pattern.is_empty() {
             return self;
         }
 
         let mut path_tree = PathTree::new();
         for (index, value) in pattern.iter().enumerate() {
-            let _ = path_tree.insert(&value, index as i32);
+            let _ = path_tree.insert(value, index);
         }
 
         self.pattern = Some(path_tree);
@@ -33,16 +34,6 @@ impl RouteStorePathMatcher {
 
     pub fn build(self) -> Self {
         self
-    }
-}
-
-impl Default for RouteStorePathMatcher {
-    fn default() -> Self {
-        Self {
-            prefix: None,
-            suffix: None,
-            pattern: None,
-        }
     }
 }
 
@@ -90,7 +81,7 @@ mod tests {
         let mut route_store = RouteStoreContainer::new(load_balancer);
         route_store
             .path_matcher()
-            .with_pattern(vec![Cow::Borrowed("/auth")]);
+            .with_pattern(&[Cow::Borrowed("/auth")]);
 
         assert_eq!(route_store.path_matcher.pattern.is_some(), true);
 

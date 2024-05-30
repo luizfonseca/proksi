@@ -32,7 +32,7 @@ impl ProxyHttp for HttpLB {
         let req_header = session.req_header();
         let current_uri = &req_header.uri;
 
-        let host = get_host(&session);
+        let host = get_host(session);
         if host.is_empty() {
             return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(400)));
         }

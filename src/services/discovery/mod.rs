@@ -108,12 +108,11 @@ where
     if let Some(match_with) = match_with {
         // Path matchers
         match match_with.path {
-            Some(path_matcher) if path_matcher.patterns.len() > 0 => {
+            Some(path_matcher) if !path_matcher.patterns.is_empty() => {
                 let pattern = path_matcher.patterns;
-                route_store_container.path_matcher.with_pattern(pattern);
+                route_store_container.path_matcher.with_pattern(&pattern);
             }
-            Some(_) => {}
-            None => {}
+            _ => {}
         }
     }
 

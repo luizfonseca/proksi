@@ -76,7 +76,7 @@ impl ProxyHttp for Router {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
-        let req_host = get_host(&session);
+        let req_host = get_host(session);
         let host_without_port = req_host.split(':').collect::<Vec<_>>()[0];
 
         // If there's no host matching, returns a 404
