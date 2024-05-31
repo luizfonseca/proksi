@@ -11,7 +11,7 @@ use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
 use pingora_proxy::{ProxyHttp, Session};
 use tracing::info;
 
-use crate::ROUTE_STORE;
+use crate::stores::routes::RouteStore;
 
 /// Default peer options to be used on every upstream connection
 pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
@@ -30,7 +30,7 @@ pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
     write_timeout: None,
     verify_cert: false,
     alternative_cn: None,
-    alpn: ALPN::H2H1,
+    alpn: ALPN::H1,
     ca: None,
     no_header_eos: false,
     h2_ping_interval: None,
@@ -43,7 +43,9 @@ pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
 
 type ArcedLB = Arc<LoadBalancer<RoundRobin>>;
 /// Load balancer proxy struct
-pub struct Router;
+pub struct Router {
+    pub store: RouteStore,
+}
 
 pub struct RouterContext {
     pub host: String,
@@ -75,7 +77,7 @@ impl ProxyHttp for Router {
         let host_without_port = req_host.split(':').collect::<Vec<_>>()[0];
 
         // If there's no host matching, returns a 404
-        let route_container = ROUTE_STORE.get(host_without_port);
+        let route_container = self.store.get(host_without_port);
         if route_container.is_none() {
             session.respond_error(404).await;
             return Ok(true);

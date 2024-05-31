@@ -1837,7 +1837,6 @@ dependencies = [
  "figment",
  "http 1.1.0",
  "itertools",
- "once_cell",
  "openssl",
  "path-tree",
  "pingora",

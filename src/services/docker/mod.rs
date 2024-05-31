@@ -281,7 +281,7 @@ impl Service for LabelService {
                     continue;
                 }
 
-                let host_value: Cow<'static, str> = Cow::Owned(host.clone());
+                let host_value: Cow<'static, str> = Cow::Owned(host);
 
                 // Notify the route discovery service of the new host
                 self.sender

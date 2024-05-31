@@ -3,15 +3,17 @@ use openssl::ssl::{SniError, SslRef};
 use pingora::listeners::TlsAccept;
 use pingora_openssl::{ext, pkey::PKey, ssl::NameType, x509::X509};
 
-use crate::{stores::certificates::CertificateStore, CERT_STORE};
+use crate::stores::certificates::CertificateStore;
 
 /// Provides the correct certificates when performing SSL handshakes
-#[derive(Debug)]
-pub struct CertStore {}
+#[derive(Debug, Clone)]
+pub struct CertStore {
+    store: CertificateStore,
+}
 
 impl CertStore {
-    pub fn new() -> Self {
-        CertStore {}
+    pub fn new(store: CertificateStore) -> Self {
+        CertStore { store }
     }
 
     // This function is called when the servername callback executes
@@ -39,7 +41,7 @@ impl TlsAccept for CertStore {
     async fn certificate_callback(&self, ssl: &mut pingora::tls::ssl::SslRef) {
         // Due to the sni_callback function, we can safely unwrap here
         let host_name = ssl.servername(NameType::HOST_NAME);
-        let certificate = CERT_STORE.get(host_name.unwrap_or(""));
+        let certificate = self.store.get(host_name.unwrap_or_default());
         if certificate.is_none() {
             tracing::debug!("No certificate found for host: {:?}", host_name);
             return;

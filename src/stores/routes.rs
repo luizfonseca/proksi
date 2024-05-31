@@ -31,10 +31,6 @@ impl RouteStorePathMatcher {
         self.pattern = Some(path_tree);
         self
     }
-
-    pub fn build(self) -> Self {
-        self
-    }
 }
 
 pub struct RouteStoreContainer {
@@ -48,10 +44,6 @@ impl RouteStoreContainer {
             load_balancer: Arc::new(load_balancer),
             path_matcher: RouteStorePathMatcher::new(),
         }
-    }
-
-    pub fn path_matcher(&mut self) -> &mut RouteStorePathMatcher {
-        &mut self.path_matcher
     }
 }
 
@@ -78,7 +70,7 @@ mod tests {
         let load_balancer = LoadBalancer::<RoundRobin>::try_from_iter(vec!["1.1.1.1:80"]).unwrap();
         let mut route_store = RouteStoreContainer::new(load_balancer);
         route_store
-            .path_matcher()
+            .path_matcher
             .with_pattern(&[Cow::Borrowed("/auth")]);
 
         assert_eq!(route_store.path_matcher.pattern.is_some(), true);

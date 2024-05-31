@@ -7,16 +7,18 @@ use pingora::{
 };
 use tracing::debug;
 
-use crate::ROUTE_STORE;
+use crate::stores::routes::RouteStore;
 
 /// Health check service that will run health checks on all upstreams
 /// And update the route store with the new healthy upstreams.
 /// This service will run in a separate thread.
-pub struct HealthService {}
+pub struct HealthService {
+    route_store: RouteStore,
+}
 
 impl HealthService {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(store: RouteStore) -> Self {
+        Self { route_store: store }
     }
 }
 
@@ -30,7 +32,7 @@ impl Service for HealthService {
         loop {
             interval.tick().await;
 
-            let store_clone = ROUTE_STORE.clone();
+            let store_clone = self.route_store.clone();
 
             for route in store_clone.iter() {
                 debug!("Running health check for host {}", route.key());
@@ -43,7 +45,8 @@ impl Service for HealthService {
                 route_container.load_balancer.update().await.unwrap();
 
                 // TODO: only update if the upstream has changed
-                ROUTE_STORE.insert(route.key().to_string(), route_container.clone());
+                self.route_store
+                    .insert(route.key().to_string(), route_container.clone());
             }
         }
     }

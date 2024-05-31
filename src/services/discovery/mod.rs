@@ -12,19 +12,24 @@ use tracing::debug;
 
 use crate::{
     config::{Config, RouteMatcher, RoutePathMatcher},
-    stores::routes::RouteStoreContainer,
-    MsgProxy, ROUTE_STORE,
+    stores::routes::{RouteStore, RouteStoreContainer},
+    MsgProxy,
 };
 
 // Service discovery for load balancers
 pub struct RoutingService {
     config: Arc<Config>,
     broadcast: Sender<MsgProxy>,
+    store: RouteStore,
 }
 
 impl RoutingService {
-    pub fn new(config: Arc<Config>, broadcast: Sender<MsgProxy>) -> Self {
-        Self { config, broadcast }
+    pub fn new(config: Arc<Config>, broadcast: Sender<MsgProxy>, store: RouteStore) -> Self {
+        Self {
+            config,
+            broadcast,
+            store,
+        }
     }
 
     /// From a given configuration file, create the static load balancing configuration
@@ -37,7 +42,12 @@ impl RoutingService {
                 .map(|upstr| format!("{}:{}", upstr.ip, upstr.port))
                 .collect::<Vec<String>>();
 
-            add_route_to_router(&route.host, &upstream_backends, route.match_with.clone());
+            add_route_to_router(
+                &self.store,
+                &route.host,
+                &upstream_backends,
+                route.match_with.clone(),
+            );
 
             debug!("Added route: {}, {:?}", route.host, route.upstreams);
         }
@@ -46,6 +56,7 @@ impl RoutingService {
     /// Watch for new routes being added and update the Router Store
     fn watch_for_route_changes(&self) -> tokio::task::JoinHandle<()> {
         let mut receiver = self.broadcast.subscribe();
+        let store = self.store.clone();
 
         tokio::spawn(async move {
             loop {
@@ -64,7 +75,7 @@ impl RoutingService {
                         });
                     }
 
-                    add_route_to_router(&route.host, &route.upstreams, matcher);
+                    add_route_to_router(&store, &route.host, &route.upstreams, matcher);
                 }
             }
         })
@@ -93,8 +104,12 @@ impl Service for RoutingService {
 }
 
 // TODO: find if host already exists but new/old upstreams have changed
-fn add_route_to_router<A, T>(host: &str, upstream_input: &T, match_with: Option<RouteMatcher>)
-where
+fn add_route_to_router<A, T>(
+    store: &RouteStore,
+    host: &str,
+    upstream_input: &T,
+    match_with: Option<RouteMatcher>,
+) where
     T: IntoIterator<Item = A> + Debug + Clone,
     A: ToSocketAddrs,
 {
@@ -130,5 +145,5 @@ where
         }
     }
 
-    ROUTE_STORE.insert(host.to_string(), Arc::new(route_store_container));
+    store.insert(host.to_string(), Arc::new(route_store_container));
 }
