@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.0](https://github.com/luizfonseca/proksi/compare/v0.1.11...v0.2.0) (2024-05-31)
+
+
+### Features
+
+* **config:** add path matcher config for routes ([52e35b9](https://github.com/luizfonseca/proksi/commit/52e35b9f76471f5898134b9b30cc869be6fe3457))
+* **config:** enable self_signed option via configuration ([029b74d](https://github.com/luizfonseca/proksi/commit/029b74dfac417fb3c0a4bf3a1be106a5304718fc))
+* **docker:** enable header add/remove in docker labels (json format) ([0ef79e1](https://github.com/luizfonseca/proksi/commit/0ef79e1bc334662ed14335414a768445a46b70de))
+* **docker:** enable path patterns on docker ([ad87ee3](https://github.com/luizfonseca/proksi/commit/ad87ee3476ee9891ba93c1a571d05aacf32fbf12))
+* **lets_encrypt:** generate self-signed certificate for unreachable (local) domains ([37e767a](https://github.com/luizfonseca/proksi/commit/37e767aeea4f4d8a5bcf039c0428c595277ec347))
+* **routing:** enable header addition configuration ([547dbaf](https://github.com/luizfonseca/proksi/commit/547dbaf9ce5cc90fce7c0e1a551400ddc83866c0))
+* **routing:** enable header removal configuration ([c283cd4](https://github.com/luizfonseca/proksi/commit/c283cd452e716b8dc0291052b8f39d7d4402c549))
+* **routing:** enable users to provide PATH patterns against hosts ([e34ec4b](https://github.com/luizfonseca/proksi/commit/e34ec4b8523a7e2208e0d1b74c2a6f33ed9f260f))
+
+
+### Bug Fixes
+
+* **cert_store:** return SNI error when certificate for domain doesn't exist ([8648cb3](https://github.com/luizfonseca/proksi/commit/8648cb3d07280a9f15563ffa1d5e30507de43b48))
+* improve clippy warnings ([e7122de](https://github.com/luizfonseca/proksi/commit/e7122de408c6a0bfd3b83b278a7a932c312ea67d))
+
 ## [0.1.11](https://github.com/luizfonseca/proksi/compare/v0.1.10...v0.1.11) (2024-05-27)
 
 
