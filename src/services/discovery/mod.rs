@@ -1,7 +1,8 @@
-use std::{borrow::Cow, fmt::Debug, net::ToSocketAddrs, sync::Arc, time::Duration};
+use std::{borrow::Cow, fmt::Debug, net::ToSocketAddrs, str::FromStr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 
+use http::{HeaderName, HeaderValue};
 use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
@@ -135,10 +136,17 @@ fn add_route_to_router<A, T>(
     let mut route_store_container = RouteStoreContainer::new(upstreams);
 
     if let Some(headers) = headers {
-        // if let Some(headers) = headers.add {
-        //     route_store_container.host_header_add =
-        //         headers.iter().map(|v| v.name.to_string()).collect();
-        // }
+        if let Some(headers) = headers.add.as_ref() {
+            route_store_container.host_header_add = headers
+                .iter()
+                .map(|v| {
+                    (
+                        HeaderName::from_str(&v.name).unwrap(),
+                        HeaderValue::from_str(&v.value).unwrap(),
+                    )
+                })
+                .collect();
+        }
 
         if let Some(to_remove) = headers.remove.as_ref() {
             route_store_container.host_header_remove =

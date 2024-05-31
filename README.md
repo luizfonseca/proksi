@@ -258,6 +258,7 @@ services:
 - [x] Automatic SSL certificate renewal
 - [x] Extensible through configuration
 - [x] ~Path matcher (regex, prefix and suffix)~ Pattern-based for high performance and flexibility
+- [x] Header manipulation (add/replace, remove)
 - [ ] Default middlewares implemented
   - [ ] RateLimiter,
   - [ ] GeoIp/Ip whitelisting
@@ -276,7 +277,7 @@ The following features are included or will be included into Proksi without the 
 - [X] Automatic SSL termination (using LetsEncrypt)
 - [X] Automatic HTTP to HTTPS redirection
 - [x] Docker Labeling Support (for services discovery)
-- [ ] Load Balancing (Round Robin, Weighted Round Robin, Least Connections)
+- [x] Load Balancing (✅ Round Robin, ⛔︎ Weighted Round Robin, ⛔︎ Least Connections)
 - [X] Health Checks
 - [ ] Storage support for LetsEncrypt certificates (S3, Etcd, Consul, etc)
 - [ ] Controller <> server support (in order to share certificates)

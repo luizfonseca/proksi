@@ -137,8 +137,12 @@ impl ProxyHttp for Router {
     ) -> pingora::Result<()> {
         let container = ctx.route_container.as_ref().unwrap();
 
+        for (name, value) in &container.host_header_add {
+            upstream_response.insert_header(name, value)?;
+        }
+
         // Remove headers from the upstream response
-        for name in container.host_header_remove.iter() {
+        for name in &container.host_header_remove {
             upstream_response.remove_header(name);
         }
 

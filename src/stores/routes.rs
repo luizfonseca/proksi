@@ -1,6 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
 use dashmap::DashMap;
+use http::{HeaderName, HeaderValue};
 use path_tree::PathTree;
 use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
 
@@ -37,7 +38,7 @@ pub struct RouteStoreContainer {
     pub load_balancer: Arc<LoadBalancer<RoundRobin>>,
     pub path_matcher: RouteStorePathMatcher,
     pub host_header_remove: Vec<String>,
-    pub host_header_add: Vec<(String, String)>,
+    pub host_header_add: Vec<(HeaderName, HeaderValue)>,
 }
 
 impl RouteStoreContainer {
