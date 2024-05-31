@@ -1,4 +1,4 @@
-use std::{fmt::Debug, net::ToSocketAddrs, sync::Arc, time::Duration};
+use std::{borrow::Cow, fmt::Debug, net::ToSocketAddrs, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 
@@ -11,7 +11,7 @@ use tokio::sync::broadcast::Sender;
 use tracing::debug;
 
 use crate::{
-    config::{Config, RouteMatcher},
+    config::{Config, RouteMatcher, RoutePathMatcher},
     stores::routes::RouteStoreContainer,
     MsgProxy, ROUTE_STORE,
 };
@@ -49,8 +49,22 @@ impl RoutingService {
 
         tokio::spawn(async move {
             loop {
+                // TODO: refactor
                 if let Ok(MsgProxy::NewRoute(route)) = receiver.recv().await {
-                    add_route_to_router(&route.host, &route.upstreams, None);
+                    let mut matcher: Option<RouteMatcher> = None;
+                    let route_clone = route.path_matchers.clone();
+                    if !route.path_matchers.is_empty() {
+                        matcher = Some(RouteMatcher {
+                            path: Some(RoutePathMatcher {
+                                patterns: route_clone
+                                    .iter()
+                                    .map(|v| Cow::Owned(v.clone()))
+                                    .collect(),
+                            }),
+                        });
+                    }
+
+                    add_route_to_router(&route.host, &route.upstreams, matcher)
                 }
             }
         })
@@ -81,10 +95,10 @@ impl Service for RoutingService {
 // TODO: find if host already exists but new/old upstreams have changed
 fn add_route_to_router<A, T>(host: &str, upstream_input: T, match_with: Option<RouteMatcher>)
 where
-    T: IntoIterator<Item = A> + Debug + Clone + Copy,
+    T: IntoIterator<Item = A> + Debug + Clone,
     A: ToSocketAddrs,
 {
-    let upstreams = LoadBalancer::<RoundRobin>::try_from_iter(upstream_input);
+    let upstreams = LoadBalancer::<RoundRobin>::try_from_iter(upstream_input.clone());
     if upstreams.is_err() {
         debug!(
             "Could not create upstreams for host: {}, upstreams {:?}",
@@ -101,7 +115,7 @@ where
     upstreams.health_check_frequency = Some(Duration::from_secs(15));
 
     // Create new routing container
-    let mut route_store_container = RouteStoreContainer::new(Arc::new(upstreams));
+    let mut route_store_container = RouteStoreContainer::new(upstreams);
 
     // Prepare route matchers
     // TODO: enable matchers for upstreams for true load balancing based on path

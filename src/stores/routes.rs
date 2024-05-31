@@ -43,9 +43,9 @@ pub struct RouteStoreContainer {
 }
 
 impl RouteStoreContainer {
-    pub fn new(load_balancer: Arc<LoadBalancer<RoundRobin>>) -> Self {
+    pub fn new(load_balancer: LoadBalancer<RoundRobin>) -> Self {
         RouteStoreContainer {
-            load_balancer,
+            load_balancer: Arc::new(load_balancer),
             path_matcher: RouteStorePathMatcher::new(),
         }
     }
@@ -67,8 +67,7 @@ mod tests {
 
     #[test]
     fn test_router_container_defaults_empty_pattern() {
-        let load_balancer =
-            Arc::new(LoadBalancer::<RoundRobin>::try_from_iter(vec!["1.1.1.1:80"]).unwrap());
+        let load_balancer = LoadBalancer::<RoundRobin>::try_from_iter(vec!["1.1.1.1:80"]).unwrap();
         let route_store = RouteStoreContainer::new(load_balancer);
 
         assert_eq!(route_store.path_matcher.pattern.is_none(), true);
@@ -76,8 +75,7 @@ mod tests {
 
     #[test]
     fn test_router_container_works_with_valid_and_invalid_pattern() {
-        let load_balancer =
-            Arc::new(LoadBalancer::<RoundRobin>::try_from_iter(vec!["1.1.1.1:80"]).unwrap());
+        let load_balancer = LoadBalancer::<RoundRobin>::try_from_iter(vec!["1.1.1.1:80"]).unwrap();
         let mut route_store = RouteStoreContainer::new(load_balancer);
         route_store
             .path_matcher()

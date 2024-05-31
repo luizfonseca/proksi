@@ -97,8 +97,8 @@ impl LetsencryptService {
         info!("Certificate created for order {:?}", order_cert.api_order());
         let cert = order_cert.download_and_save_cert()?;
 
-        let crt_bytes = Bytes::from(cert.certificate().to_string()).to_vec();
-        let key_bytes = Bytes::from(cert.private_key().to_string()).to_vec();
+        let crt_bytes = Bytes::from(cert.certificate().to_string());
+        let key_bytes = Bytes::from(cert.private_key().to_string());
 
         CERT_STORE.insert(
             domain.to_string(),
@@ -179,14 +179,14 @@ impl LetsencryptService {
                     return;
                 }
 
-                let crt_bytes = Bytes::from(cert.certificate().to_string()).to_vec();
-                let key_bytes = Bytes::from(cert.private_key().to_string()).to_vec();
+                let crt_bytes = cert.certificate().to_string();
+                let key_bytes = cert.private_key().to_string();
 
                 CERT_STORE.insert(
                     domain.to_string(),
                     Certificate {
-                        certificate: crt_bytes,
-                        key: key_bytes,
+                        certificate: Bytes::from(crt_bytes),
+                        key: Bytes::from(key_bytes),
                     },
                 );
             }
@@ -294,8 +294,8 @@ fn create_self_signed_certificate(domain: &str, config: &Config) -> Result<(), a
     CERT_STORE.insert(
         domain.to_string(),
         Certificate {
-            key: key_bytes,
-            certificate: crt_bytes,
+            key: Bytes::from(key_bytes),
+            certificate: Bytes::from(crt_bytes),
         },
     );
 

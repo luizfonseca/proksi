@@ -1,9 +1,4 @@
-use std::{
-    borrow::{Borrow, Cow},
-    collections::BTreeMap,
-    sync::Arc,
-    time::Duration,
-};
+use std::{borrow::Cow, collections::BTreeMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use pingora::{
@@ -23,11 +18,11 @@ pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
     verify_hostname: true,
     read_timeout: Some(Duration::from_secs(30)),
     connection_timeout: Some(Duration::from_secs(30)),
-    tcp_recv_buf: Some(2048),
+    tcp_recv_buf: None,
     tcp_keepalive: Some(TcpKeepalive {
         count: 5,
-        interval: Duration::from_secs(10),
-        idle: Duration::from_secs(30),
+        interval: Duration::from_secs(15),
+        idle: Duration::from_secs(60),
     }),
     bind_to: None,
     total_connection_timeout: None,
@@ -39,7 +34,7 @@ pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
     ca: None,
     no_header_eos: false,
     h2_ping_interval: None,
-    max_h2_streams: 5,
+    max_h2_streams: 1,
     extra_proxy_headers: BTreeMap::new(),
     curves: None,
     second_keyshare: true, // default true and noop when not using PQ curves
@@ -51,7 +46,7 @@ type ArcedLB = Arc<LoadBalancer<RoundRobin>>;
 pub struct Router;
 
 pub struct RouterContext {
-    pub host: Option<Cow<'static, str>>,
+    pub host: String,
     pub current_lb: Option<ArcedLB>,
 }
 
@@ -63,7 +58,7 @@ impl ProxyHttp for Router {
     /// Define how the `ctx` should be created.
     fn new_ctx(&self) -> Self::CTX {
         RouterContext {
-            host: None,
+            host: String::new(),
             current_lb: None,
         }
     }
@@ -98,7 +93,7 @@ impl ProxyHttp for Router {
             _ => {}
         }
 
-        ctx.host = Some(Cow::Owned(host_without_port.to_string()));
+        ctx.host = host_without_port.to_string();
         ctx.current_lb = Some(route_container.load_balancer.clone());
         Ok(false)
     }
@@ -126,14 +121,8 @@ impl ProxyHttp for Router {
             return Err(pingora::Error::new(HTTPStatus(503)));
         }
 
-        let host = ctx.host.as_ref().unwrap();
-
-        let _b: &str = host.borrow();
-        // info!(host = b, "Upstream selected");
-
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
-        let host = ctx.host.clone().unwrap();
-        let mut peer = HttpPeer::new(healthy_upstream.unwrap(), false, host.into_owned());
+        let mut peer = HttpPeer::new(healthy_upstream.unwrap(), false, ctx.host.clone());
         peer.options = DEFAULT_PEER_OPTIONS;
         Ok(Box::new(peer))
     }

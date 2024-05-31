@@ -2,6 +2,7 @@ use std::{borrow::Cow, sync::Arc};
 
 use ::pingora::server::Server;
 use anyhow::anyhow;
+use bytes::Bytes;
 use config::load;
 use dashmap::DashMap;
 
@@ -31,15 +32,17 @@ pub static ROUTE_STORE: Lazy<RouteStore> = Lazy::new(|| Arc::new(DashMap::new())
 /// Static reference to the certificate store that can be shared across threads
 pub static CERT_STORE: Lazy<CertificateStore> = Lazy::new(|| Arc::new(DashMap::new()));
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct MsgRoute {
     host: Cow<'static, str>,
     upstreams: Vec<String>,
+    path_matchers: Vec<String>,
 }
+
 #[derive(Clone)]
 pub struct MsgCert {
-    _cert: Vec<u8>,
-    _key: Vec<u8>,
+    _cert: Bytes,
+    _key: Bytes,
 }
 
 #[derive(Clone)]
@@ -58,7 +61,7 @@ fn main() -> Result<(), anyhow::Error> {
     let (sender, mut _receiver) = tokio::sync::broadcast::channel::<MsgProxy>(100);
 
     // Receiver channel for non-blocking logging
-    let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+    let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<bytes::Bytes>();
     let proxy_logger = ProxyLog::new(&log_sender);
 
     // Creates a tracing/logging subscriber based on the configuration provided

@@ -32,6 +32,12 @@ fn connect_to_docker(endpoint: &str) -> Result<Docker, bollard::errors::Error> {
     Docker::connect_with_local_defaults()
 }
 
+#[derive(Debug, Default)]
+pub struct ProksiDockerRoute {
+    upstreams: Vec<String>,
+    path_matchers: Vec<String>,
+}
+
 /// A service that will list all services in a Swarm OR containers through the Docker API
 /// and update the route store with the new services.
 /// This service will run in a separate thread.
@@ -59,11 +65,14 @@ impl LabelService {
     /// Generate a list of services based on the provided filters
     /// This will returns a mapping between host <> ips for each service
     /// Only works for docker in Swarm mode.
-    async fn list_services<T>(&self, filters: HashMap<T, Vec<T>>) -> HashMap<String, Vec<String>>
+    async fn list_services<T>(
+        &self,
+        filters: HashMap<T, Vec<T>>,
+    ) -> HashMap<String, ProksiDockerRoute>
     where
         T: Into<String> + Hash + serde::ser::Serialize + Eq,
     {
-        let mut host_map = HashMap::<String, Vec<String>>::new();
+        let mut host_map = HashMap::<String, ProksiDockerRoute>::new();
         let services = self
             .inner
             .list_services(Some(ListServicesOptions {
@@ -119,10 +128,9 @@ impl LabelService {
             // TODO offer an option to load balance directly to the container IPs
             // of the service instead of through the docker dns
             if !host_map.contains_key(proksi_host) {
-                host_map.insert(
-                    proksi_host.clone(),
-                    vec![format!("tasks.{service_name}:{proksi_port}")],
-                );
+                let mut routed = ProksiDockerRoute::default();
+                routed.upstreams = vec![format!("tasks.{service_name}:{proksi_port}")];
+                host_map.insert(proksi_host.clone(), routed);
             }
         }
 
@@ -132,11 +140,14 @@ impl LabelService {
     /// Generate a list of containers based on the provided filters
     /// This will return a mapping between host <> ips for each container
     /// Does not work for docker in Swarm mode
-    async fn list_containers<T>(&self, filters: HashMap<T, Vec<T>>) -> HashMap<String, Vec<String>>
+    async fn list_containers<T>(
+        &self,
+        filters: HashMap<T, Vec<T>>,
+    ) -> HashMap<String, ProksiDockerRoute>
     where
         T: Into<String> + Hash + serde::ser::Serialize + Eq,
     {
-        let mut host_map = HashMap::<String, Vec<String>>::new();
+        let mut host_map = HashMap::<String, ProksiDockerRoute>::new();
         let containers = self
             .inner
             .list_containers(Some(ListContainersOptions {
@@ -158,14 +169,29 @@ impl LabelService {
             // Get specified container labels
             let container_names = &container.names;
             let container_labels = container.labels.as_ref().unwrap();
-            let default_bool = String::from("false");
-            let proxy_enabled = container_labels
-                .get("proksi.enabled")
-                .unwrap_or(&default_bool);
-            let proxy_host = container_labels.get("proksi.host");
-            let proxy_port = container_labels.get("proksi.port");
 
-            if proxy_enabled != "true" {
+            let mut proxy_enabled = false;
+            let mut proxy_host = "";
+            let mut proxy_port = "";
+            let mut match_with_path_patterns = vec![];
+
+            // Map through extra labels
+            container_labels.iter().for_each(|(k, v)| {
+                if k.starts_with("proksi.") {
+                    // direct values
+                    match k.as_str() {
+                        "proksi.enabled" => proxy_enabled = v == "true",
+                        "proksi.host" => proxy_host = v,
+                        "proksi.port" => proxy_port = v,
+                        k if k.starts_with("proksi.match_with.path.pattern.") => {
+                            match_with_path_patterns.push(v.clone())
+                        }
+                        _ => {}
+                    }
+                }
+            });
+
+            if !proxy_enabled {
                 info!(
                     "Container {container_names:?} does not have the label
                     proksi.enabled set to `true`"
@@ -173,7 +199,7 @@ impl LabelService {
                 continue;
             }
 
-            if proxy_port.is_none() || proxy_host.is_none() {
+            if proxy_port.is_empty() || proxy_host.is_empty() {
                 info!(
                     "Container {container_names:?} does not have a
                   `proksi.port` label or a `proksi.host` label"
@@ -181,12 +207,11 @@ impl LabelService {
                 continue;
             }
 
-            let proxy_port = proxy_port.unwrap();
-            let proxy_host = proxy_host.unwrap();
-
             // Create a new entry in the host_map if it does not exist
             if !host_map.contains_key(proxy_host) {
-                host_map.insert(proxy_host.clone(), vec![]);
+                let mut routed = ProksiDockerRoute::default();
+                routed.path_matchers = match_with_path_patterns;
+                host_map.insert(proxy_host.to_string(), routed);
             }
 
             // map container endpoints
@@ -205,7 +230,11 @@ impl LabelService {
                     continue;
                 }
 
-                host_map.get_mut(proxy_host).unwrap().push(ip_plus_port);
+                host_map
+                    .get_mut(proxy_host)
+                    .unwrap()
+                    .upstreams
+                    .push(ip_plus_port);
             }
         }
 
@@ -236,9 +265,9 @@ impl Service for LabelService {
                 DockerServiceMode::Container => self.list_containers(filters.clone()).await,
             };
 
-            for (host, ips) in hosts {
+            for (host, value) in hosts {
                 // If no upstreams can be found, skip adding the route
-                if ips.is_empty() {
+                if value.upstreams.is_empty() {
                     continue;
                 }
 
@@ -248,7 +277,8 @@ impl Service for LabelService {
                 self.sender
                     .send(MsgProxy::NewRoute(MsgRoute {
                         host: host_value,
-                        upstreams: ips,
+                        upstreams: value.upstreams,
+                        path_matchers: value.path_matchers,
                     }))
                     .ok();
             }

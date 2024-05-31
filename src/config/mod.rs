@@ -190,7 +190,7 @@ pub struct Route {
     pub match_with: Option<RouteMatcher>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, ValueEnum)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ValueEnum)]
 pub enum LogLevel {
     Debug,
     Info,

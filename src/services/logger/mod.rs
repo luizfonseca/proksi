@@ -1,6 +1,7 @@
 use std::io;
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
@@ -11,12 +12,12 @@ use tracing_subscriber::fmt::MakeWriter;
 
 /// A `io::Write` implementation that sends logs to a background service
 #[derive(Debug, Clone)]
-pub struct StdoutWriter(UnboundedSender<Vec<u8>>);
+pub struct StdoutWriter(UnboundedSender<Bytes>);
 
 impl io::Write for StdoutWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let buf_copy = buf.to_owned();
-        if let Ok(()) = self.0.send(buf_copy) {
+        if let Ok(()) = self.0.send(buf_copy.into()) {
             return Ok(buf.len());
         }
 
@@ -35,7 +36,7 @@ pub struct ProxyLog {
 }
 
 impl ProxyLog {
-    pub fn new(sender: &UnboundedSender<Vec<u8>>) -> Self {
+    pub fn new(sender: &UnboundedSender<Bytes>) -> Self {
         ProxyLog {
             // level,
             stdout: StdoutWriter(sender.clone()),
@@ -55,11 +56,11 @@ impl<'a> MakeWriter<'a> for ProxyLog {
 /// A background service that receives logs from the main thread and writes them to stdout
 /// TODO: implement log rotation/write to disk (or use an existing lightweight crate)
 pub struct ProxyLoggerReceiver {
-    receiver: UnboundedReceiver<Vec<u8>>,
+    receiver: UnboundedReceiver<Bytes>,
 }
 
 impl ProxyLoggerReceiver {
-    pub fn new(receiver: UnboundedReceiver<Vec<u8>>) -> Self {
+    pub fn new(receiver: UnboundedReceiver<Bytes>) -> Self {
         ProxyLoggerReceiver { receiver }
     }
 }
