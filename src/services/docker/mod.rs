@@ -38,6 +38,15 @@ pub struct ProksiDockerRoute {
     path_matchers: Vec<String>,
 }
 
+impl ProksiDockerRoute {
+    pub fn new(upstreams: Vec<String>, path_matchers: Vec<String>) -> Self {
+        Self {
+            upstreams,
+            path_matchers,
+        }
+    }
+}
+
 /// A service that will list all services in a Swarm OR containers through the Docker API
 /// and update the route store with the new services.
 /// This service will run in a separate thread.
@@ -129,7 +138,9 @@ impl LabelService {
             // of the service instead of through the docker dns
             if !host_map.contains_key(proksi_host) {
                 let mut routed = ProksiDockerRoute::default();
-                routed.upstreams = vec![format!("tasks.{service_name}:{proksi_port}")];
+                routed
+                    .upstreams
+                    .push(format!("tasks.{service_name}:{proksi_port}"));
                 host_map.insert(proksi_host.clone(), routed);
             }
         }
@@ -176,7 +187,7 @@ impl LabelService {
             let mut match_with_path_patterns = vec![];
 
             // Map through extra labels
-            container_labels.iter().for_each(|(k, v)| {
+            for (k, v) in container_labels {
                 if k.starts_with("proksi.") {
                     // direct values
                     match k.as_str() {
@@ -184,12 +195,12 @@ impl LabelService {
                         "proksi.host" => proxy_host = v,
                         "proksi.port" => proxy_port = v,
                         k if k.starts_with("proksi.match_with.path.pattern.") => {
-                            match_with_path_patterns.push(v.clone())
+                            match_with_path_patterns.push(v.clone());
                         }
                         _ => {}
                     }
                 }
-            });
+            }
 
             if !proxy_enabled {
                 info!(
@@ -209,8 +220,7 @@ impl LabelService {
 
             // Create a new entry in the host_map if it does not exist
             if !host_map.contains_key(proxy_host) {
-                let mut routed = ProksiDockerRoute::default();
-                routed.path_matchers = match_with_path_patterns;
+                let routed = ProksiDockerRoute::new(vec![], match_with_path_patterns);
                 host_map.insert(proxy_host.to_string(), routed);
             }
 

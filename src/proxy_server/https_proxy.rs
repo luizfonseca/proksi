@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::BTreeMap, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use pingora::{

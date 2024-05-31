@@ -64,7 +64,7 @@ impl RoutingService {
                         });
                     }
 
-                    add_route_to_router(&route.host, &route.upstreams, matcher)
+                    add_route_to_router(&route.host, &route.upstreams, matcher);
                 }
             }
         })
@@ -93,7 +93,7 @@ impl Service for RoutingService {
 }
 
 // TODO: find if host already exists but new/old upstreams have changed
-fn add_route_to_router<A, T>(host: &str, upstream_input: T, match_with: Option<RouteMatcher>)
+fn add_route_to_router<A, T>(host: &str, upstream_input: &T, match_with: Option<RouteMatcher>)
 where
     T: IntoIterator<Item = A> + Debug + Clone,
     A: ToSocketAddrs,
