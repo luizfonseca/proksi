@@ -324,8 +324,8 @@ impl Service for LabelService {
                         host: host_value,
                         upstreams: value.upstreams,
                         path_matchers: value.path_matchers,
-                        host_headers_add: value.host_header_add.unwrap(),
-                        host_headers_remove: value.host_header_remove.unwrap(),
+                        host_headers_add: value.host_header_add.unwrap_or_else(Vec::new),
+                        host_headers_remove: value.host_header_remove.unwrap_or_else(Vec::new),
                     }))
                     .ok();
             }
