@@ -231,24 +231,25 @@ services:
         # The port that your service is running on. E.g. `3000`.
         proksi.port: "3000"
 
-        # (Optional) The path prefix that the service should be available at.
+        # (Optional)
         # E.g. `/api` will match only requests with "example.com/api*" to this service.
-        proksi.path.prefix: "/api"
+        proksi.path.pattern.api: "/api"
 
-        # (Optional) The suffix that the service will use to handle requests.
+        # (Optional)
         # E.g. `.json` will match only requests with "example.com/*.json"
-        proksi.path.suffix: ".json"
+        proksi.path.pattern.only_json: ".json"
 
-        # (Optional) A dictionary of Headers to add to the response at the end of proxying
+        # (Optional) A JSON object with headers to insert/replace to
+        # the request before proxying.
         proksi.headers.add: |
           [
-            {name="X-Forwarded-For", value="my-api"},
-            {name="X-Api-Version", value="1.0\"}
+            {"name": "X-Forwarded-For", "value": "my-api"},
+            {"name": "X-Api-Version", "value: "1.0" }
           ]
 
-        # A list of comma-separated headers to remove from the response at the end of proxying.
+        # (Optional) A JSON object with headers to remove in the request before proxying.
         proksi.headers.remove: |
-          ["Server","X-User-Id"]
+          [{ "name": "Server" }, { "name": "X-User-Id" }]
 ```
 
 ## Jobs to be done
@@ -324,31 +325,38 @@ You can see below an excerpt of the configuration (generated from Cue). This is 
 # Example configuration file
 service_name: "proksi"
 worker_threads: 4
+
 logging:
   level: "INFO"
   access_logs_enabled: true
   error_logs_enabled: false
+
 lets_encrypt:
   enabled: true
   # This issues temporary certificates for testing. Flip it to `false` to use
   # production certificates.
   staging: true
   email: "your-email@example.com"
+
 paths:
+  # where to store certificates?
   lets_encrypt: "./my-lets_encrypt-folder"
+
 routes:
   - host: "example.com"
     match_with:
+      # path patterns to match and if there are no matches, HTTP 404
       path:
         patterns:
           - "/api/*"
           - "*.js"
     ssl_certificate:
+      # Useful for testing only
       self_signed_on_failure: true
     headers:
       add:
-        - name: "X-Forwarded-For"
-          value: "<value>"
+        - name: "Cache-Control"
+          value: "max=3600"
         - name: "X-Api-Version"
           value: "1.0"
       remove:

@@ -77,7 +77,18 @@ impl RoutingService {
                         });
                     }
 
-                    add_route_to_router(&store, &route.host, &route.upstreams, matcher, None);
+                    let route_header = RouteHeader {
+                        add: Some(route.host_headers_add),
+                        remove: Some(route.host_headers_remove),
+                    };
+
+                    add_route_to_router(
+                        &store,
+                        &route.host,
+                        &route.upstreams,
+                        matcher,
+                        Some(&route_header),
+                    );
                 }
             }
         })

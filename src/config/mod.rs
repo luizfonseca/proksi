@@ -106,7 +106,7 @@ impl Default for Path {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteHeaderAdd {
     /// The name of the header
     pub name: Cow<'static, str>,
@@ -115,7 +115,7 @@ pub struct RouteHeaderAdd {
     pub value: Cow<'static, str>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteHeaderRemove {
     /// The name of the header to remove (ex.: "Server")
     pub name: Cow<'static, str>,

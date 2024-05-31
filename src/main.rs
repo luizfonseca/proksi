@@ -3,7 +3,7 @@ use std::{borrow::Cow, sync::Arc};
 use ::pingora::server::Server;
 use anyhow::anyhow;
 use bytes::Bytes;
-use config::load;
+use config::{load, RouteHeaderAdd, RouteHeaderRemove};
 use dashmap::DashMap;
 
 use pingora::{listeners::TlsSettings, server::configuration::Opt};
@@ -30,6 +30,8 @@ pub struct MsgRoute {
     host: Cow<'static, str>,
     upstreams: Vec<String>,
     path_matchers: Vec<String>,
+    host_headers_add: Vec<RouteHeaderAdd>,
+    host_headers_remove: Vec<RouteHeaderRemove>,
 }
 
 #[derive(Clone)]

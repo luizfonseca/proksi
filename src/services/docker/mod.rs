@@ -16,7 +16,7 @@ use tokio::sync::broadcast::Sender;
 use tracing::{debug, info};
 
 use crate::{
-    config::{Config, DockerServiceMode},
+    config::{Config, DockerServiceMode, RouteHeaderAdd, RouteHeaderRemove},
     MsgProxy, MsgRoute,
 };
 
@@ -36,6 +36,9 @@ fn connect_to_docker(endpoint: &str) -> Result<Docker, bollard::errors::Error> {
 pub struct ProksiDockerRoute {
     upstreams: Vec<String>,
     path_matchers: Vec<String>,
+
+    host_header_add: Option<Vec<RouteHeaderAdd>>,
+    host_header_remove: Option<Vec<RouteHeaderRemove>>,
 }
 
 impl ProksiDockerRoute {
@@ -43,6 +46,8 @@ impl ProksiDockerRoute {
         Self {
             upstreams,
             path_matchers,
+            host_header_add: None,
+            host_header_remove: None,
         }
     }
 }
@@ -97,7 +102,7 @@ impl LabelService {
 
         let services = services.unwrap();
 
-        for service in &services {
+        for service in services {
             let service_id = service.id.as_ref().unwrap();
             let service_name = service.spec.as_ref().unwrap().name.as_ref();
 
@@ -107,18 +112,45 @@ impl LabelService {
             }
 
             let service_name = service_name.unwrap();
-
-            let falsy_string = String::from("false");
             let service_labels = service.spec.as_ref().unwrap().labels.as_ref().unwrap();
-            let proksi_enabled = service_labels
-                .get("proksi.enabled")
-                .unwrap_or(&falsy_string);
 
-            let empty_string = String::new();
-            let proksi_host = service_labels.get("proksi.host").unwrap_or(&empty_string);
-            let proksi_port = service_labels.get("proksi.port").unwrap_or(&empty_string);
+            let mut proxy_enabled = false;
+            let mut proxy_host = "";
+            let mut proxy_port = "";
+            let mut match_with_path_patterns = vec![];
+            let mut route_header_add: Option<Vec<RouteHeaderAdd>> = None;
+            let mut route_header_remove: Option<Vec<RouteHeaderRemove>> = None;
 
-            if proksi_enabled != "true" {
+            // Map through extra labels
+            for (k, v) in service_labels {
+                if k.starts_with("proksi.") {
+                    // direct values
+                    // TODO refactor to be reused for both services and containers
+                    match k.as_str() {
+                        "proksi.enabled" => proxy_enabled = v == "true",
+                        "proksi.host" => proxy_host = v,
+                        "proksi.port" => proxy_port = v,
+                        k if k.starts_with("proksi.match_with.path.pattern.") => {
+                            match_with_path_patterns.push(v.clone());
+                        }
+                        "proksi.headers.add" => {
+                            let deser: Vec<RouteHeaderAdd> =
+                                serde_json::from_str(v).unwrap_or(vec![]);
+
+                            route_header_add = Some(deser);
+                        }
+                        "proksi.headers.remove" => {
+                            let deser: Vec<RouteHeaderRemove> =
+                                serde_json::from_str(v).unwrap_or(vec![]);
+
+                            route_header_remove = Some(deser);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            if !proxy_enabled {
                 info!(
                     "Service {service_name:?} does not have the label
                     proksi.enabled set to `true`"
@@ -126,7 +158,7 @@ impl LabelService {
                 continue;
             }
 
-            if proksi_host.is_empty() || proksi_port.is_empty() {
+            if proxy_host.is_empty() || proxy_port.is_empty() {
                 info!(
                     "Service {service_name:?} does not have the label
                     proksi.host set to a valid host or proksi.port set to a valid port"
@@ -136,12 +168,15 @@ impl LabelService {
 
             // TODO offer an option to load balance directly to the container IPs
             // of the service instead of through the docker dns
-            if !host_map.contains_key(proksi_host) {
+            if !host_map.contains_key(proxy_host) {
                 let mut routed = ProksiDockerRoute::default();
                 routed
                     .upstreams
-                    .push(format!("tasks.{service_name}:{proksi_port}"));
-                host_map.insert(proksi_host.clone(), routed);
+                    .push(format!("tasks.{service_name}:{proxy_port}"));
+                routed.path_matchers = match_with_path_patterns;
+                routed.host_header_add = route_header_add;
+                routed.host_header_remove = route_header_remove;
+                host_map.insert(proxy_host.to_string(), routed);
             }
         }
 
@@ -176,7 +211,7 @@ impl LabelService {
 
         let containers = containers.unwrap();
 
-        for container in &containers {
+        for container in containers {
             // Get specified container labels
             let container_names = &container.names;
             let container_labels = container.labels.as_ref().unwrap();
@@ -289,6 +324,8 @@ impl Service for LabelService {
                         host: host_value,
                         upstreams: value.upstreams,
                         path_matchers: value.path_matchers,
+                        host_headers_add: value.host_header_add.unwrap(),
+                        host_headers_remove: value.host_header_remove.unwrap(),
                     }))
                     .ok();
             }
