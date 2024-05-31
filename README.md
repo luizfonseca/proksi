@@ -247,7 +247,8 @@ services:
           ]
 
         # A list of comma-separated headers to remove from the response at the end of proxying.
-        proksi.headers.remove: "Server,X-User-Id"
+        proksi.headers.remove: |
+          ["Server","X-User-Id"]
 ```
 
 ## Jobs to be done
