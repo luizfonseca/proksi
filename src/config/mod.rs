@@ -124,10 +124,10 @@ pub struct RouteHeaderRemove {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RouteHeader {
     /// The name of the header
-    pub add: Vec<RouteHeaderAdd>,
+    pub add: Option<Vec<RouteHeaderAdd>>,
 
     /// The value of the header
-    pub remove: Vec<RouteHeaderRemove>,
+    pub remove: Option<Vec<RouteHeaderRemove>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

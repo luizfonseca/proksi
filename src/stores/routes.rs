@@ -36,6 +36,8 @@ impl RouteStorePathMatcher {
 pub struct RouteStoreContainer {
     pub load_balancer: Arc<LoadBalancer<RoundRobin>>,
     pub path_matcher: RouteStorePathMatcher,
+    pub host_header_remove: Vec<String>,
+    pub host_header_add: Vec<(String, String)>,
 }
 
 impl RouteStoreContainer {
@@ -43,6 +45,8 @@ impl RouteStoreContainer {
         RouteStoreContainer {
             load_balancer: Arc::new(load_balancer),
             path_matcher: RouteStorePathMatcher::new(),
+            host_header_remove: Vec::new(),
+            host_header_add: Vec::new(),
         }
     }
 }

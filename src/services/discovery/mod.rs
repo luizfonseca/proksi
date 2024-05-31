@@ -11,7 +11,7 @@ use tokio::sync::broadcast::Sender;
 use tracing::debug;
 
 use crate::{
-    config::{Config, RouteMatcher, RoutePathMatcher},
+    config::{Config, RouteHeader, RouteMatcher, RoutePathMatcher},
     stores::routes::{RouteStore, RouteStoreContainer},
     MsgProxy,
 };
@@ -47,6 +47,7 @@ impl RoutingService {
                 &route.host,
                 &upstream_backends,
                 route.match_with.clone(),
+                route.headers.as_ref(),
             );
 
             debug!("Added route: {}, {:?}", route.host, route.upstreams);
@@ -75,7 +76,7 @@ impl RoutingService {
                         });
                     }
 
-                    add_route_to_router(&store, &route.host, &route.upstreams, matcher);
+                    add_route_to_router(&store, &route.host, &route.upstreams, matcher, None);
                 }
             }
         })
@@ -109,6 +110,7 @@ fn add_route_to_router<A, T>(
     host: &str,
     upstream_input: &T,
     match_with: Option<RouteMatcher>,
+    headers: Option<&RouteHeader>,
 ) where
     T: IntoIterator<Item = A> + Debug + Clone,
     A: ToSocketAddrs,
@@ -131,6 +133,18 @@ fn add_route_to_router<A, T>(
 
     // Create new routing container
     let mut route_store_container = RouteStoreContainer::new(upstreams);
+
+    if let Some(headers) = headers {
+        // if let Some(headers) = headers.add {
+        //     route_store_container.host_header_add =
+        //         headers.iter().map(|v| v.name.to_string()).collect();
+        // }
+
+        if let Some(to_remove) = headers.remove.as_ref() {
+            route_store_container.host_header_remove =
+                to_remove.iter().map(|v| v.name.to_string()).collect();
+        }
+    }
 
     // Prepare route matchers
     // TODO: enable matchers for upstreams for true load balancing based on path

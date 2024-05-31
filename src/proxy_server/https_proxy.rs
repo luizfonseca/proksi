@@ -1,17 +1,17 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+
 use pingora::{
     protocols::ALPN,
     upstreams::peer::{HttpPeer, PeerOptions, TcpKeepalive},
     ErrorType::HTTPStatus,
 };
 use pingora_http::ResponseHeader;
-use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
 use pingora_proxy::{ProxyHttp, Session};
 use tracing::info;
 
-use crate::stores::routes::RouteStore;
+use crate::stores::routes::{RouteStore, RouteStoreContainer};
 
 /// Default peer options to be used on every upstream connection
 pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
@@ -30,7 +30,7 @@ pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
     write_timeout: None,
     verify_cert: false,
     alternative_cn: None,
-    alpn: ALPN::H1,
+    alpn: ALPN::H2H1,
     ca: None,
     no_header_eos: false,
     h2_ping_interval: None,
@@ -41,7 +41,6 @@ pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
     tracer: None,
 };
 
-type ArcedLB = Arc<LoadBalancer<RoundRobin>>;
 /// Load balancer proxy struct
 pub struct Router {
     pub store: RouteStore,
@@ -49,7 +48,7 @@ pub struct Router {
 
 pub struct RouterContext {
     pub host: String,
-    pub current_lb: Option<ArcedLB>,
+    pub route_container: Option<Arc<RouteStoreContainer>>,
 }
 
 #[async_trait]
@@ -61,7 +60,7 @@ impl ProxyHttp for Router {
     fn new_ctx(&self) -> Self::CTX {
         RouterContext {
             host: String::new(),
-            current_lb: None,
+            route_container: None,
         }
     }
 
@@ -96,7 +95,7 @@ impl ProxyHttp for Router {
         }
 
         ctx.host = host_without_port.to_string();
-        ctx.current_lb = Some(route_container.load_balancer.clone());
+        ctx.route_container = Some(route_container.value().clone());
         Ok(false)
     }
 
@@ -109,7 +108,7 @@ impl ProxyHttp for Router {
         _session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
-        let upstream = ctx.current_lb.clone();
+        let upstream = ctx.route_container.as_ref();
 
         // No upstream found (should never happen, but just in case)
         if upstream.is_none() {
@@ -117,7 +116,8 @@ impl ProxyHttp for Router {
         }
 
         // No healthy upstream found
-        let healthy_upstream = upstream.unwrap().select(b"", 32);
+        let upstream = upstream.unwrap();
+        let healthy_upstream = upstream.load_balancer.select(b"", 32);
         if healthy_upstream.is_none() {
             info!("No healthy upstream found");
             return Err(pingora::Error::new(HTTPStatus(503)));
@@ -132,10 +132,15 @@ impl ProxyHttp for Router {
     async fn response_filter(
         &self,
         _session: &mut Session,
-        _upstream_response: &mut ResponseHeader,
-        _ctx: &mut Self::CTX,
+        upstream_response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
-        // Add custom headers to the response
+        let container = ctx.route_container.as_ref().unwrap();
+
+        // Remove headers from the upstream response
+        for name in container.host_header_remove.iter() {
+            upstream_response.remove_header(name);
+        }
 
         Ok(())
     }
