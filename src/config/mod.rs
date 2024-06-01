@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::PathBuf};
+use std::{borrow::Cow, collections::HashMap, path::PathBuf};
 
 use clap::{Args, Parser, ValueEnum};
 use figment::{
@@ -167,6 +167,18 @@ pub struct RouteMatcher {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct RoutePlugin {
+    /// The name of the plugin (must be a valid plugin name)
+    pub name: Cow<'static, str>,
+
+    /// The configuration for the plugin - we are not enforcing a specific format.
+    /// Each plugin is in charge of parsing the configuration.
+    /// The configuration is a key-value pair where the key is a string and
+    /// the value is a JSON object (ex: `{ "key": "value" }`)
+    pub config: Option<HashMap<Cow<'static, str>, serde_json::Value>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Route {
     /// The hostname that the proxy will accept
     /// requests for the upstreams in the route.
@@ -176,10 +188,15 @@ pub struct Route {
     /// also be used to create the certificate for the domain when `letsencrypt` is enabled.
     pub host: Cow<'static, str>,
 
+    /// Plugins that will be applied to the route/host
+    /// (ex: rate limiting, oauth2, etc.)
+    pub plugins: Option<Vec<RoutePlugin>>,
+
     /// SSL certificate configurations for the given host
     /// (ex: self-signed, path/object storage, etc.)
     pub ssl_certificate: Option<RouteSslCertificate>,
 
+    /// Header modifications for the given route (remove, add, etc. )
     pub headers: Option<RouteHeader>,
 
     /// The upstreams to which the request will be proxied,
@@ -441,6 +458,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
     fn helper_config_file() -> &'static str {
@@ -456,6 +475,10 @@ mod tests {
           lets_encrypt: "/test/letsencrypt"
         routes:
           - host: "example.com"
+            plugins:
+              - name: "cors"
+                config:
+                  allowed_origins: ["*"]
             headers:
               add:
                 - name: "X-Forwarded-For"
@@ -504,7 +527,8 @@ mod tests {
                 "PROKSI_ROUTES",
                 r#"[{
               host="changed.example.com",
-              match_with={ path={ prefix="/api", suffix=".json", patterns=["/api/v1/:entity/:action*"] } },
+              match_with={ path={ patterns=["/api/v1/:entity/:action*"] } },
+              plugins=[{ name="cors", config={ allowed_origins=["*"] } }],
               upstreams=[{ ip="10.0.1.2/24", port=3000, weight=1 }] }]
             "#,
             );
@@ -556,8 +580,6 @@ mod tests {
             assert_eq!(logging.access_logs_enabled, true);
             assert_eq!(logging.error_logs_enabled, false);
 
-            print!("{:?}", proxy_config.routes);
-
             assert_eq!(proxy_config.routes.len(), 0);
 
             Ok(())
@@ -579,6 +601,10 @@ mod tests {
                     upstreams:
                       - ip: "10.1.2.24/24"
                         port: 3000
+                    plugins:
+                      - name: "cors"
+                        config:
+                          allowed_origins: ["*"]
                 "#,
             )?;
 
@@ -606,6 +632,11 @@ mod tests {
             assert_eq!(letsencrypt.staging, Some(true));
 
             assert_eq!(paths.lets_encrypt.as_os_str(), "/etc/proksi/letsencrypt");
+
+            let plugins = proxy_config.routes[0].plugins.as_ref().unwrap();
+            let plugin_config = plugins[0].config.as_ref().unwrap();
+            assert_eq!(plugins[0].name, "cors");
+            assert_eq!(plugin_config.get("allowed_origins"), Some(&json!(["*"])));
 
             Ok(())
         });

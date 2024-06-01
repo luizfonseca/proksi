@@ -20,6 +20,7 @@ use stores::{certificates::CertificateStore, routes::RouteStore};
 
 mod channel;
 mod config;
+mod plugins;
 mod proxy_server;
 mod services;
 mod stores;
