@@ -55,7 +55,7 @@ pingora-pool = "0.2.0"
 pingora-proxy = { version = "0.2.0" }
 serde = "1.0.203"
 serde_json = "1.0.117"
-tokio = { version = "1.37.0", features = ["sync", "rt-multi-thread"] }
+tokio = { version = "1.38.0", features = ["sync", "rt-multi-thread"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 itertools = "0.13.0"
