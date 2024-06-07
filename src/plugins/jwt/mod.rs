@@ -8,12 +8,12 @@ use serde::{Deserialize, Serialize};
 
 /// Struct that holds the claims for a JWT token
 #[derive(Debug, Serialize, Deserialize)]
-pub struct JwtClaims {
-    sub: Cow<'static, str>,
-    exp: usize,
-    iat: usize,
-    teams: Vec<String>,
-    ids: Vec<String>,
+pub(super) struct JwtClaims {
+    pub sub: Cow<'static, str>,
+    pub exp: usize,
+    pub iat: usize,
+    pub teams: Vec<String>,
+    pub ids: Vec<String>,
     // usernames: Vec<String>,
 }
 

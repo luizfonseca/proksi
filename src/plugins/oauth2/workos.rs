@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use serde::Deserialize;
 
-use super::{UserFromProvider, HTTP_CLIENT};
+use super::{provider::UserFromProvider, HTTP_CLIENT};
 
 pub(super) struct WorkosOauthService;
 

@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use anyhow::bail;
 use serde::Deserialize;
 
-use super::{UserFromProvider, HTTP_CLIENT};
+use super::{provider::UserFromProvider, HTTP_CLIENT};
 
 /// Github OAuth2 plugin
 pub(super) struct GithubOauthService;

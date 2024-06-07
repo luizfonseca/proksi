@@ -2,8 +2,9 @@ use cookie::{time::OffsetDateTime, Cookie, SameSite};
 
 use crate::plugins::jwt;
 
-use super::{UserFromProvider, COOKIE_NAME};
+use super::{provider::UserFromProvider, COOKIE_NAME};
 
+/// Creates a secure cookie for the user containing the JWT token
 pub(super) fn create_secure_cookie<'a>(
     user: UserFromProvider,
     jwt_secret: String,
