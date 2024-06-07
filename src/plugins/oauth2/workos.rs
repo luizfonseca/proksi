@@ -46,13 +46,13 @@ impl WorkosOauthService {
 
 #[derive(Deserialize)]
 struct WorkosTokenResponse {
-    access_token: Cow<'static, str>,
-    refresh_token: Cow<'static, str>,
+    // access_token: Cow<'static, str>,
+    // refresh_token: Cow<'static, str>,
     user: WorkosUserResponse,
 }
 
 #[derive(Deserialize)]
 struct WorkosUserResponse {
-    id: Cow<'static, str>,
+    // id: Cow<'static, str>,
     email: Cow<'static, str>,
 }

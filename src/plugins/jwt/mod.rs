@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 /// Struct that holds the claims for a JWT token
 #[derive(Debug, Serialize, Deserialize)]
-pub(super) struct JwtClaims {
+pub(crate) struct JwtClaims {
     pub sub: Cow<'static, str>,
     pub exp: usize,
     pub iat: usize,

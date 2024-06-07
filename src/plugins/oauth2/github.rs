@@ -35,7 +35,7 @@ impl GithubOauthService {
         let token = Self::get_oauth_token(client_id, client_secret, code).await?;
 
         if token.access_token.is_none() {
-            bail!("Failed to get access token from Github: {:?}", token);
+            bail!("Failed to get access token from Github: {:?}", token.error);
         }
 
         let access_token = token.access_token.unwrap();
@@ -49,7 +49,7 @@ impl GithubOauthService {
             email: Cow::Owned(primary_email.email.to_string()),
             team_ids: vec![],
             organization_ids: vec![],
-            usernames: vec![],
+            usernames: vec![user.login.to_string()],
         })
     }
 
@@ -126,5 +126,5 @@ struct GithubEmailResponse {
 /// { "name": "John Doe", username: "johndoe" } }
 #[derive(Deserialize, Debug)]
 struct GithubUserResponse {
-    name: Cow<'static, str>,
+    login: Cow<'static, str>,
 }
