@@ -187,3 +187,25 @@ routes:
         network: "shared"
         # match_with:
         #   pattern: "/api/billing/*"
+
+    # Plugins that will be applied to the route/host
+    # (ex: rate limiting, oauth2, etc.)
+    # Plugins can be used to extend the functionality of Proksi.
+    # For example, the oauth2 plugin can be used to authenticate users using OAuth2 providers.
+    plugins:
+      # The name of the plugin (must be a valid plugin name)
+      - name: "oauth2"
+        config:
+          client_id: "<client_id>"
+          client_secret: "<client_secret>"
+          jwt_secret: "<jwt_secret>" # The secret used to sign the JWT token
+          # The validations key is used to specify the validations that the user must pass to
+          validations:
+            - key: "team_id"
+              value:
+                - "<team_id>"
+            # The email key is used to specify the email address that
+            # the user must have to pass the validation
+            - key: "email"
+              value:
+                - "<user_email>"

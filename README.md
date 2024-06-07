@@ -265,7 +265,7 @@ services:
   - [ ] RateLimiter,
   - [ ] GeoIp/Ip whitelisting
   - [ ] BasicAuth
-  - [ ] Oauth2
+  - [X] Oauth2
   - [ ] CORS
 
 
@@ -289,7 +289,7 @@ The following features are included or will be included into Proksi without the 
 - [ ] **IP range** blocking
 - [ ] **IP allowlists/denylists**
 - [ ] **Basic** Authentication
-- [ ] **Oauth2** Authentication (Google, Facebook, Github, etc)
+- [X] **Oauth2** Authentication (Google, Facebook, ✅ Github, ✅ WorkOs etc)
 - [ ] **JWT** Authentication (and thus, passing information downstream)
 - [ ] **CORS** Middleware
 - [ ] **Rate Limiting** Middleware

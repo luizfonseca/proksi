@@ -154,3 +154,27 @@ network = "public"
 ip = "10.1.2.23/24"
 port = 3_000
 network = "shared"
+
+# Plugins that will be applied to the route/host
+# (ex: rate limiting, oauth2, etc.)
+# Plugins can be used to extend the functionality of Proksi.
+# For example, the oauth2 plugin can be used to authenticate users using OAuth2 providers.
+[[routes.plugins]]
+[[routes.plugins.config]]
+# The name of the plugin (must be a valid plugin name)
+name = "oauth2"
+client_id = "<client_id>"
+client_secret = "<client_secret>"
+# The secret used to sign the JWT token
+jwt_secret = "<jwt_secret>"
+
+
+# The validations key is used to specify the validations that the user must pass to
+validations = [
+  { type = "team_id", value = [
+    "<team_id>",
+  ] },
+  { type = "email", value = [
+    "<user_email>",
+  ] },
+]
