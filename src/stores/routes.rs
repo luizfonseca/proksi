@@ -1,9 +1,11 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use dashmap::DashMap;
 use http::{HeaderName, HeaderValue};
 use path_tree::PathTree;
 use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
+
+use crate::config::RoutePlugin;
 
 #[derive(Debug, Default)]
 pub struct RouteStorePathMatcher {
@@ -39,6 +41,8 @@ pub struct RouteStoreContainer {
     pub path_matcher: RouteStorePathMatcher,
     pub host_header_remove: Vec<String>,
     pub host_header_add: Vec<(HeaderName, HeaderValue)>,
+
+    pub plugins: HashMap<String, RoutePlugin>,
 }
 
 impl RouteStoreContainer {
@@ -48,6 +52,7 @@ impl RouteStoreContainer {
             path_matcher: RouteStorePathMatcher::new(),
             host_header_remove: Vec::new(),
             host_header_add: Vec::new(),
+            plugins: HashMap::new(),
         }
     }
 }

@@ -166,7 +166,7 @@ pub struct RouteMatcher {
     pub path: Option<RoutePathMatcher>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RoutePlugin {
     /// The name of the plugin (must be a valid plugin name)
     pub name: Cow<'static, str>,
@@ -281,7 +281,10 @@ pub struct Logging {
 ///   lets_encrypt: "/etc/proksi/letsencrypt"
 /// routes:
 ///   - host: "example.com"
-///     path_prefix: "/api"
+///     match_with:
+///       path:
+///         patterns:
+///          - "/api/v1/*"
 ///     headers:
 ///       add:
 ///         - name: "X-Forwarded-For"

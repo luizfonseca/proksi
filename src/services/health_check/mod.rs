@@ -1,11 +1,10 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use async_trait::async_trait;
 use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
-use tracing::debug;
 
 use crate::stores::routes::RouteStore;
 
@@ -25,29 +24,38 @@ impl HealthService {
 #[async_trait]
 impl Service for HealthService {
     async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
+        tracing::info!("Starting health check service");
         // TODO: create multiple interval checks
         let mut interval = tokio::time::interval(Duration::from_secs(15));
         interval.tick().await;
 
         loop {
             interval.tick().await;
+            let mut weak_map = HashMap::new();
 
-            let store_clone = self.route_store.clone();
-
-            for route in store_clone.iter() {
-                debug!("Running health check for host {}", route.key());
-                let route_container = route.value();
+            for route in self.route_store.iter() {
+                tracing::info!("Running health check for host {}", route.key());
+                let route_container = route.clone();
                 route_container
                     .load_balancer
                     .backends()
                     .run_health_check(false)
                     .await;
+
                 route_container.load_balancer.update().await.unwrap();
 
                 // TODO: only update if the upstream has changed
-                self.route_store
-                    .insert(route.key().to_string(), route_container.clone());
+                weak_map.insert(route.key().to_string(), route_container);
             }
+
+            // Important: not to hold the lock while updating the route store
+            // E.g. inserting while we are cloning items in a loop
+            for (key, value) in weak_map.iter() {
+                self.route_store.insert(key.clone(), value.clone());
+            }
+
+            // We don't need to hold health check results in memory
+            drop(weak_map);
         }
     }
 

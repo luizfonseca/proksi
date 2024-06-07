@@ -12,7 +12,7 @@ use tokio::sync::broadcast::Sender;
 use tracing::debug;
 
 use crate::{
-    config::{Config, RouteHeader, RouteMatcher, RoutePathMatcher},
+    config::{Config, RouteHeader, RouteMatcher, RoutePathMatcher, RoutePlugin},
     stores::routes::{RouteStore, RouteStoreContainer},
     MsgProxy,
 };
@@ -49,6 +49,7 @@ impl RoutingService {
                 &upstream_backends,
                 route.match_with.clone(),
                 route.headers.as_ref(),
+                route.plugins.as_ref(),
             );
 
             debug!("Added route: {}, {:?}", route.host, route.upstreams);
@@ -88,6 +89,7 @@ impl RoutingService {
                         &route.upstreams,
                         matcher,
                         Some(&route_header),
+                        None,
                     );
                 }
             }
@@ -123,6 +125,7 @@ fn add_route_to_router<A, T>(
     upstream_input: &T,
     match_with: Option<RouteMatcher>,
     headers: Option<&RouteHeader>,
+    plugins: Option<&Vec<RoutePlugin>>,
 ) where
     T: IntoIterator<Item = A> + Debug + Clone,
     A: ToSocketAddrs,
@@ -162,6 +165,19 @@ fn add_route_to_router<A, T>(
         if let Some(to_remove) = headers.remove.as_ref() {
             route_store_container.host_header_remove =
                 to_remove.iter().map(|v| v.name.to_string()).collect();
+        }
+    }
+
+    if let Some(plugins) = plugins {
+        for plugin in plugins {
+            match plugin.name.as_ref() {
+                "oauth2" => {
+                    route_store_container
+                        .plugins
+                        .insert(plugin.name.to_string(), plugin.clone());
+                }
+                _ => {}
+            }
         }
     }
 

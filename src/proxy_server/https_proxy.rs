@@ -1,7 +1,13 @@
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+    time::Duration,
+};
 
 use async_trait::async_trait;
 
+use http::Uri;
 use pingora::{
     protocols::ALPN,
     upstreams::peer::{HttpPeer, PeerOptions, TcpKeepalive},
@@ -12,6 +18,8 @@ use pingora_proxy::{ProxyHttp, Session};
 use tracing::info;
 
 use crate::stores::routes::{RouteStore, RouteStoreContainer};
+
+use super::middleware::{execute_request_plugins, execute_response_plugins};
 
 /// Default peer options to be used on every upstream connection
 pub const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
@@ -49,6 +57,7 @@ pub struct Router {
 pub struct RouterContext {
     pub host: String,
     pub route_container: Option<Arc<RouteStoreContainer>>,
+    pub extensions: HashMap<Cow<'static, str>, String>,
 }
 
 #[async_trait]
@@ -61,6 +70,7 @@ impl ProxyHttp for Router {
         RouterContext {
             host: String::new(),
             route_container: None,
+            extensions: HashMap::new(),
         }
     }
 
@@ -74,6 +84,7 @@ impl ProxyHttp for Router {
     ) -> pingora::Result<bool> {
         let req_host = get_host(session);
         let host_without_port = req_host.split(':').collect::<Vec<_>>()[0];
+        ctx.host = host_without_port.to_string();
 
         // If there's no host matching, returns a 404
         let route_container = self.store.get(host_without_port);
@@ -83,7 +94,7 @@ impl ProxyHttp for Router {
         }
 
         // Match request pattern based on the URI
-        let uri = session.req_header().uri.clone();
+        let uri = get_uri(session);
         let route_container = route_container.unwrap();
 
         match &route_container.path_matcher.pattern {
@@ -94,8 +105,11 @@ impl ProxyHttp for Router {
             _ => {}
         }
 
-        ctx.host = host_without_port.to_string();
         ctx.route_container = Some(route_container.value().clone());
+
+        // Middleware phase: request_filterx
+        execute_request_plugins(session, ctx, &route_container.plugins).await?;
+
         Ok(false)
     }
 
@@ -131,7 +145,7 @@ impl ProxyHttp for Router {
 
     async fn response_filter(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
@@ -146,13 +160,20 @@ impl ProxyHttp for Router {
             upstream_response.remove_header(name);
         }
 
+        // Middleware phase: response_filterx
+        execute_response_plugins(session, ctx, &container.plugins).await?;
+
         Ok(())
     }
 }
 
+fn get_uri(session: &mut Session) -> Uri {
+    session.req_header().uri.clone()
+}
+
 /// Retrieves the host from the request headers based on
 /// whether the request is HTTP/1.1 or HTTP/2
-fn get_host(session: &Session) -> &str {
+fn get_host(session: &mut Session) -> &str {
     if let Some(host) = session.get_header(http::header::HOST) {
         return host.to_str().unwrap_or("");
     }
