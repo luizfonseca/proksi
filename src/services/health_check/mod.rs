@@ -50,7 +50,7 @@ impl Service for HealthService {
 
             // Important: not to hold the lock while updating the route store
             // E.g. inserting while we are cloning items in a loop
-            for (key, value) in weak_map.iter() {
+            for (key, value) in &weak_map {
                 self.route_store.insert(key.clone(), value.clone());
             }
 

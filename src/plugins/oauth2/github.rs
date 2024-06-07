@@ -3,9 +3,9 @@ use std::borrow::Cow;
 use anyhow::bail;
 use serde::Deserialize;
 
-use super::{provider::UserFromProvider, HTTP_CLIENT};
+use super::{provider::OauthUser, HTTP_CLIENT};
 
-/// Github OAuth2 plugin
+/// Github `OAuth2` plugin
 pub(super) struct GithubOauthService;
 
 const GITHUB_API_URL: &str = "https://api.github.com";
@@ -31,7 +31,7 @@ impl GithubOauthService {
         client_id: &str,
         client_secret: &str,
         code: &str,
-    ) -> Result<UserFromProvider, anyhow::Error> {
+    ) -> Result<OauthUser, anyhow::Error> {
         let token = Self::get_oauth_token(client_id, client_secret, code).await?;
 
         if token.access_token.is_none() {
@@ -45,7 +45,7 @@ impl GithubOauthService {
 
         let primary_email = emails.iter().find(|e| e.primary).unwrap();
 
-        Ok(UserFromProvider {
+        Ok(OauthUser {
             email: Cow::Owned(primary_email.email.to_string()),
             team_ids: vec![],
             organization_ids: vec![],
@@ -106,7 +106,7 @@ impl GithubOauthService {
     }
 }
 
-/// Response from POST github.com/login/oauth/access_token
+/// Response from `POST github.com/login/oauth/access_token`
 /// Can be an error response (with an error property) or a success response
 #[derive(Deserialize, Debug)]
 struct GithubTokenResponse {
@@ -114,16 +114,16 @@ struct GithubTokenResponse {
     access_token: Option<Cow<'static, str>>,
 }
 
-/// Item Response from api.github.com/user/emails
-/// { [ {"email":"user@example.com","primary":true,"verified":true} ]  }
+/// Item Response from `api.github.com/user/emails`
+/// `{ [ {"email":"user@example.com","primary":true,"verified":true} ]  }`
 #[derive(Deserialize, Debug)]
 struct GithubEmailResponse {
     email: Cow<'static, str>,
     primary: bool,
 }
 
-/// Response from api.github.com/user
-/// { "name": "John Doe", username: "johndoe" } }
+/// Response from `api.github.com/user`
+/// `{ "name": "John Doe", username: "johndoe" } }`
 #[derive(Deserialize, Debug)]
 struct GithubUserResponse {
     login: Cow<'static, str>,

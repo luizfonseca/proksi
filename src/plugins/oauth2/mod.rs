@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use pingora_http::ResponseHeader;
 use pingora_proxy::Session;
 
-use provider::{Provider, ProviderType, UserFromProvider};
+use provider::{OauthType, OauthUser, Provider};
 
 use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
 
@@ -45,11 +45,7 @@ impl Oauth2 {
 
     /// Checks if the user is authorized to access the protected Oauth2 resource
     /// This is part of the validation object in the oauth2 configuration.
-    fn is_authorized(
-        &self,
-        user: &UserFromProvider,
-        validations: Option<&serde_json::Value>,
-    ) -> bool {
+    fn is_authorized(user: &OauthUser, validations: Option<&serde_json::Value>) -> bool {
         shared::validate_user_from_provider(user, validations)
     }
 
@@ -76,7 +72,7 @@ impl Oauth2 {
 
         // Finish the request, we don't want to continue processing
         // and the user has been redirected
-        return Ok(true);
+        Ok(true)
     }
 
     /// Ends the Oauth2 flow and returns HTTP unauthorized if errors occur during the Oauth process
@@ -88,7 +84,7 @@ impl Oauth2 {
 
         // Finish the request, we don't want to continue processing
         // and the user has been redirected
-        return Ok(true);
+        Ok(true)
     }
 
     /// Validates a given cookie and returns true if
@@ -114,8 +110,8 @@ impl Oauth2 {
 
         let decoded = jwt::decode_jwt(secure_jwt.unwrap().value(), jwt_secret.as_bytes());
 
-        if decoded.is_err() || !self.is_authorized(&decoded?.into(), validations) {
-            return Ok(self.unauthorized_response(session).await?);
+        if decoded.is_err() || !Self::is_authorized(&decoded?.into(), validations) {
+            return self.unauthorized_response(session).await;
         }
 
         Ok(true)
@@ -134,15 +130,15 @@ impl Oauth2 {
 
     fn parse_provider(
         plugin_config: &HashMap<Cow<'static, str>, serde_json::Value>,
-    ) -> Result<ProviderType> {
+    ) -> Result<OauthType> {
         let provider = plugin_config
             .get("provider")
             .and_then(|v| v.as_str())
             .ok_or(anyhow!("Missing or invalid provider"))?;
 
         match provider {
-            "github" => Ok(ProviderType::Github),
-            "workos" => Ok(ProviderType::Workos),
+            "github" => Ok(OauthType::Github),
+            "workos" => Ok(OauthType::Workos),
             _ => bail!("Provider not found in the plugin configuration"),
         }
     }
@@ -205,7 +201,7 @@ impl MiddlewarePlugin for Oauth2 {
 
             // Check if the state is valid
             if OAUTH2_STATE.get(&state.to_string()).is_none() {
-                return Ok(self.unauthorized_response(session).await?);
+                return self.unauthorized_response(session).await;
             }
 
             // Step 1: Exchange the code for an access token
@@ -215,11 +211,11 @@ impl MiddlewarePlugin for Oauth2 {
             })?;
 
             // Validate if user is authorized to access the protected resource
-            if !self.is_authorized(&user, validations) {
-                return Ok(self.unauthorized_response(session).await?);
+            if !Self::is_authorized(&user, validations) {
+                return self.unauthorized_response(session).await;
             }
 
-            let jwt_cookie = secure_cookie::create_secure_cookie(user, jwt_secret, &ctx.host)?;
+            let jwt_cookie = secure_cookie::create_secure_cookie(&user, &jwt_secret, &ctx.host)?;
 
             let mut res_headers = ResponseHeader::build_no_case(StatusCode::FOUND, Some(1))?;
             res_headers.insert_header(http::header::LOCATION, "/")?;

@@ -1,9 +1,9 @@
 use itertools::Itertools;
 use std::{borrow::Cow, collections::HashMap};
 
-use super::provider::UserFromProvider;
+use super::provider::OauthUser;
 
-/// Parses an HTTP str (from http::Uri) to a Hashmap of query parameters
+/// Parses an HTTP str (from `http::Uri`) to a Hashmap of query parameters
 pub(super) fn from_string_to_query_params(value: &str) -> HashMap<Cow<str>, Cow<str>> {
     value
         .split('&')
@@ -17,31 +17,26 @@ pub(super) fn from_string_to_query_params(value: &str) -> HashMap<Cow<str>, Cow<
         .collect()
 }
 
-/// Given a resulting user from Oauth2, validates if the user is authorized
+/// Given a resulting user from `Oauth2`, validates if the user is authorized
 /// based on the validations provided in the configuration of the plugin
 pub(super) fn validate_user_from_provider(
-    user: &UserFromProvider,
+    user: &OauthUser,
     validations: Option<&serde_json::Value>,
 ) -> bool {
-    let validations_array = match validations.and_then(|v| v.as_array()) {
-        Some(array) => array,
-        // Authorize if validations is None or not an array
-        None => return true,
+    // Authorize if validations is None or not an array
+    let Some(validations_array) = validations.and_then(|v| v.as_array()) else {
+        return true;
     };
 
     for validation in validations_array {
         // each validation is an object containing
         // type (string) and value (array)
-        let validation_object = match validation.as_object() {
-            Some(obj) => obj,
-            // Skip if not an object
-            None => continue,
+        let Some(validation_object) = validation.as_object() else {
+            continue;
         };
 
-        let validation_type = match validation_object.get("type").and_then(|v| v.as_str()) {
-            Some(t) => t,
-            // Skip if no type or type is not string
-            None => continue,
+        let Some(validation_type) = validation_object.get("type").and_then(|v| v.as_str()) else {
+            continue;
         };
 
         let validation_values = match validation_object.get("value").and_then(|v| v.as_array()) {
@@ -60,13 +55,13 @@ pub(super) fn validate_user_from_provider(
                 // Check if the user's team is in the list of allowed teams
                 return validation_values
                     .iter()
-                    .any(|v| user.team_ids.contains(&v.to_string()));
+                    .any(|v| user.team_ids.contains(&(**v).to_string()));
             }
             "org_id" => {
                 // Check if the user's organization is in the list of allowed organizations
                 return validation_values
                     .iter()
-                    .any(|v| user.organization_ids.contains(&v.to_string()));
+                    .any(|v| user.organization_ids.contains(&(**v).to_string()));
             }
             "email" => {
                 tracing::info!(
@@ -91,7 +86,7 @@ mod tests {
 
     #[test]
     fn test_no_validations() {
-        let user = UserFromProvider {
+        let user = OauthUser {
             team_ids: vec![],
             organization_ids: vec![],
             email: Cow::Borrowed("user@example.com"),
@@ -103,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_invalid_validations() {
-        let user = UserFromProvider {
+        let user = OauthUser {
             team_ids: vec![],
             organization_ids: vec![],
             email: Cow::Borrowed("user@example.com"),
@@ -125,7 +120,7 @@ mod tests {
 
     #[test]
     fn test_validations_with_team_id() {
-        let user = UserFromProvider {
+        let user = OauthUser {
             team_ids: vec!["team1".to_string()],
             organization_ids: vec![],
             email: Cow::Borrowed("user@example.com"),
@@ -144,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_validations_with_org_id() {
-        let user = UserFromProvider {
+        let user = OauthUser {
             team_ids: vec![],
             organization_ids: vec!["org1".to_string()],
             email: Cow::Borrowed("user@example.com"),
@@ -163,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_validations_with_email() {
-        let user = UserFromProvider {
+        let user = OauthUser {
             team_ids: vec![],
             organization_ids: vec![],
             email: Cow::Borrowed("user@example.com"),
@@ -182,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_validations_no_match() {
-        let user = UserFromProvider {
+        let user = OauthUser {
             team_ids: vec!["team1".to_string()],
             organization_ids: vec!["org1".to_string()],
             email: Cow::Borrowed("user@example.com"),

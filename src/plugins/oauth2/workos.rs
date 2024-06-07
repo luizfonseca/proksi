@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use serde::Deserialize;
 
-use super::{provider::UserFromProvider, HTTP_CLIENT};
+use super::{provider::OauthUser, HTTP_CLIENT};
 
 pub(super) struct WorkosOauthService;
 
@@ -19,7 +19,7 @@ impl WorkosOauthService {
         client_id: &str,
         client_secret: &str,
         code: &str,
-    ) -> Result<UserFromProvider, anyhow::Error> {
+    ) -> Result<OauthUser, anyhow::Error> {
         let response = HTTP_CLIENT
             .post(WORKOS_API_URL)
             .json(&serde_json::json!(
@@ -35,7 +35,7 @@ impl WorkosOauthService {
             .await?;
         let body = response.json::<WorkosTokenResponse>().await?;
 
-        Ok(UserFromProvider {
+        Ok(OauthUser {
             email: body.user.email,
             team_ids: vec![],
             organization_ids: vec![],

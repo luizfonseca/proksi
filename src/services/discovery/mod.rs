@@ -176,6 +176,7 @@ fn add_route_to_router<A, T>(
                         .plugins
                         .insert(plugin.name.to_string(), plugin.clone());
                 }
+                "request_id" => continue,
                 _ => {}
             }
         }

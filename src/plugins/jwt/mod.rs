@@ -29,8 +29,8 @@ pub(crate) fn encode_jwt(sub: &str, secret: &[u8]) -> Result<String, anyhow::Err
 
     let claims = JwtClaims {
         sub: Cow::Owned(sub.to_string()),
-        exp: in_one_day.as_secs() as usize,
-        iat: since.as_secs() as usize,
+        exp: usize::try_from(in_one_day.as_secs())?,
+        iat: usize::try_from(since.as_secs())?,
         teams: vec![],
         ids: vec![],
         // usernames: vec![],

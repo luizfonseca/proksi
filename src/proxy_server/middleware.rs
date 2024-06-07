@@ -14,13 +14,14 @@ pub async fn execute_response_plugins(
 
                 if crate::plugins::PLUGINS
                     .oauth2
-                    .response_filter(session, ctx, &value)
+                    .response_filter(session, ctx, value)
                     .await
                     .is_ok_and(|v| v)
                 {
                     return Ok(());
                 }
             }
+            "request_id" => continue,
             _ => {}
         }
     }
@@ -39,13 +40,14 @@ pub async fn execute_request_plugins(
 
                 if crate::plugins::PLUGINS
                     .oauth2
-                    .request_filter(session, ctx, &value)
+                    .request_filter(session, ctx, value)
                     .await
                     .is_ok_and(|v| v)
                 {
                     return Ok(());
                 }
             }
+            "request_id" => continue,
             _ => {}
         }
     }
