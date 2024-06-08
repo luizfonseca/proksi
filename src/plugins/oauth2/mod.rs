@@ -28,6 +28,7 @@ mod shared;
 static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
 
 // Shared state for Oauth2 flows (should be cleaned up after fetching for the first time)
+// TODO find a way to clean up/expire the state
 static OAUTH2_STATE: Lazy<Arc<DashMap<String, String>>> = Lazy::new(|| Arc::new(DashMap::new()));
 const COOKIE_NAME: &str = "__Secure_Auth_PRK_JWT";
 

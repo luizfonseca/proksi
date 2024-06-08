@@ -220,6 +220,8 @@ impl LabelService {
             let mut proxy_host = "";
             let mut proxy_port = "";
             let mut match_with_path_patterns = vec![];
+            let mut route_header_add: Option<Vec<RouteHeaderAdd>> = None;
+            let mut route_header_remove: Option<Vec<RouteHeaderRemove>> = None;
 
             // Map through extra labels
             for (k, v) in container_labels {
@@ -229,6 +231,18 @@ impl LabelService {
                         "proksi.enabled" => proxy_enabled = v == "true",
                         "proksi.host" => proxy_host = v,
                         "proksi.port" => proxy_port = v,
+                        "proksi.headers.add" => {
+                            let deser: Vec<RouteHeaderAdd> =
+                                serde_json::from_str(v).unwrap_or(vec![]);
+
+                            route_header_add = Some(deser);
+                        }
+                        "proksi.headers.remove" => {
+                            let deser: Vec<RouteHeaderRemove> =
+                                serde_json::from_str(v).unwrap_or(vec![]);
+
+                            route_header_remove = Some(deser);
+                        }
                         k if k.starts_with("proksi.match_with.path.pattern.") => {
                             match_with_path_patterns.push(v.clone());
                         }
@@ -255,7 +269,9 @@ impl LabelService {
 
             // Create a new entry in the host_map if it does not exist
             if !host_map.contains_key(proxy_host) {
-                let routed = ProksiDockerRoute::new(vec![], match_with_path_patterns);
+                let mut routed = ProksiDockerRoute::new(vec![], match_with_path_patterns);
+                routed.host_header_add = route_header_add;
+                routed.host_header_remove = route_header_remove;
                 host_map.insert(proxy_host.to_string(), routed);
             }
 
