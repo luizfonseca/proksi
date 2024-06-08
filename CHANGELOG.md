@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.3](https://github.com/luizfonseca/proksi/compare/v0.2.2...v0.2.3) (2024-06-08)
+
+
+### Bug Fixes
+
+* **oauth2:** redirect to saved url from state and store cookie for top domains ([2295d1b](https://github.com/luizfonseca/proksi/commit/2295d1bfac40e9fce3e694f84d632805428af0ce))
+* **routing:** converting DNS names to socketAddr now compares new and old backends correctly ([147db8b](https://github.com/luizfonseca/proksi/commit/147db8bf22109c0e732c2221a701541b095fc8bc))
+* **routing:** discovery service now skips routes without upstream updates ([84b07fd](https://github.com/luizfonseca/proksi/commit/84b07fd34c9deaec0aadc55caf4e44452746ceb6))
+
 ## [0.2.2](https://github.com/luizfonseca/proksi/compare/v0.2.1...v0.2.2) (2024-06-08)
 
 
