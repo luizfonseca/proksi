@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Debug, net::ToSocketAddrs, str::FromStr, sync::Arc, time::Duration};
+use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 
@@ -132,24 +132,46 @@ impl Service for RoutingService {
     }
 }
 
+// Check whether the host already exists and whether there the upstream list has changed
+fn has_new_backend(store: &RouteStore, host: &str, upstream_input: &[String]) -> bool {
+    if let Some(route_container) = store.get(host) {
+        let backends = route_container.load_balancer.backends().get_backend();
+
+        // If upstreams are not the same length, return true (update)
+        if backends.len() != upstream_input.len() {
+            return true;
+        }
+
+        !backends
+            .iter()
+            .all(|be| upstream_input.contains(&be.addr.to_string()))
+    } else {
+        false
+    }
+}
+
 // TODO: find if host already exists but new/old upstreams have changed
-fn add_route_to_router<A, T>(
+fn add_route_to_router(
     store: &RouteStore,
     host: &str,
-    upstream_input: &T,
+    upstream_input: &[String],
     match_with: Option<RouteMatcher>,
     headers: Option<&RouteHeader>,
     plugins: Option<&Vec<RoutePlugin>>,
     should_self_sign_cert_on_failure: bool,
-) where
-    T: IntoIterator<Item = A> + Debug + Clone,
-    A: ToSocketAddrs,
-{
-    let upstreams = LoadBalancer::<RoundRobin>::try_from_iter(upstream_input.clone());
+) {
+    // Check if current route already exists
+    if store.contains_key(host) && !has_new_backend(store, host, upstream_input) {
+        tracing::debug!("skipping update, no routing changes for host: {}", host);
+        return;
+    }
+
+    let upstreams = LoadBalancer::<RoundRobin>::try_from_iter(upstream_input);
     if upstreams.is_err() {
-        debug!(
+        tracing::info!(
             "Could not create upstreams for host: {}, upstreams {:?}",
-            host, upstream_input
+            host,
+            upstream_input
         );
         return;
     }
@@ -212,4 +234,127 @@ fn add_route_to_router<A, T>(
     }
 
     store.insert(host.to_string(), Arc::new(route_store_container));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stores::routes::RouteStore;
+    use dashmap::DashMap;
+
+    fn setup_mock_route_store() -> RouteStore {
+        Arc::new(DashMap::new())
+    }
+
+    fn setup_route_store_with_entry() -> RouteStore {
+        let store = setup_mock_route_store();
+        let upstreams = vec!["127.0.0.1:8080".to_string(), "127.0.0.2:8080".to_string()];
+
+        let load_balancer =
+            LoadBalancer::<RoundRobin>::try_from_iter(upstreams.into_iter()).unwrap();
+        store.insert(
+            "example.com".to_string(),
+            Arc::new(RouteStoreContainer::new(load_balancer)),
+        );
+
+        store
+    }
+
+    #[test]
+    fn test_add_route_to_router_new_route() {
+        let store = setup_mock_route_store();
+        let host = "example.com";
+        let upstreams = vec!["127.0.0.1:8080".to_string()];
+        let matcher = None;
+        let headers = None;
+        let plugins = None;
+        let should_self_sign_cert_on_failure = false;
+
+        add_route_to_router(
+            &store,
+            host,
+            &upstreams,
+            matcher,
+            headers,
+            plugins,
+            should_self_sign_cert_on_failure,
+        );
+
+        assert!(store.contains_key(host));
+    }
+
+    #[test]
+    fn test_add_route_to_router_existing_route_no_changes() {
+        let store = setup_route_store_with_entry();
+        let host = "example.com";
+        let upstreams = vec!["127.0.0.1:8080".to_string()];
+        let matcher = None;
+        let headers = None;
+        let plugins = None;
+        let should_self_sign_cert_on_failure = false;
+
+        add_route_to_router(
+            &store,
+            host,
+            &upstreams,
+            matcher,
+            headers,
+            plugins,
+            should_self_sign_cert_on_failure,
+        );
+
+        // Verify the route still exists and no new upstreams were added
+        assert!(store.contains_key(host));
+    }
+
+    #[test]
+    fn test_has_new_backend_no_change() {
+        let store = setup_route_store_with_entry();
+        let host = "example.com";
+        let upstreams = vec!["127.0.0.1:8080".to_string(), "127.0.0.2:8080".to_string()];
+
+        assert!(!has_new_backend(&store, host, &upstreams));
+    }
+
+    #[test]
+    fn test_has_new_backend_with_change() {
+        let store = setup_route_store_with_entry();
+        let host = "example.com";
+        let upstreams = vec!["127.0.0.3:8080".to_string()];
+
+        assert!(has_new_backend(&store, host, &upstreams));
+    }
+
+    #[test]
+    fn test_add_route_to_router_existing_route_with_changes() {
+        let store = setup_route_store_with_entry();
+        let host = "example.com";
+        let upstreams = vec!["127.0.0.3:8080".to_string()];
+        let matcher = None;
+        let headers = None;
+        let plugins = None;
+        let should_self_sign_cert_on_failure = false;
+
+        add_route_to_router(
+            &store,
+            host,
+            &upstreams,
+            matcher,
+            headers,
+            plugins,
+            should_self_sign_cert_on_failure,
+        );
+
+        // Verify that the route exists and the upstreams have been updated
+        assert!(store.contains_key(host));
+        let route_container = store.get(host).unwrap();
+        let backends: Vec<String> = route_container
+            .load_balancer
+            .backends()
+            .get_backend()
+            .iter()
+            .map(|backend| backend.addr.to_string())
+            .collect();
+        assert!(backends.contains(&"127.0.0.3:8080".to_string()));
+    }
 }
