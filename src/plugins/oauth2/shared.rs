@@ -80,6 +80,31 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn test_query_params_to_map() {
+        let query_params = "team_id=team1&org_id=org1&email=user@example.com";
+        let map = from_string_to_query_params(query_params);
+        assert_eq!(map.get("team_id").unwrap(), "team1");
+        assert_eq!(map.get("org_id").unwrap(), "org1");
+        assert_eq!(map.get("email").unwrap(), "user@example.com");
+    }
+
+    #[test]
+    fn test_query_params_to_map_with_empty_values() {
+        let query_params = "team_id=&org_id=&email=";
+        let map = from_string_to_query_params(query_params);
+        assert_eq!(map.get("team_id").unwrap(), "");
+        assert_eq!(map.get("org_id").unwrap(), "");
+        assert_eq!(map.get("email").unwrap(), "");
+    }
+
+    #[test]
+    fn test_query_params_to_map_with_non_existent_keys() {
+        let query_params = "team_id=team1&org_id=org";
+        let map = from_string_to_query_params(query_params);
+        assert_eq!(map.get("state"), None);
+    }
+
+    #[test]
     fn test_no_validations() {
         let user = OauthUser {
             team_ids: vec![],

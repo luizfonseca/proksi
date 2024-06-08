@@ -112,7 +112,9 @@ impl Oauth2 {
         let decoded = jwt::decode_jwt(secure_jwt.unwrap().value(), jwt_secret.as_bytes());
 
         if decoded.is_err() || !Self::is_authorized(&decoded?.into(), validations) {
-            return self.unauthorized_response(session).await;
+            if let Ok(true) = self.unauthorized_response(session).await {
+                return Ok(false);
+            }
         }
 
         Ok(true)
