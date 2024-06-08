@@ -83,6 +83,7 @@ impl LabelService {
     /// Generate a list of services based on the provided filters
     /// This will returns a mapping between host <> ips for each service
     /// Only works for docker in Swarm mode.
+    #[allow(clippy::too_many_lines)]
     async fn list_services<T>(
         &self,
         filters: HashMap<T, Vec<T>>,
@@ -159,12 +160,12 @@ impl LabelService {
                         "proksi.plugins.oauth2.provider" => oauth2_provider = Some(v.clone()),
                         "proksi.plugins.oauth2.client_id" => oauth2_client_id = Some(v.clone()),
                         "proksi.plugins.oauth2.client_secret" => {
-                            oauth2_client_secret = Some(v.clone())
+                            oauth2_client_secret = Some(v.clone());
                         }
                         "proksi.plugins.oauth2.jwt_secret" => oauth2_jwt_secret = Some(v.clone()),
                         "proksi.plugins.oauth2.validations" => {
                             oauth2_validations =
-                                Some(serde_json::from_str(v).unwrap_or_else(|_| json!([])))
+                                Some(serde_json::from_str(v).unwrap_or_else(|_| json!([])));
                         }
                         _ => {}
                     }
