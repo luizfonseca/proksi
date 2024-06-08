@@ -89,7 +89,7 @@ impl RoutingService {
                         &route.upstreams,
                         matcher,
                         Some(&route_header),
-                        None,
+                        Some(&route.plugins),
                     );
                 }
             }

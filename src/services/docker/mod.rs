@@ -12,11 +12,12 @@ use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
+use serde_json::json;
 use tokio::sync::broadcast::Sender;
 use tracing::{debug, info};
 
 use crate::{
-    config::{Config, DockerServiceMode, RouteHeaderAdd, RouteHeaderRemove},
+    config::{Config, DockerServiceMode, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin},
     MsgProxy, MsgRoute,
 };
 
@@ -39,6 +40,7 @@ pub struct ProksiDockerRoute {
 
     host_header_add: Option<Vec<RouteHeaderAdd>>,
     host_header_remove: Option<Vec<RouteHeaderRemove>>,
+    plugins: Option<Vec<RoutePlugin>>,
 }
 
 impl ProksiDockerRoute {
@@ -48,6 +50,8 @@ impl ProksiDockerRoute {
             path_matchers,
             host_header_add: None,
             host_header_remove: None,
+
+            plugins: None,
         }
     }
 }
@@ -121,6 +125,12 @@ impl LabelService {
             let mut route_header_add: Option<Vec<RouteHeaderAdd>> = None;
             let mut route_header_remove: Option<Vec<RouteHeaderRemove>> = None;
 
+            // TEMP: Oauth2 plugin
+            let mut oauth2_client_id: Option<String> = None;
+            let mut oauth2_client_secret: Option<String> = None;
+            let mut oauth2_jwt_secret: Option<String> = None;
+            let mut oauth2_validations: Option<serde_json::Value> = None;
+
             // Map through extra labels
             for (k, v) in service_labels {
                 if k.starts_with("proksi.") {
@@ -144,6 +154,15 @@ impl LabelService {
                                 serde_json::from_str(v).unwrap_or(vec![]);
 
                             route_header_remove = Some(deser);
+                        }
+                        "proksi.plugins.oauth2.client_id" => oauth2_client_id = Some(v.clone()),
+                        "proksi.plugins.oauth2.client_secret" => {
+                            oauth2_client_secret = Some(v.clone())
+                        }
+                        "proksi.plugins.oauth2.jwt_secret" => oauth2_jwt_secret = Some(v.clone()),
+                        "proksi.plugins.oauth2.validations" => {
+                            oauth2_validations =
+                                Some(serde_json::from_str(v).unwrap_or_else(|_| json!([])))
                         }
                         _ => {}
                     }
@@ -176,6 +195,26 @@ impl LabelService {
                 routed.path_matchers = match_with_path_patterns;
                 routed.host_header_add = route_header_add;
                 routed.host_header_remove = route_header_remove;
+
+                let mut plugin_hashmap = HashMap::new();
+                plugin_hashmap.insert(Cow::Borrowed("client_id"), json!(oauth2_client_id.unwrap()));
+                plugin_hashmap.insert(
+                    Cow::Borrowed("client_secret"),
+                    json!(oauth2_client_secret.unwrap()),
+                );
+                plugin_hashmap.insert(
+                    Cow::Borrowed("jwt_secret"),
+                    json!(oauth2_jwt_secret.unwrap()),
+                );
+                plugin_hashmap.insert(
+                    Cow::Borrowed("validations"),
+                    json!(oauth2_validations.unwrap()),
+                );
+                routed.plugins = Some(vec![RoutePlugin {
+                    name: Cow::Borrowed("oauth2"),
+                    config: Some(plugin_hashmap),
+                }]);
+
                 host_map.insert(proxy_host.to_string(), routed);
             }
         }
@@ -342,6 +381,7 @@ impl Service for LabelService {
                         path_matchers: value.path_matchers,
                         host_headers_add: value.host_header_add.unwrap_or_else(Vec::new),
                         host_headers_remove: value.host_header_remove.unwrap_or_else(Vec::new),
+                        plugins: value.plugins.unwrap_or_else(Vec::new),
                     }))
                     .ok();
             }
