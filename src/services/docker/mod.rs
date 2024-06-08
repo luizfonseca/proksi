@@ -160,7 +160,7 @@ impl LabelService {
                             route_header_remove = Some(deser);
                         }
                         "proksi.ssl_certificate.self_signed_on_failure" => {
-                            ssl_certificate_self_signed_on_failure = v == "true"
+                            ssl_certificate_self_signed_on_failure = v == "true";
                         }
                         "proksi.plugins.oauth2.provider" => oauth2_provider = Some(v.clone()),
                         "proksi.plugins.oauth2.client_id" => oauth2_client_id = Some(v.clone()),
