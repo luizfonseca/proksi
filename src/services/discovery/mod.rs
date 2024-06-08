@@ -152,7 +152,8 @@ fn has_new_backend(
     }
 }
 
-// TODO: find if host already exists but new/old upstreams have changed
+/// Adds new routes to the store if there are changes to an existing route or
+/// if the host does not exist in the store.
 fn add_route_to_router(
     store: &RouteStore,
     host: &str,
