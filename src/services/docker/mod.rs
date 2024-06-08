@@ -206,28 +206,17 @@ impl LabelService {
                 routed.ssl_certificate_self_signed_on_failure =
                     ssl_certificate_self_signed_on_failure;
 
-                let mut plugin_hashmap = HashMap::new();
-                plugin_hashmap.insert(Cow::Borrowed("client_id"), json!(oauth2_client_id.unwrap()));
+                // This part is optional
+                if let Some(plugin) = Self::get_oauth2_plugin(
+                    oauth2_provider,
+                    oauth2_client_id,
+                    oauth2_client_secret,
+                    oauth2_jwt_secret,
+                    oauth2_validations,
+                ) {
+                    routed.plugins = Some(vec![plugin]);
+                }
 
-                plugin_hashmap.insert(Cow::Borrowed("provider"), json!(oauth2_provider.unwrap()));
-
-                plugin_hashmap.insert(
-                    Cow::Borrowed("client_secret"),
-                    json!(oauth2_client_secret.unwrap()),
-                );
-                plugin_hashmap.insert(
-                    Cow::Borrowed("jwt_secret"),
-                    json!(oauth2_jwt_secret.unwrap()),
-                );
-                plugin_hashmap.insert(
-                    Cow::Borrowed("validations"),
-                    json!(oauth2_validations.unwrap()),
-                );
-                routed.plugins = Some(vec![RoutePlugin {
-                    name: Cow::Borrowed("oauth2"),
-                    config: Some(plugin_hashmap),
-                }]);
-                //
                 host_map.insert(proxy_host.to_string(), routed);
             }
         }
@@ -352,6 +341,41 @@ impl LabelService {
         }
 
         host_map
+    }
+
+    // Parses the oauth2 configuration and returns a RoutePlugin
+    fn get_oauth2_plugin(
+        provider: Option<String>,
+        client_id: Option<String>,
+        client_secret: Option<String>,
+        jwt_secret: Option<String>,
+        validations: Option<serde_json::Value>,
+    ) -> Option<RoutePlugin> {
+        if provider.is_none()
+            || client_id.is_none()
+            || client_secret.is_none()
+            || jwt_secret.is_none()
+            || validations.is_none()
+        {
+            return None;
+        }
+
+        let mut plugin_hashmap = HashMap::new();
+        plugin_hashmap.insert(Cow::Borrowed("client_id"), json!(client_id.unwrap()));
+
+        plugin_hashmap.insert(Cow::Borrowed("provider"), json!(provider.unwrap()));
+
+        plugin_hashmap.insert(
+            Cow::Borrowed("client_secret"),
+            json!(client_secret.unwrap()),
+        );
+        plugin_hashmap.insert(Cow::Borrowed("jwt_secret"), json!(jwt_secret.unwrap()));
+        plugin_hashmap.insert(Cow::Borrowed("validations"), json!(validations.unwrap()));
+
+        Some(RoutePlugin {
+            name: Cow::Borrowed("oauth2"),
+            config: Some(plugin_hashmap),
+        })
     }
 }
 
