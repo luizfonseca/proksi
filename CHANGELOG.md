@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/luizfonseca/proksi/compare/v0.2.1...v0.2.2) (2024-06-08)
+
+
+### Bug Fixes
+
+* **docker:** incorrect unwrapping of optional plugin. Resolves [#23](https://github.com/luizfonseca/proksi/issues/23) ([6259725](https://github.com/luizfonseca/proksi/commit/6259725a9307905a40edcafb8d528c257ed49853))
+
 ## [0.2.1](https://github.com/luizfonseca/proksi/compare/v0.2.0...v0.2.1) (2024-06-08)
 
 
