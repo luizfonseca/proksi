@@ -34,6 +34,8 @@ pub struct MsgRoute {
     host_headers_add: Vec<RouteHeaderAdd>,
     host_headers_remove: Vec<RouteHeaderRemove>,
     plugins: Vec<RoutePlugin>,
+
+    self_signed_certs: bool,
 }
 
 #[derive(Clone)]

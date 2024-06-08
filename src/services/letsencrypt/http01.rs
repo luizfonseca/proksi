@@ -130,7 +130,11 @@ impl LetsencryptService {
                         continue;
                     }
 
-                    service.handle_certificate_for_domain(route.key(), &acc);
+                    service.handle_certificate_for_domain(
+                        route.key(),
+                        &acc,
+                        route.self_signed_certificate,
+                    );
                 }
             }
         })
@@ -173,7 +177,12 @@ impl LetsencryptService {
         })
     }
 
-    fn handle_certificate_for_domain(&self, domain: &str, account: &Account<FilePersist>) {
+    fn handle_certificate_for_domain(
+        &self,
+        domain: &str,
+        account: &Account<FilePersist>,
+        self_signed_on_failure: bool,
+    ) {
         match account.certificate(domain) {
             Ok(Some(cert)) => {
                 // Certificate already exists
@@ -197,7 +206,7 @@ impl LetsencryptService {
                 let order = self.create_order_for_domain(domain, account);
                 if order.is_err() {
                     // Create self signed certificate
-                    self.create_self_signed_certificate(domain, &self.config)
+                    self.create_self_signed_certificate(domain, self_signed_on_failure)
                         .unwrap();
                 }
             }
@@ -212,21 +221,12 @@ impl LetsencryptService {
     fn create_self_signed_certificate(
         &self,
         domain: &str,
-        config: &Config,
+        enabled: bool,
     ) -> Result<(), anyhow::Error> {
-        // find route in config
-        let route = config.routes.iter().find(|r| r.host == domain);
-
-        if route.is_none() || route.unwrap().ssl_certificate.is_none() {
-            // Nothing to do
-            return Ok(());
-        }
-
         // Generate self-signed certificate only if self_signed_on_failure is set to true
         // If not provided, default to true
-        let route = route.unwrap();
-        let ssl_cert = route.ssl_certificate.as_ref().unwrap();
-        if !ssl_cert.self_signed_on_failure.unwrap_or(true) {
+        if !enabled {
+            // Nothing to do
             return Ok(());
         }
 

@@ -43,6 +43,11 @@ impl RoutingService {
                 .map(|upstr| format!("{}:{}", upstr.ip, upstr.port))
                 .collect::<Vec<String>>();
 
+            let self_signed_cert_on_failure = route
+                .ssl_certificate
+                .as_ref()
+                .and_then(|v| v.self_signed_on_failure);
+
             add_route_to_router(
                 &self.store,
                 &route.host,
@@ -50,6 +55,7 @@ impl RoutingService {
                 route.match_with.clone(),
                 route.headers.as_ref(),
                 route.plugins.as_ref(),
+                self_signed_cert_on_failure.unwrap_or(false),
             );
 
             debug!("Added route: {}, {:?}", route.host, route.upstreams);
@@ -90,6 +96,7 @@ impl RoutingService {
                         matcher,
                         Some(&route_header),
                         Some(&route.plugins),
+                        route.self_signed_certs,
                     );
                 }
             }
@@ -126,6 +133,7 @@ fn add_route_to_router<A, T>(
     match_with: Option<RouteMatcher>,
     headers: Option<&RouteHeader>,
     plugins: Option<&Vec<RoutePlugin>>,
+    should_self_sign_cert_on_failure: bool,
 ) where
     T: IntoIterator<Item = A> + Debug + Clone,
     A: ToSocketAddrs,
@@ -148,6 +156,7 @@ fn add_route_to_router<A, T>(
 
     // Create new routing container
     let mut route_store_container = RouteStoreContainer::new(upstreams);
+    route_store_container.self_signed_certificate = should_self_sign_cert_on_failure;
 
     if let Some(headers) = headers {
         if let Some(headers) = headers.add.as_ref() {

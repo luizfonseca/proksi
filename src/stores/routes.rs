@@ -42,6 +42,8 @@ pub struct RouteStoreContainer {
     pub host_header_remove: Vec<String>,
     pub host_header_add: Vec<(HeaderName, HeaderValue)>,
 
+    pub self_signed_certificate: bool,
+
     pub plugins: HashMap<String, RoutePlugin>,
 }
 
@@ -52,6 +54,7 @@ impl RouteStoreContainer {
             path_matcher: RouteStorePathMatcher::new(),
             host_header_remove: Vec::new(),
             host_header_add: Vec::new(),
+            self_signed_certificate: false,
             plugins: HashMap::new(),
         }
     }

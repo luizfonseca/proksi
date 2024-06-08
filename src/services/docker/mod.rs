@@ -40,6 +40,7 @@ pub struct ProksiDockerRoute {
 
     host_header_add: Option<Vec<RouteHeaderAdd>>,
     host_header_remove: Option<Vec<RouteHeaderRemove>>,
+    ssl_certificate_self_signed_on_failure: bool,
     plugins: Option<Vec<RoutePlugin>>,
 }
 
@@ -50,7 +51,7 @@ impl ProksiDockerRoute {
             path_matchers,
             host_header_add: None,
             host_header_remove: None,
-
+            ssl_certificate_self_signed_on_failure: false,
             plugins: None,
         }
     }
@@ -132,6 +133,7 @@ impl LabelService {
             let mut oauth2_client_secret: Option<String> = None;
             let mut oauth2_jwt_secret: Option<String> = None;
             let mut oauth2_validations: Option<serde_json::Value> = None;
+            let mut ssl_certificate_self_signed_on_failure = false;
 
             // Map through extra labels
             for (k, v) in service_labels {
@@ -156,6 +158,9 @@ impl LabelService {
                                 serde_json::from_str(v).unwrap_or(vec![]);
 
                             route_header_remove = Some(deser);
+                        }
+                        "proksi.ssl_certificate.self_signed_on_failure" => {
+                            ssl_certificate_self_signed_on_failure = v == "true"
                         }
                         "proksi.plugins.oauth2.provider" => oauth2_provider = Some(v.clone()),
                         "proksi.plugins.oauth2.client_id" => oauth2_client_id = Some(v.clone()),
@@ -198,6 +203,8 @@ impl LabelService {
                 routed.path_matchers = match_with_path_patterns;
                 routed.host_header_add = route_header_add;
                 routed.host_header_remove = route_header_remove;
+                routed.ssl_certificate_self_signed_on_failure =
+                    ssl_certificate_self_signed_on_failure;
 
                 let mut plugin_hashmap = HashMap::new();
                 plugin_hashmap.insert(Cow::Borrowed("client_id"), json!(oauth2_client_id.unwrap()));
@@ -388,6 +395,8 @@ impl Service for LabelService {
                         host_headers_add: value.host_header_add.unwrap_or_else(Vec::new),
                         host_headers_remove: value.host_header_remove.unwrap_or_else(Vec::new),
                         plugins: value.plugins.unwrap_or_else(Vec::new),
+
+                        self_signed_certs: value.ssl_certificate_self_signed_on_failure,
                     }))
                     .ok();
             }
