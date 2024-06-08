@@ -132,19 +132,21 @@ impl Service for RoutingService {
     }
 }
 
-// Check whether the host already exists and whether there the upstream list has changed
-fn has_new_backend(store: &RouteStore, host: &str, upstream_input: &[String]) -> bool {
+// Check whether the host already exists and if the the upstream list has changed
+fn has_new_backend(
+    store: &RouteStore,
+    host: &str,
+    upstream_input: &LoadBalancer<RoundRobin>,
+) -> bool {
     if let Some(route_container) = store.get(host) {
         let backends = route_container.load_balancer.backends().get_backend();
-
+        let new_backends = upstream_input.backends().get_backend();
         // If upstreams are not the same length, return true (update)
-        if backends.len() != upstream_input.len() {
+        if backends.len() != new_backends.len() {
             return true;
         }
 
-        !backends
-            .iter()
-            .all(|be| upstream_input.contains(&be.addr.to_string()))
+        !backends.iter().all(|be| new_backends.contains(be))
     } else {
         false
     }
@@ -161,22 +163,20 @@ fn add_route_to_router(
     should_self_sign_cert_on_failure: bool,
 ) {
     // Check if current route already exists
-    if store.contains_key(host) && !has_new_backend(store, host, upstream_input) {
-        tracing::debug!("skipping update, no routing changes for host: {}", host);
-        return;
-    }
 
-    let upstreams = LoadBalancer::<RoundRobin>::try_from_iter(upstream_input);
-    if upstreams.is_err() {
+    let Ok(mut upstreams) = LoadBalancer::<RoundRobin>::try_from_iter(upstream_input) else {
         tracing::info!(
             "Could not create upstreams for host: {}, upstreams {:?}",
             host,
             upstream_input
         );
         return;
-    }
+    };
 
-    let mut upstreams = upstreams.unwrap();
+    if store.contains_key(host) && !has_new_backend(store, host, &upstreams) {
+        tracing::debug!("skipping update, no routing changes for host: {}", host);
+        return;
+    }
 
     // TODO: support defining health checks in the configuration file
     let tcp_health_check = TcpHealthCheck::new();
@@ -311,7 +311,11 @@ mod tests {
     fn test_has_new_backend_no_change() {
         let store = setup_route_store_with_entry();
         let host = "example.com";
-        let upstreams = vec!["127.0.0.1:8080".to_string(), "127.0.0.2:8080".to_string()];
+        let upstreams = LoadBalancer::try_from_iter(vec![
+            "127.0.0.1:8080".to_string(),
+            "127.0.0.2:8080".to_string(),
+        ])
+        .unwrap();
 
         assert!(!has_new_backend(&store, host, &upstreams));
     }
@@ -320,7 +324,7 @@ mod tests {
     fn test_has_new_backend_with_change() {
         let store = setup_route_store_with_entry();
         let host = "example.com";
-        let upstreams = vec!["127.0.0.3:8080".to_string()];
+        let upstreams = LoadBalancer::try_from_iter(vec!["127.0.0.3:8080".to_string()]).unwrap();
 
         assert!(has_new_backend(&store, host, &upstreams));
     }
