@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.2.1](https://github.com/luizfonseca/proksi/compare/v0.2.0...v0.2.1) (2024-06-08)
+
+
+### Features
+
+* add support for plugin configuration ([a572ff8](https://github.com/luizfonseca/proksi/commit/a572ff8114c790f90e412bcdf5807446ef726130))
+* **docker:** enable oauth2 plugin docker service labels ([181e69e](https://github.com/luizfonseca/proksi/commit/181e69e06d946162e6ad86e2a3cc54f166104a68))
+* **docker:** enable self-signed certs ([6526abb](https://github.com/luizfonseca/proksi/commit/6526abbc6c0e02b2b880d0d219771738c90bc019))
+* **oauth2:** add oauth2 validation config support ([a0da2a5](https://github.com/luizfonseca/proksi/commit/a0da2a56334fba376a95b96fba028d36ea965f52))
+* **plugins:** add oauth2 plugin - github/workos support ([18ba0ad](https://github.com/luizfonseca/proksi/commit/18ba0ad6301847a6e362aadfae8ad7bd9eb461bc))
+
+
+### Bug Fixes
+
+* clippy issues ([936abb7](https://github.com/luizfonseca/proksi/commit/936abb7cc7ac41da1bc8fe98ea6099ed9cad3cba))
+* clippy issues ([9a9d090](https://github.com/luizfonseca/proksi/commit/9a9d0901b257ea2c16cd3b57333474297f9a087d))
+* **docker:** add missing headers remove/add logic to containers ([47c1e4c](https://github.com/luizfonseca/proksi/commit/47c1e4c6e667a6a586420e2b2d50b42233c6aa14))
+* **docker:** add missing plugins.oauth2.provider label config ([a7cf5f4](https://github.com/luizfonseca/proksi/commit/a7cf5f4130d557ea32e5388b6c3e0ddc045ecaeb))
+* dockerfile and CA certificates ([aeab65e](https://github.com/luizfonseca/proksi/commit/aeab65ef38065c5457f424fe3416444248536601))
+* incorrect return on 401 responses ([a2dcaae](https://github.com/luizfonseca/proksi/commit/a2dcaae1bbbcfba2623d9d2b71f5b426f639c1a1))
+
+
+### Miscellaneous Chores
+
+* release marker for 0.2.1 ([cef795b](https://github.com/luizfonseca/proksi/commit/cef795b10399b18ef810abc35a24e9a3b019cf6f))
+
 ## [0.2.0](https://github.com/luizfonseca/proksi/compare/v0.1.11...v0.2.0) (2024-05-31)
 
 
