@@ -32,11 +32,11 @@ opt-level = 0
 incremental = true
 
 [profile.release]
-opt-level = 2
+opt-level = 3      # Optimize for speed
 strip = true       # Automatically strip symbols from the binary.
 lto = true         # Enable link-time optimization.
 debug = false
-codegen-units = 12
+codegen-units = 2
 incremental = true
 panic = "abort"    # Abort on panic.
 
