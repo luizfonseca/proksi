@@ -74,7 +74,12 @@ impl ProxyHttp for Router {
         ctx.route_container = Some(route_container.value().clone());
 
         // Middleware phase: request_filterx
-        execute_request_plugins(session, ctx, &route_container.plugins).await?;
+        // We are checking to see if the request has already been handled
+        // by the plugins i.e. (ok(true))
+        match execute_request_plugins(session, ctx, &route_container.plugins).await {
+            Ok(true) => return Ok(true),
+            _ => {}
+        }
 
         Ok(false)
     }

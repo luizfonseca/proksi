@@ -98,6 +98,13 @@ impl RoutingService {
                         Some(&route.plugins),
                         route.self_signed_certs,
                     );
+
+                    tracing::debug!(
+                        "Added route: {}, {:?} self-signed: {}",
+                        route.host,
+                        route.upstreams,
+                        route.self_signed_certs
+                    );
                 }
             }
         })

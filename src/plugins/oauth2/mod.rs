@@ -186,33 +186,42 @@ impl MiddlewarePlugin for Oauth2 {
 
         // Step 0. Check if the request is for the Oauth Callback URL
         if uri.path() == callback_path {
-            let query = uri
-                .query()
-                .ok_or_else(|| anyhow!("Missing query in path"))?;
+            let Some(query) = uri.query() else {
+                return self.unauthorized_response(session).await;
+            };
 
             let query_params = shared::from_string_to_query_params(query);
 
-            let code = query_params
-                .get("code")
-                .ok_or_else(|| anyhow!("Code not found in the query"))?;
+            let Some(code) = query_params.get("code") else {
+                tracing::info!("missing code in the query");
+                return self.unauthorized_response(session).await;
+            };
 
-            let state = query_params
-                .get("state")
-                .ok_or_else(|| anyhow!("State not found in the query"))?;
+            let Some(state) = query_params.get("state") else {
+                tracing::info!("missing state in the query");
+                return self.unauthorized_response(session).await;
+            };
 
-            // Check if the state is valid
             if OAUTH2_STATE.get(&state.to_string()).is_none() {
+                tracing::info!("state does not exist or was removed");
                 return self.unauthorized_response(session).await;
             }
 
+            // Cleanup state to avoid replay attacks
+            OAUTH2_STATE.remove(&state.to_string());
+
             // Step 1: Exchange the code for an access token
-            let user = oauth_provider.get_oauth_user(code).await.or_else(|err| {
-                tracing::error!("Failed to exchange code for token {:?}", err);
-                bail!("Failed to exchange code for token");
-            })?;
+            let user = match oauth_provider.get_oauth_user(code).await {
+                Err(err) => {
+                    tracing::error!("Failed to exchange code {code}, state {state}: {err}");
+                    return self.unauthorized_response(session).await;
+                }
+                Ok(user) => user,
+            };
 
             // Validate if user is authorized to access the protected resource
             if !Self::is_authorized(&user, validations) {
+                tracing::info!("user is not authorized {:?}", user);
                 return self.unauthorized_response(session).await;
             }
 
@@ -222,8 +231,6 @@ impl MiddlewarePlugin for Oauth2 {
             res_headers.insert_header(http::header::LOCATION, "/")?;
             res_headers.insert_header(http::header::SET_COOKIE, jwt_cookie.to_string())?;
 
-            // Cleanup state to avoid replay attacks
-            OAUTH2_STATE.remove(&state.to_string());
             session.write_response_header(Box::new(res_headers)).await?;
 
             return Ok(true);
@@ -233,8 +240,8 @@ impl MiddlewarePlugin for Oauth2 {
             .validate_cookie(session, &jwt_secret, validations)
             .await?
         {
-            // If the user is authorized, return false to
-            // let the request continue processing to upstream
+            // If the user is not authorized, return true to
+            // interrupt the request
             return Ok(false);
         }
 

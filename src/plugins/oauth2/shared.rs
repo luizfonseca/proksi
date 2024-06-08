@@ -44,7 +44,7 @@ pub(super) fn validate_user_from_provider(
             None => continue, // Skip if no value or value is not array
         };
 
-        tracing::info!(
+        tracing::debug!(
             "Validating {:?} with {:?}",
             validation_type,
             validation_values
@@ -64,11 +64,6 @@ pub(super) fn validate_user_from_provider(
                     .any(|v| user.organization_ids.contains(&(**v).to_string()));
             }
             "email" => {
-                tracing::info!(
-                    "Validating email {:?} and {:?}",
-                    user.email,
-                    validation_values
-                );
                 // Check if the user's email is in the list of allowed emails
                 return validation_values.iter().contains(&&user.email[..]);
             }

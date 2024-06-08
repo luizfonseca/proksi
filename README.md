@@ -228,6 +228,13 @@ services:
         # The hostname that the service should be available at. E.g. `example.com`.
         proksi.host: "example.com"
 
+
+        # you can make Proksi to use a self-signed certificate (in-memory)
+        # if the certificate can't be issued. A certificate is required for
+        # Proksi to proxy requests to the upstream server
+        # (this is useful for development and testing purposes)
+        proksi.ssl_certificate.self_signed_on_failure: "true"
+
         # The port that your service is running on. E.g. `3000`.
         proksi.port: "3000"
 

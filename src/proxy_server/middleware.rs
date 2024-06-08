@@ -32,7 +32,7 @@ pub async fn execute_request_plugins(
     session: &mut pingora_proxy::Session,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
     plugins: &HashMap<String, crate::config::RoutePlugin>,
-) -> Result<()> {
+) -> Result<bool> {
     for (name, value) in plugins {
         match name.as_str() {
             "oauth2" => {
@@ -44,12 +44,12 @@ pub async fn execute_request_plugins(
                     .await
                     .is_ok_and(|v| v)
                 {
-                    return Ok(());
+                    return Ok(true);
                 }
             }
             "request_id" => continue,
             _ => {}
         }
     }
-    Ok(())
+    Ok(false)
 }

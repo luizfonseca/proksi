@@ -3,7 +3,7 @@ FROM debian:stable-slim
 RUN set -eux; \
   export DEBIAN_FRONTEND=noninteractive; \
   apt update; \
-  apt install --yes --no-install-recommends openssl libc6; \
+  apt install --yes --no-install-recommends openssl ca-certificates; \
   apt clean autoclean; \
   apt autoremove --yes; \
   rm -rf /var/lib/{apt,dpkg,cache,log}/;
