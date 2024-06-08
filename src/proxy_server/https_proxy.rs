@@ -76,9 +76,8 @@ impl ProxyHttp for Router {
         // Middleware phase: request_filterx
         // We are checking to see if the request has already been handled
         // by the plugins i.e. (ok(true))
-        match execute_request_plugins(session, ctx, &route_container.plugins).await {
-            Ok(true) => return Ok(true),
-            _ => {}
+        if let Ok(true) = execute_request_plugins(session, ctx, &route_container.plugins).await {
+            return Ok(true);
         }
 
         Ok(false)
