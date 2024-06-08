@@ -126,6 +126,7 @@ impl LabelService {
             let mut route_header_remove: Option<Vec<RouteHeaderRemove>> = None;
 
             // TEMP: Oauth2 plugin
+            let mut oauth2_provider: Option<String> = None;
             let mut oauth2_client_id: Option<String> = None;
             let mut oauth2_client_secret: Option<String> = None;
             let mut oauth2_jwt_secret: Option<String> = None;
@@ -155,6 +156,7 @@ impl LabelService {
 
                             route_header_remove = Some(deser);
                         }
+                        "proksi.plugins.oauth2.provider" => oauth2_provider = Some(v.clone()),
                         "proksi.plugins.oauth2.client_id" => oauth2_client_id = Some(v.clone()),
                         "proksi.plugins.oauth2.client_secret" => {
                             oauth2_client_secret = Some(v.clone())
@@ -198,6 +200,9 @@ impl LabelService {
 
                 let mut plugin_hashmap = HashMap::new();
                 plugin_hashmap.insert(Cow::Borrowed("client_id"), json!(oauth2_client_id.unwrap()));
+
+                plugin_hashmap.insert(Cow::Borrowed("provider"), json!(oauth2_provider.unwrap()));
+
                 plugin_hashmap.insert(
                     Cow::Borrowed("client_secret"),
                     json!(oauth2_client_secret.unwrap()),
@@ -214,7 +219,7 @@ impl LabelService {
                     name: Cow::Borrowed("oauth2"),
                     config: Some(plugin_hashmap),
                 }]);
-
+                //
                 host_map.insert(proxy_host.to_string(), routed);
             }
         }

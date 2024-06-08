@@ -250,6 +250,19 @@ services:
         # (Optional) A JSON object with headers to remove in the request before proxying.
         proksi.headers.remove: |
           [{ "name": "Server" }, { "name": "X-User-Id" }]
+
+
+        # The Oauth2 plugin
+        # This plugin is responsible for handling Oauth authentication and authorization
+        # It can be used to authenticate users against various Oauth providers
+        # and authorize them to access specific resources or perform certain actions
+        # based on their authorization level.
+        proksi.plugins.oauth2.provider: github
+        proksi.plugins.oauth2.client_id: <client_id>
+        proksi.plugins.oauth2.client_secret: <client_secret>
+        proksi.plugins.oauth2.jwt_secret: <jwt_secret> # The secret used to sign the JWT token
+        proksi.plugins.oauth2.validations:  |
+          [ { "type": "email", "value": ["your-email@example.com"] } ]
 ```
 
 ## Jobs to be done
