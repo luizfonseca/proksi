@@ -56,7 +56,7 @@ impl Oauth2 {
         session: &mut Session,
         oauth_provider: &Provider,
     ) -> Result<bool> {
-        let current_path = session.req_header().uri.path();
+        let current_address = session.req_header().uri.to_string();
         let state = uuid::Uuid::new_v4().to_string();
 
         let mut res_headers =
@@ -68,7 +68,7 @@ impl Oauth2 {
         )?;
 
         // Store the current path in the state
-        OAUTH2_STATE.insert(state, current_path.to_string());
+        OAUTH2_STATE.insert(state, current_address);
         session.write_response_header(Box::new(res_headers)).await?;
 
         // Finish the request, we don't want to continue processing
@@ -204,10 +204,15 @@ impl MiddlewarePlugin for Oauth2 {
                 return self.unauthorized_response(session).await;
             };
 
-            if OAUTH2_STATE.get(&state.to_string()).is_none() {
+            let Some(saved_state) = OAUTH2_STATE.get(&state.to_string()) else {
                 tracing::info!("state does not exist or was removed");
                 return self.unauthorized_response(session).await;
-            }
+            };
+
+            let redirect_from_state = saved_state.value().to_owned();
+
+            // Remove ref of state to avoid deadlocks
+            drop(saved_state);
 
             // Cleanup state to avoid replay attacks
             OAUTH2_STATE.remove(&state.to_string());
@@ -230,8 +235,8 @@ impl MiddlewarePlugin for Oauth2 {
             let jwt_cookie = secure_cookie::create_secure_cookie(&user, &jwt_secret, &ctx.host)?;
 
             let mut res_headers = ResponseHeader::build_no_case(StatusCode::FOUND, Some(1))?;
-            res_headers.insert_header(http::header::LOCATION, "/")?;
             res_headers.insert_header(http::header::SET_COOKIE, jwt_cookie.to_string())?;
+            res_headers.insert_header(http::header::LOCATION, redirect_from_state)?;
 
             session.write_response_header(Box::new(res_headers)).await?;
 
