@@ -34,7 +34,7 @@ impl Service for HealthService {
             let mut weak_map = HashMap::new();
 
             for route in self.route_store.iter() {
-                tracing::info!("Running health check for host {}", route.key());
+                tracing::debug!("Running health check for host {}", route.key());
                 let route_container = route.clone();
                 route_container
                     .load_balancer

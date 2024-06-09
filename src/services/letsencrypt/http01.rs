@@ -96,7 +96,7 @@ impl LetsencryptService {
         let pkey = acme_lib::create_p384_key();
         let order_cert = order_csr.finalize_pkey(pkey, 5000)?;
 
-        info!("Certificate created for order {:?}", order_cert.api_order());
+        info!("certificate created for order {:?}", order_cert.api_order());
         let cert = order_cert.download_and_save_cert()?;
 
         let crt_bytes = Bytes::from(cert.certificate().to_string());
@@ -161,7 +161,7 @@ impl LetsencryptService {
                     }
 
                     let valid_days_left = cert.unwrap().valid_days_left();
-                    info!("Certificate for domain {domain} expires in {valid_days_left} days",);
+                    info!("certificate for domain {domain} expires in {valid_days_left} days",);
 
                     // Nothing to do
                     if valid_days_left > 5 {
@@ -230,7 +230,7 @@ impl LetsencryptService {
             return Ok(());
         }
 
-        tracing::info!("Creating a temporary self-signed certificate for {domain}");
+        tracing::info!("creating an in-memory self-signed certificate for {domain}");
 
         let rsa = openssl::rsa::Rsa::generate(2048)?;
         let mut openssl_cert = openssl::x509::X509Builder::new()?;
@@ -273,14 +273,14 @@ impl LetsencryptService {
 #[async_trait]
 impl Service for LetsencryptService {
     async fn start_service(&mut self, _fds: Option<ListenFds>, mut _shutdown: ShutdownWatch) {
-        info!(service = "letsencrypt", "Started LetsEncrypt service");
+        info!("started LetsEncrypt service");
 
         // Get directory based on whether we are running on staging/production
         // LetsEncrypt configurations
         let dir = self.get_lets_encrypt_directory();
         let certificates_dir = dir.as_os_str();
 
-        info!("Creating certificates in {certificates_dir:?}");
+        info!("creating certificates in {certificates_dir:?}");
         // Ensure the directories exist before we start creating certificates
         create_dir_all(certificates_dir).unwrap_or_default();
 
@@ -288,11 +288,11 @@ impl Service for LetsencryptService {
         let persist = acme_lib::persist::FilePersist::new(certificates_dir);
 
         let dir = acme_lib::Directory::from_url(persist, self.get_lets_encrypt_url())
-            .expect("Failed to create LetsEncrypt directory");
+            .expect("failed to create LetsEncrypt directory");
 
         let account = dir
             .account(&self.config.lets_encrypt.email)
-            .expect("Failed to create or retrieve existing account");
+            .expect("failed to create or retrieve existing account");
 
         tokio::select! {
             _ = self.watch_for_route_changes(&account) => {}

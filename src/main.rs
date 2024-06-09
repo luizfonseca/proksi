@@ -70,8 +70,8 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Creates a tracing/logging subscriber based on the configuration provided
     tracing_subscriber::fmt()
+        .json()
         .with_max_level(&proxy_config.logging.level)
-        .compact()
         .with_writer(proxy_logger)
         .init();
 
@@ -132,6 +132,11 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Add TLS settings to the HTTPS service
     https_secure_service.add_tls_with_settings("0.0.0.0:443", None, tls_settings);
+
+    // Add Prometheus service
+    // let mut prometheus_service_http = Service::prometheus_http_service();
+    // prometheus_service_http.add_tcp("0.0.0.0:9090");
+    // pingora_server.add_service(prometheus_service_http);
 
     // Built-in services for health checks, logging, and routing
     pingora_server.add_service(RoutingService::new(

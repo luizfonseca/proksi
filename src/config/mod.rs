@@ -213,6 +213,7 @@ pub enum LogLevel {
     Info,
     Warn,
     Error,
+    Trace,
 }
 
 /// Transforms our custom `LogLevel` enum into a `tracing::level_filters::LevelFilter`
@@ -224,6 +225,7 @@ impl From<&LogLevel> for tracing::level_filters::LevelFilter {
             LogLevel::Info => LevelFilter::INFO,
             LogLevel::Warn => LevelFilter::WARN,
             LogLevel::Error => LevelFilter::ERROR,
+            LogLevel::Trace => LevelFilter::TRACE,
         }
     }
 }
@@ -438,8 +440,9 @@ where
         "info" => Ok(LogLevel::Info),
         "warn" => Ok(LogLevel::Warn),
         "error" => Ok(LogLevel::Error),
+        "trace" => Ok(LogLevel::Trace),
         _ => Err(serde::de::Error::custom(
-            "expected one of DEBUG, INFO, WARN, ERROR",
+            "expected one of DEBUG, INFO, WARN, ERROR, TRACE",
         )),
     }
 }

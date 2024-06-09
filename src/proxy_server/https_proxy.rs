@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 
-use http::Uri;
+use http::{HeaderValue, Uri};
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 use pingora_http::ResponseHeader;
 use pingora_proxy::{ProxyHttp, Session};
@@ -24,6 +24,12 @@ pub struct RouterContext {
     pub host: String,
     pub route_container: Option<Arc<RouteStoreContainer>>,
     pub extensions: HashMap<Cow<'static, str>, String>,
+
+    pub timings: RouterTimings,
+}
+
+pub struct RouterTimings {
+    request_filter_start: std::time::Instant,
 }
 
 #[async_trait]
@@ -37,6 +43,9 @@ impl ProxyHttp for Router {
             host: String::new(),
             route_container: None,
             extensions: HashMap::new(),
+            timings: RouterTimings {
+                request_filter_start: std::time::Instant::now(),
+            },
         }
     }
 
@@ -113,6 +122,10 @@ impl ProxyHttp for Router {
         Ok(Box::new(peer))
     }
 
+    /// Modify the response header before it is send to the downstream
+    ///
+    /// The modification is after caching. This filter is called for all responses including
+    /// responses served from cache.
     async fn response_filter(
         &self,
         session: &mut Session,
@@ -134,6 +147,66 @@ impl ProxyHttp for Router {
         execute_response_plugins(session, ctx, &container.plugins).await?;
 
         Ok(())
+    }
+
+    /// This filter is called when the entire response is sent to the downstream successfully or
+    /// there is a fatal error that terminate the request.
+    ///
+    /// An error log is already emitted if there is any error. This phase is used for collecting
+    /// metrics and sending access logs.
+    async fn logging(
+        &self,
+        session: &mut Session,
+        _: Option<&pingora::Error>,
+        ctx: &mut Self::CTX,
+    ) {
+        let http_version = if session.is_http2() {
+            "http/2"
+        } else {
+            "http/1.1"
+        };
+
+        let method = session.req_header().method.to_string();
+        let query = session.req_header().uri.query().unwrap_or_default();
+        let path = session.req_header().uri.path();
+        let empty_header = HeaderValue::from_static("");
+        let host = session.req_header().uri.host();
+        let referer = session
+            .req_header()
+            .headers
+            .get("referer")
+            .unwrap_or(&empty_header);
+
+        let user_agent = session
+            .req_header()
+            .headers
+            .get("user-agent")
+            .unwrap_or(&empty_header);
+
+        let client_ip = session
+            .client_addr()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+
+        let status_code = session
+            .response_written()
+            .map(|v| v.status.as_u16())
+            .unwrap_or_default();
+
+        let duration_ms = ctx.timings.request_filter_start.elapsed().as_millis();
+
+        tracing::info!(
+            method,
+            path,
+            query,
+            host,
+            duration_ms,
+            user_agent = user_agent.to_str().unwrap_or(""),
+            referer = referer.to_str().unwrap_or(""),
+            client_ip,
+            status_code,
+            http_version,
+        );
     }
 }
 
