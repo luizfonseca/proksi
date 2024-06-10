@@ -109,8 +109,9 @@ impl LabelService {
         let services = services.unwrap();
 
         for service in services {
-            let service_id = service.id.as_ref().unwrap();
-            let service_name = service.spec.as_ref().unwrap().name.as_ref();
+            let service_id = service.id.unwrap();
+            let service_spec = service.spec.clone().unwrap();
+            let service_name = service_spec.name.as_ref();
 
             if service_name.is_none() {
                 info!("Service {service_id:?} does not have a name");
@@ -118,7 +119,7 @@ impl LabelService {
             }
 
             let service_name = service_name.unwrap();
-            let service_labels = service.spec.as_ref().unwrap().labels.as_ref().unwrap();
+            let service_labels = service_spec.labels.as_ref().unwrap();
 
             let mut proxy_enabled = false;
             let mut proxy_host = "";
@@ -268,6 +269,7 @@ impl LabelService {
         for container in containers {
             // Get specified container labels
             let container_names = &container.names;
+
             let container_labels = container.labels.as_ref().unwrap();
 
             let mut proxy_enabled = false;
@@ -405,12 +407,14 @@ impl Service for LabelService {
             vec!["proksi.enabled=true", "proksi.host", "proksi.port"],
         );
 
+        let config = self.config.clone();
+
         let mut interval = tokio::time::interval(Duration::from_secs(15));
         interval.tick().await;
         loop {
             interval.tick().await;
 
-            let hosts = match self.config.docker.mode {
+            let hosts = match config.docker.mode {
                 DockerServiceMode::Swarm => self.list_services(filters.clone()).await,
                 DockerServiceMode::Container => self.list_containers(filters.clone()).await,
             };

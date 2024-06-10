@@ -65,15 +65,13 @@ impl ProxyHttp for Router {
         ctx.host = host_without_port.to_string();
 
         // If there's no host matching, returns a 404
-        let route_container = self.store.get(host_without_port);
-        if route_container.is_none() {
+        let Some(route_container) = self.store.get(host_without_port) else {
             session.respond_error(404).await;
             return Ok(true);
-        }
+        };
 
         // Match request pattern based on the URI
         let uri = get_uri(session);
-        let route_container = route_container.unwrap();
 
         match &route_container.path_matcher.pattern {
             Some(pattern) if pattern.find(uri.path()).is_none() => {
