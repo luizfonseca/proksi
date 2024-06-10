@@ -55,6 +55,7 @@ impl Service for HealthService {
             }
 
             // We don't need to hold health check results in memory
+            weak_map.clear();
             drop(weak_map);
         }
     }

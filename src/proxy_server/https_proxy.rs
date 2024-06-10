@@ -4,14 +4,17 @@ use async_trait::async_trait;
 
 use http::{HeaderValue, Uri};
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
-use pingora_http::ResponseHeader;
+use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::{ProxyHttp, Session};
 use tracing::info;
 
 use crate::stores::routes::{RouteStore, RouteStoreContainer};
 
 use super::{
-    middleware::{execute_request_plugins, execute_response_plugins},
+    middleware::{
+        execute_request_plugins, execute_response_plugins, execute_upstream_request_plugins,
+        execute_upstream_response_plugins,
+    },
     DEFAULT_PEER_OPTIONS,
 };
 
@@ -144,9 +147,47 @@ impl ProxyHttp for Router {
         }
 
         // Middleware phase: response_filterx
-        execute_response_plugins(session, ctx, &container.plugins).await?;
+        execute_response_plugins(session, ctx).await?;
 
         Ok(())
+    }
+
+    /// Modify the request before it is sent to the upstream
+    ///
+    /// Unlike [Self::request_filter()], this filter allows to change the request headers to send
+    /// to the upstream.
+    async fn upstream_request_filter(
+        &self,
+        session: &mut Session,
+        upstream_request: &mut RequestHeader,
+        ctx: &mut Self::CTX,
+    ) -> pingora::Result<()>
+    where
+        Self::CTX: Send + Sync,
+    {
+        execute_upstream_request_plugins(session, upstream_request, ctx)
+            .await
+            .ok();
+
+        Ok(())
+    }
+
+    /// Modify the response header from the upstream
+    ///
+    /// The modification is before caching, so any change here will be stored in the cache if enabled.
+    ///
+    /// Responses served from cache won't trigger this filter. If the cache needed revalidation,
+    /// only the 304 from upstream will trigger the filter (though it will be merged into the
+    /// cached header, not served directly to downstream).
+    fn upstream_response_filter(
+        &self,
+        session: &mut Session,
+        upstream_response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
+    ) {
+        execute_upstream_response_plugins(session, upstream_response, ctx);
+
+        //
     }
 
     /// This filter is called when the entire response is sent to the downstream successfully or
@@ -206,6 +247,7 @@ impl ProxyHttp for Router {
             client_ip,
             status_code,
             http_version,
+            request_id = ctx.extensions.get("request_id_header"),
         );
     }
 }

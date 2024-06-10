@@ -6,7 +6,7 @@ use cookie::Cookie;
 use dashmap::DashMap;
 use http::StatusCode;
 use once_cell::sync::Lazy;
-use pingora_http::ResponseHeader;
+use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::Session;
 
 use provider::{OauthType, OauthUser, Provider};
@@ -149,6 +149,24 @@ impl Oauth2 {
 
 #[async_trait]
 impl MiddlewarePlugin for Oauth2 {
+    async fn upstream_request_filter(
+        &self,
+        _: &mut Session,
+        _: &mut RequestHeader,
+        _: &mut RouterContext,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn upstream_response_filter(
+        &self,
+        _: &mut Session,
+        _: &mut ResponseHeader,
+        _: &mut RouterContext,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// Oauth2 filters requests with/without the required Secure Cookie
     /// If the request has the required cookie, the request is allowed to pass through
     /// and we perform a JWT validation
@@ -157,7 +175,7 @@ impl MiddlewarePlugin for Oauth2 {
     async fn request_filter(
         &self,
         session: &mut Session,
-        ctx: &RouterContext,
+        ctx: &mut RouterContext,
         plugin: &RoutePlugin,
     ) -> Result<bool> {
         // Nothing to do if the plugin configuration is not present
@@ -260,7 +278,7 @@ impl MiddlewarePlugin for Oauth2 {
     async fn response_filter(
         &self,
         _: &mut Session,
-        _: &RouterContext,
+        _: &mut RouterContext,
         _: &RoutePlugin,
     ) -> Result<bool> {
         Ok(false)

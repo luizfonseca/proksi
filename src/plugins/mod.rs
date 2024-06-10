@@ -2,19 +2,25 @@ use anyhow::Result;
 use async_trait::async_trait;
 use oauth2::Oauth2;
 use once_cell::sync::Lazy;
+use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::Session;
+use request_id::RequestId;
 
 use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
 
 pub mod jwt;
 pub mod oauth2;
+pub mod request_id;
 
 pub(crate) struct ProxyPlugins {
     pub oauth2: Lazy<Oauth2>,
+    pub request_id: Lazy<RequestId>,
 }
 
+/// Static plugin registry (plugins that don't generate a new instance for each request)
 pub static PLUGINS: Lazy<ProxyPlugins> = Lazy::new(|| ProxyPlugins {
     oauth2: Lazy::new(Oauth2::new),
+    request_id: Lazy::new(RequestId::new),
 });
 
 #[async_trait]
@@ -27,9 +33,20 @@ pub trait MiddlewarePlugin {
     async fn request_filter(
         &self,
         session: &mut Session,
-        state: &RouterContext,
+        state: &mut RouterContext,
         config: &RoutePlugin,
     ) -> Result<bool>;
+
+    /// Modify the request before it is sent to the upstream
+    ///
+    /// Unlike [Self::request_filter()], this filter allows to
+    /// change the request headers before it hits your server.
+    async fn upstream_request_filter(
+        &self,
+        session: &mut Session,
+        upstream_request: &mut RequestHeader,
+        state: &mut RouterContext,
+    ) -> Result<()>;
 
     /// Filter responses (from upstream) based on the middleware's logic
     /// Return false if the request should be allowed to pass through and was not handled
@@ -37,7 +54,14 @@ pub trait MiddlewarePlugin {
     async fn response_filter(
         &self,
         session: &mut Session,
-        state: &RouterContext,
+        state: &mut RouterContext,
         config: &RoutePlugin,
     ) -> Result<bool>;
+
+    fn upstream_response_filter(
+        &self,
+        session: &mut Session,
+        upstream_response: &mut ResponseHeader,
+        state: &mut RouterContext,
+    ) -> Result<()>;
 }

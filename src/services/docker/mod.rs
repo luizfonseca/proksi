@@ -134,6 +134,7 @@ impl LabelService {
             let mut oauth2_jwt_secret: Option<String> = None;
             let mut oauth2_validations: Option<serde_json::Value> = None;
             let mut ssl_certificate_self_signed_on_failure = false;
+            let mut docker_request_id = false;
 
             // Map through extra labels
             for (k, v) in service_labels {
@@ -172,6 +173,9 @@ impl LabelService {
                             oauth2_validations =
                                 Some(serde_json::from_str(v).unwrap_or_else(|_| json!([])));
                         }
+                        "proksi.plugins.request_id.enabled" => {
+                            docker_request_id = v == "true";
+                        }
                         _ => {}
                     }
                 }
@@ -207,6 +211,7 @@ impl LabelService {
                     ssl_certificate_self_signed_on_failure;
 
                 // This part is optional
+                let mut plugins: Vec<RoutePlugin> = vec![];
                 if let Some(plugin) = Self::get_oauth2_plugin(
                     oauth2_provider,
                     oauth2_client_id,
@@ -214,9 +219,17 @@ impl LabelService {
                     oauth2_jwt_secret,
                     oauth2_validations,
                 ) {
-                    routed.plugins = Some(vec![plugin]);
+                    plugins.push(plugin);
                 }
 
+                if docker_request_id {
+                    plugins.push(RoutePlugin {
+                        name: Cow::Borrowed("request_id"),
+                        config: None,
+                    });
+                }
+
+                routed.plugins = Some(plugins);
                 host_map.insert(proxy_host.to_string(), routed);
             }
         }
