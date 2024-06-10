@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.7](https://github.com/luizfonseca/proksi/compare/v0.2.6...v0.2.7) (2024-06-10)
+
+
+### Bug Fixes
+
+* improvements to memory and cpu usage of background services ([750de40](https://github.com/luizfonseca/proksi/commit/750de403284e341c5d2fbfd0031264c768374c0a))
+
 ## [0.2.6](https://github.com/luizfonseca/proksi/compare/v0.2.5...v0.2.6) (2024-06-10)
 
 
