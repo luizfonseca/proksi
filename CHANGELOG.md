@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.5](https://github.com/luizfonseca/proksi/compare/v0.2.3...v0.2.5) (2024-06-10)
+
+
+### Features
+
+* **logging:** enable basic accesslogs (non-configurable) ([63452cf](https://github.com/luizfonseca/proksi/commit/63452cf58c63a4ebbb0514028e289d0f5afa096a))
+* **request_id:** add request_id plugin ([6b84a47](https://github.com/luizfonseca/proksi/commit/6b84a47d5ad0b18f0f0557344edd9c55bdf8e7ba))
+
+
+### Miscellaneous Chores
+
+* release marker for 0.2.5 ([fd3411f](https://github.com/luizfonseca/proksi/commit/fd3411fba644637ed56ae2df64f266a651a51e74))
+
 ## [0.2.3](https://github.com/luizfonseca/proksi/compare/v0.2.2...v0.2.3) (2024-06-08)
 
 
