@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.6](https://github.com/luizfonseca/proksi/compare/v0.2.5...v0.2.6) (2024-06-10)
+
+
+### Bug Fixes
+
+* **docker:** small improvements to ownership ([32824ff](https://github.com/luizfonseca/proksi/commit/32824ff6f24f1422976fd3e29b3d8f9465088258))
+* use x509 and Pkey directly for certs and minor improvements ([b020bdd](https://github.com/luizfonseca/proksi/commit/b020bdd3a9296733a12060bdcd861f4998fe13d7))
+
 ## [0.2.5](https://github.com/luizfonseca/proksi/compare/v0.2.3...v0.2.5) (2024-06-10)
 
 
