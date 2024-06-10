@@ -234,7 +234,7 @@ fn add_route_to_router(
         }
     }
 
-    store.insert(host.to_string(), Arc::new(route_store_container));
+    store.insert(host.to_string(), route_store_container);
 }
 
 #[cfg(test)]

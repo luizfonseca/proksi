@@ -6,11 +6,10 @@ use crate::plugins::MiddlewarePlugin;
 
 /// Executes the request and response plugins
 pub async fn execute_response_plugins(
+    container: &RouteStoreContainer,
     session: &mut pingora_proxy::Session,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) -> Result<()> {
-    let container = ctx.route_container.clone().unwrap();
-
     for (name, value) in &container.plugins {
         match name.as_str() {
             "oauth2" => {

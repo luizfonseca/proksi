@@ -3,8 +3,8 @@ use std::{fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
 use acme_lib::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
 use anyhow::anyhow;
 use async_trait::async_trait;
-use bytes::Bytes;
 use dashmap::DashMap;
+use openssl::{pkey::PKey, x509::X509};
 use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
@@ -99,8 +99,8 @@ impl LetsencryptService {
         info!("certificate created for order {:?}", order_cert.api_order());
         let cert = order_cert.download_and_save_cert()?;
 
-        let crt_bytes = Bytes::from(cert.certificate().to_string());
-        let key_bytes = Bytes::from(cert.private_key().to_string());
+        let crt_bytes = X509::from_pem(cert.certificate().as_bytes())?;
+        let key_bytes = PKey::private_key_from_pem(cert.private_key().as_bytes())?;
 
         self.cert_store.insert(
             domain.to_string(),
@@ -190,14 +190,14 @@ impl LetsencryptService {
                     return;
                 }
 
-                let crt_bytes = cert.certificate().to_string();
-                let key_bytes = cert.private_key().to_string();
+                let crt = X509::from_pem(cert.certificate().as_bytes()).unwrap();
+                let key = PKey::private_key_from_pem(cert.private_key().as_bytes()).unwrap();
 
                 self.cert_store.insert(
                     domain.to_string(),
                     Certificate {
-                        certificate: Bytes::from(crt_bytes),
-                        key: Bytes::from(key_bytes),
+                        certificate: crt,
+                        key,
                     },
                 );
             }
@@ -255,14 +255,12 @@ impl LetsencryptService {
         openssl_cert.sign(&key, hash)?;
 
         let openssl_cert = openssl_cert.build();
-        let key_bytes = key.private_key_to_pem_pkcs8()?;
-        let crt_bytes = openssl_cert.to_pem()?;
 
         self.cert_store.insert(
             domain.to_string(),
             Certificate {
-                key: Bytes::from(key_bytes),
-                certificate: Bytes::from(crt_bytes),
+                key,
+                certificate: openssl_cert,
             },
         );
 

@@ -62,7 +62,7 @@ impl RouteStoreContainer {
 
 // LoadBalancer<RoundRobin>
 /// A store for routes that is updated in a background thread
-pub type RouteStore = Arc<DashMap<String, Arc<RouteStoreContainer>>>;
+pub type RouteStore = Arc<DashMap<String, RouteStoreContainer>>;
 
 #[cfg(test)]
 

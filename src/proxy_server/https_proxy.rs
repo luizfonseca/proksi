@@ -6,7 +6,6 @@ use http::{HeaderValue, Uri};
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::{ProxyHttp, Session};
-use tracing::info;
 
 use crate::stores::routes::{RouteStore, RouteStoreContainer};
 
@@ -25,7 +24,7 @@ pub struct Router {
 
 pub struct RouterContext {
     pub host: String,
-    pub route_container: Option<Arc<RouteStoreContainer>>,
+    pub route_container: Option<RouteStoreContainer>,
     pub extensions: HashMap<Cow<'static, str>, String>,
 
     pub timings: RouterTimings,
@@ -62,7 +61,7 @@ impl ProxyHttp for Router {
     ) -> pingora::Result<bool> {
         let req_host = get_host(session);
         let host_without_port = req_host.split(':').collect::<Vec<_>>()[0];
-        ctx.host = host_without_port.to_string();
+        ctx.host = host_without_port.to_owned();
 
         // If there's no host matching, returns a 404
         let Some(route_container) = self.store.get(host_without_port) else {
@@ -81,8 +80,6 @@ impl ProxyHttp for Router {
             _ => {}
         }
 
-        ctx.route_container = Some(route_container.value().clone());
-
         // Middleware phase: request_filterx
         // We are checking to see if the request has already been handled
         // by the plugins i.e. (ok(true))
@@ -99,26 +96,21 @@ impl ProxyHttp for Router {
     /// where and how this request should forwarded to."]
     async fn upstream_peer(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
-        let upstream = ctx.route_container.as_ref();
-
-        // No upstream found (should never happen, but just in case)
-        if upstream.is_none() {
-            return Err(pingora::Error::new(HTTPStatus(404)));
-        }
-
-        // No healthy upstream found
-        let upstream = upstream.unwrap();
-        let healthy_upstream = upstream.load_balancer.select(b"", 32);
-        if healthy_upstream.is_none() {
-            info!("No healthy upstream found");
+        // If there's no host matching, returns a 404
+        let Some(route_container) = self.store.get(&ctx.host) else {
+            session.respond_error(404).await;
             return Err(pingora::Error::new(HTTPStatus(503)));
-        }
+        };
+
+        let Some(healthy_upstream) = route_container.load_balancer.select(b"", 32) else {
+            return Err(pingora::Error::new(HTTPStatus(503)));
+        };
 
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
-        let mut peer = HttpPeer::new(healthy_upstream.unwrap(), false, ctx.host.clone());
+        let mut peer = HttpPeer::new(healthy_upstream, false, ctx.host.clone());
         peer.options = DEFAULT_PEER_OPTIONS;
         Ok(Box::new(peer))
     }
@@ -133,14 +125,16 @@ impl ProxyHttp for Router {
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
-        let container = ctx.route_container.as_ref().unwrap();
+        let Some(route_container) = ctx.route_container.as_ref() else {
+            return Err(pingora::Error::new(HTTPStatus(404)));
+        };
 
-        for (name, value) in &container.host_header_add {
+        for (name, value) in &route_container.host_header_add {
             upstream_response.insert_header(name, value)?;
         }
 
         // Remove headers from the upstream response
-        for name in &container.host_header_remove {
+        for name in &route_container.host_header_remove {
             upstream_response.remove_header(name);
         }
 

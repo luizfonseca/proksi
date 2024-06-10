@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use openssl::ssl::{SniError, SslRef};
 use pingora::listeners::TlsAccept;
-use pingora_openssl::{ext, pkey::PKey, ssl::NameType, x509::X509};
+use pingora_openssl::{ext, ssl::NameType};
 
 use crate::stores::certificates::CertificateStore;
 
@@ -40,21 +40,14 @@ impl TlsAccept for CertStore {
     /// based on the server name
     async fn certificate_callback(&self, ssl: &mut pingora::tls::ssl::SslRef) {
         // Due to the sni_callback function, we can safely unwrap here
-        let host_name = ssl.servername(NameType::HOST_NAME);
-        let certificate = self.store.get(host_name.unwrap_or_default());
-        if certificate.is_none() {
+        let host_name = ssl.servername(NameType::HOST_NAME).unwrap_or_default();
+
+        let Some(cert) = self.store.get(host_name) else {
             tracing::debug!("No certificate found for host: {:?}", host_name);
             return;
-        }
+        };
 
-        // Data from DashMap
-        let result = certificate.unwrap();
-        let cert = &result.value();
-
-        let crt_value = X509::from_pem(&cert.certificate).unwrap();
-        let key_value = PKey::private_key_from_pem(&cert.key).unwrap();
-
-        ext::ssl_use_certificate(ssl, &crt_value).unwrap();
-        ext::ssl_use_private_key(ssl, &key_value).unwrap();
+        ext::ssl_use_certificate(ssl, &cert.certificate).unwrap();
+        ext::ssl_use_private_key(ssl, &cert.key).unwrap();
     }
 }
