@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, time::Duration};
 
 use async_trait::async_trait;
 use pingora::{
@@ -29,11 +29,9 @@ async fn run_health_check_loop(store: RouteStore, _: ShutdownWatch) {
         tokio::select! {
             _ = interval.tick() => {
               let mut weak_map = HashMap::new();
-              let store_iter = store.iter();
 
-              tracing::debug!("strong count for store is {}", Arc::strong_count(&store));
 
-              for route in store_iter {
+              for route in store.iter() {
                   tracing::debug!("Running health check for host {}", route.key());
 
                   let route_container = route.clone();
@@ -53,8 +51,6 @@ async fn run_health_check_loop(store: RouteStore, _: ShutdownWatch) {
               // updating the route store
               // E.g. inserting while we are cloning items in a loop
               for (key, value) in weak_map {
-                tracing::debug!("count for {key} is {}", Arc::strong_count(&value));
-
                   store.insert(key, value);
               }
             }

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use std::{borrow::Cow, collections::HashMap};
 
 use async_trait::async_trait;
 
@@ -7,7 +7,7 @@ use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::{ProxyHttp, Session};
 
-use crate::stores::routes::{RouteStore, RouteStoreContainer};
+use crate::stores::routes::RouteStore;
 
 use super::{
     middleware::{
@@ -24,7 +24,7 @@ pub struct Router {
 
 pub struct RouterContext {
     pub host: String,
-    pub route_container: Option<RouteStoreContainer>,
+    // pub route_container: Option<RouteStoreContainer>,
     pub extensions: HashMap<Cow<'static, str>, String>,
 
     pub timings: RouterTimings,
@@ -43,7 +43,6 @@ impl ProxyHttp for Router {
     fn new_ctx(&self) -> Self::CTX {
         RouterContext {
             host: String::new(),
-            route_container: None,
             extensions: HashMap::new(),
             timings: RouterTimings {
                 request_filter_start: std::time::Instant::now(),
@@ -61,7 +60,7 @@ impl ProxyHttp for Router {
     ) -> pingora::Result<bool> {
         let req_host = get_host(session);
         let host_without_port = req_host.split(':').collect::<Vec<_>>()[0];
-        ctx.host = host_without_port.to_owned();
+        host_without_port.clone_into(&mut ctx.host);
 
         // If there's no host matching, returns a 404
         let Some(route_container) = self.store.get(host_without_port) else {
@@ -125,8 +124,10 @@ impl ProxyHttp for Router {
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
-        let Some(route_container) = ctx.route_container.as_ref() else {
-            return Err(pingora::Error::new(HTTPStatus(404)));
+        // If there's no host matching, returns a 404
+        let Some(route_container) = self.store.get(&ctx.host) else {
+            session.respond_error(404).await;
+            return Err(pingora::Error::new(HTTPStatus(503)));
         };
 
         for (name, value) in &route_container.host_header_add {
@@ -139,7 +140,7 @@ impl ProxyHttp for Router {
         }
 
         // Middleware phase: response_filterx
-        execute_response_plugins(session, ctx).await?;
+        execute_response_plugins(&route_container, session, ctx).await?;
 
         Ok(())
     }
@@ -157,7 +158,13 @@ impl ProxyHttp for Router {
     where
         Self::CTX: Send + Sync,
     {
-        execute_upstream_request_plugins(session, upstream_request, ctx)
+        // If there's no host matching, returns a 404
+        let Some(route_container) = self.store.get(&ctx.host) else {
+            session.respond_error(404).await;
+            return Err(pingora::Error::new(HTTPStatus(503)));
+        };
+
+        execute_upstream_request_plugins(&route_container, session, upstream_request, ctx)
             .await
             .ok();
 
@@ -177,7 +184,12 @@ impl ProxyHttp for Router {
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) {
-        execute_upstream_response_plugins(session, upstream_response, ctx);
+        // If there's no host matching, returns a 404
+        let Some(route_container) = self.store.get(&ctx.host) else {
+            return;
+        };
+
+        execute_upstream_response_plugins(&route_container, session, upstream_response, ctx);
 
         //
     }

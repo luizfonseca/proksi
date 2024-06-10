@@ -21,6 +21,7 @@ use crate::{
 };
 
 /// A service that handles the creation of certificates using the Let's Encrypt API
+
 #[derive(Clone)]
 pub struct LetsencryptService {
     pub(crate) config: Arc<Config>,
@@ -30,6 +31,36 @@ pub struct LetsencryptService {
 }
 
 impl LetsencryptService {
+    fn parse_x509_cert(cert_pem: &str) -> Result<X509, anyhow::Error> {
+        Ok(X509::from_pem(cert_pem.as_bytes())?)
+    }
+
+    fn parse_private_key(key_pem: &str) -> Result<PKey<openssl::pkey::Private>, anyhow::Error> {
+        Ok(PKey::private_key_from_pem(key_pem.as_bytes())?)
+    }
+
+    /// Update global certificate store with new `X509` and `PKey` for the
+    /// given domain.
+    fn insert_certificate(
+        &self,
+        domain: &str,
+        cert_pem: &str,
+        key_pem: &str,
+    ) -> Result<(), anyhow::Error> {
+        let cert = Self::parse_x509_cert(cert_pem)?;
+        let key = Self::parse_private_key(key_pem)?;
+
+        self.cert_store.insert(
+            domain.to_string(),
+            Certificate {
+                key,
+                certificate: cert,
+            },
+        );
+
+        Ok(())
+    }
+
     // Based on the letsencrypt configuration, return the appropriate URL
     fn get_lets_encrypt_url(&self) -> DirectoryUrl {
         match self.config.lets_encrypt.staging {
@@ -55,6 +86,7 @@ impl LetsencryptService {
             let challenge = auth.http_challenge();
 
             info!("HTTP-01 challenge for domain: {}", auth.domain_name());
+
             self.challenge_store.insert(
                 auth.domain_name().to_string(),
                 (
@@ -64,7 +96,7 @@ impl LetsencryptService {
             );
 
             // Let's Encrypt will check the domain's URL to validate the challenge
-            info!("HTTP-01 validating (retry: 5s)...");
+            tracing::info!("HTTP-01 validating (retry: 5s)...");
             challenge.validate(5000)?; // Retry every 5000 ms
         }
         Ok(())
@@ -99,16 +131,7 @@ impl LetsencryptService {
         info!("certificate created for order {:?}", order_cert.api_order());
         let cert = order_cert.download_and_save_cert()?;
 
-        let crt_bytes = X509::from_pem(cert.certificate().as_bytes())?;
-        let key_bytes = PKey::private_key_from_pem(cert.private_key().as_bytes())?;
-
-        self.cert_store.insert(
-            domain.to_string(),
-            Certificate {
-                key: key_bytes,
-                certificate: crt_bytes,
-            },
-        );
+        self.insert_certificate(domain, cert.certificate(), cert.private_key())?;
 
         Ok(())
     }
@@ -190,16 +213,8 @@ impl LetsencryptService {
                     return;
                 }
 
-                let crt = X509::from_pem(cert.certificate().as_bytes()).unwrap();
-                let key = PKey::private_key_from_pem(cert.private_key().as_bytes()).unwrap();
-
-                self.cert_store.insert(
-                    domain.to_string(),
-                    Certificate {
-                        certificate: crt,
-                        key,
-                    },
-                );
+                self.insert_certificate(domain, cert.certificate(), cert.private_key())
+                    .unwrap();
             }
             Ok(None) => {
                 // TODO create self signed certificate if no certificate is found

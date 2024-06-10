@@ -255,7 +255,7 @@ mod tests {
             LoadBalancer::<RoundRobin>::try_from_iter(upstreams.into_iter()).unwrap();
         store.insert(
             "example.com".to_string(),
-            Arc::new(RouteStoreContainer::new(load_balancer)),
+            RouteStoreContainer::new(load_balancer),
         );
 
         store

@@ -7,7 +7,7 @@ use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
 
 use crate::config::RoutePlugin;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RouteStorePathMatcher {
     pub prefix: Option<String>,
     pub suffix: Option<String>,
@@ -36,6 +36,7 @@ impl RouteStorePathMatcher {
     }
 }
 
+#[derive(Clone)]
 pub struct RouteStoreContainer {
     pub load_balancer: Arc<LoadBalancer<RoundRobin>>,
     pub path_matcher: RouteStorePathMatcher,

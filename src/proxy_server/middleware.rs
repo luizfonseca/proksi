@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use pingora::Result;
 
-use crate::plugins::MiddlewarePlugin;
+use crate::{plugins::MiddlewarePlugin, stores::routes::RouteStoreContainer};
 
 /// Executes the request and response plugins
 pub async fn execute_response_plugins(
@@ -69,12 +69,11 @@ pub async fn execute_request_plugins(
 
 /// Executes the upstream request plugins
 pub async fn execute_upstream_request_plugins(
+    container: &crate::stores::routes::RouteStoreContainer,
     session: &mut pingora_proxy::Session,
     upstream_request: &mut pingora_http::RequestHeader,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) -> Result<()> {
-    let container = ctx.route_container.clone().unwrap();
-
     for name in container.plugins.keys() {
         match name.as_str() {
             "request_id" => {
@@ -93,11 +92,11 @@ pub async fn execute_upstream_request_plugins(
 
 /// Executes the upstream response plugins
 pub fn execute_upstream_response_plugins(
+    container: &crate::stores::routes::RouteStoreContainer,
     session: &mut pingora_proxy::Session,
     upstream_response: &mut pingora_http::ResponseHeader,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) {
-    let container = ctx.route_container.clone().unwrap();
     for name in container.plugins.keys() {
         match name.as_str() {
             "request_id" => {
