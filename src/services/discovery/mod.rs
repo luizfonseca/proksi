@@ -63,51 +63,43 @@ impl RoutingService {
     }
 
     /// Watch for new routes being added and update the Router Store
-    fn watch_for_route_changes(&self) -> tokio::task::JoinHandle<()> {
+    async fn watch_for_route_changes(&self) {
         let mut receiver = self.broadcast.subscribe();
-        let store = self.store.clone();
 
-        tokio::spawn(async move {
-            loop {
-                // TODO: refactor
-                if let Ok(MsgProxy::NewRoute(route)) = receiver.recv().await {
-                    let mut matcher: Option<RouteMatcher> = None;
-                    let route_clone = route.path_matchers.clone();
-                    if !route.path_matchers.is_empty() {
-                        matcher = Some(RouteMatcher {
-                            path: Some(RoutePathMatcher {
-                                patterns: route_clone
-                                    .iter()
-                                    .map(|v| Cow::Owned(v.clone()))
-                                    .collect(),
-                            }),
-                        });
-                    }
-
-                    let route_header = RouteHeader {
-                        add: Some(route.host_headers_add),
-                        remove: Some(route.host_headers_remove),
-                    };
-
-                    add_route_to_router(
-                        &store,
-                        &route.host,
-                        &route.upstreams,
-                        matcher,
-                        Some(&route_header),
-                        Some(&route.plugins),
-                        route.self_signed_certs,
-                    );
-
-                    tracing::debug!(
-                        "Added route: {}, {:?} self-signed: {}",
-                        route.host,
-                        route.upstreams,
-                        route.self_signed_certs
-                    );
-                }
+        // TODO: refactor
+        while let Ok(MsgProxy::NewRoute(route)) = receiver.recv().await {
+            let mut matcher: Option<RouteMatcher> = None;
+            let route_clone = route.path_matchers.clone();
+            if !route.path_matchers.is_empty() {
+                matcher = Some(RouteMatcher {
+                    path: Some(RoutePathMatcher {
+                        patterns: route_clone.iter().map(|v| Cow::Owned(v.clone())).collect(),
+                    }),
+                });
             }
-        })
+
+            let route_header = RouteHeader {
+                add: Some(route.host_headers_add),
+                remove: Some(route.host_headers_remove),
+            };
+
+            add_route_to_router(
+                &self.store,
+                &route.host,
+                &route.upstreams,
+                matcher,
+                Some(&route_header),
+                Some(&route.plugins),
+                route.self_signed_certs,
+            );
+
+            tracing::debug!(
+                "Added route: {}, {:?} self-signed: {}",
+                route.host,
+                route.upstreams,
+                route.self_signed_certs
+            );
+        }
     }
 }
 
@@ -118,9 +110,8 @@ impl Service for RoutingService {
         self.add_routes_from_config();
 
         // Watch for new hosts being added and configure them accordingly
-        tokio::select! {
-            _ = self.watch_for_route_changes() => {}
-        };
+
+        self.watch_for_route_changes().await;
     }
 
     fn name(&self) -> &str {

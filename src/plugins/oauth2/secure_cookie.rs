@@ -25,6 +25,19 @@ pub(super) fn create_secure_cookie<'a>(
         .build())
 }
 
+/// Removes the secure cookie for the user
+pub(super) fn remove_secure_cookie(host: &str) -> Cookie<'static> {
+    let cookie_domain = extract_cookie_domain(host);
+    Cookie::build((COOKIE_NAME, ""))
+        .secure(true)
+        .domain(cookie_domain)
+        .path("/")
+        .expires(OffsetDateTime::now_utc().checked_add(cookie::time::Duration::days(1)))
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .build()
+}
+
 /// Extracts the domain without subdomain
 /// This function does not support all possible tlds.
 fn extract_cookie_domain(host: &str) -> String {

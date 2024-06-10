@@ -10,6 +10,7 @@ use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::Session;
 
 use provider::{OauthType, OauthUser, Provider};
+use secure_cookie::remove_secure_cookie;
 
 use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
 
@@ -57,10 +58,16 @@ impl Oauth2 {
         oauth_provider: &Provider,
     ) -> Result<bool> {
         let current_address = session.req_header().uri.to_string();
+        let host = session.req_header().uri.host().unwrap_or_default();
         let state = uuid::Uuid::new_v4().to_string();
 
         let mut res_headers =
             ResponseHeader::build_no_case(StatusCode::TEMPORARY_REDIRECT, Some(1))?;
+
+        // Removes any cookie to prevent the user from being redirected
+        // to the Oauth provider over and over
+        let removed_cookie = remove_secure_cookie(host);
+        res_headers.append_header(http::header::SET_COOKIE, removed_cookie.to_string())?;
 
         res_headers.append_header(
             http::header::LOCATION,

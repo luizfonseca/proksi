@@ -22,7 +22,6 @@ use crate::{
 
 /// A service that handles the creation of certificates using the Let's Encrypt API
 
-#[derive(Clone)]
 pub struct LetsencryptService {
     pub(crate) config: Arc<Config>,
     pub(crate) challenge_store: Arc<DashMap<String, (String, String)>>,
@@ -137,67 +136,53 @@ impl LetsencryptService {
     }
 
     /// Watch for route changes and create or update certificates for new routes
-    fn watch_for_route_changes(
-        &self,
-        account: &Account<FilePersist>,
-    ) -> tokio::task::JoinHandle<()> {
-        let acc = account.clone();
-        let mut interval = time::interval(Duration::from_secs(30));
-        let service = self.clone();
+    async fn watch_for_route_changes(&self, account: &Account<FilePersist>) {
+        let mut interval = time::interval(Duration::from_secs(20));
 
-        tokio::spawn(async move {
-            loop {
-                interval.tick().await;
-                for route in service.route_store.iter() {
-                    if service.cert_store.contains_key(route.key()) {
-                        continue;
-                    }
-
-                    service.handle_certificate_for_domain(
-                        route.key(),
-                        &acc,
-                        route.self_signed_certificate,
-                    );
+        loop {
+            interval.tick().await;
+            tracing::debug!("checking for new routes to create certificates for");
+            for route in self.route_store.iter() {
+                if self.cert_store.contains_key(route.key()) {
+                    continue;
                 }
+
+                self.handle_certificate_for_domain(
+                    route.key(),
+                    account,
+                    route.self_signed_certificate,
+                );
             }
-        })
+        }
     }
 
     /// Check for certificates expiration and renew them if needed
-    fn check_for_certificates_expiration(
-        &self,
-        account: &Account<FilePersist>,
-    ) -> tokio::task::JoinHandle<()> {
-        let acc = account.clone();
+    async fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) {
         let mut interval = time::interval(Duration::from_secs(84_600));
-        let service = self.clone();
 
-        tokio::spawn(async move {
-            loop {
-                interval.tick().await;
-                for value in service.route_store.iter() {
-                    let domain = value.key();
-                    let cert = acc.certificate(domain).unwrap();
+        loop {
+            interval.tick().await;
+            tracing::debug!("checking for certificates to renew");
+            for value in self.route_store.iter() {
+                let domain = value.key();
 
-                    if cert.is_none() {
-                        continue;
-                    }
+                let Ok(Some(cert)) = account.certificate(domain) else {
+                    continue;
+                };
 
-                    let valid_days_left = cert.unwrap().valid_days_left();
-                    info!("certificate for domain {domain} expires in {valid_days_left} days",);
+                let valid_days_left = cert.valid_days_left();
+                tracing::info!("certificate for domain {domain} expires in {valid_days_left} days",);
 
-                    // Nothing to do
-                    if valid_days_left > 5 {
-                        continue;
-                    }
-
-                    service
-                        .create_order_for_domain(domain, &acc)
-                        .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
-                        .unwrap();
+                // Nothing to do
+                if valid_days_left > 5 {
+                    continue;
                 }
+
+                self.create_order_for_domain(domain, account)
+                    .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
+                    .unwrap();
             }
-        })
+        }
     }
 
     fn handle_certificate_for_domain(
@@ -214,15 +199,12 @@ impl LetsencryptService {
                 }
 
                 self.insert_certificate(domain, cert.certificate(), cert.private_key())
-                    .unwrap();
+                    .ok();
             }
             Ok(None) => {
-                // TODO create self signed certificate if no certificate is found
-                let order = self.create_order_for_domain(domain, account);
-                if order.is_err() {
-                    // Create self signed certificate
+                if self.create_order_for_domain(domain, account).is_err() {
                     self.create_self_signed_certificate(domain, self_signed_on_failure)
-                        .unwrap();
+                        .ok();
                 }
             }
             _ => {}
@@ -293,7 +275,10 @@ impl Service for LetsencryptService {
         let dir = self.get_lets_encrypt_directory();
         let certificates_dir = dir.as_os_str();
 
-        info!("creating certificates in {certificates_dir:?}");
+        tracing::info!(
+            "creating certificates in folder {}",
+            certificates_dir.to_string_lossy()
+        );
         // Ensure the directories exist before we start creating certificates
         create_dir_all(certificates_dir).unwrap_or_default();
 
@@ -307,10 +292,10 @@ impl Service for LetsencryptService {
             .account(&self.config.lets_encrypt.email)
             .expect("failed to create or retrieve existing account");
 
-        tokio::select! {
-            _ = self.watch_for_route_changes(&account) => {}
-            _ = self.check_for_certificates_expiration(&account) => {}
-        }
+        let _ = tokio::join!(
+            self.watch_for_route_changes(&account),
+            self.check_for_certificates_expiration(&account)
+        );
     }
 
     fn name(&self) -> &'static str {

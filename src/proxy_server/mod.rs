@@ -13,8 +13,8 @@ pub mod middleware;
 /// Default peer options to be used on every upstream connection
 const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
     verify_hostname: true,
-    read_timeout: Some(Duration::from_secs(30)),
-    connection_timeout: Some(Duration::from_secs(30)),
+    read_timeout: None,
+    connection_timeout: None,
     tcp_recv_buf: None,
     tcp_keepalive: Some(TcpKeepalive {
         count: 5,
