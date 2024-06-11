@@ -10,7 +10,6 @@ use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::Session;
 
 use provider::{OauthType, OauthUser, Provider};
-use secure_cookie::remove_secure_cookie;
 
 use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
 
