@@ -58,7 +58,7 @@ impl Oauth2 {
         oauth_provider: &Provider,
     ) -> Result<bool> {
         let current_address = session.req_header().uri.to_string();
-        let host = session.req_header().uri.host().unwrap_or_default();
+        // let host = session.req_header().uri.host().unwrap_or_default();
         let state = uuid::Uuid::new_v4().to_string();
 
         let mut res_headers =
@@ -66,8 +66,8 @@ impl Oauth2 {
 
         // Removes any cookie to prevent the user from being redirected
         // to the Oauth provider over and over
-        let removed_cookie = remove_secure_cookie(host);
-        res_headers.append_header(http::header::SET_COOKIE, removed_cookie.to_string())?;
+        // let removed_cookie = remove_secure_cookie(host);
+        // res_headers.append_header(http::header::SET_COOKIE, removed_cookie.to_string())?;
 
         res_headers.append_header(
             http::header::LOCATION,
@@ -118,10 +118,13 @@ impl Oauth2 {
 
         let decoded = jwt::decode_jwt(secure_jwt.unwrap().value(), jwt_secret.as_bytes());
 
-        if decoded.is_err() || !Self::is_authorized(&decoded?.into(), validations) {
-            if let Ok(true) = self.unauthorized_response(session).await {
-                return Ok(false);
-            }
+        // Token expired or another err
+        if decoded.is_err() {
+            return Ok(false); // will redirect to oauth callback
+        }
+
+        if !Self::is_authorized(&decoded?.into(), validations) {
+            return self.unauthorized_response(session).await;
         }
 
         Ok(true)
