@@ -26,7 +26,7 @@ pub(super) fn create_secure_cookie<'a>(
 }
 
 /// Removes the secure cookie for the user
-pub(super) fn remove_secure_cookie(host: &str) -> Cookie<'static> {
+pub(super) fn _remove_secure_cookie(host: &str) -> Cookie<'static> {
     let cookie_domain = extract_cookie_domain(host);
     Cookie::build((COOKIE_NAME, ""))
         .secure(true)
