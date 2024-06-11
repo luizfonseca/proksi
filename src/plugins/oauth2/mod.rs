@@ -73,6 +73,10 @@ impl Oauth2 {
             http::header::LOCATION,
             oauth_provider.get_oauth_callback_url(&state),
         )?;
+        res_headers.append_header(
+            http::header::CACHE_CONTROL,
+            "no-store, no-cache, must-revalidate, max-age=0",
+        )?;
 
         // Store the current path in the state
         OAUTH2_STATE.insert(state, current_address);
@@ -265,6 +269,10 @@ impl MiddlewarePlugin for Oauth2 {
             let mut res_headers = ResponseHeader::build_no_case(StatusCode::FOUND, Some(1))?;
             res_headers.insert_header(http::header::SET_COOKIE, jwt_cookie.to_string())?;
             res_headers.insert_header(http::header::LOCATION, redirect_from_state)?;
+            res_headers.insert_header(
+                http::header::CACHE_CONTROL,
+                "no-store, no-cache, must-revalidate, max-age=0",
+            )?;
 
             session.write_response_header(Box::new(res_headers)).await?;
 
