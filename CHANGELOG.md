@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.8](https://github.com/luizfonseca/proksi/compare/v0.2.7...v0.2.8) (2024-06-11)
+
+
+### Bug Fixes
+
+* **oauth2:** cache policies for redirects ([77de991](https://github.com/luizfonseca/proksi/commit/77de991a802c11c091b0cc72a062a09782b441d8))
+* **oauth2:** redirection of empty cookie ([647bf7c](https://github.com/luizfonseca/proksi/commit/647bf7c519ff59489f1d89e0fe2471cd9fa1894f))
+
 ## [0.2.7](https://github.com/luizfonseca/proksi/compare/v0.2.6...v0.2.7) (2024-06-10)
 
 
