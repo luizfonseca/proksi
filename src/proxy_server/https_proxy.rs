@@ -22,12 +22,9 @@ pub struct Router {
     pub store: RouteStore,
 }
 
-impl Router {
-    fn process_route<'a>(&'a self, ctx: &'a RouterContext) -> Arc<RouteStoreContainer> {
-        ctx.route_container.as_ref().unwrap().clone()
-    }
+fn process_route(ctx: &RouterContext) -> Arc<RouteStoreContainer> {
+    ctx.route_container.as_ref().unwrap().clone()
 }
-
 pub struct RouterContext {
     pub host: String,
     pub route_container: Option<Arc<RouteStoreContainer>>,
@@ -108,7 +105,7 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
         // If there's no host matching, returns a 404
-        let route_container = self.process_route(ctx);
+        let route_container = process_route(ctx);
 
         let Some(healthy_upstream) = route_container.load_balancer.select(b"", 4) else {
             return Err(pingora::Error::new(HTTPStatus(503)));
@@ -131,7 +128,7 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
         // If there's no host matching, returns a 404
-        let route_container = self.process_route(ctx);
+        let route_container = process_route(ctx);
 
         for (name, value) in &route_container.host_header_add {
             upstream_response.insert_header(name, value)?;
@@ -162,7 +159,7 @@ impl ProxyHttp for Router {
         Self::CTX: Send + Sync,
     {
         // If there's no host matching, returns a 404
-        let route_container = self.process_route(ctx);
+        let route_container = process_route(ctx);
 
         execute_upstream_request_plugins(&route_container, session, upstream_request, ctx)
             .await

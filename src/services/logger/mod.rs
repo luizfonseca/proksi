@@ -24,7 +24,7 @@ impl io::Write for StdoutWriter {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        Ok(io::stdout().flush()?)
+        io::stdout().flush()
     }
 }
 
