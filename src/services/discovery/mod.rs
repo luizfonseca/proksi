@@ -189,7 +189,7 @@ fn add_route_to_router(
     if let Some(plugins) = plugins {
         for plugin in plugins {
             match plugin.name.as_ref() {
-                "oauth2" | "request_id" => {
+                "oauth2" | "request_id" | "basic_auth" => {
                     route_store_container
                         .plugins
                         .insert(plugin.name.to_string(), plugin.clone());

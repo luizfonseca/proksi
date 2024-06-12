@@ -37,11 +37,10 @@ pub async fn execute_request_plugins(
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
     plugins: &HashMap<String, crate::config::RoutePlugin>,
 ) -> Result<bool> {
+    use crate::plugins::MiddlewarePlugin;
     for (name, value) in plugins {
         match name.as_str() {
             "oauth2" => {
-                use crate::plugins::MiddlewarePlugin;
-
                 if crate::plugins::PLUGINS
                     .oauth2
                     .request_filter(session, ctx, value)
@@ -52,14 +51,21 @@ pub async fn execute_request_plugins(
                 }
             }
             "request_id" => {
-                if crate::plugins::PLUGINS
+                crate::plugins::PLUGINS
                     .request_id
                     .request_filter(session, ctx, value)
                     .await
-                    .is_ok()
+                    .ok();
+            }
+            "basic_auth" => {
+                if crate::plugins::PLUGINS
+                    .basic_auth
+                    .request_filter(session, ctx, value)
+                    .await
+                    .is_ok_and(|v| v)
                 {
-                    // noop, not a blocking plugin
-                };
+                    return Ok(true);
+                }
             }
             _ => {}
         }

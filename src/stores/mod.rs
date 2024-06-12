@@ -39,7 +39,7 @@ pub fn get_routes() -> Arc<RouteStore> {
     ROUTE_STORE.load().clone()
 }
 
-pub fn swap_routes(map: RouteStore) {
+pub fn _swap_routes(map: RouteStore) {
     ROUTE_STORE.store(Arc::new(map));
 }
 

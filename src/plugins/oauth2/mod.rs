@@ -13,7 +13,7 @@ use provider::{OauthType, OauthUser, Provider};
 
 use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
 
-use super::{jwt, MiddlewarePlugin};
+use super::{get_required_config, jwt, MiddlewarePlugin};
 
 // New providers can be added here
 mod github;
@@ -157,17 +157,6 @@ impl Oauth2 {
         Ok(true)
     }
 
-    fn get_required_config(
-        plugin_config: &HashMap<Cow<'static, str>, serde_json::Value>,
-        key: &str,
-    ) -> Result<String> {
-        plugin_config
-            .get(key)
-            .and_then(|v| v.as_str())
-            .map(ToString::to_string)
-            .ok_or_else(|| anyhow!("Missing or invalid {}", key))
-    }
-
     fn parse_provider(
         plugin_config: &HashMap<Cow<'static, str>, serde_json::Value>,
     ) -> Result<OauthType> {
@@ -224,9 +213,9 @@ impl MiddlewarePlugin for Oauth2 {
 
         let provider = Self::parse_provider(plugin_config)?;
 
-        let client_id = Self::get_required_config(plugin_config, "client_id")?;
-        let client_secret = Self::get_required_config(plugin_config, "client_secret")?;
-        let jwt_secret = Self::get_required_config(plugin_config, "jwt_secret")?;
+        let client_id = get_required_config(plugin_config, "client_id")?;
+        let client_secret = get_required_config(plugin_config, "client_secret")?;
+        let jwt_secret = get_required_config(plugin_config, "jwt_secret")?;
         let validations = plugin_config.get("validations");
 
         // Callback path based on the selected provider

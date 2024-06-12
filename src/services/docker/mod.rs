@@ -136,6 +136,8 @@ impl LabelService {
             let mut oauth2_validations: Option<serde_json::Value> = None;
             let mut ssl_certificate_self_signed_on_failure = false;
             let mut docker_request_id = false;
+            let mut basic_auth_user = None;
+            let mut basic_auth_password = None;
 
             // Map through extra labels
             for (k, v) in service_labels {
@@ -177,6 +179,11 @@ impl LabelService {
                         "proksi.plugins.request_id.enabled" => {
                             docker_request_id = v == "true";
                         }
+                        "proksi.plugins.basic_auth.user" => basic_auth_user = Some(v.clone()),
+                        "proksi.plugins.basic_auth.password" => {
+                            basic_auth_password = Some(v.clone());
+                        }
+
                         _ => {}
                     }
                 }
@@ -227,6 +234,17 @@ impl LabelService {
                     plugins.push(RoutePlugin {
                         name: Cow::Borrowed("request_id"),
                         config: None,
+                    });
+                }
+
+                if basic_auth_user.is_some() && basic_auth_password.is_some() {
+                    let mut map = HashMap::new();
+                    map.insert(Cow::Borrowed("user"), json!(basic_auth_user.unwrap()));
+                    map.insert(Cow::Borrowed("pass"), json!(basic_auth_password.unwrap()));
+
+                    plugins.push(RoutePlugin {
+                        name: Cow::Borrowed("basic_auth"),
+                        config: Some(map),
                     });
                 }
 
