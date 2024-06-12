@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, Write};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -16,8 +16,7 @@ pub struct StdoutWriter(UnboundedSender<Bytes>);
 
 impl io::Write for StdoutWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let buf_copy = buf.to_owned();
-        if let Ok(()) = self.0.send(buf_copy.into()) {
+        if let Ok(()) = self.0.send(Bytes::copy_from_slice(buf)) {
             return Ok(buf.len());
         }
 
@@ -25,7 +24,7 @@ impl io::Write for StdoutWriter {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+        Ok(io::stdout().flush()?)
     }
 }
 
@@ -70,9 +69,8 @@ impl Service for ProxyLoggerReceiver {
     async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
         loop {
             if let Some(buf) = self.receiver.recv().await {
-                let buf = std::str::from_utf8(&buf).unwrap();
                 // TODO: flush/rotate logs to disk
-                print!("{buf}");
+                io::stdout().write_all(&buf).unwrap();
             }
         }
     }
