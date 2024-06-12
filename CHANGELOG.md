@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.10](https://github.com/luizfonseca/proksi/compare/v0.2.9...v0.2.10) (2024-06-12)
+
+
+### Bug Fixes
+
+* **oauth2:** use .get_all to retrieve all cookie values ([cade869](https://github.com/luizfonseca/proksi/commit/cade869e2bd093d07297f4360cc58c0c20ed706b))
+* **store:** use arcswap instead of dashmaps ([ad8049c](https://github.com/luizfonseca/proksi/commit/ad8049cd2db5ebc610e8266f2db80f565e765566))
+
 ## [0.2.9](https://github.com/luizfonseca/proksi/compare/v0.2.8...v0.2.9) (2024-06-12)
 
 
