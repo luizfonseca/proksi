@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use anyhow::Result;
 use async_trait::async_trait;
 
-use pingora_proxy::Session;
+use pingora::proxy::Session;
 
 use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
 
@@ -37,7 +37,7 @@ impl MiddlewarePlugin for RequestId {
     async fn upstream_request_filter(
         &self,
         _: &mut Session,
-        upstream_request: &mut pingora_http::RequestHeader,
+        upstream_request: &mut pingora::http::RequestHeader,
         ctx: &mut RouterContext,
     ) -> Result<()> {
         if let Some(request_id) = ctx.extensions.get("request_id_header") {
@@ -49,7 +49,7 @@ impl MiddlewarePlugin for RequestId {
     fn upstream_response_filter(
         &self,
         _: &mut Session,
-        upstream_response: &mut pingora_http::ResponseHeader,
+        upstream_response: &mut pingora::http::ResponseHeader,
         ctx: &mut RouterContext,
     ) -> Result<()> {
         if let Some(request_id) = ctx.extensions.get("request_id_header") {

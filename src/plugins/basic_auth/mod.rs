@@ -3,8 +3,10 @@ use std::{borrow::Cow, collections::HashMap};
 use async_trait::async_trait;
 use http::{header, StatusCode};
 use openssl::base64;
-use pingora_http::{RequestHeader, ResponseHeader};
-use pingora_proxy::Session;
+use pingora::{
+    http::{RequestHeader, ResponseHeader},
+    proxy::Session,
+};
 
 use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
 

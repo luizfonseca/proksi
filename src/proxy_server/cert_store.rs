@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use openssl::ssl::{SniError, SslRef};
 use pingora::listeners::TlsAccept;
-use pingora_openssl::{ext, ssl::NameType};
+use pingora::tls::{ext, ssl::NameType};
 
 use crate::stores::{self};
 

@@ -422,18 +422,23 @@ An sample run from the `wrk` benchmark on the simple `/ping` endpoint shows the 
 ```bash
 # Apple M1 Pro, 16GB
 # Memory Usage: 15.2MB, CPU Usage: 13%, 1 worker thread
-# at 2024-05-26T02:02:00Z
+# at 2024-06-13
 # Wrk > 50 connections, 4 threads, 30s duration
 wrk -c 50 -t 4 -d 30s http://127.0.0.1/ping
 
 Running 30s test @ http://127.0.0.1/ping
   4 threads and 50 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency   401.63us   98.26us   2.05ms   89.65%
-    Req/Sec    29.69k     2.86k   32.41k    92.03%
-  3556060 requests in 30.10s, 437.48MB read
-Requests/sec: 118140.21
-Transfer/sec:     14.53MB
+    Latency   376.73us  124.78us   7.83ms   91.64%
+    Req/Sec    31.76k     3.03k   34.29k    92.44%
+  Latency Distribution
+     50%  373.00us
+     75%  404.00us
+     90%  442.00us
+     99%  675.00us
+  3803987 requests in 30.10s, 467.98MB read
+Requests/sec: 126377.09
+Transfer/sec:     15.55MB
 ```
 
 It's also based on [Pingora](https://github.com/cloudflare/pingora), so it should be fast if cloudflare is using it.

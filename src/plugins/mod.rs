@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use basic_auth::BasicAuth;
 use oauth2::Oauth2;
 use once_cell::sync::Lazy;
-use pingora_http::{RequestHeader, ResponseHeader};
-use pingora_proxy::Session;
+use pingora::http::{RequestHeader, ResponseHeader};
+use pingora::proxy::Session;
 use request_id::RequestId;
 
 use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};

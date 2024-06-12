@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use cookie::Cookie;
 use http::StatusCode;
 use once_cell::sync::Lazy;
-use pingora_http::{RequestHeader, ResponseHeader};
-use pingora_proxy::Session;
+use pingora::http::{RequestHeader, ResponseHeader};
+use pingora::proxy::Session;
 
 use provider::{OauthType, OauthUser, Provider};
 

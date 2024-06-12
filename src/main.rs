@@ -6,8 +6,8 @@ use bytes::Bytes;
 use clap::crate_version;
 use config::{load, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
 
-use pingora::{listeners::TlsSettings, server::configuration::Opt};
-use pingora_proxy::http_proxy_service;
+use pingora::{listeners::TlsSettings, proxy::http_proxy_service, server::configuration::Opt};
+
 use proxy_server::cert_store::CertStore;
 use services::{
     discovery::RoutingService,

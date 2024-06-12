@@ -7,7 +7,7 @@ use crate::{plugins::MiddlewarePlugin, stores::routes::RouteStoreContainer};
 /// Executes the request and response plugins
 pub async fn execute_response_plugins(
     container: &RouteStoreContainer,
-    session: &mut pingora_proxy::Session,
+    session: &mut pingora::proxy::Session,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) -> Result<()> {
     for (name, value) in &container.plugins {
@@ -33,7 +33,7 @@ pub async fn execute_response_plugins(
 
 /// Executes the request plugins
 pub async fn execute_request_plugins(
-    session: &mut pingora_proxy::Session,
+    session: &mut pingora::proxy::Session,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
     plugins: &HashMap<String, crate::config::RoutePlugin>,
 ) -> Result<bool> {
@@ -76,8 +76,8 @@ pub async fn execute_request_plugins(
 /// Executes the upstream request plugins
 pub async fn execute_upstream_request_plugins(
     container: &crate::stores::routes::RouteStoreContainer,
-    session: &mut pingora_proxy::Session,
-    upstream_request: &mut pingora_http::RequestHeader,
+    session: &mut pingora::proxy::Session,
+    upstream_request: &mut pingora::http::RequestHeader,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) -> Result<()> {
     for name in container.plugins.keys() {
@@ -99,8 +99,8 @@ pub async fn execute_upstream_request_plugins(
 /// Executes the upstream response plugins
 pub fn execute_upstream_response_plugins(
     container: &crate::stores::routes::RouteStoreContainer,
-    session: &mut pingora_proxy::Session,
-    upstream_response: &mut pingora_http::ResponseHeader,
+    session: &mut pingora::proxy::Session,
+    upstream_response: &mut pingora::http::ResponseHeader,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) {
     for name in container.plugins.keys() {

@@ -3,11 +3,11 @@ use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
 use async_trait::async_trait;
 
 use http::{HeaderName, HeaderValue};
+use pingora::lb::{health_check::TcpHealthCheck, selection::RoundRobin, LoadBalancer};
 use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
-use pingora_load_balancing::{health_check::TcpHealthCheck, selection::RoundRobin, LoadBalancer};
 use tokio::sync::broadcast::Sender;
 use tracing::debug;
 

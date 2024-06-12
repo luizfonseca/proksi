@@ -4,10 +4,10 @@ use http::{
     uri::Scheme,
     StatusCode, Uri,
 };
+use pingora::http::ResponseHeader;
 use pingora::upstreams::peer::HttpPeer;
-use pingora_http::ResponseHeader;
 
-use pingora_proxy::{ProxyHttp, Session};
+use pingora::proxy::{ProxyHttp, Session};
 use tracing::info;
 
 use crate::stores;

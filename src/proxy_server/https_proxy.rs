@@ -3,9 +3,9 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use async_trait::async_trait;
 
 use http::{HeaderValue, Uri};
+use pingora::http::{RequestHeader, ResponseHeader};
+use pingora::proxy::{ProxyHttp, Session};
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
-use pingora_http::{RequestHeader, ResponseHeader};
-use pingora_proxy::{ProxyHttp, Session};
 
 use crate::stores::{self, routes::RouteStoreContainer};
 

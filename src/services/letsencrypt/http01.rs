@@ -101,8 +101,8 @@ impl LetsencryptService {
         x509_name.append_entry_by_text("CN", "Test")?;
         let x509_name = x509_name.build();
 
-        let hash = pingora_openssl::hash::MessageDigest::sha256();
-        let key = pingora_openssl::pkey::PKey::from_rsa(rsa)?;
+        let hash = pingora::tls::hash::MessageDigest::sha256();
+        let key = pingora::tls::pkey::PKey::from_rsa(rsa)?;
         let one_year = openssl::asn1::Asn1Time::days_from_now(365)?;
         let today = openssl::asn1::Asn1Time::days_from_now(0)?;
         openssl_cert.set_version(2)?;

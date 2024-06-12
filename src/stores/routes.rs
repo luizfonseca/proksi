@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use http::{HeaderName, HeaderValue};
 use path_tree::PathTree;
-use pingora_load_balancing::{selection::RoundRobin, LoadBalancer};
+use pingora::lb::{selection::RoundRobin, LoadBalancer};
 
 use crate::config::RoutePlugin;
 
