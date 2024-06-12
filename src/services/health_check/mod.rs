@@ -32,17 +32,13 @@ async fn run_health_check_loop(store: RouteStore) {
         for route in store.iter() {
             tracing::debug!("Running health check for host {}", route.key());
 
-            let route_container = route.to_owned();
+            // let route_container = route.to_owned();
 
-            route_container.load_balancer.update().await.ok();
-            route_container
-                .load_balancer
-                .backends()
-                .run_health_check(true)
-                .await;
+            route.load_balancer.update().await.ok();
+            route.load_balancer.backends().run_health_check(true).await;
 
             // TODO: only update if the upstream has changed
-            weak_map.insert(route.key().to_owned(), route_container);
+            weak_map.insert(route.key().to_owned(), route.clone());
         }
 
         // Important: not to hold the lock while

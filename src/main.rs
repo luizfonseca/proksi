@@ -16,7 +16,7 @@ use services::{
     letsencrypt::http01::LetsencryptService,
     logger::{ProxyLog, ProxyLoggerReceiver},
 };
-use stores::{certificates::CertificateStore, routes::RouteStore};
+use stores::{certificates::CertificateStore, challenges::ChallengeStore, routes::RouteStore};
 
 mod channel;
 mod config;
@@ -54,7 +54,7 @@ fn main() -> Result<(), anyhow::Error> {
     // Stores (Routes, Certificates, Challenges)
     let route_store: RouteStore = Arc::new(DashMap::new());
     let certificate_store: CertificateStore = Arc::new(DashMap::new());
-    let challenge_store = Arc::new(DashMap::<String, (String, String)>::new());
+    let challenge_store: ChallengeStore = Arc::new(DashMap::new());
 
     // Loads configuration from command-line, YAML or TOML sources
     let proxy_config = Arc::new(
