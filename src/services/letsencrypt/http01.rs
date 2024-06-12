@@ -37,7 +37,6 @@ impl LetsencryptService {
     /// Update global certificate store with new `X509` and `PKey` for the
     /// given domain.
     fn insert_certificate(
-        &self,
         domain: &str,
         cert_pem: &str,
         key_pem: &str,
@@ -56,27 +55,8 @@ impl LetsencryptService {
         Ok(())
     }
 
-    // Based on the letsencrypt configuration, return the appropriate URL
-    fn get_lets_encrypt_url(&self) -> DirectoryUrl {
-        match self.config.lets_encrypt.staging {
-            Some(false) => DirectoryUrl::LetsEncrypt,
-            _ => DirectoryUrl::LetsEncryptStaging,
-        }
-    }
-
-    /// Return the appropriate Let's Encrypt directories for certificates based on the environment
-    fn get_lets_encrypt_directory(&self) -> PathBuf {
-        match self.config.lets_encrypt.staging {
-            Some(false) => self.config.paths.lets_encrypt.join("production"),
-            _ => self.config.paths.lets_encrypt.join("staging"),
-        }
-    }
-
     /// Start an HTTP-01 challenge for a given order
-    fn handle_http_01_challenge(
-        &self,
-        order: &mut NewOrder<FilePersist>,
-    ) -> Result<(), anyhow::Error> {
+    fn handle_http_01_challenge(order: &mut NewOrder<FilePersist>) -> Result<(), anyhow::Error> {
         for auth in order.authorizations()? {
             let challenge = auth.http_challenge();
 
@@ -97,119 +77,11 @@ impl LetsencryptService {
         Ok(())
     }
 
-    /// Create a new order for a domain (HTTP-01 challenge)
-    fn create_order_for_domain(
-        &self,
-        domain: &str,
-        account: &Account<FilePersist>,
-    ) -> Result<(), anyhow::Error> {
-        let mut order = account.new_order(domain, &[])?;
-
-        let order_csr = loop {
-            // Break if we are done confirming validations
-            if let Some(csr) = order.confirm_validations() {
-                break csr;
-            }
-
-            // Get the possible authorizations (for a single domain
-            // this will only be one element).
-            self.handle_http_01_challenge(&mut order)
-                .map_err(|err| anyhow!("Failed to handle HTTP-01 challenge: {err}"))?;
-
-            order.refresh().unwrap_or_default();
-        };
-
-        // Order OK
-        let pkey = acme_lib::create_p384_key();
-        let order_cert = order_csr.finalize_pkey(pkey, 5000)?;
-
-        info!("certificate created for order {:?}", order_cert.api_order());
-        let cert = order_cert.download_and_save_cert()?;
-
-        self.insert_certificate(domain, cert.certificate(), cert.private_key())?;
-
-        Ok(())
-    }
-
-    /// Watch for route changes and create or update certificates for new routes
-    async fn watch_for_route_changes(&self, account: &Account<FilePersist>) {
-        let mut interval = time::interval(Duration::from_secs(20));
-
-        loop {
-            interval.tick().await;
-            tracing::debug!("checking for new routes to create certificates for");
-            for (key, value) in stores::get_routes().iter() {
-                if stores::get_certificates().contains_key(key) {
-                    continue;
-                }
-
-                self.handle_certificate_for_domain(key, account, value.self_signed_certificate);
-            }
-        }
-    }
-
-    /// Check for certificates expiration and renew them if needed
-    async fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) {
-        let mut interval = time::interval(Duration::from_secs(84_600));
-
-        loop {
-            interval.tick().await;
-            tracing::debug!("checking for certificates to renew");
-            for (domain, _) in stores::get_routes().iter() {
-                let Ok(Some(cert)) = account.certificate(domain) else {
-                    continue;
-                };
-
-                let valid_days_left = cert.valid_days_left();
-                tracing::info!("certificate for domain {domain} expires in {valid_days_left} days",);
-
-                // Nothing to do
-                if valid_days_left > 5 {
-                    continue;
-                }
-
-                self.create_order_for_domain(domain, account)
-                    .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
-                    .unwrap();
-            }
-        }
-    }
-
-    fn handle_certificate_for_domain(
-        &self,
-        domain: &str,
-        account: &Account<FilePersist>,
-        self_signed_on_failure: bool,
-    ) {
-        match account.certificate(domain) {
-            Ok(Some(cert)) => {
-                // Certificate already exists
-                if stores::get_certificates().contains_key(domain) {
-                    return;
-                }
-
-                self.insert_certificate(domain, cert.certificate(), cert.private_key())
-                    .ok();
-            }
-            Ok(None) => {
-                if self.create_order_for_domain(domain, account).is_err() {
-                    self.create_self_signed_certificate(domain, self_signed_on_failure)
-                        .ok();
-                }
-            }
-            _ => {}
-        }
-    }
-
     /// Creates an in-memory self-signed certificate for a domain if let's encrypt
     /// cannot be used.
     /// Note this is only useful for local development or testing purposes
     /// and should be used sparingly
-    fn create_self_signed_certificate(
-        &self,
-        domain: &str,
-        enabled: bool,
-    ) -> Result<(), anyhow::Error> {
+    fn create_self_signed_certificate(domain: &str, enabled: bool) -> Result<(), anyhow::Error> {
         // Generate self-signed certificate only if self_signed_on_failure is set to true
         // If not provided, default to true
         if !enabled {
@@ -252,6 +124,122 @@ impl LetsencryptService {
         );
 
         Ok(())
+    }
+
+    // Based on the letsencrypt configuration, return the appropriate URL
+    fn get_lets_encrypt_url(&self) -> DirectoryUrl {
+        match self.config.lets_encrypt.staging {
+            Some(false) => DirectoryUrl::LetsEncrypt,
+            _ => DirectoryUrl::LetsEncryptStaging,
+        }
+    }
+
+    /// Return the appropriate Let's Encrypt directories for certificates based on the environment
+    fn get_lets_encrypt_directory(&self) -> PathBuf {
+        match self.config.lets_encrypt.staging {
+            Some(false) => self.config.paths.lets_encrypt.join("production"),
+            _ => self.config.paths.lets_encrypt.join("staging"),
+        }
+    }
+
+    /// Create a new order for a domain (HTTP-01 challenge)
+    fn create_order_for_domain(
+        domain: &str,
+        account: &Account<FilePersist>,
+    ) -> Result<(), anyhow::Error> {
+        let mut order = account.new_order(domain, &[])?;
+
+        let order_csr = loop {
+            // Break if we are done confirming validations
+            if let Some(csr) = order.confirm_validations() {
+                break csr;
+            }
+
+            // Get the possible authorizations (for a single domain
+            // this will only be one element).
+            Self::handle_http_01_challenge(&mut order)
+                .map_err(|err| anyhow!("Failed to handle HTTP-01 challenge: {err}"))?;
+
+            order.refresh().unwrap_or_default();
+        };
+
+        // Order OK
+        let pkey = acme_lib::create_p384_key();
+        let order_cert = order_csr.finalize_pkey(pkey, 5000)?;
+
+        info!("certificate created for order {:?}", order_cert.api_order());
+        let cert = order_cert.download_and_save_cert()?;
+
+        Self::insert_certificate(domain, cert.certificate(), cert.private_key())?;
+
+        Ok(())
+    }
+
+    /// Watch for route changes and create or update certificates for new routes
+    async fn watch_for_route_changes(&self, account: &Account<FilePersist>) {
+        let mut interval = time::interval(Duration::from_secs(20));
+
+        loop {
+            interval.tick().await;
+            tracing::debug!("checking for new routes to create certificates for");
+            for (key, value) in stores::get_routes().iter() {
+                if stores::get_certificates().contains_key(key) {
+                    continue;
+                }
+
+                Self::handle_certificate_for_domain(key, account, value.self_signed_certificate);
+            }
+        }
+    }
+
+    /// Check for certificates expiration and renew them if needed
+    async fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) {
+        let mut interval = time::interval(Duration::from_secs(84_600));
+
+        loop {
+            interval.tick().await;
+            tracing::debug!("checking for certificates to renew");
+            for (domain, _) in stores::get_routes().iter() {
+                let Ok(Some(cert)) = account.certificate(domain) else {
+                    continue;
+                };
+
+                let valid_days_left = cert.valid_days_left();
+                tracing::info!("certificate for domain {domain} expires in {valid_days_left} days",);
+
+                // Nothing to do
+                if valid_days_left > 5 {
+                    continue;
+                }
+
+                Self::create_order_for_domain(domain, account)
+                    .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
+                    .unwrap();
+            }
+        }
+    }
+
+    fn handle_certificate_for_domain(
+        domain: &str,
+        account: &Account<FilePersist>,
+        self_signed_on_failure: bool,
+    ) {
+        match account.certificate(domain) {
+            Ok(Some(cert)) => {
+                // Certificate already exists
+                if stores::get_certificates().contains_key(domain) {
+                    return;
+                }
+
+                Self::insert_certificate(domain, cert.certificate(), cert.private_key()).ok();
+            }
+            Ok(None) => {
+                if Self::create_order_for_domain(domain, account).is_err() {
+                    Self::create_self_signed_certificate(domain, self_signed_on_failure).ok();
+                }
+            }
+            _ => {}
+        }
     }
 }
 
