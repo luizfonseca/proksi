@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.9](https://github.com/luizfonseca/proksi/compare/v0.2.8...v0.2.9) (2024-06-12)
+
+
+### Bug Fixes
+
+* **logger:** improvements to memory usage ([fae9d4d](https://github.com/luizfonseca/proksi/commit/fae9d4d9274dfb75ce18e752dff8580386aab9ec))
+* reuse dashmap contents on request ([4ee34bd](https://github.com/luizfonseca/proksi/commit/4ee34bdb5afe2869bc5f6b918e2ecf68dddd4a11))
+* small type fixes ([cff726a](https://github.com/luizfonseca/proksi/commit/cff726a5991e1387673017ab00f8ba2a04e461b3))
+
 ## [0.2.8](https://github.com/luizfonseca/proksi/compare/v0.2.7...v0.2.8) (2024-06-11)
 
 
