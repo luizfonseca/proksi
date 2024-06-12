@@ -27,25 +27,13 @@ async fn run_health_check_loop() {
 
     loop {
         interval.tick().await;
-        let mut new_map = HashMap::new();
 
         for (key, route) in stores::get_routes().iter() {
             tracing::debug!("Running health check for host {}", key);
 
-            let route_container = route.to_owned();
-
-            route_container.load_balancer.update().await.ok();
-            route_container
-                .load_balancer
-                .backends()
-                .run_health_check(true)
-                .await;
-
-            // TODO: only update if the upstream has changed
-            new_map.insert(key.to_owned(), route_container);
+            route.load_balancer.update().await.ok();
+            route.load_balancer.backends().run_health_check(true).await;
         }
-
-        stores::swap_routes(new_map);
     }
 }
 
