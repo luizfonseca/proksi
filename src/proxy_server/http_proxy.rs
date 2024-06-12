@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
-use dashmap::DashMap;
 use http::{
     header::{CONTENT_LENGTH, CONTENT_TYPE, LOCATION},
     uri::Scheme,
@@ -13,9 +10,9 @@ use pingora_http::ResponseHeader;
 use pingora_proxy::{ProxyHttp, Session};
 use tracing::info;
 
-pub struct HttpLB {
-    pub(crate) challenge_store: Arc<DashMap<String, (String, String)>>,
-}
+use crate::stores;
+
+pub struct HttpLB {}
 
 #[async_trait]
 impl ProxyHttp for HttpLB {
@@ -53,7 +50,7 @@ impl ProxyHttp for HttpLB {
             .path()
             .starts_with("/.well-known/acme-challenge")
         {
-            let challenge_from_host = self.challenge_store.get(host);
+            let challenge_from_host = stores::get_challenge_by_key(host);
 
             if challenge_from_host.is_none() {
                 return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));
@@ -62,7 +59,7 @@ impl ProxyHttp for HttpLB {
             let challenge_from_host = challenge_from_host.unwrap();
 
             // Get the token and proof from the challenge store
-            let (token, proof) = challenge_from_host.value();
+            let (token, proof) = challenge_from_host;
             // Get the token from the URL
             let token_from_url = current_uri.path().split('/').last().unwrap();
 

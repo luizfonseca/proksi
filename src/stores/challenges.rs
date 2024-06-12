@@ -1,5 +1,3 @@
-use std::sync::Arc;
+use std::collections::HashMap;
 
-use dashmap::DashMap;
-
-pub type ChallengeStore = Arc<DashMap<String, (String, String)>>;
+pub type ChallengeStore = HashMap<String, (String, String)>;

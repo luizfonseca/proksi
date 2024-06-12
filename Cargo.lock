@@ -619,19 +619,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dashmap"
-version = "5.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
-dependencies = [
- "cfg-if",
- "hashbrown 0.14.5",
- "lock_api",
- "once_cell",
- "parking_lot_core",
-]
-
-[[package]]
 name = "data-encoding"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1992,13 +1979,13 @@ version = "0.2.9"
 dependencies = [
  "acme-lib",
  "anyhow",
+ "arc-swap",
  "async-trait",
  "bollard",
  "bollard-stubs",
  "bytes",
  "clap 4.5.6",
  "cookie",
- "dashmap",
  "figment",
  "http 1.1.0",
  "itertools",

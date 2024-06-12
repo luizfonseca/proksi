@@ -7,7 +7,7 @@ use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::{ProxyHttp, Session};
 
-use crate::stores::routes::{RouteStore, RouteStoreContainer};
+use crate::stores::{self, routes::RouteStoreContainer};
 
 use super::{
     middleware::{
@@ -19,7 +19,7 @@ use super::{
 
 /// Load balancer proxy struct
 pub struct Router {
-    pub store: RouteStore,
+    // pub store: RouteStore,
 }
 
 fn process_route(ctx: &RouterContext) -> Arc<RouteStoreContainer> {
@@ -67,15 +67,17 @@ impl ProxyHttp for Router {
         host_without_port.clone_into(&mut ctx.host);
 
         // If there's no host matching, returns a 404
-        let Some(route_container) = self.store.get(host_without_port) else {
+        let Some(route_container) = stores::get_route_by_key(host_without_port) else {
             session.respond_error(404).await;
             return Ok(true);
         };
 
+        let arced = Arc::new(route_container);
+
         // Match request pattern based on the URI
         let uri = get_uri(session);
 
-        match &route_container.path_matcher.pattern {
+        match &arced.path_matcher.pattern {
             Some(pattern) if pattern.find(uri.path()).is_none() => {
                 session.respond_error(404).await;
                 return Ok(true);
@@ -83,12 +85,12 @@ impl ProxyHttp for Router {
             _ => {}
         }
 
-        ctx.route_container = Some(Arc::new(route_container.value().clone()));
+        ctx.route_container = Some(Arc::clone(&arced));
 
         // Middleware phase: request_filterx
         // We are checking to see if the request has already been handled
         // by the plugins i.e. (ok(true))
-        if let Ok(true) = execute_request_plugins(session, ctx, &route_container.plugins).await {
+        if let Ok(true) = execute_request_plugins(session, ctx, &arced.plugins).await {
             return Ok(true);
         }
 
@@ -182,9 +184,7 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) {
         // If there's no host matching, returns a 404
-        let Some(route_container) = self.store.get(&ctx.host) else {
-            return;
-        };
+        let route_container = process_route(ctx);
 
         execute_upstream_response_plugins(&route_container, session, upstream_response, ctx);
 

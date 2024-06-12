@@ -3,28 +3,26 @@ use openssl::ssl::{SniError, SslRef};
 use pingora::listeners::TlsAccept;
 use pingora_openssl::{ext, ssl::NameType};
 
-use crate::stores::certificates::CertificateStore;
+use crate::stores::{self};
 
 /// Provides the correct certificates when performing SSL handshakes
 #[derive(Debug, Clone)]
-pub struct CertStore {
-    store: CertificateStore,
-}
+pub struct CertStore {}
 
 impl CertStore {
-    pub fn new(store: CertificateStore) -> Self {
-        CertStore { store }
+    pub fn new() -> Self {
+        CertStore {}
     }
 
     // This function is called when the servername callback executes
     // It is used to check if the server name is in the certificate store
     // If it is, the handshake continues, otherwise it is aborted
     // and the client is disconnected
-    pub fn sni_callback(ssl_ref: &mut SslRef, store: &CertificateStore) -> Result<(), SniError> {
+    pub fn sni_callback(ssl_ref: &mut SslRef) -> Result<(), SniError> {
         let servername = ssl_ref.servername(NameType::HOST_NAME).unwrap_or("");
         tracing::debug!("Received SNI: {}", servername);
 
-        if store.get(servername).is_some() {
+        if stores::get_certificate_by_key(servername).is_some() {
             return Ok(());
         }
 
@@ -42,7 +40,7 @@ impl TlsAccept for CertStore {
         // Due to the sni_callback function, we can safely unwrap here
         let host_name = ssl.servername(NameType::HOST_NAME).unwrap_or_default();
 
-        let Some(cert) = self.store.get(host_name) else {
+        let Some(cert) = stores::get_certificate_by_key(host_name) else {
             tracing::debug!("No certificate found for host: {:?}", host_name);
             return;
         };

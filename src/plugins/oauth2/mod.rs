@@ -1,9 +1,9 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use anyhow::{anyhow, bail, Result};
+use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use cookie::Cookie;
-use dashmap::DashMap;
 use http::StatusCode;
 use once_cell::sync::Lazy;
 use pingora_http::{RequestHeader, ResponseHeader};
@@ -29,8 +29,25 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
 
 // Shared state for Oauth2 flows (should be cleaned up after fetching for the first time)
 // TODO find a way to clean up/expire the state
-static OAUTH2_STATE: Lazy<Arc<DashMap<String, String>>> = Lazy::new(|| Arc::new(DashMap::new()));
+static OAUTH2_STATE: Lazy<ArcSwap<HashMap<String, String>>> =
+    Lazy::new(|| ArcSwap::new(Arc::new(HashMap::new())));
 const COOKIE_NAME: &str = "__Secure_Auth_PRK_JWT";
+
+fn insert_oauth2_state(key: String, value: String) {
+    let mut map = (**OAUTH2_STATE.load()).clone();
+
+    map.insert(key, value);
+
+    OAUTH2_STATE.store(Arc::new(map));
+}
+
+fn remove_oauth2_state(key: &str) {
+    let mut map = (**OAUTH2_STATE.load()).clone();
+
+    map.remove(key);
+
+    OAUTH2_STATE.store(Arc::new(map));
+}
 
 /// The Oauth2 plugin
 /// This plugin is responsible for handling Oauth authentication and authorization
@@ -78,7 +95,7 @@ impl Oauth2 {
         )?;
 
         // Store the current path in the state
-        OAUTH2_STATE.insert(state, current_address);
+        insert_oauth2_state(state, current_address);
         session.write_response_header(Box::new(res_headers)).await?;
 
         // Finish the request, we don't want to continue processing
@@ -242,23 +259,22 @@ impl MiddlewarePlugin for Oauth2 {
                 return self.unauthorized_response(session).await;
             };
 
-            let Some(saved_state) = OAUTH2_STATE.get(&state.to_string()) else {
+            let store = OAUTH2_STATE.load();
+            let state = store.get(&state.to_string());
+            let Some(saved_state) = state else {
                 tracing::info!("state does not exist or was removed");
                 return self.unauthorized_response(session).await;
             };
 
-            let redirect_from_state = saved_state.value().to_owned();
-
-            // Remove ref of state to avoid deadlocks
-            drop(saved_state);
+            let redirect_from_state = saved_state.to_owned();
 
             // Cleanup state to avoid replay attacks
-            OAUTH2_STATE.remove(&state.to_string());
+            remove_oauth2_state(saved_state);
 
             // Step 1: Exchange the code for an access token
             let user = match oauth_provider.get_oauth_user(code).await {
                 Err(err) => {
-                    tracing::error!("Failed to exchange code {code}, state {state}: {err}");
+                    tracing::error!("Failed to exchange code {code}, state {saved_state}: {err}");
                     return self.unauthorized_response(session).await;
                 }
                 Ok(user) => user,

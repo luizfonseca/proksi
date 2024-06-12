@@ -3,7 +3,7 @@ use std::{fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
 use acme_lib::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
 use anyhow::anyhow;
 use async_trait::async_trait;
-use dashmap::DashMap;
+
 use openssl::{pkey::PKey, x509::X509};
 use pingora::{
     server::{ListenFds, ShutdownWatch},
@@ -14,19 +14,15 @@ use tracing::info;
 
 use crate::{
     config::Config,
-    stores::{
-        certificates::{Certificate, CertificateStore},
-        routes::RouteStore,
-    },
+    stores::{self, certificates::Certificate},
 };
 
 /// A service that handles the creation of certificates using the Let's Encrypt API
 
 pub struct LetsencryptService {
     pub(crate) config: Arc<Config>,
-    pub(crate) challenge_store: Arc<DashMap<String, (String, String)>>,
-    pub(crate) route_store: RouteStore,
-    pub(crate) cert_store: CertificateStore,
+    // pub(crate) route_store: RouteStore,
+    // pub(crate) cert_store: CertificateStore,
 }
 
 impl LetsencryptService {
@@ -49,7 +45,7 @@ impl LetsencryptService {
         let cert = Self::parse_x509_cert(cert_pem)?;
         let key = Self::parse_private_key(key_pem)?;
 
-        self.cert_store.insert(
+        stores::insert_certificate(
             domain.to_string(),
             Certificate {
                 key,
@@ -86,7 +82,7 @@ impl LetsencryptService {
 
             info!("HTTP-01 challenge for domain: {}", auth.domain_name());
 
-            self.challenge_store.insert(
+            stores::insert_challenge(
                 auth.domain_name().to_string(),
                 (
                     challenge.http_token().to_string(),
@@ -142,16 +138,12 @@ impl LetsencryptService {
         loop {
             interval.tick().await;
             tracing::debug!("checking for new routes to create certificates for");
-            for route in self.route_store.iter() {
-                if self.cert_store.contains_key(route.key()) {
+            for (key, value) in stores::get_routes().iter() {
+                if stores::get_certificates().contains_key(key) {
                     continue;
                 }
 
-                self.handle_certificate_for_domain(
-                    route.key(),
-                    account,
-                    route.self_signed_certificate,
-                );
+                self.handle_certificate_for_domain(key, account, value.self_signed_certificate);
             }
         }
     }
@@ -163,9 +155,7 @@ impl LetsencryptService {
         loop {
             interval.tick().await;
             tracing::debug!("checking for certificates to renew");
-            for value in self.route_store.iter() {
-                let domain = value.key();
-
+            for (domain, _) in stores::get_routes().iter() {
                 let Ok(Some(cert)) = account.certificate(domain) else {
                     continue;
                 };
@@ -194,7 +184,7 @@ impl LetsencryptService {
         match account.certificate(domain) {
             Ok(Some(cert)) => {
                 // Certificate already exists
-                if self.cert_store.contains_key(domain) {
+                if stores::get_certificates().contains_key(domain) {
                     return;
                 }
 
@@ -253,7 +243,7 @@ impl LetsencryptService {
 
         let openssl_cert = openssl_cert.build();
 
-        self.cert_store.insert(
+        stores::insert_certificate(
             domain.to_string(),
             Certificate {
                 key,
