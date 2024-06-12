@@ -257,8 +257,12 @@ impl Service for LetsencryptService {
             "creating certificates in folder {}",
             certificates_dir.to_string_lossy()
         );
-        // Ensure the directories exist before we start creating certificates
-        create_dir_all(certificates_dir).unwrap_or_default();
+
+        // Ensures the directories exist before we start creating certificates
+        if create_dir_all(certificates_dir).is_err() {
+            tracing::error!("failed to create directory {certificates_dir:?}. Check permissions or make sure that the parent directory exists beforehand.");
+            return;
+        }
 
         // Key-Value Store
         let persist = acme_lib::persist::FilePersist::new(certificates_dir);
