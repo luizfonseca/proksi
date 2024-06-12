@@ -3,6 +3,7 @@ use std::{borrow::Cow, sync::Arc};
 use ::pingora::server::Server;
 use anyhow::anyhow;
 use bytes::Bytes;
+use clap::crate_version;
 use config::{load, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
 
 use pingora::{listeners::TlsSettings, server::configuration::Opt};
@@ -136,5 +137,11 @@ fn main() -> Result<(), anyhow::Error> {
     pingora_server.add_service(https_secure_service);
 
     pingora_server.bootstrap();
+
+    tracing::info!(
+        version = crate_version!(),
+        workers = proxy_config.worker_threads,
+        "running on :443 and :80"
+    );
     pingora_server.run_forever();
 }
