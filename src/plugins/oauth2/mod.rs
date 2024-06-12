@@ -106,14 +106,21 @@ impl Oauth2 {
         jwt_secret: &str,
         validations: Option<&serde_json::Value>,
     ) -> Result<bool> {
-        let cookie_header = session.req_header().headers.get("cookie");
-        if cookie_header.is_none() {
-            return Ok(false); // will redirect to oauth callback
-        }
+        let cookie_header = session.req_header().headers.get_all("cookie");
 
-        let secure_jwt = Cookie::split_parse(cookie_header.unwrap().to_str()?)
-            .filter_map(Result::ok)
-            .find(|c| c.name() == COOKIE_NAME);
+        let mut secure_jwt: Option<Cookie> = None;
+
+        for cookie in cookie_header {
+            let cookie_str = cookie.to_str().unwrap();
+
+            let Ok(ck) = Cookie::parse(cookie_str) else {
+                continue;
+            };
+
+            if ck.name() == COOKIE_NAME {
+                secure_jwt = Some(ck);
+            }
+        }
 
         if secure_jwt.is_none() {
             return Ok(false); // will redirect to oauth callback
