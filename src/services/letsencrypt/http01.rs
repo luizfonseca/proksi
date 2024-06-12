@@ -136,10 +136,12 @@ impl LetsencryptService {
 
     /// Return the appropriate Let's Encrypt directories for certificates based on the environment
     fn get_lets_encrypt_directory(&self) -> PathBuf {
-        match self.config.lets_encrypt.staging {
-            Some(false) => self.config.paths.lets_encrypt.join("production"),
-            _ => self.config.paths.lets_encrypt.join("staging"),
-        }
+        let suffix = match self.config.lets_encrypt.staging {
+            Some(false) => "production",
+            _ => "staging",
+        };
+
+        self.config.paths.lets_encrypt.join(suffix)
     }
 
     /// Create a new order for a domain (HTTP-01 challenge)
