@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.12](https://github.com/luizfonseca/proksi/compare/v0.2.10...v0.2.12) (2024-06-13)
+
+
+### Features
+
+* **plugin:** add basic auth plugin ([8a4cf9e](https://github.com/luizfonseca/proksi/commit/8a4cf9e287159eebe4f4725415276dd64be89ff9))
+
+
+### Bug Fixes
+
+* **health_check:** remove unneeded temp. map ([04158f2](https://github.com/luizfonseca/proksi/commit/04158f2865bb72f8d4d98d531e5e538eb1e8cf99))
+* **lets_encrypt:** fix panic caused by missing certificate directory ([691a45a](https://github.com/luizfonseca/proksi/commit/691a45ad3f30e4af9db3d6e3eb739765abd6d32a))
+* **oauth2:** no-store generate state based on timestamp/url ([4a9645f](https://github.com/luizfonseca/proksi/commit/4a9645f179ea386b8d2cd1ae33ff2c424ac24cd3))
+* **oauth2:** username support for filtering ([19dab94](https://github.com/luizfonseca/proksi/commit/19dab94498ebabf4188ca3ba2ca942ec6f06403f))
+
+
+### Miscellaneous Chores
+
+* release marker for 0.2.12 ([3d88b27](https://github.com/luizfonseca/proksi/commit/3d88b27c33e55678b2353f26490ce7e3d64f959b))
+
 ## [0.2.10](https://github.com/luizfonseca/proksi/compare/v0.2.9...v0.2.10) (2024-06-12)
 
 
