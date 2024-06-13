@@ -1,7 +1,7 @@
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use std::time::SystemTime;
+use std::{borrow::Cow, collections::HashMap};
 
 use anyhow::{anyhow, bail, Result};
-use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use cookie::Cookie;
 use http::StatusCode;
@@ -29,24 +29,13 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
 
 // Shared state for Oauth2 flows (should be cleaned up after fetching for the first time)
 // TODO find a way to clean up/expire the state
-static OAUTH2_STATE: Lazy<ArcSwap<HashMap<String, String>>> =
-    Lazy::new(|| ArcSwap::new(Arc::new(HashMap::new())));
 const COOKIE_NAME: &str = "__Secure_Auth_PRK_JWT";
 
-fn insert_oauth2_state(key: String, value: String) {
-    let mut map = (**OAUTH2_STATE.load()).clone();
-
-    map.insert(key, value);
-
-    OAUTH2_STATE.store(Arc::new(map));
-}
-
-fn remove_oauth2_state(key: &str) {
-    let mut map = (**OAUTH2_STATE.load()).clone();
-
-    map.remove(key);
-
-    OAUTH2_STATE.store(Arc::new(map));
+fn get_current_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 /// The Oauth2 plugin
@@ -54,11 +43,16 @@ fn remove_oauth2_state(key: &str) {
 /// It can be used to authenticate users against various Oauth providers
 /// and authorize them to access specific resources or perform certain actions
 /// based on their authorization level.
-pub struct Oauth2;
+pub struct Oauth2 {
+    short_crypt: short_crypt::ShortCrypt,
+}
 
 impl Oauth2 {
     pub fn new() -> Self {
-        Self {}
+        // Generates in-memory secret for oauth2 states
+        let short_crypt = short_crypt::ShortCrypt::new(uuid::Uuid::new_v4().to_string());
+
+        Self { short_crypt }
     }
 
     /// Checks if the user is authorized to access the protected Oauth2 resource
@@ -75,7 +69,9 @@ impl Oauth2 {
     ) -> Result<bool> {
         let current_address = session.req_header().uri.to_string();
         // let host = session.req_header().uri.host().unwrap_or_default();
-        let state = uuid::Uuid::new_v4().to_string();
+
+        let state = format!("{};{}", get_current_timestamp(), current_address);
+        let state = self.short_crypt.encrypt_to_url_component(&state);
 
         let mut res_headers =
             ResponseHeader::build_no_case(StatusCode::TEMPORARY_REDIRECT, Some(1))?;
@@ -95,7 +91,6 @@ impl Oauth2 {
         )?;
 
         // Store the current path in the state
-        insert_oauth2_state(state, current_address);
         session.write_response_header(Box::new(res_headers)).await?;
 
         // Finish the request, we don't want to continue processing
@@ -248,22 +243,33 @@ impl MiddlewarePlugin for Oauth2 {
                 return self.unauthorized_response(session).await;
             };
 
-            let store = OAUTH2_STATE.load();
-            let state = store.get(&state.to_string());
-            let Some(saved_state) = state else {
+            // Get encrypted state and decrypt it
+            let Ok(encrypted) = self.short_crypt.decrypt_url_component(state) else {
                 tracing::info!("state does not exist or was removed");
                 return self.unauthorized_response(session).await;
             };
 
-            let redirect_from_state = saved_state.to_owned();
+            let Ok(redirect_from_state) = String::from_utf8(encrypted) else {
+                tracing::info!("state is not a valid UTF-8 string");
+                return self.unauthorized_response(session).await;
+            };
 
-            // Cleanup state to avoid replay attacks
-            remove_oauth2_state(saved_state);
+            let (timestamp, current_address) = redirect_from_state.split_once(';').unwrap();
+            let timestamp = timestamp.parse::<u64>().unwrap();
+            let current_address = current_address.to_string();
+
+            // Check if the state is still valid from the last 120 seconds (2 minutes)
+            if timestamp + 120 < get_current_timestamp() {
+                tracing::info!("state has expired");
+                return self.unauthorized_response(session).await;
+            }
 
             // Step 1: Exchange the code for an access token
             let user = match oauth_provider.get_oauth_user(code).await {
                 Err(err) => {
-                    tracing::error!("Failed to exchange code {code}, state {saved_state}: {err}");
+                    tracing::error!(
+                        "Failed to exchange code {code}, state {redirect_from_state}: {err}"
+                    );
                     return self.unauthorized_response(session).await;
                 }
                 Ok(user) => user,
@@ -279,7 +285,7 @@ impl MiddlewarePlugin for Oauth2 {
 
             let mut res_headers = ResponseHeader::build_no_case(StatusCode::FOUND, Some(1))?;
             res_headers.insert_header(http::header::SET_COOKIE, jwt_cookie.to_string())?;
-            res_headers.insert_header(http::header::LOCATION, redirect_from_state)?;
+            res_headers.insert_header(http::header::LOCATION, current_address)?;
             res_headers.insert_header(
                 http::header::CACHE_CONTROL,
                 "no-store, no-cache, must-revalidate, max-age=0",
