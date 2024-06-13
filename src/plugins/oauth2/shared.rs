@@ -67,6 +67,12 @@ pub(super) fn validate_user_from_provider(
                 // Check if the user's email is in the list of allowed emails
                 return validation_values.iter().contains(&&user.email[..]);
             }
+            "username" => {
+                // Check if the user's username is in the list of allowed usernames
+                return validation_values
+                    .iter()
+                    .any(|v| user.usernames.contains(&v.to_string()));
+            }
             _ => {}
         }
     }

@@ -8,8 +8,6 @@ use crate::config::RoutePlugin;
 
 #[derive(Debug, Default, Clone)]
 pub struct RouteStorePathMatcher {
-    pub prefix: Option<String>,
-    pub suffix: Option<String>,
     pub pattern: Option<PathTree<usize>>,
 }
 

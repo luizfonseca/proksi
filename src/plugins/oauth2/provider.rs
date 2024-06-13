@@ -11,7 +11,6 @@ pub struct Provider {
     pub(super) typ: OauthType,
     pub(super) client_id: String,
     pub(super) client_secret: String,
-    // redirect_uri: String,
 }
 
 impl Provider {
