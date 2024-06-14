@@ -68,7 +68,7 @@ impl ProxyLoggerReceiver {
 impl Service for ProxyLoggerReceiver {
     async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
         while let Some(buf) = self.receiver.recv().await {
-            io::stdout().write(&buf).unwrap();
+            io::stdout().write_all(&buf).unwrap();
         }
     }
 
