@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
 use async_trait::async_trait;
-use bytes::Bytes;
+
 use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
@@ -12,11 +12,11 @@ use tracing_subscriber::fmt::MakeWriter;
 
 /// A `io::Write` implementation that sends logs to a background service
 #[derive(Debug, Clone)]
-pub struct StdoutWriter(UnboundedSender<Bytes>);
+pub struct StdoutWriter(UnboundedSender<Vec<u8>>);
 
 impl io::Write for StdoutWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if let Ok(()) = self.0.send(Bytes::copy_from_slice(buf)) {
+        if let Ok(()) = self.0.send(buf.to_vec()) {
             return Ok(buf.len());
         }
 
@@ -35,7 +35,7 @@ pub struct ProxyLog {
 }
 
 impl ProxyLog {
-    pub fn new(sender: &UnboundedSender<Bytes>) -> Self {
+    pub fn new(sender: &UnboundedSender<Vec<u8>>) -> Self {
         ProxyLog {
             // level,
             stdout: StdoutWriter(sender.clone()),
@@ -55,11 +55,11 @@ impl<'a> MakeWriter<'a> for ProxyLog {
 /// A background service that receives logs from the main thread and writes them to stdout
 /// TODO: implement log rotation/write to disk (or use an existing lightweight crate)
 pub struct ProxyLoggerReceiver {
-    receiver: UnboundedReceiver<Bytes>,
+    receiver: UnboundedReceiver<Vec<u8>>,
 }
 
 impl ProxyLoggerReceiver {
-    pub fn new(receiver: UnboundedReceiver<Bytes>) -> Self {
+    pub fn new(receiver: UnboundedReceiver<Vec<u8>>) -> Self {
         ProxyLoggerReceiver { receiver }
     }
 }
@@ -67,11 +67,8 @@ impl ProxyLoggerReceiver {
 #[async_trait]
 impl Service for ProxyLoggerReceiver {
     async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
-        loop {
-            if let Some(buf) = self.receiver.recv().await {
-                // TODO: flush/rotate logs to disk
-                io::stdout().write_all(&buf).unwrap();
-            }
+        while let Some(buf) = self.receiver.recv().await {
+            io::stdout().write(&buf).unwrap();
         }
     }
 

@@ -59,7 +59,7 @@ fn main() -> Result<(), anyhow::Error> {
     let (sender, mut _receiver) = tokio::sync::broadcast::channel::<MsgProxy>(10);
 
     // Receiver channel for non-blocking logging
-    let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<bytes::Bytes>();
+    let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
     let proxy_logger = ProxyLog::new(&log_sender);
 
     // Creates a tracing/logging subscriber based on the configuration provided
