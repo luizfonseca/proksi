@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.13](https://github.com/luizfonseca/proksi/compare/v0.2.12...v0.2.13) (2024-06-14)
+
+
+### Features
+
+* **logger:** allow enabling/disabling access/error/logs altogether ([615285d](https://github.com/luizfonseca/proksi/commit/615285d6be3a8f1541fafe70d57dcff5b210e031))
+
+
+### Bug Fixes
+
+* **docker:** container (not swarm) support for extra labels ([714d9be](https://github.com/luizfonseca/proksi/commit/714d9be17755c9ccde783541ba0bbd84bcb413b0))
+
+
+### Miscellaneous Chores
+
+* release marker for 0.2.13 ([7aac672](https://github.com/luizfonseca/proksi/commit/7aac6727f643ab04e72044f4722ba133e80a3d43))
+
 ## [0.2.12](https://github.com/luizfonseca/proksi/compare/v0.2.10...v0.2.12) (2024-06-13)
 
 
