@@ -65,6 +65,9 @@ staging = true
 
 # The logging configuration for the server.
 [logging]
+# Whether to log anything at all (default: true)
+enabled = true
+
 # The log level for the server (can be "DEBUG", "INFO", "WARN", "ERROR").
 level = "INFO"
 
