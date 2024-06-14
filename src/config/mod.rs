@@ -44,7 +44,8 @@ pub struct Docker {
         long = "docker.enabled",
         required = false,
         value_parser,
-        default_value = "false"
+        default_value = "false",
+        id = "docker.enabled"
     )]
     pub enabled: Option<bool>,
 
@@ -233,6 +234,16 @@ impl From<&LogLevel> for tracing::level_filters::LevelFilter {
 #[derive(Debug, Serialize, Deserialize, Clone, Args)]
 #[group(id = "logging", requires = "level")]
 pub struct Logging {
+    /// If logging is enabled at all. Setting this to `false` will disable all logging output.
+    #[arg(
+        long = "log.enabled",
+        required = false,
+        value_parser,
+        default_value = "true",
+        id = "log.enabled"
+    )]
+    pub enabled: bool,
+
     /// The level of logging to be used.
     #[serde(deserialize_with = "log_level_deser")]
     #[arg(
@@ -257,7 +268,7 @@ pub struct Logging {
         long = "log.error_logs_enabled",
         required = false,
         value_parser,
-        default_value = "false"
+        default_value = "true"
     )]
     pub error_logs_enabled: bool,
 }
@@ -361,6 +372,7 @@ impl Default for Config {
             lets_encrypt: LetsEncrypt::default(),
             routes: vec![],
             logging: Logging {
+                enabled: true,
                 level: LogLevel::Info,
                 access_logs_enabled: true,
                 error_logs_enabled: false,

@@ -249,6 +249,7 @@ impl ProxyHttp for Router {
             status_code,
             http_version,
             request_id = ctx.extensions.get("request_id_header"),
+            access_log = true
         );
     }
 }

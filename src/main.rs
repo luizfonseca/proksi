@@ -60,7 +60,12 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Receiver channel for non-blocking logging
     let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
-    let proxy_logger = ProxyLog::new(&log_sender);
+    let proxy_logger = ProxyLog::new(
+        log_sender,
+        proxy_config.logging.enabled,
+        proxy_config.logging.access_logs_enabled,
+        proxy_config.logging.error_logs_enabled,
+    );
 
     // Creates a tracing/logging subscriber based on the configuration provided
     tracing_subscriber::fmt()
