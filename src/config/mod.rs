@@ -535,6 +535,7 @@ mod tests {
                 helper_config_file(),
             )?;
             jail.set_env("PROKSI_SERVICE_NAME", "new_name");
+            jail.set_env("PROKSI_LOGGING__ENABLED", "false");
             jail.set_env("PROKSI_LOGGING__LEVEL", "warn");
             jail.set_env("PROKSI_DOCKER__ENABLED", "true");
             jail.set_env("PROKSI_DOCKER__INTERVAL_SECS", "30");
@@ -555,6 +556,7 @@ mod tests {
 
             let proxy_config = config.unwrap();
             assert_eq!(proxy_config.service_name, "new_name");
+            assert_eq!(proxy_config.logging.enabled, false);
             assert_eq!(proxy_config.logging.level, LogLevel::Warn);
 
             assert_eq!(proxy_config.docker.enabled, Some(true));
@@ -596,7 +598,7 @@ mod tests {
             assert_eq!(proxy_config.service_name, "proksi");
             assert_eq!(logging.level, LogLevel::Info);
             assert_eq!(logging.access_logs_enabled, true);
-            assert_eq!(logging.error_logs_enabled, false);
+            assert_eq!(logging.error_logs_enabled, true);
 
             assert_eq!(proxy_config.routes.len(), 0);
 
@@ -635,7 +637,7 @@ mod tests {
             assert_eq!(proxy_config.service_name, "proksi");
             assert_eq!(logging.level, LogLevel::Info);
             assert_eq!(logging.access_logs_enabled, true);
-            assert_eq!(logging.error_logs_enabled, false);
+            assert_eq!(logging.error_logs_enabled, true);
             assert_eq!(proxy_config.routes.len(), 1);
 
             assert_eq!(proxy_config.docker.enabled, Some(false));
