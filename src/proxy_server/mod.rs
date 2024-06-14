@@ -27,7 +27,7 @@ const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
     write_timeout: None,
     verify_cert: false,
     alternative_cn: None,
-    alpn: ALPN::H2H1,
+    alpn: ALPN::H1,
     ca: None,
     no_header_eos: false,
     h2_ping_interval: None,
