@@ -49,6 +49,15 @@ pub enum MsgProxy {
     NewCertificate(MsgCert),
 }
 
+#[deny(
+    clippy::all,
+    clippy::pedantic,
+    clippy::perf,
+    clippy::correctness,
+    clippy::style,
+    clippy::suspicious,
+    clippy::complexity
+)]
 fn main() -> Result<(), anyhow::Error> {
     // Loads configuration from command-line, YAML or TOML sources
     let proxy_config = Arc::new(
