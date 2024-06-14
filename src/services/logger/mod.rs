@@ -74,11 +74,10 @@ impl<'a> MakeWriter<'a> for ProxyLog {
 
     fn make_writer_for(&'a self, meta: &tracing::Metadata<'_>) -> Self::Writer {
         // if access_logs are disabled, we run a logic to skip them
-
         let mut skip_log = false;
 
         if !self.error_logs {
-            skip_log = *meta.level() == tracing::Level::ERROR;
+            skip_log = meta.level() == &tracing::Level::ERROR;
         }
 
         if !self.access_logs {
