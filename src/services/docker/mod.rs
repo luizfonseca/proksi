@@ -296,6 +296,7 @@ impl LabelService {
             let mut match_with_path_patterns = vec![];
             let mut route_header_add: Option<Vec<RouteHeaderAdd>> = None;
             let mut route_header_remove: Option<Vec<RouteHeaderRemove>> = None;
+            let mut ssl_certificate_self_signed_on_failure = false;
 
             // Map through extra labels
             for (k, v) in container_labels {
@@ -316,6 +317,9 @@ impl LabelService {
                                 serde_json::from_str(v).unwrap_or(vec![]);
 
                             route_header_remove = Some(deser);
+                        }
+                        "proksi.ssl_certificate.self_signed_on_failure" => {
+                            ssl_certificate_self_signed_on_failure = v == "true";
                         }
                         k if k.starts_with("proksi.match_with.path.pattern.") => {
                             match_with_path_patterns.push(v.clone());
@@ -346,6 +350,8 @@ impl LabelService {
                 let mut routed = ProksiDockerRoute::new(vec![], match_with_path_patterns);
                 routed.host_header_add = route_header_add;
                 routed.host_header_remove = route_header_remove;
+                routed.ssl_certificate_self_signed_on_failure =
+                    ssl_certificate_self_signed_on_failure;
                 host_map.insert(proxy_host.to_string(), routed);
             }
 
