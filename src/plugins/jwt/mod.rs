@@ -61,6 +61,6 @@ mod tests {
     #[test]
     fn test_encode_jwt_with_secret() {
         let token = encode_jwt("test", b"secret");
-        assert_eq!(token.is_ok(), true);
+        assert!(token.is_ok());
     }
 }

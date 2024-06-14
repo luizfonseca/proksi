@@ -73,7 +73,7 @@ mod tests {
         let load_balancer = LoadBalancer::<RoundRobin>::try_from_iter(vec!["1.1.1.1:80"]).unwrap();
         let route_store = RouteStoreContainer::new(load_balancer);
 
-        assert_eq!(route_store.path_matcher.pattern.is_none(), true);
+        assert!(route_store.path_matcher.pattern.is_none());
     }
 
     #[test]
@@ -84,15 +84,15 @@ mod tests {
             .path_matcher
             .with_pattern(&[Cow::Borrowed("/auth")]);
 
-        assert_eq!(route_store.path_matcher.pattern.is_some(), true);
+        assert!(route_store.path_matcher.pattern.is_some());
 
         let pattern = route_store.path_matcher.pattern.as_ref().unwrap();
-        assert_eq!(pattern.find("/auth").is_some(), true);
+        assert!(pattern.find("/auth").is_some());
 
         let (h, p) = pattern.find("/auth").unwrap();
         assert_eq!(h, &0);
         assert_eq!(p.pattern(), "/auth");
 
-        assert_eq!(pattern.find("/invalid").is_none(), true);
+        assert!(pattern.find("/invalid").is_none());
     }
 }

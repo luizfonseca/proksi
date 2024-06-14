@@ -556,7 +556,7 @@ mod tests {
 
             let proxy_config = config.unwrap();
             assert_eq!(proxy_config.service_name, "new_name");
-            assert_eq!(proxy_config.logging.enabled, false);
+            assert!(!proxy_config.logging.enabled);
             assert_eq!(proxy_config.logging.level, LogLevel::Warn);
 
             assert_eq!(proxy_config.docker.enabled, Some(true));
@@ -597,8 +597,8 @@ mod tests {
             let logging = proxy_config.logging;
             assert_eq!(proxy_config.service_name, "proksi");
             assert_eq!(logging.level, LogLevel::Info);
-            assert_eq!(logging.access_logs_enabled, true);
-            assert_eq!(logging.error_logs_enabled, true);
+            assert!(logging.access_logs_enabled);
+            assert!(logging.error_logs_enabled);
 
             assert_eq!(proxy_config.routes.len(), 0);
 
@@ -636,8 +636,8 @@ mod tests {
 
             assert_eq!(proxy_config.service_name, "proksi");
             assert_eq!(logging.level, LogLevel::Info);
-            assert_eq!(logging.access_logs_enabled, true);
-            assert_eq!(logging.error_logs_enabled, true);
+            assert!(logging.access_logs_enabled);
+            assert!(logging.error_logs_enabled);
             assert_eq!(proxy_config.routes.len(), 1);
 
             assert_eq!(proxy_config.docker.enabled, Some(false));
