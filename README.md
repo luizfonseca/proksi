@@ -6,7 +6,7 @@
 ![Crates.io Total Downloads](https://img.shields.io/crates/d/proksi?style=for-the-badge)
 
 
-![logo](./assets/crabbylogoproksi.png)
+<img src="./assets/crabbylogoproksi.png" alt="logo" width="200"/> 
 
 
 > ⚠️ Important: this is still a work-in-progress project.
