@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.14](https://github.com/luizfonseca/proksi/compare/v0.2.13...v0.2.14) (2024-06-15)
+
+
+### Bug Fixes
+
+* remove unnecessary clones from arcswap stores ([9de6d98](https://github.com/luizfonseca/proksi/commit/9de6d984efb054c93c113773049e12677226acdb))
+
 ## [0.2.13](https://github.com/luizfonseca/proksi/compare/v0.2.12...v0.2.13) (2024-06-14)
 
 
