@@ -416,6 +416,47 @@ impl LabelService {
             config: Some(plugin_hashmap),
         })
     }
+
+    /// Sends a message to the route discovery service through mspc
+    fn send_route_message(&self, hosts: HashMap<String, ProksiDockerRoute>) {
+        for (host, value) in hosts {
+            // If no upstreams can be found, skip adding the route
+            if value.upstreams.is_empty() {
+                continue;
+            }
+
+            let host_value: Cow<'static, str> = Cow::Owned(host);
+
+            // Notify the route discovery service of the new host
+            self.sender
+                .send(MsgProxy::NewRoute(MsgRoute {
+                    host: host_value,
+                    upstreams: value.upstreams,
+                    path_matchers: value.path_matchers,
+                    host_headers_add: value.host_header_add.unwrap_or_else(Vec::new),
+                    host_headers_remove: value.host_header_remove.unwrap_or_else(Vec::new),
+                    plugins: value.plugins.unwrap_or_else(Vec::new),
+
+                    self_signed_certs: value.ssl_certificate_self_signed_on_failure,
+                }))
+                .ok();
+        }
+    }
+
+    // By default every container or service should have these 3 labels
+    // So that Proksi can route the appropriate traffic
+    async fn get_routes_from_docker(&self) -> HashMap<String, ProksiDockerRoute> {
+        let mut filters = HashMap::new();
+        filters.insert(
+            "label",
+            vec!["proksi.enabled=true", "proksi.host", "proksi.port"],
+        );
+
+        match self.config.docker.mode {
+            DockerServiceMode::Swarm => self.list_services(filters.clone()).await,
+            DockerServiceMode::Container => self.list_containers(filters.clone()).await,
+        }
+    }
 }
 
 #[async_trait]
@@ -423,48 +464,14 @@ impl Service for LabelService {
     async fn start_service(&mut self, _fds: Option<ListenFds>, mut _shutdown: ShutdownWatch) {
         info!(service = "docker", "Started Docker service");
 
-        // By default every container or service should have these 3 labels
-        // So that Proksi can route the appropriate traffic
-        let mut filters = HashMap::new();
-        filters.insert(
-            "label",
-            vec!["proksi.enabled=true", "proksi.host", "proksi.port"],
-        );
+        let mut interval = tokio::time::interval(Duration::from_secs(
+            self.config.docker.interval_secs.unwrap_or(15),
+        ));
 
-        let config = self.config.clone();
-
-        let mut interval = tokio::time::interval(Duration::from_secs(15));
         interval.tick().await;
         loop {
             interval.tick().await;
-
-            let hosts = match config.docker.mode {
-                DockerServiceMode::Swarm => self.list_services(filters.clone()).await,
-                DockerServiceMode::Container => self.list_containers(filters.clone()).await,
-            };
-
-            for (host, value) in hosts {
-                // If no upstreams can be found, skip adding the route
-                if value.upstreams.is_empty() {
-                    continue;
-                }
-
-                let host_value: Cow<'static, str> = Cow::Owned(host);
-
-                // Notify the route discovery service of the new host
-                self.sender
-                    .send(MsgProxy::NewRoute(MsgRoute {
-                        host: host_value,
-                        upstreams: value.upstreams,
-                        path_matchers: value.path_matchers,
-                        host_headers_add: value.host_header_add.unwrap_or_else(Vec::new),
-                        host_headers_remove: value.host_header_remove.unwrap_or_else(Vec::new),
-                        plugins: value.plugins.unwrap_or_else(Vec::new),
-
-                        self_signed_certs: value.ssl_certificate_self_signed_on_failure,
-                    }))
-                    .ok();
-            }
+            self.send_route_message(self.get_routes_from_docker().await);
         }
     }
 
