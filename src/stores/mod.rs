@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use arc_swap::ArcSwap;
+use arc_swap::{ArcSwap, Guard};
 use certificates::{Certificate, CertificateStore};
 use challenges::ChallengeStore;
 use once_cell::sync::Lazy;
@@ -35,8 +35,8 @@ pub fn get_route_by_key(key: &str) -> Option<RouteStoreContainer> {
     ROUTE_STORE.load().get(key).cloned()
 }
 
-pub fn get_routes() -> Arc<RouteStore> {
-    ROUTE_STORE.load().clone()
+pub fn get_routes() -> Guard<Arc<RouteStore>> {
+    ROUTE_STORE.load()
 }
 
 pub fn _swap_routes(map: RouteStore) {
@@ -59,8 +59,8 @@ pub fn get_certificate_by_key(key: &str) -> Option<Certificate> {
     CERTIFICATE_STORE.load().get(key).cloned()
 }
 
-pub fn get_certificates() -> Arc<CertificateStore> {
-    CERTIFICATE_STORE.load().clone()
+pub fn get_certificates() -> Guard<Arc<CertificateStore>> {
+    CERTIFICATE_STORE.load()
 }
 
 pub fn insert_certificate(key: String, value: Certificate) {
