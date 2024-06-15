@@ -58,7 +58,7 @@ impl RoutingService {
     }
 
     /// Watch for new routes being added and update the Router Store
-    async fn watch_for_route_changes(route: MsgRoute) {
+    fn watch_for_route_changes(route: MsgRoute) {
         // TODO: refactor
         let mut matcher: Option<RouteMatcher> = None;
         let route_clone = route.path_matchers.clone();
@@ -102,7 +102,7 @@ impl Service for RoutingService {
         // Watch for new hosts being added and configure them accordingly
         let mut receiver = self.broadcast.subscribe();
         while let Ok(MsgProxy::NewRoute(route)) = receiver.recv().await {
-            Self::watch_for_route_changes(route).await;
+            Self::watch_for_route_changes(route);
         }
     }
 
