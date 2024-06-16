@@ -1,9 +1,6 @@
 use std::{collections::BTreeMap, time::Duration};
 
-use pingora::{
-    protocols::ALPN,
-    upstreams::peer::{PeerOptions, TcpKeepalive},
-};
+use pingora::{protocols::ALPN, upstreams::peer::PeerOptions};
 
 pub mod cert_store;
 pub mod http_proxy;

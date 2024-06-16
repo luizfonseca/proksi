@@ -23,7 +23,7 @@ pub struct Router {
 }
 
 fn process_route(ctx: &RouterContext) -> Arc<RouteStoreContainer> {
-    ctx.route_container.as_ref().unwrap().clone()
+    ctx.route_container.as_ref().cloned().unwrap()
 }
 pub struct RouterContext {
     pub host: String,
