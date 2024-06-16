@@ -267,6 +267,12 @@ impl From<&LogLevel> for tracing::level_filters::LevelFilter {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ValueEnum)]
+pub enum LogFormat {
+    Json,
+    Pretty,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Args)]
 #[group(id = "logging", requires = "level")]
 pub struct Logging {
@@ -307,6 +313,16 @@ pub struct Logging {
         default_value = "true"
     )]
     pub error_logs_enabled: bool,
+
+    /// The format of the log output
+    #[serde(deserialize_with = "log_format_deser")]
+    #[arg(
+        long = "log.format",
+        required = false,
+        value_enum,
+        default_value = "json"
+    )]
+    pub format: LogFormat,
 }
 
 /// The main configuration struct.
@@ -412,6 +428,7 @@ impl Default for Config {
                 level: LogLevel::Info,
                 access_logs_enabled: true,
                 error_logs_enabled: false,
+                format: LogFormat::Json,
             },
             paths: Path::default(),
         }
@@ -507,6 +524,19 @@ where
         _ => Err(serde::de::Error::custom(
             "expected one of: Swarm, Container",
         )),
+    }
+}
+
+/// Deserialize function to convert a string to a `LogLevel` Enum
+fn log_format_deser<'de, D>(deserializer: D) -> Result<LogFormat, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    match s.to_lowercase().as_str() {
+        "json" => Ok(LogFormat::Json),
+        "pretty" => Ok(LogFormat::Pretty),
+        _ => Err(serde::de::Error::custom("expected one of: json, pretty")),
     }
 }
 

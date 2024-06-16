@@ -4,7 +4,7 @@ use ::pingora::server::Server;
 use anyhow::anyhow;
 use bytes::Bytes;
 use clap::crate_version;
-use config::{load, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
+use config::{load, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
 
 use pingora::{listeners::TlsSettings, proxy::http_proxy_service, server::configuration::Opt};
 
@@ -77,11 +77,18 @@ fn main() -> Result<(), anyhow::Error> {
     );
 
     // Creates a tracing/logging subscriber based on the configuration provided
-    tracing_subscriber::fmt()
-        // .json()
-        .with_max_level(&proxy_config.logging.level)
-        .with_writer(proxy_logger)
-        .init();
+    if proxy_config.logging.format == LogFormat::Json {
+        tracing_subscriber::fmt()
+            .json()
+            .with_max_level(&proxy_config.logging.level)
+            .with_writer(proxy_logger)
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_max_level(&proxy_config.logging.level)
+            .with_writer(proxy_logger)
+            .init();
+    };
 
     // Pingora load balancer server
     let mut pingora_server = Server::new(Some(Opt::default()))?;
