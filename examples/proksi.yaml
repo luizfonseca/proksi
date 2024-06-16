@@ -115,6 +115,13 @@ routes:
 
     # SSL configuration for the route.
     # The ssl attribute is optional.
+    ssl:
+      self_signed_fallback: true
+      path:
+        key: "/etc/proksi/certs/my-host.key"
+        pem: "/etc/proksi/certs/my-host.pem"
+
+    # SSL configuration for the route (deprecated).
     ssl_certificate:
       # If the self_signed_on_fail attribute is set to <true>,
       # the server will use a self-signed certificate if the Let's Encrypt certificate

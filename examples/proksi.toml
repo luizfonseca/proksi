@@ -103,7 +103,15 @@ host = "example.com"
 pattern = "/api/*" # Reads as "anything starting with /api/"
 
 
-# SSL certificate configuration for the route.
+# SSL configuration for the route.
+[[routes.ssl]]
+self_signed_fallback = true
+[[routes.ssl.path]]
+pem = "/etc/proksi/certs/my-host.pem"
+key = "/etc/proksi/certs/my-host.key"
+
+
+# SSL certificate configuration for the route (deprecated).
 
 [[routes.ssl_certificate]]
 
