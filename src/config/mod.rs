@@ -214,7 +214,6 @@ impl From<pingora::tls::ssl::SslVersion> for ProtoVersion {
         match v {
             pingora::tls::ssl::SslVersion::TLS1_1 => ProtoVersion::V1_1,
             pingora::tls::ssl::SslVersion::TLS1_2 => ProtoVersion::V1_2,
-            pingora::tls::ssl::SslVersion::TLS1_3 => ProtoVersion::V1_3,
             _ => ProtoVersion::V1_3,
         }
     }
