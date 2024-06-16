@@ -3,14 +3,16 @@ use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
 use async_trait::async_trait;
 
 use http::{HeaderName, HeaderValue};
+use openssl::pkey::PKey;
+use openssl::x509::X509;
 use pingora::lb::{health_check::TcpHealthCheck, selection::RoundRobin, LoadBalancer};
 use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
 use tokio::sync::broadcast::Sender;
-use tracing::debug;
 
+use crate::config::Route;
 use crate::MsgRoute;
 use crate::{
     config::{Config, RouteHeader, RouteMatcher, RoutePathMatcher, RoutePlugin},
@@ -44,6 +46,13 @@ impl RoutingService {
                 .as_ref()
                 .and_then(|v| v.self_signed_on_failure);
 
+            if let Err(err) = add_route_ssl_to_store(route) {
+                tracing::error!(
+                    "failed to add SSL certificate to store for host {:?}: {err}",
+                    route.host
+                );
+            }
+
             add_route_to_router(
                 &route.host,
                 &upstream_backends,
@@ -53,7 +62,7 @@ impl RoutingService {
                 self_signed_cert_on_failure.unwrap_or(false),
             );
 
-            debug!("Added route: {}, {:?}", route.host, route.upstreams);
+            tracing::debug!("Added route: {}, {:?}", route.host, route.upstreams);
         }
     }
 
@@ -213,6 +222,49 @@ fn add_route_to_router(
     }
 
     stores::insert_route(host.to_string(), route_store_container);
+}
+
+// TODO: refactor this into its own module
+fn add_route_ssl_to_store(route: &Route) -> Result<(), anyhow::Error> {
+    let Some(ssl_path) = route.ssl.as_ref().and_then(|v| v.path.as_ref()) else {
+        return Ok(());
+    };
+
+    let key_from_file = std::fs::read_to_string(ssl_path.key.as_os_str()).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to load private key from file {:?}: {err}",
+            ssl_path.key
+        )
+    })?;
+    let pem_from_file = std::fs::read_to_string(ssl_path.pem.as_os_str()).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to load certificate from file {:?}: {err}",
+            ssl_path.pem
+        )
+    })?;
+
+    let key = PKey::private_key_from_pem(key_from_file.as_bytes()).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to load private key from file {:?}: {err}",
+            ssl_path.key
+        )
+    })?;
+    let pem = X509::from_pem(pem_from_file.as_bytes()).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to load certificate from file {:?}: {err}",
+            ssl_path.pem
+        )
+    })?;
+
+    stores::insert_certificate(
+        route.host.to_string(),
+        stores::certificates::Certificate {
+            key,
+            certificate: pem,
+        },
+    );
+
+    Ok(())
 }
 
 // #[cfg(test)]

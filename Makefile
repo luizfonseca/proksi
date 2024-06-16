@@ -8,3 +8,5 @@ build.release:
 	cargo build --release
 build.dev:
 	cargo build
+dev:
+	cargo watch -c -x run -d 1 -i data -i dist

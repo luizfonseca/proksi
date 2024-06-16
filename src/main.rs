@@ -78,13 +78,14 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Creates a tracing/logging subscriber based on the configuration provided
     tracing_subscriber::fmt()
-        .json()
+        // .json()
         .with_max_level(&proxy_config.logging.level)
         .with_writer(proxy_logger)
         .init();
 
     // Pingora load balancer server
     let mut pingora_server = Server::new(Some(Opt::default()))?;
+    pingora_server.bootstrap();
 
     // Service: Docker
     if proxy_config.docker.enabled.unwrap_or(false) {
@@ -149,8 +150,6 @@ fn main() -> Result<(), anyhow::Error> {
     // Listen on HTTP and HTTPS ports
     pingora_server.add_service(http_public_service);
     pingora_server.add_service(https_secure_service);
-
-    pingora_server.bootstrap();
 
     tracing::info!(
         version = crate_version!(),
