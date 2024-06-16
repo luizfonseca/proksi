@@ -87,6 +87,13 @@ fn main() -> Result<(), anyhow::Error> {
     let mut pingora_server = Server::new(Some(Opt::default()))?;
     pingora_server.bootstrap();
 
+    // Built-in services for health checks, logging, and routing
+    pingora_server.add_service(RoutingService::new(
+        proxy_config.clone(),
+        sender.clone(),
+        // route_store.clone(),
+    ));
+
     // Service: Docker
     if proxy_config.docker.enabled.unwrap_or(false) {
         let docker_service = docker::LabelService::new(proxy_config.clone(), sender.clone());
@@ -138,12 +145,6 @@ fn main() -> Result<(), anyhow::Error> {
     // prometheus_service_http.add_tcp("0.0.0.0:9090");
     // pingora_server.add_service(prometheus_service_http);
 
-    // Built-in services for health checks, logging, and routing
-    pingora_server.add_service(RoutingService::new(
-        proxy_config.clone(),
-        sender.clone(),
-        // route_store.clone(),
-    ));
     pingora_server.add_service(HealthService::new());
     pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver));
 
