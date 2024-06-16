@@ -16,7 +16,7 @@ const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
     tcp_keepalive: None,
     bind_to: None,
     total_connection_timeout: None,
-    idle_timeout: Some(Duration::from_secs(3600)),
+    idle_timeout: Some(Duration::from_secs(360)),
     write_timeout: None,
     verify_cert: false,
     alternative_cn: None,

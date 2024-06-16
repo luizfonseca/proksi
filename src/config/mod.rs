@@ -10,6 +10,11 @@ use tracing::level_filters::LevelFilter;
 
 mod validate;
 
+/// Default fn for boolean values
+fn bool_true() -> bool {
+    true
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
 pub(crate) enum DockerServiceMode {
     Swarm,
@@ -180,6 +185,34 @@ pub struct RoutePlugin {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct RouteSslPath {
+    /// Path to the certificate .key file (e.g. `/etc/proksi/certs/my-host.key`)
+    pub key: PathBuf,
+
+    /// Path to the certificate .pem file (e.g. `/etc/proksi/certs/my-host.pem`)
+    pub pem: PathBuf,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RouteSsl {
+    /// If provided, will be used instead of generating certificates from
+    /// Let's Encrypt or self-signed certificates.
+    pub path: Option<RouteSslPath>,
+
+    /// If the `self_signed_on_failure` is set to <true>,
+    /// the server will use a self-signed certificate if the Let's Encrypt certificate
+    /// issuance fails. This is useful for development and testing purposes.
+    ///
+    /// If the `self_signed_on_failure` is set to <false>
+    /// and let's encrypt fails to issue a certificate,
+    /// the server will respond with a SNI error that closes the connection.
+    ///
+    /// The default value is <true>.
+    #[serde(default = "bool_true")]
+    pub self_signed_fallback: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Route {
     /// The hostname that the proxy will accept
     /// requests for the upstreams in the route.
@@ -196,6 +229,9 @@ pub struct Route {
     /// SSL certificate configurations for the given host
     /// (ex: self-signed, path/object storage, etc.)
     pub ssl_certificate: Option<RouteSslCertificate>,
+
+    /// SSL configuration for the route
+    pub ssl: Option<RouteSsl>,
 
     /// Header modifications for the given route (remove, add, etc. )
     pub headers: Option<RouteHeader>,
@@ -625,6 +661,10 @@ mod tests {
                       - name: "cors"
                         config:
                           allowed_origins: ["*"]
+                    ssl:
+                      path:
+                        key: "/etc/proksi/certs/my-host.key"
+                        pem: "/etc/proksi/certs/my-host.pem"
                 "#,
             )?;
 
@@ -653,10 +693,17 @@ mod tests {
 
             assert_eq!(paths.lets_encrypt.as_os_str(), "/etc/proksi/letsencrypt");
 
-            let plugins = proxy_config.routes[0].plugins.as_ref().unwrap();
+            let route = &proxy_config.routes[0];
+            let plugins = route.plugins.as_ref().unwrap();
             let plugin_config = plugins[0].config.as_ref().unwrap();
             assert_eq!(plugins[0].name, "cors");
             assert_eq!(plugin_config.get("allowed_origins"), Some(&json!(["*"])));
+
+            let ssl = route.ssl.as_ref().unwrap();
+            let path = ssl.path.as_ref().unwrap();
+            assert_eq!(ssl.self_signed_fallback, true);
+            assert_eq!(path.key.as_os_str(), "/etc/proksi/certs/my-host.key");
+            assert_eq!(path.pem.as_os_str(), "/etc/proksi/certs/my-host.pem");
 
             Ok(())
         });
