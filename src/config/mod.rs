@@ -15,6 +15,14 @@ fn bool_true() -> bool {
     true
 }
 
+fn default_proto_version() -> ProtoVersion {
+    ProtoVersion::V1_3
+}
+
+fn default_proto_version_min() -> ProtoVersion {
+    ProtoVersion::V1_2
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
 pub(crate) enum DockerServiceMode {
     Swarm,
@@ -194,10 +202,43 @@ pub struct RouteSslPath {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub enum ProtoVersion {
+    V1_1,
+    V1_2,
+    V1_3,
+}
+
+/// Converts a `pingora::tls::ssl::SslVersion` to a `ProtoVersion`
+impl From<pingora::tls::ssl::SslVersion> for ProtoVersion {
+    fn from(v: pingora::tls::ssl::SslVersion) -> Self {
+        match v {
+            pingora::tls::ssl::SslVersion::TLS1_1 => ProtoVersion::V1_1,
+            pingora::tls::ssl::SslVersion::TLS1_2 => ProtoVersion::V1_2,
+            pingora::tls::ssl::SslVersion::TLS1_3 => ProtoVersion::V1_3,
+            _ => ProtoVersion::V1_3,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RouteSsl {
     /// If provided, will be used instead of generating certificates from
     /// Let's Encrypt or self-signed certificates.
     pub path: Option<RouteSslPath>,
+
+    /// The minimum and maximum protocol versions that the client can use.
+    #[serde(
+        default = "default_proto_version_min",
+        deserialize_with = "proto_version_deser"
+    )]
+    pub min_proto: ProtoVersion,
+
+    /// The maximum protocol version that the client can use.
+    #[serde(
+        default = "default_proto_version",
+        deserialize_with = "proto_version_deser"
+    )]
+    pub max_proto: ProtoVersion,
 
     /// If the `self_signed_on_failure` is set to <true>,
     /// the server will use a self-signed certificate if the Let's Encrypt certificate
@@ -537,6 +578,22 @@ where
         "json" => Ok(LogFormat::Json),
         "pretty" => Ok(LogFormat::Pretty),
         _ => Err(serde::de::Error::custom("expected one of: json, pretty")),
+    }
+}
+
+/// Deserialize function to convert a string to a `LogLevel` Enum
+fn proto_version_deser<'de, D>(deserializer: D) -> Result<ProtoVersion, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    match s.to_lowercase().as_str() {
+        "v1.1" => Ok(ProtoVersion::V1_1),
+        "v1.2" => Ok(ProtoVersion::V1_2),
+        "v1.3" => Ok(ProtoVersion::V1_3),
+        _ => Err(serde::de::Error::custom(
+            "expected one of: v1.1, v1.2, v1.3",
+        )),
     }
 }
 
