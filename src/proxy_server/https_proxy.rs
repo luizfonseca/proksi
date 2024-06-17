@@ -1,3 +1,4 @@
+use std::net::ToSocketAddrs;
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
@@ -7,6 +8,7 @@ use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::proxy::{ProxyHttp, Session};
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 
+use crate::config::RouteUpstream;
 use crate::stores::{self, routes::RouteStoreContainer};
 
 use super::{
@@ -28,6 +30,7 @@ fn process_route(ctx: &RouterContext) -> Arc<RouteStoreContainer> {
 pub struct RouterContext {
     pub host: String,
     pub route_container: Option<Arc<RouteStoreContainer>>,
+    pub upstream: Option<RouteUpstream>,
     pub extensions: HashMap<Cow<'static, str>, String>,
 
     pub timings: RouterTimings,
@@ -47,6 +50,7 @@ impl ProxyHttp for Router {
         RouterContext {
             host: String::new(),
             route_container: None,
+            upstream: None,
             extensions: HashMap::new(),
             timings: RouterTimings {
                 request_filter_start: std::time::Instant::now(),
@@ -109,12 +113,33 @@ impl ProxyHttp for Router {
         // If there's no host matching, returns a 404
         let route_container = process_route(ctx);
 
-        let Some(healthy_upstream) = route_container.load_balancer.select(b"", 4) else {
+        let Some(healthy_upstream) = route_container.load_balancer.select(b"", 128) else {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
 
+        let (healthy_ip, healthy_port) = if let Some(scr) = healthy_upstream.addr.as_inet() {
+            (scr.ip().to_string(), scr.port())
+        } else {
+            return Err(pingora::Error::new(HTTPStatus(503)));
+        };
+
+        let Some(upstream) = route_container.upstreams.iter().find(|u| {
+            format!("{}:{}", u.ip, u.port)
+                .to_socket_addrs()
+                .unwrap()
+                .any(|s| s.ip().to_string() == healthy_ip && s.port() == healthy_port)
+        }) else {
+            return Err(pingora::Error::new(HTTPStatus(503)));
+        };
+
+        ctx.upstream = Some(upstream.clone());
+
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
-        let mut peer = HttpPeer::new(healthy_upstream, false, ctx.host.clone());
+        let mut peer = HttpPeer::new(
+            healthy_upstream,
+            healthy_port == 443,
+            upstream.sni.clone().unwrap_or(String::new()),
+        );
         peer.options = DEFAULT_PEER_OPTIONS;
         Ok(Box::new(peer))
     }
@@ -156,12 +181,24 @@ impl ProxyHttp for Router {
         session: &mut Session,
         upstream_request: &mut RequestHeader,
         ctx: &mut Self::CTX,
-    ) -> pingora::Result<()>
-    where
-        Self::CTX: Send + Sync,
-    {
+    ) -> pingora::Result<()> {
         // If there's no host matching, returns a 404
         let route_container = process_route(ctx);
+
+        let Some(upstream) = ctx.upstream.as_ref() else {
+            return Err(pingora::Error::new(HTTPStatus(503)));
+        };
+
+        // TODO: refactor
+        if let Some(headers) = upstream.headers.as_ref() {
+            if let Some(add) = headers.add.as_ref() {
+                for header_add in add {
+                    upstream_request
+                        .insert_header(header_add.name.to_string(), header_add.value.to_string())
+                        .ok();
+                }
+            }
+        }
 
         execute_upstream_request_plugins(&route_container, session, upstream_request, ctx)
             .await

@@ -1,5 +1,7 @@
+use std::net::SocketAddr;
 use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 
 use http::{HeaderName, HeaderValue};
@@ -12,7 +14,7 @@ use pingora::{
 };
 use tokio::sync::broadcast::Sender;
 
-use crate::config::Route;
+use crate::config::{Route, RouteUpstream};
 use crate::MsgRoute;
 use crate::{
     config::{Config, RouteHeader, RouteMatcher, RoutePathMatcher, RoutePlugin},
@@ -34,13 +36,6 @@ impl RoutingService {
     /// From a given configuration file, create the static load balancing configuration
     fn add_routes_from_config(&mut self) {
         for route in &self.config.routes {
-            // For each upstream, create a backend
-            let upstream_backends = route
-                .upstreams
-                .iter()
-                .map(|upstr| format!("{}:{}", upstr.ip, upstr.port))
-                .collect::<Vec<String>>();
-
             let self_signed_cert_on_failure = route
                 .ssl_certificate
                 .as_ref()
@@ -55,7 +50,7 @@ impl RoutingService {
 
             add_route_to_router(
                 &route.host,
-                &upstream_backends,
+                route.upstreams.clone(),
                 route.match_with.clone(),
                 route.headers.as_ref(),
                 route.plugins.as_ref(),
@@ -84,9 +79,30 @@ impl RoutingService {
             remove: Some(route.host_headers_remove),
         };
 
+        // create route upstreams from ip + port
+
+        let upstreams = route
+            .upstreams
+            .iter()
+            .map(|u| {
+                let scr: SocketAddr = u
+                    .parse()
+                    .map_err(|err| anyhow!("Failed to parse ip: {}", err))
+                    .unwrap();
+                RouteUpstream {
+                    ip: Cow::Owned(scr.ip().to_string()),
+                    port: scr.port(),
+                    network: None,
+                    weight: Some(1),
+                    headers: None,
+                    sni: None,
+                }
+            })
+            .collect::<Vec<_>>();
+
         add_route_to_router(
             &route.host,
-            &route.upstreams,
+            upstreams,
             matcher,
             Some(&route_header),
             Some(&route.plugins),
@@ -144,15 +160,19 @@ fn has_new_backend(host: &str, upstream_input: &LoadBalancer<RoundRobin>) -> boo
 /// if the host does not exist in the store.
 fn add_route_to_router(
     host: &str,
-    upstream_input: &[String],
+    upstream_input: Vec<RouteUpstream>,
     match_with: Option<RouteMatcher>,
     headers: Option<&RouteHeader>,
     plugins: Option<&Vec<RoutePlugin>>,
     should_self_sign_cert_on_failure: bool,
 ) {
     // Check if current route already exists
+    let upstream_str = upstream_input
+        .iter()
+        .map(|u| format!("{}:{}", u.ip, u.port))
+        .collect::<Vec<String>>();
 
-    let Ok(mut upstreams) = LoadBalancer::<RoundRobin>::try_from_iter(upstream_input) else {
+    let Ok(mut upstreams) = LoadBalancer::<RoundRobin>::try_from_iter(upstream_str) else {
         tracing::info!(
             "Could not create upstreams for host: {}, upstreams {:?}",
             host,
@@ -174,6 +194,7 @@ fn add_route_to_router(
     // Create new routing container
     let mut route_store_container = RouteStoreContainer::new(upstreams);
     route_store_container.self_signed_certificate = should_self_sign_cert_on_failure;
+    route_store_container.upstreams = upstream_input;
 
     if let Some(headers) = headers {
         if let Some(headers) = headers.add.as_ref() {

@@ -40,7 +40,7 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
                 ));
             }
 
-            if upstream.port <= 0 {
+            if upstream.port == 0 {
                 return Err(anyhow!(
                     "routes{}.upstreams{}.port must be greater than 0",
                     route_index,

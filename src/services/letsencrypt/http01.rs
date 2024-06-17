@@ -98,7 +98,7 @@ impl LetsencryptService {
         x509_name.append_entry_by_text("CN", domain)?;
         x509_name.append_entry_by_text("ST", "TX")?;
         x509_name.append_entry_by_text("O", "Proksi")?;
-        x509_name.append_entry_by_text("CN", "Test")?;
+        // x509_name.append_entry_by_text("CN", "Test")?;
         let x509_name = x509_name.build();
 
         let hash = pingora::tls::hash::MessageDigest::sha256();
