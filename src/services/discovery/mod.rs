@@ -1,7 +1,6 @@
-use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
 use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
 
-use anyhow::anyhow;
 use async_trait::async_trait;
 
 use http::{HeaderName, HeaderValue};
@@ -84,18 +83,19 @@ impl RoutingService {
         let upstreams = route
             .upstreams
             .iter()
-            .map(|u| {
-                let scr: SocketAddr = u
-                    .parse()
-                    .map_err(|err| anyhow!("Failed to parse ip: {}", err))
-                    .unwrap();
-                RouteUpstream {
-                    ip: Cow::Owned(scr.ip().to_string()),
-                    port: scr.port(),
-                    network: None,
-                    weight: Some(1),
-                    headers: None,
-                    sni: None,
+            .flat_map(|u| {
+                if let Ok(scr) = u.to_socket_addrs() {
+                    scr.map(|f| RouteUpstream {
+                        ip: Cow::Owned(f.ip().to_string()),
+                        port: f.port(),
+                        network: None,
+                        weight: Some(1),
+                        headers: None,
+                        sni: None,
+                    })
+                    .collect::<Vec<_>>()
+                } else {
+                    vec![]
                 }
             })
             .collect::<Vec<_>>();
@@ -286,6 +286,27 @@ fn add_route_ssl_to_store(route: &Route) -> Result<(), anyhow::Error> {
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use std::net::ToSocketAddrs;
+
+    #[test]
+    fn test_socket_addr() {
+        let addr = "127.0.0.1:8080".to_string();
+        let addr = addr.parse::<std::net::SocketAddr>().unwrap();
+        assert_eq!(addr.ip().to_string(), "127.0.0.1");
+        assert_eq!(addr.port(), 8080);
+    }
+
+    #[test]
+    fn test_domain_addr() {
+        let addr = "example.com:80";
+        let addr = addr.to_socket_addrs().unwrap().next().unwrap();
+        assert_eq!(addr.ip().to_string(), "93.184.215.14");
+        assert_eq!(addr.port(), 80);
+    }
 }
 
 // #[cfg(test)]
