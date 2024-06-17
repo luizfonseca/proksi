@@ -47,7 +47,7 @@ async-trait = "0.1.80"
 bollard = "0.16.1"
 bollard-stubs = "=1.44.0-rc.2"
 bytes = "1.6.0"
-clap = { version = "4.5.6", features = ["derive", "cargo"] }
+clap = { version = "4.5.7", features = ["derive", "cargo"] }
 figment = { version = "0.10.19", features = ["toml", "yaml", "env"] }
 http = "1.1.0"
 pingora = { version = "0.2.0", features = ["lb", "openssl", "proxy", "cache"] }
