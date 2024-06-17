@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/luizfonseca/proksi/compare/v0.3.0...v0.3.1) (2024-06-17)
+
+
+### Bug Fixes
+
+* **docker:** transform domain names to valid ips ([3b9e843](https://github.com/luizfonseca/proksi/commit/3b9e8436ab88d64ecefe53b05861ed501201ac88))
+
 ## [0.3.0](https://github.com/luizfonseca/proksi/compare/v0.2.14...v0.3.0) (2024-06-17)
 
 
