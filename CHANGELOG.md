@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/luizfonseca/proksi/compare/v0.2.14...v0.3.0) (2024-06-17)
+
+
+### Features
+
+* **config:** allow passing ssl.min_proto and max_proto. Ref [#38](https://github.com/luizfonseca/proksi/issues/38) ([d90538d](https://github.com/luizfonseca/proksi/commit/d90538dc54f5025a5ccf803b60f3199ed1a1d19a))
+* **config:** enable providing cert/key path to host route. Ref [#38](https://github.com/luizfonseca/proksi/issues/38) ([0ba44ba](https://github.com/luizfonseca/proksi/commit/0ba44bacf2d2aa16bffb780b9d26ce15387c7cb5))
+* **config:** enable setting the logging.format ([ea68e53](https://github.com/luizfonseca/proksi/commit/ea68e53c33a7888332bfe69f48d63a4443b896c1))
+* **route:** load certificates from config file. Ref [#38](https://github.com/luizfonseca/proksi/issues/38) ([4626f4f](https://github.com/luizfonseca/proksi/commit/4626f4f841f5cf985f718c6d15c96b9dbf84ac21))
+* **route:** store metadata about upstreams when routing ([ab6acc4](https://github.com/luizfonseca/proksi/commit/ab6acc4a7c92b97680c6222e1afbd13c8770ca9b))
+
 ## [0.2.14](https://github.com/luizfonseca/proksi/compare/v0.2.13...v0.2.14) (2024-06-15)
 
 
