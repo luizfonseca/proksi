@@ -4,9 +4,12 @@
 ![Crates.io MSRV](https://img.shields.io/crates/msrv/proksi?style=for-the-badge)
 ![Crates.io License](https://img.shields.io/crates/l/proksi?style=for-the-badge)
 ![Crates.io Total Downloads](https://img.shields.io/crates/d/proksi?style=for-the-badge)
+<img src="./assets/crabbylogoproksi.png" alt="logo" width="100" style="float: left;"/>
 
+<div>
+<a href="https://discord.gg/Auw36pPSXf" target="_blank"><img src="./assets/discord.png" alt="discord-logo" width="200" style="float: left;"/></a>
 
-<img src="./assets/crabbylogoproksi.png" alt="logo" width="200"/> 
+</div>
 
 
 > ⚠️ Important: this is still a work-in-progress project.
