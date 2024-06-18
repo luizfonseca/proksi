@@ -3,6 +3,7 @@
 /data
 /dist
 /proksi.yaml
+/proksi.hcl
 .zed/
 .vscode/
 /tmp
