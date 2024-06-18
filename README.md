@@ -11,12 +11,7 @@
 
 </div>
 
-
-> ⚠️ Important: this is still a work-in-progress project.
-> It does the basics but everything needs polishing and real production testing.
-> That said, suggestions, issues or PRs are encouraged.
-
-Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in Rust and uses Pingora as its core networking library.
+Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in [Rust](https://www.rust-lang.org/) and uses [Pingora](https://github.com/cloudflare/pingora) as its core networking library.
 
 
 - [Proksi: Automatic SSL, HTTP, and DNS Proxy](#proksi-automatic-ssl-http-and-dns-proxy)
@@ -43,7 +38,7 @@ Proksi is a simple, lightweight, and easy-to-use proxy server that automatically
 ## Features
 
 
-- [x] **HTTPS**: Automatic Redirect, SSL termination and certificate renewal (Let's Encrypt) 
+- [x] **HTTPS**: Automatic Redirect, SSL termination and certificate renewal (Let's Encrypt)
 - [x] **Docker**: Swarm/Compose Label Support
 - [x] **Load Balancing** (✅ Round Robin, ⛔︎ Weighted Round Robin, ⛔︎ Least Connections)
 - [x] **HCL functions** Extensible through configuration with `env` and `import`
@@ -85,7 +80,7 @@ You can also run Proksi using `cargo`:
 ```bash
 cargo install proksi
 mkdir config
-touch config/proksi.hcl 
+touch config/proksi.hcl
 proksi -c ./ --service_name=my_proxy
 ```
 
@@ -151,7 +146,7 @@ routes = [
 
       headers {
         add = [
-          { name = "Host", value = "example.com" }, 
+          { name = "Host", value = "example.com" },
           { name = "X-Proxy-For", value = "cdn.example.com" }
         ]
       }
