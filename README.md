@@ -119,7 +119,7 @@ touch proksi.hcl
 ```
 
 ```hcl
-worker_threads = env("WORKER_THREADS", 4)
+worker_threads = env("WORKER_THREADS")
 
 lets_encrypt {
   enabled = true
@@ -133,8 +133,8 @@ paths {
 
 // You can split your websites into separate files
 routes = [
-  import("./sites/mywebsite.com.hcl),
-  import("./sites/myotherwebsite.co.uk.hcl)
+  import("./sites/mywebsite.com.hcl"),
+  import("./sites/myotherwebsite.co.uk.hcl")
 ]
 
 // Or you can define them here
