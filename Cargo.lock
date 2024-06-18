@@ -963,6 +963,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "hcl-edit"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46510177a76e68ccd7d75c5af6dfc7d9bf14d5b274211cc35d5abe7f6e72d5b0"
+dependencies = [
+ "fnv",
+ "hcl-primitives",
+ "vecmap-rs",
+ "winnow",
+]
+
+[[package]]
+name = "hcl-primitives"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eaef0959c97781fc9aba104a08e513a14f995b7c12fdcf940d94252d2e4fa884"
+dependencies = [
+ "itoa",
+ "kstring",
+ "ryu",
+ "serde",
+ "unicode-ident",
+]
+
+[[package]]
+name = "hcl-rs"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba31dbfca0e197057f6d9a070cf87a68d93da5f551d4ad0d44e0f274f7179669"
+dependencies = [
+ "hcl-edit",
+ "hcl-primitives",
+ "indexmap 2.2.6",
+ "itoa",
+ "serde",
+ "vecmap-rs",
+]
+
+[[package]]
 name = "heck"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1327,6 +1366,16 @@ dependencies = [
  "ring",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "kstring"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec3066350882a1cd6d950d055997f379ac37fd39f81cd4d8ed186032eb3c5747"
+dependencies = [
+ "serde",
+ "static_assertions",
 ]
 
 [[package]]
@@ -2017,6 +2066,7 @@ dependencies = [
  "clap 4.5.7",
  "cookie",
  "figment",
+ "hcl-rs",
  "http 1.1.0",
  "itertools",
  "jsonwebtoken",
@@ -2708,6 +2758,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 
 [[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
 name = "strsim"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3332,6 +3388,15 @@ name = "vec_map"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
+
+[[package]]
+name = "vecmap-rs"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67d9c76f2c769d47dec11c6f4a9cd3be5e5e025a6bce297b07a311a3514ca97d"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "version_check"

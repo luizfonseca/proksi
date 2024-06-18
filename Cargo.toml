@@ -48,7 +48,7 @@ bollard = "0.16.1"
 bollard-stubs = "=1.44.0-rc.2"
 bytes = "1.6.0"
 clap = { version = "4.5.7", features = ["derive", "cargo"] }
-figment = { version = "0.10.19", features = ["toml", "yaml", "env"] }
+figment = { version = "0.10.19", features = ["yaml", "env"] }
 http = "1.1.0"
 pingora = { version = "0.2.0", features = ["lb", "openssl", "proxy", "cache"] }
 openssl = { version = "0.10", features = ["vendored"] }
@@ -66,6 +66,8 @@ jsonwebtoken = { version = "9.3.0", default-features = false }
 uuid = { version = "1.8.0", features = ["v4"] }
 prometheus = "0.13.4"
 short-crypt = "1.0.28"
+hcl-rs = "0.18.0"
+
 
 [dev-dependencies]
 figment = { version = "0.10.19", features = ["toml", "yaml", "env", "test"] }

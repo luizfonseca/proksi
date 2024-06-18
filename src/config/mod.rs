@@ -2,12 +2,14 @@ use std::{borrow::Cow, collections::HashMap, path::PathBuf};
 
 use clap::{Args, Parser, ValueEnum};
 use figment::{
-    providers::{Env, Format, Serialized, Toml, Yaml},
+    providers::{Env, Format, Serialized, Yaml},
     Figment, Provider,
 };
+use hcl::Hcl;
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
+mod hcl;
 mod validate;
 
 /// Default fn for boolean values
@@ -528,7 +530,7 @@ pub fn load(fallback: &str) -> Result<Config, figment::Error> {
         .merge(Serialized::defaults(&parsed_commands))
         .merge(Yaml::file(format!("{path_with_fallback}/proksi.yml")))
         .merge(Yaml::file(format!("{path_with_fallback}/proksi.yaml")))
-        .merge(Toml::file(format!("{path_with_fallback}/proksi.toml")))
+        .merge(Hcl::file(format!("{path_with_fallback}/proksi.hcl")))
         .merge(Env::prefixed("PROKSI_").split("__"))
         .extract()?;
 
@@ -794,6 +796,52 @@ mod tests {
             assert_eq!(ssl.self_signed_fallback, true);
             assert_eq!(path.key.as_os_str(), "/etc/proksi/certs/my-host.key");
             assert_eq!(path.pem.as_os_str(), "/etc/proksi/certs/my-host.pem");
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_load_config_from_hcl() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.hcl", tmp_dir),
+                r#"
+                service_name = "hcl-service"
+                worker_threads = 8
+                docker {
+                    enabled = true
+                    interval_secs = 30
+                    endpoint = "unix:///var/run/docker.sock"
+                }
+                lets_encrypt {
+                    email = "domain@valid.com"
+                    enabled = true
+                    staging = false
+                }
+                paths {
+                    lets_encrypt = "/etc/proksi/letsencrypt"
+                }
+                    "#,
+            )?;
+
+            let config = load(&tmp_dir);
+            let proxy_config = config.unwrap();
+
+            assert_eq!(proxy_config.service_name, "hcl-service");
+            assert_eq!(proxy_config.worker_threads, Some(8));
+            assert_eq!(proxy_config.docker.enabled, Some(true));
+            assert_eq!(proxy_config.docker.interval_secs, Some(30));
+            assert_eq!(
+                proxy_config.docker.endpoint,
+                Some(Cow::Borrowed("unix:///var/run/docker.sock"))
+            );
+
+            assert_eq!(proxy_config.lets_encrypt.email, "domain@valid.com");
+            assert_eq!(proxy_config.lets_encrypt.enabled, Some(true));
+            assert_eq!(proxy_config.lets_encrypt.staging, Some(false));
 
             Ok(())
         });
