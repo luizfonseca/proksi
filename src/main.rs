@@ -92,8 +92,11 @@ fn main() -> Result<(), anyhow::Error> {
     };
 
     // Pingora load balancer server
-    let mut pingora_opts = Opt::default();
-    pingora_opts.daemon = proxy_config.daemon;
+    let pingora_opts = Opt {
+        daemon: proxy_config.daemon,
+        ..Default::default()
+    };
+
     let mut pingora_server = Server::new(Some(pingora_opts))?;
     pingora_server.bootstrap();
 
