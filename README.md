@@ -136,21 +136,21 @@ routes = [
 routes = [
   {
     host = "cdn.example.com"
-    ssl_certificate {
+    ssl_certificate = {
       // Useful for development
       self_signed_on_failure = true
     }
-    upstreams {
+    upstreams = [{
       ip = "example.com"
       port = 443
 
-      headers {
+      headers = {
         add = [
           { name = "Host", value = "example.com" },
           { name = "X-Proxy-For", value = "cdn.example.com" }
         ]
       }
-    }
+    }]
   }
 ]
 ```
