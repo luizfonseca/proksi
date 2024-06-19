@@ -74,6 +74,9 @@ logging  {
 
   # Whether error logs are enabled.
   error_logs_enabled = false
+
+  # Formats "json" or "pretty""
+  format = "pretty"
 }
 
 # The paths for the TLS certificates, challenges, orders, and account credentials.
