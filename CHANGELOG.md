@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.7](https://github.com/luizfonseca/proksi/compare/v0.3.6...v0.3.7) (2024-06-19)
+
+
+### Bug Fixes
+
+* **config:** add -d (background) mode support ([1dd6579](https://github.com/luizfonseca/proksi/commit/1dd6579220bf503e29322ff74ec4b9ec200a9cb5))
+
 ## [0.3.6](https://github.com/luizfonseca/proksi/compare/v0.3.5...v0.3.6) (2024-06-19)
 
 
