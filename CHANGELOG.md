@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.6](https://github.com/luizfonseca/proksi/compare/v0.3.5...v0.3.6) (2024-06-19)
+
+
+### Bug Fixes
+
+* dockerfile missing glibc ([36bba29](https://github.com/luizfonseca/proksi/commit/36bba2997f3e8375c8235eb8941a543557cbf3c3))
+
 ## [0.3.5](https://github.com/luizfonseca/proksi/compare/v0.3.1...v0.3.5) (2024-06-19)
 
 
