@@ -422,6 +422,10 @@ pub(crate) struct Config {
     #[clap(short, long, default_value = "proksi")]
     pub service_name: Cow<'static, str>,
 
+    /// Runs the service in the background (daemon mode)
+    #[clap(short, long, default_value = "false")]
+    pub daemon: bool,
+
     /// The number of worker threads to be used by the HTTPS proxy service.
     ///
     /// For background services the default is always (1) and cannot be changed.
@@ -466,6 +470,7 @@ impl Default for Config {
             config_path: Cow::Borrowed("/etc/proksi/config"),
             service_name: Cow::Borrowed("proksi"),
             worker_threads: Some(1),
+            daemon: false,
             docker: Docker::default(),
             lets_encrypt: LetsEncrypt::default(),
             routes: vec![],

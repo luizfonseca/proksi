@@ -92,7 +92,9 @@ fn main() -> Result<(), anyhow::Error> {
     };
 
     // Pingora load balancer server
-    let mut pingora_server = Server::new(Some(Opt::default()))?;
+    let mut pingora_opts = Opt::default();
+    pingora_opts.daemon = proxy_config.daemon;
+    let mut pingora_server = Server::new(Some(pingora_opts))?;
     pingora_server.bootstrap();
 
     // Built-in services for health checks, logging, and routing

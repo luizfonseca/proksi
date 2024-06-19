@@ -170,6 +170,7 @@ impl LetsencryptService {
         let order_cert = order_csr.finalize_pkey(pkey, 5000)?;
 
         info!("certificate created for order {:?}", order_cert.api_order());
+
         let cert = order_cert.download_and_save_cert()?;
 
         Self::insert_certificate(domain, cert.certificate(), cert.private_key())?;
