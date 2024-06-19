@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.5](https://github.com/luizfonseca/proksi/compare/v0.3.1...v0.3.5) (2024-06-19)
+
+
+### Features
+
+* **config:** add support for HCL as a main configuration language ([74f9621](https://github.com/luizfonseca/proksi/commit/74f9621da9325af24e1bab87bfefd954cf3334ae))
+* **hcl:** add support for HCL functions ([31c5f29](https://github.com/luizfonseca/proksi/commit/31c5f29a89467805e0e7d07d30d1c7ee60ec5dc6))
+
+
+### Bug Fixes
+
+* **hcl:** conditional check for hcl extension ([bb1d8a8](https://github.com/luizfonseca/proksi/commit/bb1d8a807bf71ff237277dd068b83b9970016aa1))
+
+
+### Miscellaneous Chores
+
+* release marker for 0.3.5 ([ace8317](https://github.com/luizfonseca/proksi/commit/ace8317cd8931832175e2d8aaf3922854c3495be))
+
 ## [0.3.1](https://github.com/luizfonseca/proksi/compare/v0.3.0...v0.3.1) (2024-06-17)
 
 
