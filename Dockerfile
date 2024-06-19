@@ -1,9 +1,5 @@
-FROM debian:bullseye-slim as builder
+FROM ubuntu:noble
 RUN apt-get update && apt-get install -y ca-certificates && apt-get clean
-
-# ---
-FROM scratch
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 COPY proksi /app/proksi
 
