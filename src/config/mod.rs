@@ -166,6 +166,19 @@ pub struct RouteUpstream {
     pub headers: Option<RouteHeader>,
 }
 
+impl Default for RouteUpstream {
+    fn default() -> Self {
+        RouteUpstream {
+            ip: Cow::Borrowed("127.0.0.1"),
+            port: 80,
+            network: None,
+            weight: None,
+            sni: None,
+            headers: None,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RouteSslCertificate {
     /// Whether to use a self-signed certificate if the certificate can't be

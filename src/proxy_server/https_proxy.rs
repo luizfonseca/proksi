@@ -25,12 +25,12 @@ pub struct Router {
 }
 
 fn process_route(ctx: &RouterContext) -> Arc<RouteStoreContainer> {
-    ctx.route_container.clone().unwrap()
+    ctx.route_container.clone()
 }
 pub struct RouterContext {
     pub host: String,
-    pub route_container: Option<Arc<RouteStoreContainer>>,
-    pub upstream: Option<RouteUpstream>,
+    pub route_container: Arc<RouteStoreContainer>,
+    pub upstream: RouteUpstream,
     pub extensions: HashMap<Cow<'static, str>, String>,
 
     pub timings: RouterTimings,
@@ -49,9 +49,9 @@ impl ProxyHttp for Router {
     fn new_ctx(&self) -> Self::CTX {
         RouterContext {
             host: String::new(),
-            route_container: None,
-            upstream: None,
-            extensions: HashMap::new(),
+            route_container: Arc::new(RouteStoreContainer::default()),
+            upstream: RouteUpstream::default(),
+            extensions: HashMap::with_capacity(2),
             timings: RouterTimings {
                 request_filter_start: std::time::Instant::now(),
             },
@@ -89,7 +89,7 @@ impl ProxyHttp for Router {
             _ => {}
         }
 
-        ctx.route_container = Some(Arc::clone(&arced));
+        ctx.route_container = Arc::clone(&arced);
 
         // Middleware phase: request_filterx
         // We are checking to see if the request has already been handled
@@ -132,7 +132,7 @@ impl ProxyHttp for Router {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
 
-        ctx.upstream = Some(upstream.clone());
+        ctx.upstream = upstream.clone();
 
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
         let mut peer = HttpPeer::new(
@@ -185,9 +185,7 @@ impl ProxyHttp for Router {
         // If there's no host matching, returns a 404
         let route_container = process_route(ctx);
 
-        let Some(upstream) = ctx.upstream.as_ref() else {
-            return Err(pingora::Error::new(HTTPStatus(503)));
-        };
+        let upstream = &ctx.upstream;
 
         // TODO: refactor
         if let Some(headers) = upstream.headers.as_ref() {
@@ -239,6 +237,8 @@ impl ProxyHttp for Router {
         _: Option<&pingora::Error>,
         ctx: &mut Self::CTX,
     ) {
+        let duration_ms = ctx.timings.request_filter_start.elapsed().as_millis();
+
         let http_version = if session.is_http2() {
             "http/2"
         } else {
@@ -271,8 +271,6 @@ impl ProxyHttp for Router {
             .response_written()
             .map(|v| v.status.as_u16())
             .unwrap_or_default();
-
-        let duration_ms = ctx.timings.request_filter_start.elapsed().as_millis();
 
         tracing::info!(
             method,

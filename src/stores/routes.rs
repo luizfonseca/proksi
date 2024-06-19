@@ -46,16 +46,32 @@ pub struct RouteStoreContainer {
     pub plugins: HashMap<String, RoutePlugin>,
 }
 
+impl Default for RouteStoreContainer {
+    fn default() -> Self {
+        RouteStoreContainer {
+            load_balancer: Arc::new(
+                LoadBalancer::<RoundRobin>::try_from_iter(vec!["127.0.0.1:80:80"]).unwrap(),
+            ),
+            path_matcher: RouteStorePathMatcher::default(),
+            host_header_remove: Vec::with_capacity(0),
+            host_header_add: Vec::with_capacity(0),
+            self_signed_certificate: false,
+            plugins: HashMap::new(),
+            upstreams: Vec::with_capacity(0),
+        }
+    }
+}
+
 impl RouteStoreContainer {
     pub fn new(load_balancer: LoadBalancer<RoundRobin>) -> Self {
         RouteStoreContainer {
             load_balancer: Arc::new(load_balancer),
             path_matcher: RouteStorePathMatcher::new(),
-            host_header_remove: Vec::new(),
-            host_header_add: Vec::new(),
+            host_header_remove: Vec::with_capacity(5),
+            host_header_add: Vec::with_capacity(5),
             self_signed_certificate: false,
             plugins: HashMap::new(),
-            upstreams: Vec::new(),
+            upstreams: Vec::with_capacity(5),
         }
     }
 }
