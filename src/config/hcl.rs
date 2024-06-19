@@ -27,7 +27,8 @@ impl figment::providers::Format for HclFormat {
 #[allow(clippy::needless_pass_by_value)]
 fn read_hcl_file(args: FuncArgs) -> Result<Value, String> {
     let path = Path::new(args[0].as_str().unwrap());
-    if path
+
+    if !path
         .extension()
         .map_or(false, |ext| ext.eq_ignore_ascii_case("hcl"))
     {
