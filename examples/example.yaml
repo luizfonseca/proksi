@@ -111,7 +111,9 @@ routes:
     # Header related
     match_with:
       path:
-        pattern: "/api/*"
+        patterns:
+          - "/api/*"
+          - "/api/v1/*"
 
     # SSL configuration for the route.
     # The ssl attribute is optional.

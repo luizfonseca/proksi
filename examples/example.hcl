@@ -16,7 +16,7 @@ service_name = "proksi"
 # (and other background services) is single threaded.
 worker_threads = 4
 
-docker = {
+docker {
   # Whether the Docker integration is enabled
   # (the background service will run and listen for Docker events).
   # Default value is <false>.
@@ -42,7 +42,7 @@ docker = {
   mode = "container"
 }
 
-lets_encrypt = {
+lets_encrypt {
   # Whether the Let's Encrypt integration is enabled
   # (the background service will run and issue certificates for your routes).
   enabled = true
@@ -60,7 +60,7 @@ lets_encrypt = {
   staging = true
 }
 
-logging = {
+logging  {
   # Whether to log anything at all (default: true)
   enabled = true
 
@@ -78,7 +78,7 @@ logging = {
 
 # The paths for the TLS certificates, challenges, orders, and account credentials.
 # You can override any, these are the current defaults.
-paths = {
+paths {
 
   # The path where the TLS certificates will be stored.
   # If the path doesn't exist, it will be created if the binary has the right permissions.
@@ -101,52 +101,43 @@ routes = [
     # If the connection fails, it will try the next one.
     # --
     # Health checks run in the background to ensure you have a healthy connection always.
-    upstreams = {
-      # The IP address of the upstream server or HOSTNAME.
-      ip = "google.com"
-      # The network attribute specifies the network that the upstream server is part of.
-      # This is mostly important for Docker containers, but it can be used for other purposes.
-      # network = "public"
-      port = 443
-      sni = "google.com"
+    upstreams = [
+      {
+        # The IP address of the upstream server or HOSTNAME.
+        ip = "google.com"
+        # The network attribute specifies the network that the upstream server is part of.
+        # This is mostly important for Docker containers, but it can be used for other purposes.
+        # network = "public"
+        port = 443
+        sni = "google.com"
 
-      # The headers attribute specifies the headers that will
-      # be added or removed when making a request to your UPSTREAM (your server)
-      headers = {
-        add = {
-          name = "Host"
-          value = "google.com"
+        # The headers attribute specifies the headers that will
+        # be added or removed when making a request to your UPSTREAM (your server)
+        headers = {
+          add = {
+            name = "Host"
+            value = "google.com"
+          }
         }
+      },
+      # New upstream
+      {
+        ip = "10.1.2.23/24"
+        network = "shared"
+        port = 3000
       }
-    }
-
-    upstreams = {
-      ip = "10.1.2.23/24"
-      network = "shared"
-      port = 3000
-    }
+    ]
 
 
     # The headers attribute specifies the headers that will
     # be added or removed at the end of the response to DOWNSTREAM (client)
     headers = {
-      add = {
-        name = "X-Forwarded-For"
-        value = "<value>"
-      }
+      add = [
+        {  name = "X-Forwarded-For", value = "<value>" },
+        {  name = "X-Api-Version", value = "<value>" }
+      ]
 
-      add = {
-        name = "X-Api-Version"
-        value = "1.0"
-      }
-
-      remove = {
-        name = "Server"
-      }
-
-      remove = {
-        name = "Header-From-Upstream"
-      }
+      remove = [{  name = "Server" }]
     }
 
     # SSL configuration for the route.
@@ -169,39 +160,25 @@ routes = [
     # You can have multiple matchers:
     # Path related
     # Header related
-    match_with "path" {
-      pattern = "/api/*"
+    match_with = {
+      path = {
+        patterns = ["/api/*", "/*"]
+      }
     }
 
     # Plugins that will be applied to the route/host
     # (ex: rate limiting, oauth2, etc.)
     # Plugins can be used to extend the functionality of Proksi.
     # For example, the oauth2 plugin can be used to authenticate users using OAuth2 providers.
-    plugins = {
-      name "request_id" {}
-      name "basic_auth" {
-        config = {
-          user = "<user>"
-          pass = "<pass>"
-        }
-      }
-
-      name "oauth2" {
-        config = {
-          client_id = "<client_id>"
-          client_secret = "<client_secret>"
-          jwt_secret = "<jwt_secret>"
-          validations = {
-            key = "team_id"
-            value = ["<team_id>"]
-          }
-
-          validations = {
-            key = "email"
-            value = ["<user_email>"]
-          }
-        }
-      }
+    plugins = [
+    { name:  "request_id" },
+    { name:  "basic_auth", config: { user: "<user>", pass: "<pass>" } },
+    { name:  "oauth2", config: {
+      provider: "github",
+      client_id: "<client_id>",
+      client_secret: "<client_secret>",
+      jwt_secret: "<jwt_secret>",
+      validations: [ { key: "team_id", value: [ "<team_id>" ] } ] }
     }
   }
 ]
