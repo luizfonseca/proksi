@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.8](https://github.com/luizfonseca/proksi/compare/v0.3.7...v0.3.8) (2024-06-20)
+
+
+### Features
+
+* **cache:** add cache status to response headers and support expiration config ([cff30e7](https://github.com/luizfonseca/proksi/commit/cff30e7a861df3137f982fe5e237bd68afa1ec13))
+* **cache:** add DiskCache storage type ([8ab5352](https://github.com/luizfonseca/proksi/commit/8ab53527a2cacaa204b88c73bd1497403fc82f53))
+* **cache:** add expiration/stale config ([35c92c3](https://github.com/luizfonseca/proksi/commit/35c92c3f8724ae04ae5960f4a02355542851a61e))
+* **config:** make cache configurable ([df7749f](https://github.com/luizfonseca/proksi/commit/df7749fd1f61deac737336558ad2f9dcf24adb34))
+
+
+### Bug Fixes
+
+* **cache:** generate namespaced cache keys ([2981577](https://github.com/luizfonseca/proksi/commit/29815773a8cc6de9eeccb5aa88af1f4ca4a85421))
+
+
+### Miscellaneous Chores
+
+* release marker for 0.3.9 ([ffec88a](https://github.com/luizfonseca/proksi/commit/ffec88a3d702734b13fd8786331b08c25f992d7f))
+
 ## [0.3.7](https://github.com/luizfonseca/proksi/compare/v0.3.6...v0.3.7) (2024-06-19)
 
 
