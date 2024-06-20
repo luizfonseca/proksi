@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.11](https://github.com/luizfonseca/proksi/compare/v0.3.10...v0.3.11) (2024-06-20)
+
+
+### Bug Fixes
+
+* **cache:** improve writing to cache (disk) ([cef089f](https://github.com/luizfonseca/proksi/commit/cef089f4974b936f01dc71b6e89975f10d20c4f0))
+* clippy ([00f5620](https://github.com/luizfonseca/proksi/commit/00f5620ee42d862692498437486f57c39de17e10))
+* disable SNI callback restriction ([45f4287](https://github.com/luizfonseca/proksi/commit/45f4287ea6aa20de6c541811b2f663653377590e))
+
 ## [0.3.10](https://github.com/luizfonseca/proksi/compare/v0.3.9...v0.3.10) (2024-06-20)
 
 
