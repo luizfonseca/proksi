@@ -134,9 +134,10 @@ impl ProxyHttp for Router {
     /// where and how this request should forwarded to."]
     async fn upstream_peer(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
+        session.cache.set_max_file_size_bytes(100 * 1024 * 1024);
         // If there's no host matching, returns a 404
         let route_container = process_route(ctx);
 
@@ -351,9 +352,6 @@ impl ProxyHttp for Router {
 
     /// This callback is invoked when a cacheable response is ready to be admitted to cache
     fn cache_miss(&self, session: &mut Session, ctx: &mut Self::CTX) {
-        // 100MB Hardcoded for now, but we can make it configurable later
-        session.cache.set_max_file_size_bytes(100 * 1024 * 1024);
-
         ctx.extensions
             .insert(Cow::Borrowed("cache_state"), "MISS".into());
         session.cache.cache_miss();
@@ -372,6 +370,7 @@ impl ProxyHttp for Router {
     ) -> pingora::Result<bool> {
         ctx.extensions
             .insert(Cow::Borrowed("cache_state"), "HIT".into());
+
         Ok(false)
     }
 

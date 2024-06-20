@@ -18,7 +18,7 @@ use pingora::{http::ResponseHeader, Result};
 use serde::{Deserialize, Serialize};
 use tokio::{
     fs::OpenOptions,
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
 };
 
 use crate::stores;
@@ -108,9 +108,13 @@ impl Storage for DiskCache {
             return Ok(None);
         };
 
-        let Ok(file_stream) = tokio::fs::File::open(main_path.join(cache_file)).await else {
+        let file_path = main_path.join(cache_file);
+
+        let Ok(mut file_stream) = tokio::fs::File::open(&file_path).await else {
             return Ok(None);
         };
+
+        file_stream.rewind().await.ok();
         tracing::debug!("found cache for {key:?}");
 
         Ok(Some((
@@ -121,7 +125,7 @@ impl Storage for DiskCache {
                 meta.stale_if_error_sec,
                 convert_headers(meta.headers),
             ),
-            Box::new(DiskCacheHitHandler::new(file_stream)),
+            Box::new(DiskCacheHitHandler::new(file_stream, file_path)),
         )))
     }
 
@@ -198,12 +202,13 @@ impl Storage for DiskCache {
 
 pub struct DiskCacheHitHandler {
     target: tokio::fs::File,
+    path: PathBuf,
 }
 
 /// HIT handler for the cache
 impl DiskCacheHitHandler {
-    pub fn new(target: tokio::fs::File) -> Self {
-        DiskCacheHitHandler { target }
+    pub fn new(target: tokio::fs::File, path: PathBuf) -> Self {
+        DiskCacheHitHandler { target, path }
     }
 }
 
@@ -213,28 +218,33 @@ impl HandleHit for DiskCacheHitHandler {
     ///
     /// Return `None` when no more body to read.
     async fn read_body(&mut self) -> Result<Option<bytes::Bytes>> {
-        let mut buffer = [0; 4096];
+        let mut buffer = vec![0; 16384];
 
         let Ok(bytes_read) = self.target.read(&mut buffer).await else {
-            return Err(pingora::Error::new_str("failed to read from cache"));
+            tracing::error!("failed to read completely from cache: {:?}", self.path);
+            return Ok(None);
         };
 
+        tracing::debug!("read from cache: {bytes_read}");
         if bytes_read == 0 {
             return Ok(None);
         }
 
-        Ok(Some(bytes::Bytes::copy_from_slice(&buffer)))
+        let bytes = bytes::Bytes::from(buffer);
+        Ok(Some(bytes))
     }
 
     /// Finish the current cache hit
     async fn finish(
         self: Box<Self>, // because self is always used as a trait object
-        _: &'static (dyn Storage + Sync),
-        _: &CacheKey,
+        _storage: &'static (dyn Storage + Sync),
+        _cache_key: &CacheKey,
         _: &SpanHandle,
     ) -> Result<()> {
-        // TODO: implement flush
-        // self.target.flush().await.ok();
+        if let Ok(mut f) = tokio::fs::File::open(&self.path).await {
+            f.flush().await.ok();
+        }
+
         Ok(())
     }
 
@@ -274,7 +284,10 @@ impl DiskCacheMissHandler {
 }
 
 /// Writes a file to disk and append data on every write
-async fn write_to_file<P: AsRef<Path>>(path: P, content: &[u8]) -> std::io::Result<()> {
+async fn write_to_file<P: AsRef<Path>>(
+    path: P,
+    content: &[u8],
+) -> std::io::Result<tokio::fs::File> {
     let mut file = OpenOptions::new()
         .create(true) // Create the file if it doesn't exist
         .append(true)
@@ -282,31 +295,29 @@ async fn write_to_file<P: AsRef<Path>>(path: P, content: &[u8]) -> std::io::Resu
         .await?;
 
     // Writing the content to the file
-    file.write_all(content).await?;
-    Ok(())
+    file.write(content).await?;
+    Ok(file)
 }
 
 #[async_trait]
 impl HandleMiss for DiskCacheMissHandler {
     /// Write the given body to the storage
     async fn write_body(&mut self, data: bytes::Bytes, end: bool) -> Result<()> {
-        if end {
-            return Ok(());
-        }
-
         let primary_key = self.key.primary_key();
         let main_path = self.main_path.clone();
         let cache_file = format!("{primary_key}.cache");
 
-        if write_to_file(&main_path.join(&cache_file), &data)
-            .await
-            .is_err()
-        {
+        let Ok(mut file) = write_to_file(&main_path.join(&cache_file), &data).await else {
             tracing::error!(
                 "failed to write to cache file: {:?}",
                 main_path.join(cache_file)
             );
             return Err(pingora::Error::new_str("failed to write to cache file"));
+        };
+
+        if end {
+            file.flush().await.ok();
+            return Ok(());
         }
 
         Ok(())
