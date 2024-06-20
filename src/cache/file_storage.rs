@@ -295,7 +295,7 @@ async fn write_to_file<P: AsRef<Path>>(
         .await?;
 
     // Writing the content to the file
-    file.write(content).await?;
+    file.write_all(content).await?;
     Ok(file)
 }
 
