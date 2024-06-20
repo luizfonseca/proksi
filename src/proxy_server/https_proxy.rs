@@ -12,7 +12,7 @@ use openssl::base64;
 use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::proxy::{ProxyHttp, Session};
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
-use pingora_cache::cache_control::Cacheable;
+
 use pingora_cache::{CacheKey, CacheMeta, RespCacheable};
 
 use crate::cache::file_storage::DiskCache;
@@ -27,7 +27,7 @@ use super::{
     DEFAULT_PEER_OPTIONS,
 };
 
-static STORAGE_CACHE: Lazy<DiskCache> = Lazy::new(|| DiskCache::new());
+static STORAGE_CACHE: Lazy<DiskCache> = Lazy::new(DiskCache::new);
 
 /// Load balancer proxy struct
 pub struct Router {
@@ -109,7 +109,13 @@ impl ProxyHttp for Router {
         }
 
         let storage = &*STORAGE_CACHE;
-        session.cache.enable(storage, None, None, None);
+        if arced.cache.is_some() {
+            let cache = arced.cache.as_ref().unwrap();
+
+            if cache.enabled.unwrap_or(false) {
+                session.cache.enable(storage, None, None, None);
+            }
+        }
 
         Ok(false)
     }
@@ -335,7 +341,7 @@ impl ProxyHttp for Router {
     /// Decide if the response is cacheable
     fn response_cache_filter(
         &self,
-        session: &Session,
+        _session: &Session,
         resp: &ResponseHeader,
         _ctx: &mut Self::CTX,
     ) -> pingora::Result<RespCacheable> {

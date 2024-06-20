@@ -6,7 +6,7 @@ use pingora_cache::{
     key::CompactCacheKey,
     storage::{HandleHit, HandleMiss},
     trace::SpanHandle,
-    CacheKey, CacheMeta, HitHandler, MemCache, MissHandler, Storage,
+    CacheKey, CacheMeta, HitHandler, MissHandler, Storage,
 };
 
 use pingora::{http::ResponseHeader, Result};
@@ -34,7 +34,7 @@ pub struct DiskCacheItemMeta {
     pub stale_while_revalidate_sec: u32,
     pub stale_if_error_sec: u32,
 
-    /// It's converted later on to a ResponseHeader
+    /// It's converted later on to a `ResponseHeader`
     pub headers: HashMap<String, String>,
 }
 
@@ -237,12 +237,12 @@ impl HandleHit for DiskCacheHitHandler {
 /// MISS handler for the cache
 pub struct DiskCacheMissHandler {
     key: CacheKey,
-    meta: DiskCacheItemMeta,
+    _meta: DiskCacheItemMeta,
 }
 
 impl DiskCacheMissHandler {
     pub fn new(key: CacheKey, meta: DiskCacheItemMeta) -> DiskCacheMissHandler {
-        DiskCacheMissHandler { key, meta }
+        DiskCacheMissHandler { key, _meta: meta }
     }
 }
 
@@ -264,7 +264,9 @@ impl HandleMiss for DiskCacheMissHandler {
             .await
             .unwrap();
 
-        file.write(&data).await.ok();
+        if file.write(&data).await.is_ok() {
+            return Ok(());
+        }
 
         Ok(())
     }

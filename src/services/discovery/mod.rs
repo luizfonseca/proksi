@@ -13,7 +13,7 @@ use pingora::{
 };
 use tokio::sync::broadcast::Sender;
 
-use crate::config::{Route, RouteUpstream};
+use crate::config::{Route, RouteCache, RouteUpstream};
 use crate::MsgRoute;
 use crate::{
     config::{Config, RouteHeader, RouteMatcher, RoutePathMatcher, RoutePlugin},
@@ -53,6 +53,7 @@ impl RoutingService {
                 route.match_with.clone(),
                 route.headers.as_ref(),
                 route.plugins.as_ref(),
+                route.cache.as_ref(),
                 self_signed_cert_on_failure.unwrap_or(false),
             );
 
@@ -106,6 +107,7 @@ impl RoutingService {
             matcher,
             Some(&route_header),
             Some(&route.plugins),
+            None,
             route.self_signed_certs,
         );
 
@@ -164,6 +166,7 @@ fn add_route_to_router(
     match_with: Option<RouteMatcher>,
     headers: Option<&RouteHeader>,
     plugins: Option<&Vec<RoutePlugin>>,
+    cache: Option<&RouteCache>,
     should_self_sign_cert_on_failure: bool,
 ) {
     // Check if current route already exists
@@ -195,6 +198,7 @@ fn add_route_to_router(
     let mut route_store_container = RouteStoreContainer::new(upstreams);
     route_store_container.self_signed_certificate = should_self_sign_cert_on_failure;
     route_store_container.upstreams = upstream_input;
+    route_store_container.cache = cache.cloned();
 
     if let Some(headers) = headers {
         if let Some(headers) = headers.add.as_ref() {

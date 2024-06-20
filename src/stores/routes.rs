@@ -4,7 +4,7 @@ use http::{HeaderName, HeaderValue};
 use path_tree::PathTree;
 use pingora::lb::{selection::RoundRobin, LoadBalancer};
 
-use crate::config::{RoutePlugin, RouteUpstream};
+use crate::config::{RouteCache, RoutePlugin, RouteUpstream};
 
 #[derive(Debug, Default, Clone)]
 pub struct RouteStorePathMatcher {
@@ -44,6 +44,8 @@ pub struct RouteStoreContainer {
     pub self_signed_certificate: bool,
 
     pub plugins: HashMap<String, RoutePlugin>,
+
+    pub cache: Option<RouteCache>,
 }
 
 impl Default for RouteStoreContainer {
@@ -58,6 +60,7 @@ impl Default for RouteStoreContainer {
             self_signed_certificate: false,
             plugins: HashMap::new(),
             upstreams: Vec::with_capacity(0),
+            cache: None,
         }
     }
 }
@@ -72,6 +75,7 @@ impl RouteStoreContainer {
             self_signed_certificate: false,
             plugins: HashMap::new(),
             upstreams: Vec::with_capacity(5),
+            cache: None,
         }
     }
 }

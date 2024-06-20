@@ -271,6 +271,12 @@ pub struct RouteSsl {
     pub self_signed_fallback: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RouteCache {
+    pub enabled: Option<bool>,
+    pub path: PathBuf,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Route {
     /// The hostname that the proxy will accept
@@ -280,6 +286,8 @@ pub struct Route {
     /// This is the host header that the proxy will match and will
     /// also be used to create the certificate for the domain when `letsencrypt` is enabled.
     pub host: Cow<'static, str>,
+
+    pub cache: Option<RouteCache>,
 
     /// Plugins that will be applied to the route/host
     /// (ex: rate limiting, oauth2, etc.)
