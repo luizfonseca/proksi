@@ -120,18 +120,24 @@ impl Storage for DiskCache {
 
         let metadata_file = format!("{primary_key}.metadata");
 
-        tokio::fs::create_dir_all(&main_path).await.unwrap();
+        if let Err(err) = tokio::fs::create_dir_all(&main_path).await {
+            tracing::error!("failed to create directory {main_path:?}: {err}");
+            return Err(pingora::Error::new_str("failed to create directory"));
+        }
 
-        tokio::fs::write(
-            main_path.join(metadata_file),
-            serde_json::to_vec::<DiskCacheItemMeta>(&DiskCacheItemMeta::from(meta)).unwrap(),
-        )
-        .await
-        .ok();
+        let Ok(serialized_metadata) =
+            serde_json::to_vec::<DiskCacheItemMeta>(&DiskCacheItemMeta::from(meta))
+        else {
+            return Err(pingora::Error::new_str("failed to serialize cache meta"));
+        };
+        tokio::fs::write(main_path.join(metadata_file), serialized_metadata)
+            .await
+            .ok();
 
         Ok(Box::new(DiskCacheMissHandler::new(
             key.to_owned(),
             DiskCacheItemMeta::from(meta),
+            self.directory.clone(),
         )))
     }
 
@@ -154,12 +160,15 @@ impl Storage for DiskCache {
         let main_path = self.directory.join(namespace);
         let metadata_file = format!("{primary_key}.metadata");
 
-        tokio::fs::write(
-            main_path.join(metadata_file),
-            serde_json::to_vec::<DiskCacheItemMeta>(&DiskCacheItemMeta::from(meta)).unwrap(),
-        )
-        .await
-        .ok();
+        let Ok(serialized_metadata) =
+            serde_json::to_vec::<DiskCacheItemMeta>(&DiskCacheItemMeta::from(meta))
+        else {
+            return Err(pingora::Error::new_str("failed to serialize cache meta"));
+        };
+
+        tokio::fs::write(main_path.join(metadata_file), serialized_metadata)
+            .await
+            .ok();
 
         Ok(true)
     }
@@ -177,7 +186,6 @@ pub struct DiskCacheHitHandler {
 /// HIT handler for the cache
 impl DiskCacheHitHandler {
     pub fn new(target: tokio::fs::File) -> Self {
-        tracing::info!("creating hit handler");
         DiskCacheHitHandler { target }
     }
 }
@@ -233,13 +241,18 @@ impl HandleHit for DiskCacheHitHandler {
 
 /// MISS handler for the cache
 pub struct DiskCacheMissHandler {
+    directory: PathBuf,
     key: CacheKey,
     _meta: DiskCacheItemMeta,
 }
 
 impl DiskCacheMissHandler {
-    pub fn new(key: CacheKey, meta: DiskCacheItemMeta) -> DiskCacheMissHandler {
-        DiskCacheMissHandler { key, _meta: meta }
+    pub fn new(key: CacheKey, meta: DiskCacheItemMeta, directory: PathBuf) -> DiskCacheMissHandler {
+        DiskCacheMissHandler {
+            key,
+            _meta: meta,
+            directory,
+        }
     }
 }
 
@@ -252,13 +265,13 @@ impl HandleMiss for DiskCacheMissHandler {
         }
 
         let primary_key = self.key.primary_key();
-        let main_path = PathBuf::from("./tmp").join(self.key.namespace());
+        let main_path = self.directory.join(self.key.namespace());
         let cache_file = format!("{primary_key}.cache");
 
         // open file and append data
-        let mut file = tokio::fs::File::create(&main_path.join(cache_file))
-            .await
-            .unwrap();
+        let Ok(mut file) = tokio::fs::File::create(&main_path.join(cache_file)).await else {
+            return Err(pingora::Error::new_str("failed to create cache file"));
+        };
 
         if file.write(&data).await.is_ok() {
             return Ok(());
