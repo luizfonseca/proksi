@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.9](https://github.com/luizfonseca/proksi/compare/v0.3.8...v0.3.9) (2024-06-20)
+
+
+### Bug Fixes
+
+* **cache:** remove hardcoded tmp folder and .unwrap usage ([254cb05](https://github.com/luizfonseca/proksi/commit/254cb0591cdf2261eaea5274963af9f08f4018d8))
+
 ## [0.3.8](https://github.com/luizfonseca/proksi/compare/v0.3.7...v0.3.8) (2024-06-20)
 
 
