@@ -351,6 +351,9 @@ impl ProxyHttp for Router {
 
     /// This callback is invoked when a cacheable response is ready to be admitted to cache
     fn cache_miss(&self, session: &mut Session, ctx: &mut Self::CTX) {
+        // 100MB Hardcoded for now, but we can make it configurable later
+        session.cache.set_max_file_size_bytes(100 * 1024 * 1024);
+
         ctx.extensions
             .insert(Cow::Borrowed("cache_state"), "MISS".into());
         session.cache.cache_miss();
