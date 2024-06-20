@@ -274,7 +274,13 @@ pub struct RouteSsl {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteCache {
     pub enabled: Option<bool>,
-    pub expires_in_secs: Option<u64>,
+
+    #[serde(default)]
+    pub expires_in_secs: u64,
+    #[serde(default)]
+    pub stale_if_error_secs: u64,
+    #[serde(default)]
+    pub stale_while_revalidate_secs: u64,
     pub path: PathBuf,
 }
 

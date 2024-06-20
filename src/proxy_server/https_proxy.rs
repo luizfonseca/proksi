@@ -386,7 +386,7 @@ impl ProxyHttp for Router {
 
         Ok(RespCacheable::Cacheable(CacheMeta::new(
             SystemTime::now()
-                .checked_add(Duration::from_secs(cache.expires_in_secs.unwrap_or(120)))
+                .checked_add(Duration::from_secs(cache.expires_in_secs))
                 .unwrap(),
             SystemTime::now(),
             20,
