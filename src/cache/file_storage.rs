@@ -72,7 +72,7 @@ impl Storage for DiskCache {
         key: &CacheKey,
         _: &SpanHandle,
     ) -> Result<Option<(CacheMeta, HitHandler)>> {
-        tracing::info!("looking up cache for {key:?}");
+        tracing::debug!("looking up cache for {key:?}");
         // Basically we need to find a namespaced file in the cache directory
         // and return the file contents as the body
 
@@ -92,7 +92,7 @@ impl Storage for DiskCache {
         let Ok(file_stream) = tokio::fs::File::open(main_path.join(cache_file)).await else {
             return Ok(None);
         };
-        tracing::info!("found cache for {key:?}");
+        tracing::debug!("found cache for {key:?}");
 
         Ok(Some((
             CacheMeta::new(
@@ -113,7 +113,7 @@ impl Storage for DiskCache {
         meta: &CacheMeta,
         _: &SpanHandle,
     ) -> Result<MissHandler> {
-        tracing::info!("getting miss handler for {key:?}");
+        tracing::debug!("getting miss handler for {key:?}");
         let primary_key = key.primary_key();
 
         let main_path = PathBuf::from("./tmp").join(key.namespace());
@@ -188,16 +188,13 @@ impl HandleHit for DiskCacheHitHandler {
     ///
     /// Return `None` when no more body to read.
     async fn read_body(&mut self) -> Result<Option<bytes::Bytes>> {
-        tracing::info!("reading body");
         let mut buffer = [0; 4096];
 
         let Ok(bytes_read) = self.target.read(&mut buffer).await else {
-            tracing::info!("READ error");
             return Err(pingora::Error::new_str("failed to read from cache"));
         };
 
         if bytes_read == 0 {
-            tracing::info!("READ empty");
             return Ok(None);
         }
 
@@ -254,7 +251,6 @@ impl HandleMiss for DiskCacheMissHandler {
             return Ok(());
         }
 
-        tracing::info!("writing body");
         let primary_key = self.key.primary_key();
         let main_path = PathBuf::from("./tmp").join(self.key.namespace());
         let cache_file = format!("{primary_key}.cache");

@@ -1,11 +1,12 @@
 use std::net::ToSocketAddrs;
+use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 
 use http::uri::PathAndQuery;
-use http::{HeaderValue, Uri};
+use http::{HeaderName, HeaderValue, Uri};
 use once_cell::sync::Lazy;
 
 use openssl::base64;
@@ -13,7 +14,7 @@ use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::proxy::{ProxyHttp, Session};
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 
-use pingora_cache::{CacheKey, CacheMeta, RespCacheable};
+use pingora_cache::{CacheKey, CacheMeta, NoCacheReason, RespCacheable};
 
 use crate::cache::file_storage::DiskCache;
 use crate::config::RouteUpstream;
@@ -28,6 +29,8 @@ use super::{
 };
 
 static STORAGE_CACHE: Lazy<DiskCache> = Lazy::new(DiskCache::new);
+static CACHEABLE_METHODS: Lazy<Vec<http::Method>> =
+    Lazy::new(|| vec![http::Method::GET, http::Method::HEAD]);
 
 /// Load balancer proxy struct
 pub struct Router {
@@ -188,6 +191,15 @@ impl ProxyHttp for Router {
         // Middleware phase: response_filterx
         execute_response_plugins(&route_container, session, ctx).await?;
 
+        let cache_state = ctx.extensions.get("cache_state").cloned();
+        if session.cache.enabled() && cache_state.is_some() {
+            let cache_state = cache_state.unwrap();
+            // indicates whether it was HIT or MISS in the cache
+            upstream_response.insert_header(
+                HeaderName::from_str("X-Cache").unwrap(),
+                cache_state.as_str(),
+            )?;
+        }
         Ok(())
     }
 
@@ -333,21 +345,48 @@ impl ProxyHttp for Router {
     }
 
     /// This callback is invoked when a cacheable response is ready to be admitted to cache
-    fn cache_miss(&self, session: &mut Session, _ctx: &mut Self::CTX) {
-        tracing::info!("cache miss");
+    fn cache_miss(&self, session: &mut Session, ctx: &mut Self::CTX) {
+        ctx.extensions
+            .insert(Cow::Borrowed("cache_state"), "MISS".into());
         session.cache.cache_miss();
+    }
+
+    /// This filter is called after a successful cache lookup and before the cache asset is ready to
+    /// be used.
+    ///
+    /// This filter allow the user to log or force expire the asset.
+    // flex purge, other filtering, returns whether asset is should be force expired or not
+    async fn cache_hit_filter(
+        &self,
+        _meta: &CacheMeta,
+        ctx: &mut Self::CTX,
+        _req: &RequestHeader,
+    ) -> pingora::Result<bool> {
+        ctx.extensions
+            .insert(Cow::Borrowed("cache_state"), "HIT".into());
+        Ok(false)
     }
 
     /// Decide if the response is cacheable
     fn response_cache_filter(
         &self,
-        _session: &Session,
+        session: &Session,
         resp: &ResponseHeader,
-        _ctx: &mut Self::CTX,
+        ctx: &mut Self::CTX,
     ) -> pingora::Result<RespCacheable> {
+        let container = process_route(ctx);
+        let Some(cache) = container.cache.as_ref() else {
+            return Ok(RespCacheable::Uncacheable(NoCacheReason::NeverEnabled));
+        };
+
+        // Only
+        if !CACHEABLE_METHODS.contains(&session.req_header().method) {
+            return Ok(RespCacheable::Uncacheable(NoCacheReason::OriginNotCache));
+        }
+
         Ok(RespCacheable::Cacheable(CacheMeta::new(
             SystemTime::now()
-                .checked_add(Duration::from_secs(120))
+                .checked_add(Duration::from_secs(cache.expires_in_secs.unwrap_or(120)))
                 .unwrap(),
             SystemTime::now(),
             20,

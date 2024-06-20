@@ -274,6 +274,7 @@ pub struct RouteSsl {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteCache {
     pub enabled: Option<bool>,
+    pub expires_in_secs: Option<u64>,
     pub path: PathBuf,
 }
 
