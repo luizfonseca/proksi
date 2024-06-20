@@ -22,12 +22,12 @@ impl CertStore {
         let servername = ssl_ref.servername(NameType::HOST_NAME).unwrap_or("");
         tracing::debug!("Received SNI: {}", servername);
 
-        if stores::get_certificate_by_key(servername).is_some() {
-            return Ok(());
-        }
+        // if stores::get_certificate_by_key(servername).is_some() {
+        return Ok(());
+        // }
 
         // Abort the handshake
-        Err(SniError::ALERT_FATAL)
+        // Err(SniError::ALERT_FATAL)
     }
 }
 
