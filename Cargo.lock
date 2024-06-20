@@ -2054,7 +2054,7 @@ dependencies = [
 
 [[package]]
 name = "proksi"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "acme-lib",
  "anyhow",

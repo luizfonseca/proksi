@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.10](https://github.com/luizfonseca/proksi/compare/v0.3.9...v0.3.10) (2024-06-20)
+
+
+### Bug Fixes
+
+* **cache:** introduce static arc for cache paths and fix file size for cached files ([3cc4190](https://github.com/luizfonseca/proksi/commit/3cc41907fed46cc4ad23768671ebfefc90fbda21))
+* **cache:** set max_cache default (without it, it's 16Kb) ([1492ce3](https://github.com/luizfonseca/proksi/commit/1492ce33fa7813690b766cbf0cf1a1c3e04686cb))
+
 ## [0.3.9](https://github.com/luizfonseca/proksi/compare/v0.3.8...v0.3.9) (2024-06-20)
 
 
