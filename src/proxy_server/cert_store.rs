@@ -18,12 +18,13 @@ impl CertStore {
     // It is used to check if the server name is in the certificate store
     // If it is, the handshake continues, otherwise it is aborted
     // and the client is disconnected
+    #[allow(clippy::unnecessary_wraps)]
     pub fn sni_callback(ssl_ref: &mut SslRef) -> Result<(), SniError> {
         let servername = ssl_ref.servername(NameType::HOST_NAME).unwrap_or("");
         tracing::debug!("Received SNI: {}", servername);
 
         // if stores::get_certificate_by_key(servername).is_some() {
-        return Ok(());
+        Ok(())
         // }
 
         // Abort the handshake
