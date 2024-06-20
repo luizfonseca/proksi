@@ -18,6 +18,7 @@ use services::{
     logger::{ProxyLog, ProxyLoggerReceiver},
 };
 
+mod cache;
 mod channel;
 mod config;
 mod plugins;

@@ -4,10 +4,14 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use async_trait::async_trait;
 
 use http::{HeaderValue, Uri};
+use once_cell::sync::Lazy;
+
 use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::proxy::{ProxyHttp, Session};
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
+use pingora_cache::{CacheKey, CacheMeta};
 
+use crate::cache::file_storage::DiskCache;
 use crate::config::RouteUpstream;
 use crate::stores::{self, routes::RouteStoreContainer};
 
@@ -19,17 +23,19 @@ use super::{
     DEFAULT_PEER_OPTIONS,
 };
 
+static STORAGE_CACHE: Lazy<DiskCache> = Lazy::new(|| DiskCache::new());
+
 /// Load balancer proxy struct
 pub struct Router {
     // pub store: RouteStore,
 }
 
 fn process_route(ctx: &RouterContext) -> Arc<RouteStoreContainer> {
-    ctx.route_container.clone()
+    ctx.route_container.clone().unwrap()
 }
 pub struct RouterContext {
     pub host: String,
-    pub route_container: Arc<RouteStoreContainer>,
+    pub route_container: Option<Arc<RouteStoreContainer>>,
     pub upstream: RouteUpstream,
     pub extensions: HashMap<Cow<'static, str>, String>,
 
@@ -49,7 +55,7 @@ impl ProxyHttp for Router {
     fn new_ctx(&self) -> Self::CTX {
         RouterContext {
             host: String::new(),
-            route_container: Arc::new(RouteStoreContainer::default()),
+            route_container: None,
             upstream: RouteUpstream::default(),
             extensions: HashMap::with_capacity(2),
             timings: RouterTimings {
@@ -89,7 +95,7 @@ impl ProxyHttp for Router {
             _ => {}
         }
 
-        ctx.route_container = Arc::clone(&arced);
+        ctx.route_container = Some(Arc::clone(&arced));
 
         // Middleware phase: request_filterx
         // We are checking to see if the request has already been handled
@@ -97,6 +103,9 @@ impl ProxyHttp for Router {
         if let Ok(true) = execute_request_plugins(session, ctx, &arced.plugins).await {
             return Ok(true);
         }
+
+        let storage = &*STORAGE_CACHE;
+        session.cache.enable(storage, None, None, None);
 
         Ok(false)
     }
@@ -287,6 +296,43 @@ impl ProxyHttp for Router {
             access_log = true
         );
     }
+
+    // This callback generates the cache key
+    ///
+    /// This callback is called only when cache is enabled for this request
+    ///
+    /// By default this callback returns a default cache key generated from the request.
+    fn cache_key_callback(
+        &self,
+        session: &Session,
+        _ctx: &mut Self::CTX,
+    ) -> pingora::Result<CacheKey> {
+        let req_header = session.req_header();
+        Ok(CacheKey::default(req_header))
+    }
+
+    /// This callback is invoked when a cacheable response is ready to be admitted to cache
+    fn cache_miss(&self, session: &mut Session, _ctx: &mut Self::CTX) {
+        tracing::info!("cache miss");
+        session.cache.cache_miss();
+    }
+
+    // This filter is called after a successful cache lookup and before the cache asset is ready to
+    // be used.
+    //
+    // This filter allow the user to log or force expire the asset.
+    // flex purge, other filtering, returns whether asset is should be force expired or not
+    // async fn cache_hit_filter(
+    //     &self,
+    //     _meta: &CacheMeta,
+    //     _ctx: &mut Self::CTX,
+    //     _req: &RequestHeader,
+    // ) -> pingora::Result<bool>
+    // where
+    //     Self::CTX: Send + Sync,
+    // {
+    //     Ok(false)
+    // }
 }
 
 fn get_uri(session: &mut Session) -> Uri {

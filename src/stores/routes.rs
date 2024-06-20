@@ -50,7 +50,7 @@ impl Default for RouteStoreContainer {
     fn default() -> Self {
         RouteStoreContainer {
             load_balancer: Arc::new(
-                LoadBalancer::<RoundRobin>::try_from_iter(vec!["127.0.0.1:80:80"]).unwrap(),
+                LoadBalancer::<RoundRobin>::try_from_iter(vec!["127.0.0.1:80"]).unwrap(),
             ),
             path_matcher: RouteStorePathMatcher::default(),
             host_header_remove: Vec::with_capacity(0),
