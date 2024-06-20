@@ -65,6 +65,7 @@ impl ProxyHttp for Router {
             route_container: None,
             upstream: RouteUpstream::default(),
             extensions: HashMap::with_capacity(2),
+
             timings: RouterTimings {
                 request_filter_start: std::time::Instant::now(),
             },
@@ -82,6 +83,8 @@ impl ProxyHttp for Router {
         let req_host = get_host(session);
         let host_without_port = req_host.split(':').collect::<Vec<_>>()[0];
         host_without_port.clone_into(&mut ctx.host);
+
+        ctx.host = host_without_port.to_string();
 
         // If there's no host matching, returns a 404
         let Some(route_container) = stores::get_route_by_key(host_without_port) else {
@@ -111,12 +114,14 @@ impl ProxyHttp for Router {
             return Ok(true);
         }
 
-        let storage = &*STORAGE_CACHE;
         if arced.cache.is_some() {
             let cache = arced.cache.as_ref().unwrap();
-
             if cache.enabled.unwrap_or(false) {
-                session.cache.enable(storage, None, None, None);
+                stores::insert_cache_routing(
+                    ctx.host.clone(),
+                    cache.path.to_string_lossy().to_string(),
+                );
+                session.cache.enable(&*STORAGE_CACHE, None, None, None);
             }
         }
 
@@ -389,8 +394,8 @@ impl ProxyHttp for Router {
                 .checked_add(Duration::from_secs(cache.expires_in_secs))
                 .unwrap(),
             SystemTime::now(),
-            20,
-            20,
+            cache.stale_while_revalidate_secs,
+            cache.stale_if_error_secs,
             resp.clone(),
         )))
     }

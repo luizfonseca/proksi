@@ -6,6 +6,7 @@ use challenges::ChallengeStore;
 use once_cell::sync::Lazy;
 use routes::{RouteStore, RouteStoreContainer};
 
+pub mod cache;
 pub mod certificates;
 pub mod challenges;
 pub mod routes;
@@ -69,4 +70,31 @@ pub fn insert_certificate(key: String, value: Certificate) {
     map.insert(key, value);
 
     CERTIFICATE_STORE.store(Arc::new(map));
+}
+
+// Cache Routing store
+static CACHE_ROUTING_STORE: Lazy<ArcSwap<cache::PathCacheStorage>> =
+    Lazy::new(|| ArcSwap::new(Arc::new(HashMap::new())));
+
+pub fn get_cache_routing_by_key(key: &str) -> Option<String> {
+    CACHE_ROUTING_STORE.load().get(key).cloned()
+}
+
+// pub fn get_cache_routings() -> Guard<Arc<cache::CacheStore>> {
+//     CACHE_ROUTING_STORE.load()
+// }
+
+pub fn insert_cache_routing(key: String, value: String) {
+    let route = CACHE_ROUTING_STORE.load();
+
+    // Dont insert if the key already exists
+    if route.get(&key).is_some() {
+        return;
+    }
+
+    let mut map = (**route).clone();
+
+    map.insert(key, value);
+
+    CACHE_ROUTING_STORE.store(Arc::new(map));
 }

@@ -1,4 +1,9 @@
-use std::{any::Any, collections::HashMap, path::PathBuf, time::SystemTime};
+use std::{
+    any::Any,
+    collections::HashMap,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 use async_trait::async_trait;
 use http::StatusCode;
@@ -11,19 +16,33 @@ use pingora_cache::{
 
 use pingora::{http::ResponseHeader, Result};
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{
+    fs::OpenOptions,
+    io::{AsyncReadExt, AsyncWriteExt},
+};
+
+use crate::stores;
 
 /// Disk based cache storage and memory cache for speeding up cache lookups
 
 pub struct DiskCache {
-    directory: PathBuf,
+    pub directory: PathBuf,
 }
 
 impl DiskCache {
     pub fn new() -> Self {
         DiskCache {
-            directory: PathBuf::from("./tmp"),
+            directory: PathBuf::from("/tmp"),
         }
+    }
+
+    /// Retrieves the directory for the given key
+    pub fn get_directory_for(&self, key: &str) -> PathBuf {
+        let Some(path) = stores::get_cache_routing_by_key(key) else {
+            return self.directory.join(key);
+        };
+
+        PathBuf::from(path).join(key)
     }
 }
 
@@ -78,7 +97,7 @@ impl Storage for DiskCache {
 
         let namespace = key.namespace();
         let primary_key = key.primary_key();
-        let main_path = self.directory.join(namespace);
+        let main_path = self.get_directory_for(namespace);
         let metadata_file = format!("{primary_key}.metadata");
         let cache_file = format!("{primary_key}.cache");
         let Ok(body) = tokio::fs::read(main_path.join(metadata_file)).await else {
@@ -115,9 +134,7 @@ impl Storage for DiskCache {
     ) -> Result<MissHandler> {
         tracing::debug!("getting miss handler for {key:?}");
         let primary_key = key.primary_key();
-
-        let main_path = PathBuf::from("./tmp").join(key.namespace());
-
+        let main_path = self.get_directory_for(key.namespace());
         let metadata_file = format!("{primary_key}.metadata");
 
         if let Err(err) = tokio::fs::create_dir_all(&main_path).await {
@@ -137,7 +154,7 @@ impl Storage for DiskCache {
         Ok(Box::new(DiskCacheMissHandler::new(
             key.to_owned(),
             DiskCacheItemMeta::from(meta),
-            self.directory.clone(),
+            main_path,
         )))
     }
 
@@ -157,7 +174,7 @@ impl Storage for DiskCache {
     ) -> Result<bool> {
         let namespace = key.namespace();
         let primary_key = key.primary_key();
-        let main_path = self.directory.join(namespace);
+        let main_path = self.get_directory_for(namespace);
         let metadata_file = format!("{primary_key}.metadata");
 
         let Ok(serialized_metadata) =
@@ -241,7 +258,7 @@ impl HandleHit for DiskCacheHitHandler {
 
 /// MISS handler for the cache
 pub struct DiskCacheMissHandler {
-    directory: PathBuf,
+    main_path: PathBuf,
     key: CacheKey,
     _meta: DiskCacheItemMeta,
 }
@@ -251,9 +268,22 @@ impl DiskCacheMissHandler {
         DiskCacheMissHandler {
             key,
             _meta: meta,
-            directory,
+            main_path: directory,
         }
     }
+}
+
+/// Writes a file to disk and append data on every write
+async fn write_to_file<P: AsRef<Path>>(path: P, content: &[u8]) -> std::io::Result<()> {
+    let mut file = OpenOptions::new()
+        .create(true) // Create the file if it doesn't exist
+        .append(true)
+        .open(path)
+        .await?;
+
+    // Writing the content to the file
+    file.write_all(content).await?;
+    Ok(())
 }
 
 #[async_trait]
@@ -265,16 +295,18 @@ impl HandleMiss for DiskCacheMissHandler {
         }
 
         let primary_key = self.key.primary_key();
-        let main_path = self.directory.join(self.key.namespace());
+        let main_path = self.main_path.clone();
         let cache_file = format!("{primary_key}.cache");
 
-        // open file and append data
-        let Ok(mut file) = tokio::fs::File::create(&main_path.join(cache_file)).await else {
-            return Err(pingora::Error::new_str("failed to create cache file"));
-        };
-
-        if file.write(&data).await.is_ok() {
-            return Ok(());
+        if write_to_file(&main_path.join(&cache_file), &data)
+            .await
+            .is_err()
+        {
+            tracing::error!(
+                "failed to write to cache file: {:?}",
+                main_path.join(cache_file)
+            );
+            return Err(pingora::Error::new_str("failed to write to cache file"));
         }
 
         Ok(())

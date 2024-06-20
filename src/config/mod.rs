@@ -25,6 +25,14 @@ fn default_proto_version_min() -> ProtoVersion {
     ProtoVersion::V1_2
 }
 
+fn default_stale_secs() -> u32 {
+    60
+}
+
+fn default_cache_expire_secs() -> u64 {
+    3600
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
 pub(crate) enum DockerServiceMode {
     Swarm,
@@ -275,12 +283,12 @@ pub struct RouteSsl {
 pub struct RouteCache {
     pub enabled: Option<bool>,
 
-    #[serde(default)]
+    #[serde(default = "default_cache_expire_secs")]
     pub expires_in_secs: u64,
-    #[serde(default)]
-    pub stale_if_error_secs: u64,
-    #[serde(default)]
-    pub stale_while_revalidate_secs: u64,
+    #[serde(default = "default_stale_secs")]
+    pub stale_if_error_secs: u32,
+    #[serde(default = "default_stale_secs")]
+    pub stale_while_revalidate_secs: u32,
     pub path: PathBuf,
 }
 
