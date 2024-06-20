@@ -6,12 +6,12 @@ use pingora_cache::{
     key::CompactCacheKey,
     storage::{HandleHit, HandleMiss},
     trace::SpanHandle,
-    CacheKey, CacheMeta, HitHandler, MissHandler, Storage,
+    CacheKey, CacheMeta, HitHandler, MemCache, MissHandler, Storage,
 };
 
 use pingora::{http::ResponseHeader, Result};
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// Disk based cache storage and memory cache for speeding up cache lookups
 
@@ -123,7 +123,7 @@ impl Storage for DiskCache {
         tokio::fs::create_dir_all(&main_path).await.unwrap();
 
         tokio::fs::write(
-            metadata_file,
+            main_path.join(metadata_file),
             serde_json::to_vec::<DiskCacheItemMeta>(&DiskCacheItemMeta::from(meta)).unwrap(),
         )
         .await
@@ -189,14 +189,19 @@ impl HandleHit for DiskCacheHitHandler {
     /// Return `None` when no more body to read.
     async fn read_body(&mut self) -> Result<Option<bytes::Bytes>> {
         tracing::info!("reading body");
+        let mut buffer = [0; 4096];
 
-        let mut buf = Vec::with_capacity(50);
+        let Ok(bytes_read) = self.target.read(&mut buffer).await else {
+            tracing::info!("READ error");
+            return Err(pingora::Error::new_str("failed to read from cache"));
+        };
 
-        if let Err(_) = self.target.read_to_end(&mut buf).await {
+        if bytes_read == 0 {
+            tracing::info!("READ empty");
             return Ok(None);
         }
 
-        Ok(Some(bytes::Bytes::copy_from_slice(&buf)))
+        Ok(Some(bytes::Bytes::copy_from_slice(&buffer)))
     }
 
     /// Finish the current cache hit
@@ -244,26 +249,22 @@ impl DiskCacheMissHandler {
 #[async_trait]
 impl HandleMiss for DiskCacheMissHandler {
     /// Write the given body to the storage
-    async fn write_body(&mut self, data: bytes::Bytes, _: bool) -> Result<()> {
+    async fn write_body(&mut self, data: bytes::Bytes, end: bool) -> Result<()> {
+        if end {
+            return Ok(());
+        }
+
         tracing::info!("writing body");
         let primary_key = self.key.primary_key();
-
         let main_path = PathBuf::from("./tmp").join(self.key.namespace());
-
-        let metadata_file = format!("{primary_key}.metadata");
         let cache_file = format!("{primary_key}.cache");
 
-        tokio::fs::create_dir_all(&main_path).await.unwrap();
+        // open file and append data
+        let mut file = tokio::fs::File::create(&main_path.join(cache_file))
+            .await
+            .unwrap();
 
-        tokio::fs::write(
-            metadata_file,
-            serde_json::to_vec::<DiskCacheItemMeta>(&self.meta).unwrap(),
-        )
-        .await
-        .ok();
-
-        // TODO check performance
-        tokio::fs::write(cache_file, data).await.ok();
+        file.write(&data).await.ok();
 
         Ok(())
     }

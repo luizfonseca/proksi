@@ -1,15 +1,19 @@
 use std::net::ToSocketAddrs;
+use std::time::{Duration, SystemTime};
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 
+use http::uri::PathAndQuery;
 use http::{HeaderValue, Uri};
 use once_cell::sync::Lazy;
 
+use openssl::base64;
 use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::proxy::{ProxyHttp, Session};
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
-use pingora_cache::{CacheKey, CacheMeta};
+use pingora_cache::cache_control::Cacheable;
+use pingora_cache::{CacheKey, CacheMeta, RespCacheable};
 
 use crate::cache::file_storage::DiskCache;
 use crate::config::RouteUpstream;
@@ -305,16 +309,45 @@ impl ProxyHttp for Router {
     fn cache_key_callback(
         &self,
         session: &Session,
-        _ctx: &mut Self::CTX,
+        ctx: &mut Self::CTX,
     ) -> pingora::Result<CacheKey> {
         let req_header = session.req_header();
-        Ok(CacheKey::default(req_header))
+        Ok(CacheKey::new(
+            ctx.host.clone(),
+            base64::encode_block(
+                req_header
+                    .uri
+                    .path_and_query()
+                    .unwrap_or(&PathAndQuery::from_static("/"))
+                    .as_str()
+                    .as_bytes(),
+            ),
+            "",
+        ))
     }
 
     /// This callback is invoked when a cacheable response is ready to be admitted to cache
     fn cache_miss(&self, session: &mut Session, _ctx: &mut Self::CTX) {
         tracing::info!("cache miss");
         session.cache.cache_miss();
+    }
+
+    /// Decide if the response is cacheable
+    fn response_cache_filter(
+        &self,
+        session: &Session,
+        resp: &ResponseHeader,
+        _ctx: &mut Self::CTX,
+    ) -> pingora::Result<RespCacheable> {
+        Ok(RespCacheable::Cacheable(CacheMeta::new(
+            SystemTime::now()
+                .checked_add(Duration::from_secs(120))
+                .unwrap(),
+            SystemTime::now(),
+            20,
+            20,
+            resp.clone(),
+        )))
     }
 
     // This filter is called after a successful cache lookup and before the cache asset is ready to
