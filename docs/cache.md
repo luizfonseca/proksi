@@ -11,6 +11,7 @@ Each route can have a `cache` section that specifies the cache configuration for
 The cache configuration includes the following options:
 
 - `enabled`: Whether the cache is enabled for the route. Defaults to `false`.
+- `cache_type`: Which cache backend to use. Defaults to `memcache`. Other options are `disk`.
 - `expires_in_secs`: The number of seconds the cache should be valid for. Defaults to `360`.
 - `stale_if_error_secs`: The number of seconds the cache should be valid for if an error occurs. Defaults to `60`.
 - `stale_while_revalidate_secs`: The number of seconds the cache should be valid for if the response is revalidated. Defaults to `60`.
@@ -24,6 +25,7 @@ routes = [
     host: "example.com",
     cache: {
       enabled: true,
+      cache_type: "memcache",
       expires_in_secs: 360,
       stale_if_error_secs: 60,
       stale_while_revalidate_secs: 60,

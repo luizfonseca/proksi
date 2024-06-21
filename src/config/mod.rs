@@ -37,6 +37,10 @@ fn default_cache_type() -> RouteCacheType {
     RouteCacheType::MemCache
 }
 
+fn default_cache_path() -> PathBuf {
+    PathBuf::from("/tmp")
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
 pub(crate) enum DockerServiceMode {
     Swarm,
@@ -305,6 +309,8 @@ pub struct RouteCache {
     pub stale_if_error_secs: u32,
     #[serde(default = "default_stale_secs")]
     pub stale_while_revalidate_secs: u32,
+
+    #[serde(default = "default_cache_path")]
     pub path: PathBuf,
 }
 
