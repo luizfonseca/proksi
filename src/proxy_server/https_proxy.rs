@@ -216,7 +216,7 @@ impl ProxyHttp for Router {
             let cache_state = cache_state.unwrap();
             // indicates whether it was HIT or MISS in the cache
             upstream_response.insert_header(
-                HeaderName::from_str("Cache-Status").unwrap(),
+                HeaderName::from_str("cache-status").unwrap(),
                 cache_state.as_str(),
             )?;
         }
