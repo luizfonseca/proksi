@@ -6,6 +6,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use bytes::BufMut;
 use http::StatusCode;
 use pingora_cache::{
     key::CompactCacheKey,
@@ -48,6 +49,7 @@ impl DiskCache {
 
 #[derive(Serialize, Deserialize)]
 pub struct DiskCacheItemMeta {
+    pub status: u16,
     pub created_at: SystemTime,
     pub fresh_until: SystemTime,
     pub stale_while_revalidate_sec: u32,
@@ -60,6 +62,7 @@ pub struct DiskCacheItemMeta {
 impl From<&CacheMeta> for DiskCacheItemMeta {
     fn from(meta: &CacheMeta) -> Self {
         DiskCacheItemMeta {
+            status: meta.response_header().status.as_u16(),
             created_at: meta.created(),
             fresh_until: meta.fresh_until(),
             stale_while_revalidate_sec: meta.stale_while_revalidate_sec(),
@@ -73,8 +76,9 @@ impl From<&CacheMeta> for DiskCacheItemMeta {
     }
 }
 
-fn convert_headers(headers: HashMap<String, String>) -> ResponseHeader {
-    let mut res_headers = ResponseHeader::build_no_case(StatusCode::OK, None).unwrap();
+fn convert_headers(headers: HashMap<String, String>, status: u16) -> ResponseHeader {
+    let status_code = StatusCode::from_u16(status).unwrap_or(StatusCode::OK);
+    let mut res_headers = ResponseHeader::build(status_code, None).unwrap();
 
     for (k, v) in headers {
         res_headers.insert_header(k, v).ok();
@@ -135,7 +139,7 @@ impl Storage for DiskCache {
                 meta.created_at,
                 meta.stale_while_revalidate_sec,
                 meta.stale_if_error_sec,
-                convert_headers(meta.headers),
+                convert_headers(meta.headers, meta.status),
             ),
             Box::new(DiskCacheHitHandler::new(file_stream, file_path)),
         )))
@@ -230,9 +234,11 @@ impl HandleHit for DiskCacheHitHandler {
     ///
     /// Return `None` when no more body to read.
     async fn read_body(&mut self) -> Result<Option<bytes::Bytes>> {
-        let mut buffer = [0; 16384];
+        // 1 MB
+        // let one_mb = 1024 * 1024;
+        let mut buffer = bytes::BytesMut::new().limit(32000);
 
-        let Ok(bytes_read) = self.target.read(&mut buffer).await else {
+        let Ok(bytes_read) = self.target.read_buf(&mut buffer).await else {
             tracing::error!("failed to read completely from cache: {:?}", self.path);
             return Ok(None);
         };
@@ -242,8 +248,7 @@ impl HandleHit for DiskCacheHitHandler {
             return Ok(None);
         }
 
-        let bytes = bytes::Bytes::copy_from_slice(&buffer);
-        Ok(Some(bytes))
+        Ok(Some(buffer.into_inner().freeze()))
     }
 
     /// Finish the current cache hit

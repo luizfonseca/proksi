@@ -400,9 +400,11 @@ impl ProxyHttp for Router {
             return Ok(RespCacheable::Uncacheable(NoCacheReason::NeverEnabled));
         };
 
-        // Only
+        // Only cache GET and HEAD requests with 2xx responses
         if !CACHEABLE_METHODS.contains(&session.req_header().method) {
-            return Ok(RespCacheable::Uncacheable(NoCacheReason::OriginNotCache));
+            return Ok(RespCacheable::Uncacheable(NoCacheReason::Custom(
+                "method or status not cacheable",
+            )));
         }
 
         Ok(RespCacheable::Cacheable(CacheMeta::new(

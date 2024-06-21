@@ -69,6 +69,7 @@ prometheus = "0.13.4"
 short-crypt = "1.0.28"
 hcl-rs = "0.18.0"
 pingora-cache = "0.2.0"
+TinyUFO = "0.2.0"
 
 
 [dev-dependencies]
