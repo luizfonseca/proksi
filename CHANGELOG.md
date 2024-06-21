@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.13](https://github.com/luizfonseca/proksi/compare/v0.3.12...v0.3.13) (2024-06-21)
+
+
+### Bug Fixes
+
+* **cache:** restore the correct status code from metadata ([fa18301](https://github.com/luizfonseca/proksi/commit/fa18301865c62008d5d5758b4757cc52b26f412c))
+* **config:** make cache path optional ([01012f7](https://github.com/luizfonseca/proksi/commit/01012f7aa7adae485f3228d7dd9e5bb1e4f7cc68))
+* **http_peer:** add sane defaults to peerOpts ([e9345c2](https://github.com/luizfonseca/proksi/commit/e9345c24efb1f17bf3d7ae06407f0f22f7bb6b01))
+
 ## [0.3.12](https://github.com/luizfonseca/proksi/compare/v0.3.11...v0.3.12) (2024-06-21)
 
 
