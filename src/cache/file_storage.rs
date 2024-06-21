@@ -1,7 +1,7 @@
 use std::{
     any::Any,
-    collections::HashMap,
-    io::Read,
+    collections::BTreeMap,
+    io::{BufReader, Read},
     path::{Path, PathBuf},
     time::SystemTime,
 };
@@ -54,7 +54,7 @@ pub struct DiskCacheItemMeta {
     pub stale_if_error_sec: u32,
 
     /// It's converted later on to a `ResponseHeader`
-    pub headers: HashMap<String, String>,
+    pub headers: BTreeMap<String, String>,
 }
 
 impl From<&CacheMeta> for DiskCacheItemMeta {
@@ -74,7 +74,7 @@ impl From<&CacheMeta> for DiskCacheItemMeta {
     }
 }
 
-fn convert_headers(headers: HashMap<String, String>, status: u16) -> ResponseHeader {
+fn convert_headers(headers: BTreeMap<String, String>, status: u16) -> ResponseHeader {
     let status_code = StatusCode::from_u16(status).unwrap_or(StatusCode::OK);
     let mut res_headers = ResponseHeader::build(status_code, None).unwrap();
 
@@ -127,6 +127,8 @@ impl Storage for DiskCache {
         // file_stream.rewind().await.ok();
         tracing::debug!("found cache for {key:?}");
 
+        let buf_reader = std::io::BufReader::new(file_stream);
+
         Ok(Some((
             CacheMeta::new(
                 meta.fresh_until,
@@ -135,7 +137,7 @@ impl Storage for DiskCache {
                 meta.stale_if_error_sec,
                 convert_headers(meta.headers, meta.status),
             ),
-            Box::new(DiskCacheHitHandler::new(file_stream, file_path)),
+            Box::new(DiskCacheHitHandler::new(buf_reader, file_path)),
         )))
     }
 
@@ -211,13 +213,13 @@ impl Storage for DiskCache {
 }
 
 pub struct DiskCacheHitHandler {
-    target: std::fs::File,
+    target: BufReader<std::fs::File>,
     path: PathBuf,
 }
 
 /// HIT handler for the cache
 impl DiskCacheHitHandler {
-    pub fn new(target: std::fs::File, path: PathBuf) -> Self {
+    pub fn new(target: BufReader<std::fs::File>, path: PathBuf) -> Self {
         DiskCacheHitHandler { target, path }
     }
 }
@@ -228,9 +230,9 @@ impl HandleHit for DiskCacheHitHandler {
     ///
     /// Return `None` when no more body to read.
     async fn read_body(&mut self) -> Result<Option<bytes::Bytes>> {
-        let mut buffer = [0; 32_000];
+        let mut buffer = vec![0; 32_000];
 
-        let Ok(bytes_read) = self.target.by_ref().read(&mut buffer) else {
+        let Ok(bytes_read) = self.target.read(&mut buffer) else {
             tracing::error!("failed to read completely from cache: {:?}", self.path);
             return Ok(None);
         };
@@ -240,7 +242,8 @@ impl HandleHit for DiskCacheHitHandler {
             return Ok(None);
         }
 
-        Ok(Some(bytes::Bytes::copy_from_slice(&buffer)))
+        let slice = bytes::Bytes::copy_from_slice(&buffer[..bytes_read]);
+        Ok(Some(slice))
     }
 
     /// Finish the current cache hit
