@@ -211,18 +211,19 @@ impl ProxyHttp for Router {
             upstream_response.remove_header(name);
         }
 
-        // Middleware phase: response_filterx
-        execute_response_plugins(&route_container, session, ctx).await?;
-
         let cache_state = ctx.extensions.get("cache_state").cloned();
         if session.cache.enabled() && cache_state.is_some() {
             let cache_state = cache_state.unwrap();
             // indicates whether it was HIT or MISS in the cache
             upstream_response.insert_header(
-                HeaderName::from_str("X-Cache").unwrap(),
+                HeaderName::from_str("Cache-Status").unwrap(),
                 cache_state.as_str(),
             )?;
         }
+
+        // Middleware phase: response_filterx
+        execute_response_plugins(&route_container, session, ctx).await?;
+
         Ok(())
     }
 
@@ -370,7 +371,7 @@ impl ProxyHttp for Router {
     /// This callback is invoked when a cacheable response is ready to be admitted to cache
     fn cache_miss(&self, session: &mut Session, ctx: &mut Self::CTX) {
         ctx.extensions
-            .insert(Cow::Borrowed("cache_state"), "MISS".into());
+            .insert(Cow::Borrowed("cache_state"), "fwd=miss".into());
         session.cache.cache_miss();
     }
 
@@ -386,7 +387,7 @@ impl ProxyHttp for Router {
         _req: &RequestHeader,
     ) -> pingora::Result<bool> {
         ctx.extensions
-            .insert(Cow::Borrowed("cache_state"), "HIT".into());
+            .insert(Cow::Borrowed("cache_state"), "hit".into());
 
         Ok(false)
     }
