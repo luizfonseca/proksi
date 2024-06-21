@@ -15,7 +15,7 @@ The cache configuration includes the following options:
 - `expires_in_secs`: The number of seconds the cache should be valid for. Defaults to `360`.
 - `stale_if_error_secs`: The number of seconds the cache should be valid for if an error occurs. Defaults to `60`.
 - `stale_while_revalidate_secs`: The number of seconds the cache should be valid for if the response is revalidated. Defaults to `60`.
-- `path`: The path to the cache directory. Defaults to `./tmp`.
+- `path`: The path to the cache directory. Defaults to `/tmp`.
 
 Here's an example of a route with a cache configuration:
 
