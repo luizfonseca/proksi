@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.12](https://github.com/luizfonseca/proksi/compare/v0.3.11...v0.3.12) (2024-06-21)
+
+
+### Bug Fixes
+
+* **cache:** add mem_cache as the main default option ([4029ac0](https://github.com/luizfonseca/proksi/commit/4029ac097873d99add0ff85fbbf1d2f7cfc7f643))
+
 ## [0.3.11](https://github.com/luizfonseca/proksi/compare/v0.3.10...v0.3.11) (2024-06-20)
 
 
