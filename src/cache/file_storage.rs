@@ -18,7 +18,7 @@ use pingora::{http::ResponseHeader, Result};
 use serde::{Deserialize, Serialize};
 use tokio::{
     fs::OpenOptions,
-    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWriteExt},
 };
 
 use crate::stores;
@@ -86,6 +86,14 @@ fn convert_headers(headers: HashMap<String, String>) -> ResponseHeader {
 #[async_trait]
 impl Storage for DiskCache {
     /// Lookup the storage for the given `CacheKey`
+    ///
+    /// Whether this storage backend supports reading partially written data
+    ///
+    /// This is to indicate when cache should unlock readers
+    fn support_streaming_partial_write(&self) -> bool {
+        false
+    }
+
     async fn lookup(
         &'static self,
         key: &CacheKey,
@@ -110,11 +118,15 @@ impl Storage for DiskCache {
 
         let file_path = main_path.join(cache_file);
 
-        let Ok(mut file_stream) = tokio::fs::File::open(&file_path).await else {
+        let Ok(file_stream) = tokio::fs::OpenOptions::new()
+            .read(true)
+            .open(&file_path)
+            .await
+        else {
             return Ok(None);
         };
 
-        file_stream.rewind().await.ok();
+        // file_stream.rewind().await.ok();
         tracing::debug!("found cache for {key:?}");
 
         Ok(Some((
@@ -218,7 +230,7 @@ impl HandleHit for DiskCacheHitHandler {
     ///
     /// Return `None` when no more body to read.
     async fn read_body(&mut self) -> Result<Option<bytes::Bytes>> {
-        let mut buffer = vec![0; 16384];
+        let mut buffer = [0; 16384];
 
         let Ok(bytes_read) = self.target.read(&mut buffer).await else {
             tracing::error!("failed to read completely from cache: {:?}", self.path);
@@ -230,7 +242,7 @@ impl HandleHit for DiskCacheHitHandler {
             return Ok(None);
         }
 
-        let bytes = bytes::Bytes::from(buffer);
+        let bytes = bytes::Bytes::copy_from_slice(&buffer);
         Ok(Some(bytes))
     }
 
@@ -241,10 +253,6 @@ impl HandleHit for DiskCacheHitHandler {
         _cache_key: &CacheKey,
         _: &SpanHandle,
     ) -> Result<()> {
-        if let Ok(mut f) = tokio::fs::File::open(&self.path).await {
-            f.flush().await.ok();
-        }
-
         Ok(())
     }
 
@@ -256,7 +264,7 @@ impl HandleHit for DiskCacheHitHandler {
     /// Try to seek to a certain range of the body
     /// For files this could become a blocking operation
     /// `end: None` means to read to the end of the body.
-    fn seek(&mut self, _: usize, _: Option<usize>) -> Result<()> {
+    fn seek(&mut self, _start: usize, _end: Option<usize>) -> Result<()> {
         Ok(())
     }
 
@@ -307,7 +315,7 @@ impl HandleMiss for DiskCacheMissHandler {
         let main_path = self.main_path.clone();
         let cache_file = format!("{primary_key}.cache");
 
-        let Ok(mut file) = write_to_file(&main_path.join(&cache_file), &data).await else {
+        let Ok(_f) = write_to_file(&main_path.join(&cache_file), &data).await else {
             tracing::error!(
                 "failed to write to cache file: {:?}",
                 main_path.join(cache_file)
@@ -316,7 +324,7 @@ impl HandleMiss for DiskCacheMissHandler {
         };
 
         if end {
-            file.flush().await.ok();
+            // file.flush().await.ok();
             return Ok(());
         }
 

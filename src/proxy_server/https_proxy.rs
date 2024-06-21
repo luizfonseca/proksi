@@ -14,10 +14,11 @@ use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::proxy::{ProxyHttp, Session};
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 
+use pingora_cache::lock::CacheLock;
 use pingora_cache::{CacheKey, CacheMeta, NoCacheReason, RespCacheable};
 
 use crate::cache::file_storage::DiskCache;
-use crate::config::RouteUpstream;
+use crate::config::{RouteCacheType, RouteUpstream};
 use crate::stores::{self, routes::RouteStoreContainer};
 
 use super::{
@@ -28,9 +29,11 @@ use super::{
     DEFAULT_PEER_OPTIONS,
 };
 
+static STORAGE_MEM_CACHE: Lazy<pingora_cache::MemCache> = Lazy::new(pingora_cache::MemCache::new);
 static STORAGE_CACHE: Lazy<DiskCache> = Lazy::new(DiskCache::new);
 static CACHEABLE_METHODS: Lazy<Vec<http::Method>> =
     Lazy::new(|| vec![http::Method::GET, http::Method::HEAD]);
+static CACHE_LOCK: Lazy<CacheLock> = Lazy::new(|| CacheLock::new(Duration::from_secs(1)));
 
 /// Load balancer proxy struct
 pub struct Router {
@@ -40,6 +43,14 @@ pub struct Router {
 fn process_route(ctx: &RouterContext) -> Arc<RouteStoreContainer> {
     ctx.route_container.clone().unwrap()
 }
+
+fn get_cache_storage(cache_type: &RouteCacheType) -> &'static (dyn pingora_cache::Storage + Sync) {
+    match cache_type {
+        RouteCacheType::Disk => &*STORAGE_CACHE,
+        RouteCacheType::MemCache => &*STORAGE_MEM_CACHE,
+    }
+}
+
 pub struct RouterContext {
     pub host: String,
     pub route_container: Option<Arc<RouteStoreContainer>>,
@@ -117,11 +128,14 @@ impl ProxyHttp for Router {
         if arced.cache.is_some() {
             let cache = arced.cache.as_ref().unwrap();
             if cache.enabled.unwrap_or(false) {
+                let storage = get_cache_storage(&cache.cache_type);
                 stores::insert_cache_routing(
                     ctx.host.clone(),
                     cache.path.to_string_lossy().to_string(),
                 );
-                session.cache.enable(&*STORAGE_CACHE, None, None, None);
+                session
+                    .cache
+                    .enable(storage, None, None, Some(&*CACHE_LOCK));
             }
         }
 
@@ -401,23 +415,6 @@ impl ProxyHttp for Router {
             resp.clone(),
         )))
     }
-
-    // This filter is called after a successful cache lookup and before the cache asset is ready to
-    // be used.
-    //
-    // This filter allow the user to log or force expire the asset.
-    // flex purge, other filtering, returns whether asset is should be force expired or not
-    // async fn cache_hit_filter(
-    //     &self,
-    //     _meta: &CacheMeta,
-    //     _ctx: &mut Self::CTX,
-    //     _req: &RequestHeader,
-    // ) -> pingora::Result<bool>
-    // where
-    //     Self::CTX: Send + Sync,
-    // {
-    //     Ok(false)
-    // }
 }
 
 fn get_uri(session: &mut Session) -> Uri {

@@ -33,6 +33,10 @@ fn default_cache_expire_secs() -> u64 {
     3600
 }
 
+fn default_cache_type() -> RouteCacheType {
+    RouteCacheType::MemCache
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
 pub(crate) enum DockerServiceMode {
     Swarm,
@@ -279,9 +283,21 @@ pub struct RouteSsl {
     pub self_signed_fallback: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub enum RouteCacheType {
+    Disk,
+    MemCache,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteCache {
     pub enabled: Option<bool>,
+
+    #[serde(
+        default = "default_cache_type",
+        deserialize_with = "deserialize_cache_type"
+    )]
+    pub cache_type: RouteCacheType,
 
     #[serde(default = "default_cache_expire_secs")]
     pub expires_in_secs: u64,
@@ -640,6 +656,18 @@ where
         _ => Err(serde::de::Error::custom(
             "expected one of: v1.1, v1.2, v1.3",
         )),
+    }
+}
+
+fn deserialize_cache_type<'de, D>(deserializer: D) -> Result<RouteCacheType, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    match s.to_lowercase().as_str() {
+        "disk" => Ok(RouteCacheType::Disk),
+        "memcache" => Ok(RouteCacheType::MemCache),
+        _ => Err(serde::de::Error::custom("expected one of: disk, memcache")),
     }
 }
 
