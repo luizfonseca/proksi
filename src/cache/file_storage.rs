@@ -1,12 +1,13 @@
 use std::{
     any::Any,
     collections::HashMap,
+    io::Read,
     path::{Path, PathBuf},
     time::SystemTime,
 };
 
 use async_trait::async_trait;
-use bytes::BufMut;
+
 use http::StatusCode;
 use pingora_cache::{
     key::CompactCacheKey,
@@ -17,10 +18,7 @@ use pingora_cache::{
 
 use pingora::{http::ResponseHeader, Result};
 use serde::{Deserialize, Serialize};
-use tokio::{
-    fs::OpenOptions,
-    io::{AsyncReadExt, AsyncWriteExt},
-};
+use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
 use crate::stores;
 
@@ -112,7 +110,7 @@ impl Storage for DiskCache {
         let main_path = self.get_directory_for(namespace);
         let metadata_file = format!("{primary_key}.metadata");
         let cache_file = format!("{primary_key}.cache");
-        let Ok(body) = tokio::fs::read(main_path.join(metadata_file)).await else {
+        let Ok(body) = std::fs::read(main_path.join(metadata_file)) else {
             return Ok(None);
         };
 
@@ -122,11 +120,7 @@ impl Storage for DiskCache {
 
         let file_path = main_path.join(cache_file);
 
-        let Ok(file_stream) = tokio::fs::OpenOptions::new()
-            .read(true)
-            .open(&file_path)
-            .await
-        else {
+        let Ok(file_stream) = std::fs::OpenOptions::new().read(true).open(&file_path) else {
             return Ok(None);
         };
 
@@ -217,13 +211,13 @@ impl Storage for DiskCache {
 }
 
 pub struct DiskCacheHitHandler {
-    target: tokio::fs::File,
+    target: std::fs::File,
     path: PathBuf,
 }
 
 /// HIT handler for the cache
 impl DiskCacheHitHandler {
-    pub fn new(target: tokio::fs::File, path: PathBuf) -> Self {
+    pub fn new(target: std::fs::File, path: PathBuf) -> Self {
         DiskCacheHitHandler { target, path }
     }
 }
@@ -234,11 +228,9 @@ impl HandleHit for DiskCacheHitHandler {
     ///
     /// Return `None` when no more body to read.
     async fn read_body(&mut self) -> Result<Option<bytes::Bytes>> {
-        // 1 MB
-        // let one_mb = 1024 * 1024;
-        let mut buffer = bytes::BytesMut::new().limit(32000);
+        let mut buffer = [0; 32_000];
 
-        let Ok(bytes_read) = self.target.read_buf(&mut buffer).await else {
+        let Ok(bytes_read) = self.target.by_ref().read(&mut buffer) else {
             tracing::error!("failed to read completely from cache: {:?}", self.path);
             return Ok(None);
         };
@@ -248,7 +240,7 @@ impl HandleHit for DiskCacheHitHandler {
             return Ok(None);
         }
 
-        Ok(Some(buffer.into_inner().freeze()))
+        Ok(Some(bytes::Bytes::copy_from_slice(&buffer)))
     }
 
     /// Finish the current cache hit

@@ -151,9 +151,12 @@ impl ProxyHttp for Router {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
-        session.cache.set_max_file_size_bytes(100 * 1024 * 1024);
         // If there's no host matching, returns a 404
         let route_container = process_route(ctx);
+
+        if session.cache.enabled() {
+            session.cache.set_max_file_size_bytes(100 * 1024 * 1024);
+        }
 
         let Some(healthy_upstream) = route_container.load_balancer.select(b"", 128) else {
             return Err(pingora::Error::new(HTTPStatus(503)));
