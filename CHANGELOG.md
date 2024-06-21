@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.14](https://github.com/luizfonseca/proksi/compare/v0.3.13...v0.3.14) (2024-06-21)
+
+
+### Bug Fixes
+
+* **cache:** incorrect buffer size on read_body ([6cb3f2f](https://github.com/luizfonseca/proksi/commit/6cb3f2ff579ff05b9d74e5b521d3653210353ad1))
+
 ## [0.3.13](https://github.com/luizfonseca/proksi/compare/v0.3.12...v0.3.13) (2024-06-21)
 
 
