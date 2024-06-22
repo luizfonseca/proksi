@@ -88,7 +88,7 @@ impl Storage for DiskCache {
                 meta.created_at,
                 meta.stale_while_revalidate_sec,
                 meta.stale_if_error_sec,
-                meta.convert_headers(),
+                DiskCacheItemMetadata::convert_headers(&meta),
             ),
             Box::new(DiskCacheHitHandler::new(buf_reader, file_path)),
         )))

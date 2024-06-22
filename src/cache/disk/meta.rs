@@ -21,11 +21,11 @@ pub struct DiskCacheItemMetadata {
 
 impl DiskCacheItemMetadata {
     /// Converts a `DiskCacheItemMeta` `BTreeMap` to a `ResponseHeader`
-    pub fn convert_headers(&self) -> ResponseHeader {
-        let status_code = StatusCode::from_u16(self.status).unwrap_or(StatusCode::OK);
+    pub fn convert_headers(meta: &DiskCacheItemMetadata) -> ResponseHeader {
+        let status_code = StatusCode::from_u16(meta.status).unwrap_or(StatusCode::OK);
         let mut res_headers = ResponseHeader::build(status_code, None).unwrap();
 
-        for (k, v) in &self.headers {
+        for (k, v) in &meta.headers {
             res_headers.insert_header(k.to_owned(), v).ok();
         }
 
