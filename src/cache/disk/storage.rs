@@ -49,7 +49,7 @@ impl DiskCache {
         serde_json::from_slice(&body).ok()
     }
 
-    fn get_memory_key(&self, key: &CacheKey) -> String {
+    fn get_memory_key(key: &CacheKey) -> String {
         format!("{}-{}", key.namespace(), key.primary_key())
     }
 }
@@ -73,7 +73,7 @@ impl Storage for DiskCache {
         tracing::debug!("looking up cache for {key:?}");
         // Basically we need to find a namespaced file in the cache directory
         // and return the file contents as the body
-        let memcache_key = self.get_memory_key(&key);
+        let memcache_key = Self::get_memory_key(key);
 
         if let Some((meta, body)) = self.memcache.read().await.get(&memcache_key) {
             tracing::error!("found cache for {key:?} in memory");
@@ -99,7 +99,7 @@ impl Storage for DiskCache {
             return Ok(None);
         };
 
-        let Some(meta) = self.get_cached_metadata(&key).await else {
+        let Some(meta) = self.get_cached_metadata(key).await else {
             return Ok(None);
         };
 
