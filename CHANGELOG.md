@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.21](https://github.com/luizfonseca/proksi/compare/v0.3.20...v0.3.21) (2024-06-22)
+
+
+### Bug Fixes
+
+* hcl imports work on nested elements ([bf719b6](https://github.com/luizfonseca/proksi/commit/bf719b6b3b86ce0babcf3f9537c31a0531f72a69))
+
 ## [0.3.20](https://github.com/luizfonseca/proksi/compare/v0.3.15...v0.3.20) (2024-06-22)
 
 
