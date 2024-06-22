@@ -64,7 +64,7 @@ jobs:
             bin: proksi
             cross: true
             target: x86_64-unknown-linux-gnu
-            cargo_command: cross
+            cargo_command: cargo
           #
           - name: proksi-macos-x86_64
             os: macos-latest
