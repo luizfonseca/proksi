@@ -1,6 +1,5 @@
 use std::{
     any::Any,
-    collections::HashMap,
     io::{BufReader, Read},
     path::{Path, PathBuf},
     sync::Arc,
@@ -16,16 +15,16 @@ use pingora_cache::{
 
 use pingora::Result;
 
-use tokio::{fs::OpenOptions, io::AsyncWriteExt, sync::RwLock};
+use tokio::{fs::OpenOptions, io::AsyncWriteExt};
+
+use crate::cache::disk::storage::DISK_MEMORY_CACHE;
 
 use super::meta::DiskCacheItemMetadata;
-
-type MemoryCache = Arc<RwLock<HashMap<String, (DiskCacheItemMetadata, bytes::Bytes)>>>;
 
 pub struct DiskCacheHitHandler {
     target: BufReader<std::fs::File>,
     path: PathBuf,
-    cache: MemoryCache,
+
     meta: DiskCacheItemMetadata,
     finished_buffer: bytes::BytesMut,
 }
@@ -35,13 +34,13 @@ impl DiskCacheHitHandler {
     pub fn new(
         target: BufReader<std::fs::File>,
         path: PathBuf,
-        cache: MemoryCache,
+
         meta: DiskCacheItemMetadata,
     ) -> Self {
         DiskCacheHitHandler {
             target,
             path,
-            cache,
+
             meta,
             finished_buffer: bytes::BytesMut::new(),
         }
@@ -83,15 +82,19 @@ impl HandleHit for DiskCacheHitHandler {
         let cached_data_key = format!("{}-{}", cache_key.namespace(), cache_key.primary_key());
 
         // Skiping if the data is already in the cache
-        if self.cache.read().await.contains_key(&cached_data_key) {
+        if DISK_MEMORY_CACHE.load().contains_key(&cached_data_key) {
             tracing::debug!("skipping write, cach already contains data for {cache_key:?}");
             return Ok(());
         }
 
-        self.cache
-            .write()
-            .await
-            .insert(cached_data_key, (self.meta, self.finished_buffer.freeze()));
+        DISK_MEMORY_CACHE.rcu(|p| {
+            let mut map = (**p).clone();
+            map.insert(
+                cached_data_key.clone(),
+                (self.meta.clone(), self.finished_buffer.clone().freeze()),
+            );
+            Arc::new(map)
+        });
 
         tracing::debug!("wrote to memory cache: {:?}", self.path);
         Ok(())

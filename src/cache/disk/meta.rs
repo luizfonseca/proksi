@@ -7,7 +7,7 @@ use pingora::http::ResponseHeader;
 use serde::{Deserialize, Serialize};
 
 /// `DiskCache` storage metadata with information about the sibling cache file
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct DiskCacheItemMetadata {
     pub status: u16,
     pub created_at: SystemTime,
