@@ -868,7 +868,7 @@ mod tests {
 
             let ssl = route.ssl.as_ref().unwrap();
             let path = ssl.path.as_ref().unwrap();
-            assert_eq!(ssl.self_signed_fallback, true);
+            assert!(ssl.self_signed_fallback);
             assert_eq!(path.key.as_os_str(), "/etc/proksi/certs/my-host.key");
             assert_eq!(path.pem.as_os_str(), "/etc/proksi/certs/my-host.pem");
 

@@ -1,26 +1,20 @@
 use std::{
     any::Any,
-    collections::BTreeMap,
     io::{BufReader, Read},
     path::{Path, PathBuf},
-    time::SystemTime,
 };
 
 use async_trait::async_trait;
 
-use http::StatusCode;
 use pingora_cache::{
-    key::CompactCacheKey,
     storage::{HandleHit, HandleMiss},
     trace::SpanHandle,
-    CacheKey, CacheMeta, HitHandler, MissHandler, Storage,
+    CacheKey, Storage,
 };
 
-use pingora::{http::ResponseHeader, Result};
-use serde::{Deserialize, Serialize};
+use pingora::{Result};
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
-use crate::stores;
 
 use super::meta::DiskCacheItemMeta;
 

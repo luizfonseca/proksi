@@ -1,26 +1,17 @@
 use std::{
-    any::Any,
     collections::BTreeMap,
-    io::{BufReader, Read},
-    path::{Path, PathBuf},
     time::SystemTime,
 };
 
-use async_trait::async_trait;
 
 use http::StatusCode;
 use pingora_cache::{
-    key::CompactCacheKey,
-    storage::{HandleHit, HandleMiss},
-    trace::SpanHandle,
-    CacheKey, CacheMeta, HitHandler, MissHandler, Storage,
+    CacheMeta,
 };
 
-use pingora::{http::ResponseHeader, Result};
+use pingora::{http::ResponseHeader};
 use serde::{Deserialize, Serialize};
-use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
-use crate::stores;
 
 /// `DiskCache` storage metadata with information about the sibling cache file
 #[derive(Serialize, Deserialize)]
