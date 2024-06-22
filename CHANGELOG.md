@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.20](https://github.com/luizfonseca/proksi/compare/v0.3.15...v0.3.20) (2024-06-22)
+
+
+### Features
+
+* **cache:** add in-memory cache for results from disk ([b35f04c](https://github.com/luizfonseca/proksi/commit/b35f04cdeef455d8e5a7cfe0068bb1c90e4c71b8))
+* **disk_cache:** use arcswap for now ([575b95d](https://github.com/luizfonseca/proksi/commit/575b95d9bed2e162528cc2a72394b38a06c17f42))
+
+
+### Miscellaneous Chores
+
+* release marker for 0.3.20 ([1b7be63](https://github.com/luizfonseca/proksi/commit/1b7be63154a4f559b0b57cfc664f8a81897f15e2))
+
 ## [0.3.15](https://github.com/luizfonseca/proksi/compare/v0.3.14...v0.3.15) (2024-06-22)
 
 
