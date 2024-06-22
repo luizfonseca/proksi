@@ -1,3 +1,4 @@
+name: Discord ping notification
 on:
   release:
     types: [published]

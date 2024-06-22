@@ -45,7 +45,14 @@ fn read_hcl_file(args: FuncArgs) -> Result<Value, String> {
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
 
-    Ok(Value::Object(hcl::from_str(&contents).unwrap()))
+    let value = match hcl::eval::from_str::<Value>(&contents, &get_hcl_context()) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(format!("failed to parse hcl file: {e}"));
+        }
+    };
+
+    Ok(value)
 }
 
 /// Function to retrieve an environment variable from a given HCL template. Useful for secrets.
