@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.15](https://github.com/luizfonseca/proksi/compare/v0.3.14...v0.3.15) (2024-06-22)
+
+
+### Bug Fixes
+
+* convert header function ([8d24da7](https://github.com/luizfonseca/proksi/commit/8d24da706cf1d81f3f9ca1e686b1ef137ec41789))
+
 ## [0.3.14](https://github.com/luizfonseca/proksi/compare/v0.3.13...v0.3.14) (2024-06-21)
 
 
