@@ -1,16 +1,18 @@
-use std::{any::Any, path::PathBuf};
+use std::{any::Any, collections::HashMap, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 
+use bytes::Buf;
 use pingora_cache::{
     key::CompactCacheKey, trace::SpanHandle, CacheKey, CacheMeta, HitHandler, MissHandler, Storage,
 };
 
 use pingora::Result;
+use tokio::sync::RwLock;
 
 use crate::{
     cache::disk::{
-        handlers::{DiskCacheHitHandler, DiskCacheMissHandler},
+        handlers::{DiskCacheHitHandler, DiskCacheHitHandlerInMemory, DiskCacheMissHandler},
         meta::DiskCacheItemMetadata,
     },
     stores,
@@ -19,22 +21,36 @@ use crate::{
 /// Disk based cache storage using a `BufReader`
 pub struct DiskCache {
     pub directory: PathBuf,
+    memcache: Arc<RwLock<HashMap<String, (DiskCacheItemMetadata, bytes::Bytes)>>>,
 }
 
 impl DiskCache {
     pub fn new() -> Self {
         DiskCache {
             directory: PathBuf::from("/tmp"),
+            memcache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     /// Retrieves the directory for the given key using the namespace as the base path
-    pub fn get_directory_for(&self, key: &str) -> PathBuf {
-        let Some(path) = stores::get_cache_routing_by_key(key) else {
-            return self.directory.join(key);
+    pub fn get_directory_for(&self, namespace: &str) -> PathBuf {
+        let Some(path) = stores::get_cache_routing_by_key(namespace) else {
+            return self.directory.join(namespace);
         };
 
-        PathBuf::from(path).join(key)
+        PathBuf::from(path).join(namespace)
+    }
+
+    async fn get_cached_metadata(&self, key: &CacheKey) -> Option<DiskCacheItemMetadata> {
+        let path = self.get_directory_for(key.namespace());
+        let metadata_file = format!("{}.metadata", key.primary_key());
+
+        let body = tokio::fs::read(path.join(metadata_file)).await.ok()?;
+        serde_json::from_slice(&body).ok()
+    }
+
+    fn get_memory_key(&self, key: &CacheKey) -> String {
+        format!("{}-{}", key.namespace(), key.primary_key())
     }
 }
 
@@ -57,23 +73,33 @@ impl Storage for DiskCache {
         tracing::debug!("looking up cache for {key:?}");
         // Basically we need to find a namespaced file in the cache directory
         // and return the file contents as the body
+        let memcache_key = self.get_memory_key(&key);
+
+        if let Some((meta, body)) = self.memcache.read().await.get(&memcache_key) {
+            tracing::error!("found cache for {key:?} in memory");
+            return Ok(Some((
+                CacheMeta::new(
+                    meta.fresh_until,
+                    meta.created_at,
+                    meta.stale_while_revalidate_sec,
+                    meta.stale_if_error_sec,
+                    DiskCacheItemMetadata::convert_headers(meta),
+                ),
+                Box::new(DiskCacheHitHandlerInMemory::new(body.clone().reader())),
+            )));
+        }
 
         let namespace = key.namespace();
         let primary_key = key.primary_key();
         let main_path = self.get_directory_for(namespace);
-        let metadata_file = format!("{primary_key}.metadata");
         let cache_file = format!("{primary_key}.cache");
-        let Ok(body) = std::fs::read(main_path.join(metadata_file)) else {
-            return Ok(None);
-        };
-
-        let Ok(meta) = serde_json::from_slice::<DiskCacheItemMetadata>(&body) else {
-            return Ok(None);
-        };
-
         let file_path = main_path.join(cache_file);
 
         let Ok(file_stream) = std::fs::OpenOptions::new().read(true).open(&file_path) else {
+            return Ok(None);
+        };
+
+        let Some(meta) = self.get_cached_metadata(&key).await else {
             return Ok(None);
         };
 
@@ -90,7 +116,12 @@ impl Storage for DiskCache {
                 meta.stale_if_error_sec,
                 DiskCacheItemMetadata::convert_headers(&meta),
             ),
-            Box::new(DiskCacheHitHandler::new(buf_reader, file_path)),
+            Box::new(DiskCacheHitHandler::new(
+                buf_reader,
+                file_path,
+                self.memcache.clone(),
+                meta,
+            )),
         )))
     }
 
