@@ -17,7 +17,7 @@ use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 use pingora_cache::lock::CacheLock;
 use pingora_cache::{CacheKey, CacheMeta, NoCacheReason, RespCacheable};
 
-use crate::cache::file_storage::DiskCache;
+use crate::cache::disk::storage::DiskCache;
 use crate::config::{RouteCacheType, RouteUpstream};
 use crate::stores::{self, routes::RouteStoreContainer};
 
