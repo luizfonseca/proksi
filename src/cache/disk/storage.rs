@@ -76,7 +76,7 @@ impl Storage for DiskCache {
         let memcache_key = Self::get_memory_key(key);
 
         if let Some((meta, body)) = self.memcache.read().await.get(&memcache_key) {
-            tracing::error!("found cache for {key:?} in memory");
+            tracing::debug!("found cache for {key:?} in memory");
             return Ok(Some((
                 CacheMeta::new(
                     meta.fresh_until,

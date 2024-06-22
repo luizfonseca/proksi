@@ -93,6 +93,7 @@ impl HandleHit for DiskCacheHitHandler {
             .await
             .insert(cached_data_key, (self.meta, self.finished_buffer.freeze()));
 
+        tracing::debug!("wrote to memory cache: {:?}", self.path);
         Ok(())
     }
 
