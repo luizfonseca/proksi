@@ -46,6 +46,8 @@ impl TlsAccept for CertStore {
             return;
         };
 
+        ext::ssl_add_chain_cert(ssl, &cert.certificate).unwrap();
+
         ext::ssl_use_certificate(ssl, &cert.certificate).unwrap();
         ext::ssl_use_private_key(ssl, &cert.key).unwrap();
     }
