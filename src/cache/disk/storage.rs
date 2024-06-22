@@ -1,28 +1,22 @@
-use std::{
-    any::Any,
-    io::{Read},
-    path::{PathBuf},
-};
+use std::{any::Any, path::PathBuf};
 
 use async_trait::async_trait;
 
 use pingora_cache::{
-    key::CompactCacheKey,
-    trace::SpanHandle,
-    CacheKey, CacheMeta, HitHandler, MissHandler, Storage,
+    key::CompactCacheKey, trace::SpanHandle, CacheKey, CacheMeta, HitHandler, MissHandler, Storage,
 };
 
-use pingora::{Result};
+use pingora::Result;
 
 use crate::{
     cache::disk::{
         handlers::{DiskCacheHitHandler, DiskCacheMissHandler},
-        meta::DiskCacheItemMeta,
+        meta::DiskCacheItemMetadata,
     },
     stores,
 };
 
-/// Disk based cache storage using a BufReader
+/// Disk based cache storage using a `BufReader`
 pub struct DiskCache {
     pub directory: PathBuf,
 }
@@ -73,7 +67,7 @@ impl Storage for DiskCache {
             return Ok(None);
         };
 
-        let Ok(meta) = serde_json::from_slice::<DiskCacheItemMeta>(&body) else {
+        let Ok(meta) = serde_json::from_slice::<DiskCacheItemMetadata>(&body) else {
             return Ok(None);
         };
 
@@ -118,7 +112,7 @@ impl Storage for DiskCache {
         }
 
         let Ok(serialized_metadata) =
-            serde_json::to_vec::<DiskCacheItemMeta>(&DiskCacheItemMeta::from(meta))
+            serde_json::to_vec::<DiskCacheItemMetadata>(&DiskCacheItemMetadata::from(meta))
         else {
             return Err(pingora::Error::new_str("failed to serialize cache meta"));
         };
@@ -128,7 +122,7 @@ impl Storage for DiskCache {
 
         Ok(Box::new(DiskCacheMissHandler::new(
             key.to_owned(),
-            DiskCacheItemMeta::from(meta),
+            DiskCacheItemMetadata::from(meta),
             main_path,
         )))
     }
@@ -153,7 +147,7 @@ impl Storage for DiskCache {
         let metadata_file = format!("{primary_key}.metadata");
 
         let Ok(serialized_metadata) =
-            serde_json::to_vec::<DiskCacheItemMeta>(&DiskCacheItemMeta::from(meta))
+            serde_json::to_vec::<DiskCacheItemMetadata>(&DiskCacheItemMetadata::from(meta))
         else {
             return Err(pingora::Error::new_str("failed to serialize cache meta"));
         };

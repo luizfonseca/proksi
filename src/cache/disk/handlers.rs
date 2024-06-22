@@ -12,11 +12,11 @@ use pingora_cache::{
     CacheKey, Storage,
 };
 
-use pingora::{Result};
+use pingora::Result;
+
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
-
-use super::meta::DiskCacheItemMeta;
+use super::meta::DiskCacheItemMetadata;
 
 pub struct DiskCacheHitHandler {
     target: BufReader<std::fs::File>,
@@ -84,11 +84,15 @@ impl HandleHit for DiskCacheHitHandler {
 pub struct DiskCacheMissHandler {
     main_path: PathBuf,
     key: CacheKey,
-    _meta: DiskCacheItemMeta,
+    _meta: DiskCacheItemMetadata,
 }
 
 impl DiskCacheMissHandler {
-    pub fn new(key: CacheKey, meta: DiskCacheItemMeta, directory: PathBuf) -> DiskCacheMissHandler {
+    pub fn new(
+        key: CacheKey,
+        meta: DiskCacheItemMetadata,
+        directory: PathBuf,
+    ) -> DiskCacheMissHandler {
         DiskCacheMissHandler {
             key,
             _meta: meta,
@@ -143,7 +147,7 @@ impl HandleMiss for DiskCacheMissHandler {
     /// failed.
     async fn finish(
         self: Box<Self>, // because self is always used as a trait object
-    ) -> Result<usize> {
+    ) -> pingora::Result<usize> {
         Ok(0)
     }
 }

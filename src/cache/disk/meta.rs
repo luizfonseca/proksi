@@ -1,21 +1,14 @@
-use std::{
-    collections::BTreeMap,
-    time::SystemTime,
-};
-
+use std::{collections::BTreeMap, time::SystemTime};
 
 use http::StatusCode;
-use pingora_cache::{
-    CacheMeta,
-};
+use pingora_cache::CacheMeta;
 
-use pingora::{http::ResponseHeader};
+use pingora::http::ResponseHeader;
 use serde::{Deserialize, Serialize};
-
 
 /// `DiskCache` storage metadata with information about the sibling cache file
 #[derive(Serialize, Deserialize)]
-pub struct DiskCacheItemMeta {
+pub struct DiskCacheItemMetadata {
     pub status: u16,
     pub created_at: SystemTime,
     pub fresh_until: SystemTime,
@@ -26,7 +19,7 @@ pub struct DiskCacheItemMeta {
     pub headers: BTreeMap<String, String>,
 }
 
-impl DiskCacheItemMeta {
+impl DiskCacheItemMetadata {
     /// Converts a `DiskCacheItemMeta` `BTreeMap` to a `ResponseHeader`
     pub fn convert_headers(&self) -> ResponseHeader {
         let status_code = StatusCode::from_u16(self.status).unwrap_or(StatusCode::OK);
@@ -40,10 +33,10 @@ impl DiskCacheItemMeta {
     }
 }
 
-impl From<&CacheMeta> for DiskCacheItemMeta {
+impl From<&CacheMeta> for DiskCacheItemMetadata {
     /// Converts a `CacheMeta` to a `DiskCacheItemMeta`
     fn from(meta: &CacheMeta) -> Self {
-        DiskCacheItemMeta {
+        DiskCacheItemMetadata {
             status: meta.response_header().status.as_u16(),
             created_at: meta.created(),
             fresh_until: meta.fresh_until(),
