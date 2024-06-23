@@ -143,6 +143,7 @@ fn main() -> Result<(), anyhow::Error> {
     let cert_store = CertStore::new();
     let mut tls_settings = TlsSettings::with_callbacks(Box::new(cert_store)).unwrap();
     tls_settings.enable_h2();
+
     // tls_settings.set_session_cache_mode(SslSessionCacheMode::SERVER);
     tls_settings.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
 

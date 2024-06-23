@@ -1,7 +1,7 @@
 name: Discord ping notification
 on:
   release:
-    types: [published]
+    types: [released]
 
 jobs:
   github-releases-to-discord:

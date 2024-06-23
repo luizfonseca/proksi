@@ -1,6 +1,6 @@
 use std::{fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
 
-use acme_lib::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
+use acme_v2::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
 use anyhow::anyhow;
 use async_trait::async_trait;
 
@@ -166,7 +166,7 @@ impl LetsencryptService {
         };
 
         // Order OK
-        let pkey = acme_lib::create_p384_key();
+        let pkey = acme_v2::create_p384_key();
         let order_cert = order_csr.finalize_pkey(pkey, 5000)?;
 
         info!("certificate created for order {:?}", order_cert.api_order());
@@ -268,9 +268,9 @@ impl Service for LetsencryptService {
         }
 
         // Key-Value Store
-        let persist = acme_lib::persist::FilePersist::new(certificates_dir);
+        let persist = acme_v2::persist::FilePersist::new(certificates_dir);
 
-        let dir = acme_lib::Directory::from_url(persist, self.get_lets_encrypt_url())
+        let dir = acme_v2::Directory::from_url(persist, self.get_lets_encrypt_url())
             .expect("failed to create LetsEncrypt directory");
 
         let account = dir
