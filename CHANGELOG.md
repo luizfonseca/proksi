@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.22](https://github.com/luizfonseca/proksi/compare/v0.3.21...v0.3.22) (2024-06-23)
+
+
+### Bug Fixes
+
+* **cert:** add certs to chain. Fixes [#47](https://github.com/luizfonseca/proksi/issues/47) ([05f366c](https://github.com/luizfonseca/proksi/commit/05f366cbaca24dac388fb14907571fd6ad1bf99b))
+* change acme-lib to acme-v2 due to security bug ([201fbb6](https://github.com/luizfonseca/proksi/commit/201fbb62c19b3f110a96ef911813947de76c4dcb))
+* **http01:** fetch lets_encrypt intermediate cert ([f2c748e](https://github.com/luizfonseca/proksi/commit/f2c748eed5bc0f876e6589f63e804377653f1aab))
+
 ## [0.3.21](https://github.com/luizfonseca/proksi/compare/v0.3.20...v0.3.21) (2024-06-22)
 
 
