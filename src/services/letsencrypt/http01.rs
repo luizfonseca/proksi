@@ -333,10 +333,10 @@ impl Service for LetsencryptService {
         match self.fetch_lets_encrypt_e5_certificate().await {
             Ok(cert) => {
                 tracing::info!("retrieved Let's Encrypt intermediate certificate");
-                self.intermediate = Some(Arc::new(cert))
+                self.intermediate = Some(Arc::new(cert));
             }
             Err(e) => {
-                tracing::error!("failed to fetch Let's Encrypt intermediate certificate: {e}")
+                tracing::error!("failed to fetch Let's Encrypt intermediate certificate: {e}");
             }
         }
 
