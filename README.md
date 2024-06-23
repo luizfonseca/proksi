@@ -320,6 +320,7 @@ Note that as always, these are mostly opt-in and are **disabled by default**.
 
 ## Performance & Benchmarks
 
+### Static
 Early tests are promising, but we need to do more testing to see how Proksi performs under *real* load. There are also some optimizations that can be done to improve performance in the long term, though the focus is on making it feature complete first.
 
 An sample run from the `wrk` benchmark on the simple `/ping` endpoint shows the following results (running on a **single** worker thread):
@@ -347,6 +348,13 @@ Transfer/sec:     15.55MB
 ```
 
 It's also based on [Pingora](https://github.com/cloudflare/pingora), so it should be fast if cloudflare is using it.
+
+
+### CDN (Disk + Memory)
+There's multiple variations on performance, but you can see below that Proksi is able to handle a fair amount of traffic and is able to serve requests without major issues when network performance is involved:.
+
+![load-test](./assets/one_minute_test.png)
+**Specs**: 4000 clients, 1 minute test, `cache_type` set to `disk`, Oracle server.
 
 
 ## Why build another proxy...?
