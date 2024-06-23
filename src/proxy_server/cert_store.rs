@@ -47,6 +47,7 @@ impl TlsAccept for CertStore {
         };
 
         if let Some(intermediate) = cert.intermediate {
+            tracing::debug!("intermediate certificate to chain for host {host_name}");
             ext::ssl_add_chain_cert(ssl, &intermediate).unwrap();
         }
 
