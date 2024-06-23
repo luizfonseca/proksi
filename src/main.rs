@@ -118,6 +118,7 @@ fn main() -> Result<(), anyhow::Error> {
     if proxy_config.lets_encrypt.enabled.unwrap_or(false) {
         let letsencrypt_service = LetsencryptService {
             config: proxy_config.clone(),
+            intermediate: None,
         };
         pingora_server.add_service(letsencrypt_service);
     }
