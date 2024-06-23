@@ -86,7 +86,7 @@ impl LetsencryptService {
     /// themselves from the Let's Encrypt website on every new session (which is slow).
     /// [Let's Encrypt website](https://letsencrypt.org/certificates/)
     async fn fetch_lets_encrypt_e5_certificate(&self) -> Result<X509, anyhow::Error> {
-        let url = "https://letsencrypt.org/certs/2024/e5-cross.pem";
+        let url = "https://letsencrypt.org/certs/2024/e5.pem";
         let e5_path = self
             .get_lets_encrypt_directory()
             .join("le-intermediate.pem");
