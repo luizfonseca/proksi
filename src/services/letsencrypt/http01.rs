@@ -330,8 +330,14 @@ impl Service for LetsencryptService {
             .expect("failed to create or retrieve existing account");
 
         // Ensure we have the intermediate certificate stored
-        if let Ok(intermediate) = self.fetch_lets_encrypt_e5_certificate().await {
-            self.intermediate = Some(Arc::new(intermediate));
+        match self.fetch_lets_encrypt_e5_certificate().await {
+            Ok(cert) => {
+                tracing::info!("retrieved Let's Encrypt intermediate certificate");
+                self.intermediate = Some(Arc::new(cert))
+            }
+            Err(e) => {
+                tracing::error!("failed to fetch Let's Encrypt intermediate certificate: {e}")
+            }
         }
 
         let _ = tokio::join!(
