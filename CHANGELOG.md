@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.23](https://github.com/luizfonseca/proksi/compare/v0.3.22...v0.3.23) (2024-06-23)
+
+
+### Bug Fixes
+
+* ci ([82e234c](https://github.com/luizfonseca/proksi/commit/82e234cf0a57106deb405c955900f8626b8ade5d))
+
 ## [0.3.22](https://github.com/luizfonseca/proksi/compare/v0.3.21...v0.3.22) (2024-06-23)
 
 
