@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use openssl::{
     pkey::{PKey, Private},
@@ -10,7 +10,6 @@ pub struct Certificate {
     pub key: PKey<Private>,
     #[allow(clippy::struct_field_names)]
     pub certificate: X509,
-    pub intermediate: Option<Arc<X509>>,
 }
 
 pub type CertificateStore = HashMap<String, Certificate>;

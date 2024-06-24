@@ -1,7 +1,7 @@
 use std::{fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
 
 use acme_v2::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use async_trait::async_trait;
 
 use openssl::{pkey::PKey, x509::X509};
@@ -21,7 +21,6 @@ use crate::{
 
 pub struct LetsencryptService {
     pub(crate) config: Arc<Config>,
-    pub(crate) intermediate: Option<Arc<X509>>,
     // pub(crate) route_store: RouteStore,
     // pub(crate) cert_store: CertificateStore,
 }
@@ -43,19 +42,11 @@ impl LetsencryptService {
         domain: &str,
         cert_pem: &str,
         key_pem: &str,
-        intermediate: Option<Arc<X509>>,
     ) -> Result<(), anyhow::Error> {
         let certificate = Self::parse_x509_cert(cert_pem)?;
         let key = Self::parse_private_key(key_pem)?;
 
-        stores::insert_certificate(
-            domain.to_string(),
-            Certificate {
-                key,
-                certificate,
-                intermediate,
-            },
-        );
+        stores::insert_certificate(domain.to_string(), Certificate { key, certificate });
 
         Ok(())
     }
@@ -80,34 +71,6 @@ impl LetsencryptService {
             challenge.validate(5000)?; // Retry every 5000 ms
         }
         Ok(())
-    }
-
-    /// We need an intermediate certificate, otherwise clients/browsers have to fetch it
-    /// themselves from the Let's Encrypt website on every new session (which is slow).
-    /// [Let's Encrypt website](https://letsencrypt.org/certificates/)
-    async fn fetch_lets_encrypt_e5_certificate(&self) -> Result<X509, anyhow::Error> {
-        let url = "https://letsencrypt.org/certs/2024/e5.pem";
-        let e5_path = self
-            .get_lets_encrypt_directory()
-            .join("le-intermediate.pem");
-        // Nothing to do if the intermediate certificate already exists
-        if let Ok(cert) = std::fs::read_to_string(&e5_path) {
-            return Self::parse_x509_cert(&cert);
-        }
-
-        let Ok(resp) = reqwest::get(url).await else {
-            bail!("failed to fetch Let's Encrypt intermediate certificate");
-        };
-
-        let Ok(cert) = resp.text().await else {
-            bail!("failed to get Let's Encrypt intermediate certificate content as text");
-        };
-
-        if let Err(e) = std::fs::write(e5_path, &cert) {
-            bail!("failed to write Let's Encrypt intermediate certificate: {e}");
-        }
-
-        Self::parse_x509_cert(&cert)
     }
 
     /// Creates an in-memory self-signed certificate for a domain if let's encrypt
@@ -153,7 +116,6 @@ impl LetsencryptService {
             Certificate {
                 key,
                 certificate: openssl_cert,
-                intermediate: None,
             },
         );
 
@@ -182,7 +144,6 @@ impl LetsencryptService {
     fn create_order_for_domain(
         domain: &str,
         account: &Account<FilePersist>,
-        intermediate: Option<&Arc<X509>>,
     ) -> Result<(), anyhow::Error> {
         let mut order = account.new_order(domain, &[])?;
 
@@ -201,19 +162,14 @@ impl LetsencryptService {
         };
 
         // Order OK
-        let pkey = acme_v2::create_p384_key();
+        let pkey = acme_v2::create_rsa_key(2048);
         let order_cert = order_csr.finalize_pkey(pkey, 5000)?;
 
         info!("certificate created for order {:?}", order_cert.api_order());
 
         let cert = order_cert.download_and_save_cert()?;
 
-        Self::insert_certificate(
-            domain,
-            cert.certificate(),
-            cert.private_key(),
-            intermediate.cloned(),
-        )?;
+        Self::insert_certificate(domain, cert.certificate(), cert.private_key())?;
 
         Ok(())
     }
@@ -230,12 +186,7 @@ impl LetsencryptService {
                     continue;
                 }
 
-                Self::handle_certificate_for_domain(
-                    key,
-                    account,
-                    self.intermediate.as_ref(),
-                    value.self_signed_certificate,
-                );
+                Self::handle_certificate_for_domain(key, account, value.self_signed_certificate);
             }
         }
     }
@@ -260,7 +211,7 @@ impl LetsencryptService {
                     continue;
                 }
 
-                Self::create_order_for_domain(domain, account, self.intermediate.as_ref())
+                Self::create_order_for_domain(domain, account)
                     .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
                     .unwrap();
             }
@@ -270,7 +221,6 @@ impl LetsencryptService {
     fn handle_certificate_for_domain(
         domain: &str,
         account: &Account<FilePersist>,
-        intermediate_cert: Option<&Arc<X509>>,
         self_signed_on_failure: bool,
     ) {
         match account.certificate(domain) {
@@ -280,16 +230,10 @@ impl LetsencryptService {
                     return;
                 }
 
-                Self::insert_certificate(
-                    domain,
-                    cert.certificate(),
-                    cert.private_key(),
-                    intermediate_cert.cloned(),
-                )
-                .ok();
+                Self::insert_certificate(domain, cert.certificate(), cert.private_key()).ok();
             }
             Ok(None) => {
-                if Self::create_order_for_domain(domain, account, intermediate_cert).is_err() {
+                if Self::create_order_for_domain(domain, account).is_err() {
                     Self::create_self_signed_certificate(domain, self_signed_on_failure).ok();
                 }
             }
@@ -328,17 +272,6 @@ impl Service for LetsencryptService {
         let account = dir
             .account(&self.config.lets_encrypt.email)
             .expect("failed to create or retrieve existing account");
-
-        // Ensure we have the intermediate certificate stored
-        match self.fetch_lets_encrypt_e5_certificate().await {
-            Ok(cert) => {
-                tracing::info!("retrieved Let's Encrypt intermediate certificate");
-                self.intermediate = Some(Arc::new(cert));
-            }
-            Err(e) => {
-                tracing::error!("failed to fetch Let's Encrypt intermediate certificate: {e}");
-            }
-        }
 
         let _ = tokio::join!(
             self.watch_for_route_changes(&account),

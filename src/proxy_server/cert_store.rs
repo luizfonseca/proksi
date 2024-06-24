@@ -47,11 +47,6 @@ impl TlsAccept for CertStore {
         };
 
         ext::ssl_use_private_key(ssl, &cert.key).unwrap();
-        ext::ssl_use_certificate(ssl, &cert.certificate).unwrap();
-
-        if let Some(intermediate) = cert.intermediate {
-            tracing::debug!("intermediate certificate to chain for host");
-            ext::ssl_add_chain_cert(ssl, &intermediate).unwrap();
-        }
+        ext::ssl_add_chain_cert(ssl, &cert.certificate).unwrap();
     }
 }
