@@ -98,6 +98,7 @@ fn main() -> Result<(), anyhow::Error> {
     } else {
         tracing_subscriber::fmt()
             .with_max_level(&proxy_config.logging.level)
+            .with_ansi(proxy_config.logging.path.is_some())
             .with_writer(appender)
             .init();
     };
