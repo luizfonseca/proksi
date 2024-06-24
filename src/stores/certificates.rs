@@ -9,7 +9,8 @@ use openssl::{
 pub struct Certificate {
     pub key: PKey<Private>,
     #[allow(clippy::struct_field_names)]
-    pub certificate: X509,
+    pub leaf: X509,
+    pub chain: Option<X509>,
 }
 
 pub type CertificateStore = HashMap<String, Certificate>;

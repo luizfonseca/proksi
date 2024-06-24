@@ -38,15 +38,32 @@ impl LetsencryptService {
 
     /// Update global certificate store with new `X509` and `PKey` for the
     /// given domain.
-    fn insert_certificate(
-        domain: &str,
-        cert_pem: &str,
-        key_pem: &str,
-    ) -> Result<(), anyhow::Error> {
-        let certificate = Self::parse_x509_cert(cert_pem)?;
+    fn insert_certificate(domain: &str, bundle: &str, key_pem: &str) -> Result<(), anyhow::Error> {
+        let end = "-----END CERTIFICATE-----";
+        // Split certificates (leaf and chain) from the bundle
+        let split = bundle
+            .split_inclusive(end)
+            .filter(|cert| !cert.trim().is_empty())
+            .map(str::trim)
+            .collect::<Vec<&str>>();
+
+        let leaf_pem = split.first();
+        let chain_pem = split.get(1);
+
+        let Some(leaf) = leaf_pem else {
+            return Err(anyhow::anyhow!("Certificate is empty"));
+        };
+        let leaf = Self::parse_x509_cert(leaf)?;
+        let mut chain: Option<X509> = None;
+
+        if let Some(chain_pem) = chain_pem {
+            tracing::debug!("chain PEM: {:?}", chain_pem);
+            chain = Some(Self::parse_x509_cert(chain_pem)?);
+        }
+
         let key = Self::parse_private_key(key_pem)?;
 
-        stores::insert_certificate(domain.to_string(), Certificate { key, certificate });
+        stores::insert_certificate(domain.to_string(), Certificate { key, leaf, chain });
 
         Ok(())
     }
@@ -115,7 +132,8 @@ impl LetsencryptService {
             domain.to_string(),
             Certificate {
                 key,
-                certificate: openssl_cert,
+                leaf: openssl_cert,
+                chain: None,
             },
         );
 
@@ -230,7 +248,7 @@ impl LetsencryptService {
                     return;
                 }
 
-                Self::insert_certificate(domain, cert.certificate(), cert.private_key()).ok();
+                Self::insert_certificate(domain, cert.certificate(), cert.private_key()).unwrap();
             }
             Ok(None) => {
                 if Self::create_order_for_domain(domain, account).is_err() {

@@ -285,7 +285,8 @@ fn add_route_ssl_to_store(route: &Route) -> Result<(), anyhow::Error> {
         route.host.to_string(),
         stores::certificates::Certificate {
             key,
-            certificate: pem,
+            leaf: pem,
+            chain: None,
         },
     );
 
