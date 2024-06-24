@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.31](https://github.com/luizfonseca/proksi/compare/v0.3.30...v0.3.31) (2024-06-24)
+
+
+### Bug Fixes
+
+* remove ansi colors for logging to file ([9b1b91d](https://github.com/luizfonseca/proksi/commit/9b1b91ddb90986ab7502786fedceabeaaff6f0b1))
+
 ## [0.3.30](https://github.com/luizfonseca/proksi/compare/v0.3.23...v0.3.30) (2024-06-24)
 
 
