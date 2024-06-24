@@ -162,7 +162,7 @@ impl LetsencryptService {
         };
 
         // Order OK
-        let pkey = acme_v2::create_rsa_key(2048);
+        let pkey = acme_v2::create_p384_key();
         let order_cert = order_csr.finalize_pkey(pkey, 5000)?;
 
         info!("certificate created for order {:?}", order_cert.api_order());
