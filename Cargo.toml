@@ -20,6 +20,7 @@ exclude = [
   "tmp/",
   "Makefile",
   "Dockerfile",
+  "gitbook/",
   ".github/",
 ]
 authors = ["The Proksi Contributors <toaster.chicory-0b@icloud.com>"]
