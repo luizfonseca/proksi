@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.30](https://github.com/luizfonseca/proksi/compare/v0.3.23...v0.3.30) (2024-06-24)
+
+
+### Features
+
+* **logging:** enable file/stdout log rotation via config file/cli ([6bd378f](https://github.com/luizfonseca/proksi/commit/6bd378fcf6a79578c34d07477d8d6487f77f4003))
+
+
+### Bug Fixes
+
+* remove default path from logging ([79e144d](https://github.com/luizfonseca/proksi/commit/79e144df51af01b73f0739b26bf70333ad785b68))
+* remove fetch of e5 certificate ([eabe6d5](https://github.com/luizfonseca/proksi/commit/eabe6d5a4f013c35925ae1a7e9af70ae41843da8))
+* split lets_encrypt certs into leaf/intermediate ([f249a8c](https://github.com/luizfonseca/proksi/commit/f249a8c9aa7fa7054e4e2235854ad1bd7122fcbf))
+* use chain certs ([b1d2dcb](https://github.com/luizfonseca/proksi/commit/b1d2dcbc8c1c3025161e13edaa8cfc1ec8692787))
+
+
+### Miscellaneous Chores
+
+* release marker for 0.3.30 ([a7ac130](https://github.com/luizfonseca/proksi/commit/a7ac130d7a72e58e00f4d826f5a6359a798664cb))
+
 ## [0.3.23](https://github.com/luizfonseca/proksi/compare/v0.3.22...v0.3.23) (2024-06-23)
 
 
