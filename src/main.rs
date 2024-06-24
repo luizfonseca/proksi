@@ -4,7 +4,7 @@ use ::pingora::server::Server;
 use anyhow::anyhow;
 use bytes::Bytes;
 use clap::crate_version;
-use config::{load, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
+use config::{load, Config, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
 // use openssl::ssl::SslSessionCacheMode;
 
 use pingora::{listeners::TlsSettings, proxy::http_proxy_service, server::configuration::Opt};
@@ -15,8 +15,8 @@ use services::{
     docker::{self},
     health_check::HealthService,
     letsencrypt::http01::LetsencryptService,
-    logger::{ProxyLog, ProxyLoggerReceiver},
 };
+use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
 
 mod cache;
 mod channel;
@@ -51,6 +51,23 @@ pub enum MsgProxy {
     NewCertificate(MsgCert),
 }
 
+fn get_non_blocking_writer(config: &Config) -> (NonBlocking, WorkerGuard) {
+    // If a path is provided, create a file appender
+    if let Some(path) = config.logging.path.clone() {
+        let appender = match config.logging.rotation {
+            config::LogRotation::Daily => tracing_appender::rolling::daily,
+            config::LogRotation::Hourly => tracing_appender::rolling::hourly,
+            config::LogRotation::Minutely => tracing_appender::rolling::minutely,
+            config::LogRotation::Never => tracing_appender::rolling::never,
+        };
+
+        return tracing_appender::non_blocking(appender(path, "proksi"));
+    }
+
+    // otherwise, create a stdout appender (default)
+    tracing_appender::non_blocking(std::io::stdout())
+}
+
 #[deny(
     clippy::all,
     clippy::pedantic,
@@ -69,26 +86,19 @@ fn main() -> Result<(), anyhow::Error> {
     // Receiver channel for Routes/Certificates/etc
     let (sender, mut _receiver) = tokio::sync::broadcast::channel::<MsgProxy>(10);
 
-    // Receiver channel for non-blocking logging
-    let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
-    let proxy_logger = ProxyLog::new(
-        log_sender,
-        proxy_config.logging.enabled,
-        proxy_config.logging.access_logs_enabled,
-        proxy_config.logging.error_logs_enabled,
-    );
+    let (appender, _guard) = get_non_blocking_writer(&proxy_config);
 
     // Creates a tracing/logging subscriber based on the configuration provided
     if proxy_config.logging.format == LogFormat::Json {
         tracing_subscriber::fmt()
             .json()
             .with_max_level(&proxy_config.logging.level)
-            .with_writer(proxy_logger)
+            .with_writer(appender)
             .init();
     } else {
         tracing_subscriber::fmt()
             .with_max_level(&proxy_config.logging.level)
-            .with_writer(proxy_logger)
+            .with_writer(appender)
             .init();
     };
 
@@ -163,7 +173,6 @@ fn main() -> Result<(), anyhow::Error> {
     // pingora_server.add_service(prometheus_service_http);
 
     pingora_server.add_service(HealthService::new());
-    pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver));
 
     // Listen on HTTP and HTTPS ports
     pingora_server.add_service(http_public_service);

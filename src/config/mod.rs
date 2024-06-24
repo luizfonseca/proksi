@@ -371,6 +371,15 @@ impl From<&LogLevel> for tracing::level_filters::LevelFilter {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub enum LogRotation {
+    #[default]
+    Never,
+    Daily,
+    Hourly,
+    Minutely,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ValueEnum)]
 pub enum LogFormat {
     Json,
@@ -427,6 +436,20 @@ pub struct Logging {
         default_value = "json"
     )]
     pub format: LogFormat,
+
+    /// If set, logs will be written to the specified file
+
+    #[arg(
+        long = "log.path",
+        required = false,
+        value_parser,
+        default_value = "/tmp"
+    )]
+    pub path: Option<PathBuf>,
+
+    #[clap(skip)]
+    #[serde(deserialize_with = "log_rotation_deser", default)]
+    pub rotation: LogRotation,
 }
 
 /// The main configuration struct.
@@ -538,6 +561,8 @@ impl Default for Config {
                 access_logs_enabled: true,
                 error_logs_enabled: false,
                 format: LogFormat::Json,
+                path: None,
+                rotation: LogRotation::Never,
             },
             paths: Path::default(),
         }
@@ -646,6 +671,22 @@ where
         "json" => Ok(LogFormat::Json),
         "pretty" => Ok(LogFormat::Pretty),
         _ => Err(serde::de::Error::custom("expected one of: json, pretty")),
+    }
+}
+
+fn log_rotation_deser<'de, D>(deserializer: D) -> Result<LogRotation, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    match s.to_lowercase().as_str() {
+        "daily" => Ok(LogRotation::Daily),
+        "hourly" => Ok(LogRotation::Hourly),
+        "minutely" => Ok(LogRotation::Minutely),
+        "never" => Ok(LogRotation::Never),
+        _ => Err(serde::de::Error::custom(
+            "expected one of: daily, hourly, minutely, never",
+        )),
     }
 }
 
