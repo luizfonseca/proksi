@@ -62,7 +62,7 @@ itertools = "0.13.0"
 path-tree = "0.8.0"
 once_cell = "1.19.0"
 cookie = { version = "0.18.1", features = ["private"] }
-reqwest = { version = "0.12.4", features = ["json"] }
+reqwest = { version = "0.12.5", features = ["json"] }
 jsonwebtoken = { version = "9.3.0", default-features = false }
 uuid = { version = "1.8.0", features = ["v4"] }
 prometheus = "0.13.4"
