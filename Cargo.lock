@@ -1715,9 +1715,9 @@ checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
 
 [[package]]
 name = "path-tree"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "552c11f51b2a0a8bca9f2a6e1ecd013563de0b9138b2c8689daacc94afad048d"
+checksum = "6c7fabb0b56aba5d2eb3fa9b1547c187f21f8c051295a7b97a50be6a9332f4cb"
 dependencies = [
  "smallvec",
 ]
