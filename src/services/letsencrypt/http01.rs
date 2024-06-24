@@ -37,13 +37,12 @@ impl LetsencryptService {
     }
 
     /// Update global certificate store with new `X509` and `PKey` for the
-    /// given domain.
+    /// given domain also considering that the certificate could be a bundle file.
     fn insert_certificate(domain: &str, bundle: &str, key_pem: &str) -> Result<(), anyhow::Error> {
         let end = "-----END CERTIFICATE-----";
         // Split certificates (leaf and chain) from the bundle
         let split = bundle
             .split_inclusive(end)
-            .filter(|cert| !cert.trim().is_empty())
             .map(str::trim)
             .collect::<Vec<&str>>();
 
@@ -248,7 +247,11 @@ impl LetsencryptService {
                     return;
                 }
 
-                Self::insert_certificate(domain, cert.certificate(), cert.private_key()).unwrap();
+                if let Err(err) =
+                    Self::insert_certificate(domain, cert.certificate(), cert.private_key())
+                {
+                    tracing::error!("failed to insert certificate for domain {domain}: {err}");
+                };
             }
             Ok(None) => {
                 if Self::create_order_for_domain(domain, account).is_err() {
