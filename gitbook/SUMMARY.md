@@ -2,9 +2,9 @@
 
 ## General
 
-* [Getting started](README.md)
-* [Performance](general/performance.md)
-* [Motivations](general/motivations.md)
+* [📓 Getting started](README.md)
+* [🚀 Performance](general/performance.md)
+* [ℹ️ Motivations](general/motivations.md)
 
 ## Installation
 
@@ -13,12 +13,13 @@
 
 ## Configuration
 
+* [HCL](configuration/hcl.md)
 * [YAML](configuration/yaml.md)
-* [TOML](configuration/toml.md)
 * [Environment variables](configuration/environment-variables.md)
 
 ## Use cases
 
+* [Cache](use-cases/cache.md)
 * [Docker swarm](use-cases/docker-swarm.md)
 
 ## Contributing

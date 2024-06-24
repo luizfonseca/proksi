@@ -1,4 +1,4 @@
-# Motivations
+# ℹ️ Motivations
 
 ## Why build another proxy...?
 

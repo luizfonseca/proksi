@@ -4,8 +4,6 @@ Proksi can be configured using environment variables and **they will have higher
 
 They are mapped to the configuration file keys, always start with `PROKSI_` and can be used to override the default values. For nested keys, use the `__` character.
 
-
-
 ### Example:
 
 For the key `service_name`, the environment variable `PROKSI_SERVICE_NAME` can used
@@ -21,3 +19,7 @@ export PROKSI_ROUTES='[{host="example.com", upstreams=[{ip="10.0.1.24", port=300
 ```
 
 In the future you might be able to use `PROKSI_ROUTES__0__HOST` to set the host of the first route (or any other), but this is not yet implemented.
+
+
+
+### Full list
