@@ -6,10 +6,7 @@
 [![Crates.io Total Downloads](https://img.shields.io/crates/d/proksi?style=for-the-badge)](https://crates.io/crates/proksi)
 
 
-<img src="./assets/crabbylogoproksi.png" alt="logo" width="100"/>
-<br/>
 <img src="./assets/discord.png" alt="discord-logo" width="200"/>
-
 
 
 # About
@@ -25,7 +22,7 @@ Documentation for Proksi can be found at [https://docs.proksi.info](https://docs
 We welcome contributions to Proksi. If you have any **suggestions** or **ideas**, please feel free to open an issue or a pull request on the GitHub repository.
 
 # License
-Proksi is licensed under the [MIT License](https://github.com/luizfonseca/proksi/blob/main/LICENSE) and is free to use and modify.
+Proksi is licensed under the [MIT License](https://github.com/luizfonseca/proksi/blob/main/LICENSE), the [Apache License 2.0](https://github.com/luizfonseca/proksi/blob/main/LICENSE-APACHE) and is free to use and modify.
 
 
 
