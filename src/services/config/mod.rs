@@ -9,25 +9,25 @@ use pingora::{
 
 use crate::config::Config;
 
-pub struct ConfigService {
+pub struct FileWatcherService {
     config: Arc<Config>,
 }
 
-impl ConfigService {
+impl FileWatcherService {
     pub fn new(config: Arc<Config>) -> Self {
         Self { config }
     }
 }
 
-pub struct ConfigServiceHandler {}
-impl EventHandler for ConfigServiceHandler {
+pub struct FileWatcherServiceHandler {}
+impl EventHandler for FileWatcherServiceHandler {
     fn handle_event(&mut self, event: notify::Result<notify::Event>) {
-        println!("ConfigService: {:?}", event);
+        println!("ConfigService: {event:?}");
     }
 }
 
 #[async_trait]
-impl Service for ConfigService {
+impl Service for FileWatcherService {
     async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
         if self.config.auto_reload.enabled.is_some_and(|v| !v) {
             // Nothing to do, lets encrypt is disabled
@@ -37,7 +37,7 @@ impl Service for ConfigService {
         tracing::info!("starting config watcher service");
 
         let mut watcher = notify::poll::PollWatcher::new(
-            ConfigServiceHandler {},
+            FileWatcherServiceHandler {},
             notify::Config::default().with_manual_polling(),
         )
         .unwrap();
@@ -54,7 +54,7 @@ impl Service for ConfigService {
 
         loop {
             interval.tick().await;
-            if let Ok(_) = watcher.poll() {
+            if watcher.poll().is_ok() {
                 tracing::debug!("config watcher service tick");
             }
         }

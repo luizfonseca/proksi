@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use config::ConfigService;
+use config::FileWatcherService;
 use discovery::RoutingService;
 use docker::LabelService;
 use letsencrypt::http01::LetsencryptService;
@@ -36,7 +36,7 @@ impl pingora::services::Service for BackgroundFunctionService {
         let mut health_service = health_check::HealthService::new();
         let mut docker_service = LabelService::new(self.config.clone(), self.broadcast.clone());
         let mut letsencrypt_service = LetsencryptService::new(self.config.clone());
-        let mut config_server = ConfigService::new(self.config.clone());
+        let mut config_server = FileWatcherService::new(self.config.clone());
 
         let _ = tokio::join!(
             routing_service.start_service(None, shutdown.clone()),

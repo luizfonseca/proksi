@@ -25,7 +25,7 @@ impl figment::providers::Format for HclFormat {
 /// // HCL document
 /// worker_threads = num_cpus()
 /// ```
-#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 fn num_cpus(_: FuncArgs) -> Result<Value, String> {
     let num_cpus = num_cpus::get();
     Ok(Value::Number(num_cpus.into()))
