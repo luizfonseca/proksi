@@ -448,6 +448,24 @@ pub struct Logging {
     pub rotation: LogRotation,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AutoReload {
+    /// Enables the auto-reload service
+    pub enabled: Option<bool>,
+
+    /// The interval (in seconds) to check for changes in the configuration file
+    pub interval_secs: Option<u64>,
+}
+
+impl Default for AutoReload {
+    fn default() -> Self {
+        Self {
+            enabled: Some(false),
+            interval_secs: Some(30),
+        }
+    }
+}
+
 /// The main configuration struct.
 /// A configuration file (YAML, TOML or through ENV) will be parsed into this struct.
 /// Example:
@@ -523,6 +541,9 @@ pub(crate) struct Config {
     #[command(flatten)]
     pub logging: Logging,
 
+    #[clap(skip)]
+    pub auto_reload: AutoReload,
+
     #[command(flatten)]
     pub docker: Docker,
 
@@ -551,6 +572,7 @@ impl Default for Config {
             docker: Docker::default(),
             lets_encrypt: LetsEncrypt::default(),
             routes: vec![],
+            auto_reload: AutoReload::default(),
             logging: Logging {
                 enabled: true,
                 level: LogLevel::Info,

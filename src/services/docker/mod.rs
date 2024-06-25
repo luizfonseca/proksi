@@ -462,6 +462,11 @@ impl LabelService {
 #[async_trait]
 impl Service for LabelService {
     async fn start_service(&mut self, _fds: Option<ListenFds>, mut _shutdown: ShutdownWatch) {
+        if self.config.docker.enabled.is_some_and(|v| !v) {
+            // Nothing to do, docker is disabled
+            return;
+        }
+
         info!(service = "docker", "Started Docker service");
 
         let mut interval = tokio::time::interval(Duration::from_secs(

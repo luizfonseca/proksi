@@ -10,10 +10,7 @@ use std::{borrow::Cow, sync::Arc};
 use pingora::{listeners::TlsSettings, proxy::http_proxy_service, server::configuration::Opt};
 
 use proxy_server::cert_store::CertStore;
-use services::{
-    config::ConfigService, discovery::RoutingService, docker, health_check::HealthService,
-    letsencrypt::http01::LetsencryptService,
-};
+use services::BackgroundFunctionService;
 use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
 
 mod cache;
@@ -127,27 +124,6 @@ fn main() -> Result<(), anyhow::Error> {
     let mut pingora_server = Server::new(Some(pingora_opts))?;
     pingora_server.bootstrap();
 
-    // Built-in services for health checks, logging, and routing
-    pingora_server.add_service(RoutingService::new(
-        proxy_config.clone(),
-        sender.clone(),
-        // route_store.clone(),
-    ));
-
-    // Service: Docker
-    if proxy_config.docker.enabled.unwrap_or(false) {
-        let docker_service = docker::LabelService::new(proxy_config.clone(), sender.clone());
-        pingora_server.add_service(docker_service);
-    }
-
-    // Service: Lets Encrypt HTTP Challenge/Certificate renewal
-    if proxy_config.lets_encrypt.enabled.unwrap_or(false) {
-        let letsencrypt_service = LetsencryptService {
-            config: proxy_config.clone(),
-        };
-        pingora_server.add_service(letsencrypt_service);
-    }
-
     // Service: HTTP Load Balancer (only used by acme-challenges)
     // As we don't necessarily need an upstream to handle the acme-challenges,
     // we can use a simple mock LoadBalancer
@@ -186,8 +162,8 @@ fn main() -> Result<(), anyhow::Error> {
     // let mut prometheus_service_http = Service::prometheus_http_service();
     // prometheus_service_http.add_tcp("0.0.0.0:9090");
     // pingora_server.add_service(prometheus_service_http);
-    pingora_server.add_service(ConfigService::new());
-    pingora_server.add_service(HealthService::new());
+    // pingora_server.add_service(ConfigService::new());
+    pingora_server.add_service(BackgroundFunctionService::new(proxy_config.clone(), sender));
 
     // Listen on HTTP and HTTPS ports
     pingora_server.add_service(http_public_service);

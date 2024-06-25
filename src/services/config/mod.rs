@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use notify::{EventHandler, Watcher};
 use pingora::{
@@ -5,11 +7,15 @@ use pingora::{
     services::Service,
 };
 
-pub struct ConfigService {}
+use crate::config::Config;
+
+pub struct ConfigService {
+    config: Arc<Config>,
+}
 
 impl ConfigService {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(config: Arc<Config>) -> Self {
+        Self { config }
     }
 }
 
@@ -23,6 +29,11 @@ impl EventHandler for ConfigServiceHandler {
 #[async_trait]
 impl Service for ConfigService {
     async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
+        if self.config.auto_reload.enabled.is_some_and(|v| !v) {
+            // Nothing to do, lets encrypt is disabled
+            return;
+        }
+
         tracing::info!("starting config watcher service");
 
         let mut watcher = notify::poll::PollWatcher::new(
@@ -38,13 +49,13 @@ impl Service for ConfigService {
             )
             .unwrap();
 
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
         interval.tick().await;
 
         loop {
             interval.tick().await;
             if let Ok(_) = watcher.poll() {
-                tracing::info!("config watcher service tick");
+                tracing::debug!("config watcher service tick");
             }
         }
     }

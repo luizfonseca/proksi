@@ -26,6 +26,10 @@ pub struct LetsencryptService {
 }
 
 impl LetsencryptService {
+    pub fn new(config: Arc<Config>) -> Self {
+        Self { config }
+    }
+
     /// Parse a PEM-encoded X509 certificate from a string slice
     fn parse_x509_cert(cert_pem: &str) -> Result<X509, anyhow::Error> {
         Ok(X509::from_pem(cert_pem.as_bytes())?)
@@ -266,6 +270,10 @@ impl LetsencryptService {
 #[async_trait]
 impl Service for LetsencryptService {
     async fn start_service(&mut self, _fds: Option<ListenFds>, mut _shutdown: ShutdownWatch) {
+        if self.config.lets_encrypt.enabled.is_some_and(|v| !v) {
+            // Nothing to do, lets encrypt is disabled
+            return;
+        }
         info!("started LetsEncrypt service");
 
         // Get directory based on whether we are running on staging/production
