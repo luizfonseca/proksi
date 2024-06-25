@@ -6,7 +6,7 @@ use super::Config;
 /// That we program won't panic when we try to use them
 pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
     // Validate if worker threads is greater than 0
-    if config.worker_threads.unwrap() == 0 {
+    if config.worker_threads.is_some_and(|v| v == 0) {
         return Err(anyhow!("Worker threads must be greater than 0"));
     }
 
