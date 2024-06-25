@@ -6,14 +6,12 @@ use figment::{
     Figment, Provider,
 };
 use hcl::Hcl;
-use once_cell::sync::Lazy;
+
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
 mod hcl;
 mod validate;
-
-static DEFAULT_NUM_CPUS: Lazy<String> = Lazy::new(|| num_cpus::get().to_string());
 
 /// Default fn for boolean values
 fn bool_true() -> bool {
@@ -42,10 +40,6 @@ fn default_cache_type() -> RouteCacheType {
 
 fn default_cache_path() -> PathBuf {
     PathBuf::from("/tmp")
-}
-
-fn default_num_cpus() -> &'static str {
-    DEFAULT_NUM_CPUS.as_str()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
@@ -512,12 +506,12 @@ pub(crate) struct Config {
     /// The number of worker threads to be used by the HTTPS proxy service.
     ///
     /// For background services the default is always (1) and cannot be changed.
-    #[clap(short, long, required = false, default_value = default_num_cpus())]
+    #[clap(short, long, required = false, default_value = "2")]
     pub worker_threads: Option<usize>,
 
     /// The PATH to the configuration file to be used.
     ///
-    /// The configuration file should be named either `proksi.toml`, `proksi.yaml` or `proksi.yml`
+    /// The configuration file should be named either `proksi.hcl` or `proksi.yaml`
     ///
     /// and be present in that path. Defaults to the current directory.
     #[serde(skip)]
@@ -552,7 +546,7 @@ impl Default for Config {
         Config {
             config_path: Cow::Borrowed("/etc/proksi/config"),
             service_name: Cow::Borrowed("proksi"),
-            worker_threads: Some(num_cpus::get()),
+            worker_threads: Some(2),
             daemon: false,
             docker: Docker::default(),
             lets_encrypt: LetsEncrypt::default(),

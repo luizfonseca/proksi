@@ -6,6 +6,13 @@ description: Helpful functions you can use to optimize your configuration files.
 
 HCL supports functions that can be used to generate values in the configuration file. The following functions are supported:
 
+### num_cpus
+
+Returns the number of CPUs (logical cores) available on the system.
+
+```hcl
+worker_threads = num_cpus()
+```
 
 
 ### env
@@ -23,12 +30,12 @@ This is particularly useful if you have secrets or other type of data that you d
 worker_threads = env("WORKERS_COUNT")
 
 routes = [
- { 
+ {
    upstreams = [
-     { 
+     {
        ip = "localhost"
        port = "8009"
-       
+
        plugins = [
         {
           name = "basic_auth"
@@ -87,7 +94,7 @@ host = "my-site.com"
 
 # downstream headers
 headers {
-  add = [{ 
+  add = [{
       name = "server"
       value = "cool-server"
   }]
@@ -98,4 +105,3 @@ upstreams = [
 ]
 ```
 {% endcode %}
-

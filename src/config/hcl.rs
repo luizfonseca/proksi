@@ -17,6 +17,20 @@ impl figment::providers::Format for HclFormat {
     }
 }
 
+/// Function to retrieve the number of CPUs available on the system.
+/// Useful for setting the number of worker threads.
+/// Note that this function is not a part of the HCL specification, but a custom function.
+/// Example:
+/// ```hcl
+/// // HCL document
+/// worker_threads = num_cpus()
+/// ```
+#[allow(clippy::needless_pass_by_value)]
+fn num_cpus(_: FuncArgs) -> Result<Value, String> {
+    let num_cpus = num_cpus::get();
+    Ok(Value::Number(num_cpus.into()))
+}
+
 /// Function to read a file from a given path. Useful for reading configuration files.
 /// Note that this function is not a part of the HCL specification, but a custom function.
 /// Example:
@@ -85,9 +99,12 @@ fn get_hcl_context<'a>() -> Context<'a> {
         .param(hcl::eval::ParamType::String)
         .build(read_hcl_file);
 
+    let num_cpus_func = hcl::eval::FuncDef::builder().build(num_cpus);
+
     let mut context = hcl::eval::Context::new();
     context.declare_func("env", env_func);
     context.declare_func("import", read_file_func);
+    context.declare_func("num_cpus", num_cpus_func);
 
     context
 }
