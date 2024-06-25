@@ -10,9 +10,20 @@ HCL supports functions that can be used to generate values in the configuration 
 
 Returns the number of CPUs (logical cores) available on the system.
 
+{% code title="proksi.hcl" lineNumbers="true" %}
 ```hcl
-worker_threads = num_cpus()
+# You can use the num_cpus function to set the number of worker threads
+# You can also use math expressions like num_cpus() - 2
+worker_threads = num_cpus() - 2
+
+logging {
+  level = "info"
+}
+
+# ... other configuration
 ```
+{% endcode %}
+
 
 
 ### env
