@@ -18,8 +18,24 @@ For keys that accept a list of values, e.g. `routes`, the environment variable `
 export PROKSI_ROUTES='[{host="example.com", upstreams=[{ip="10.0.1.24", port=3001}]'
 ```
 
-In the future you might be able to use `PROKSI_ROUTES__0__HOST` to set the host of the first route (or any other), but this is not yet implemented.
-
-
 
 ### Full list
+
+Below you can find a full list of the configuration keys and their corresponding environment variables.
+
+| Key | Environment variable | Description |
+| :--- | :--- | :--- |
+| `service_name` | `PROKSI_SERVICE_NAME` | The name of the service |
+| `worker_threads` | `PROKSI_WORKER_THREADS` | The number of worker threads |
+| `daemon` | `PROKSI_DAEMON` | Whether the service should run as a daemon |
+| `logging.level` | `PROKSI_LOGGING__LEVEL` | The log level |
+| `logging.format` | `PROKSI_LOGGING__FORMAT` | The log format |
+| `logging.path` | `PROKSI_LOGGING__PATH` | The path where we should write logs files |
+| `logging.rotation` | `PROKSI_LOGGING__ROTATION` | The rotation policy of the log files |
+| `lets_encrypt.enabled` | `PROKSI_LETS_ENCRYPT__ENABLED` | Whether lets encrypt should be enabled |
+| `lets_encrypt.email` | `PROKSI_LETS_ENCRYPT__EMAIL` | The email address used for lets encrypt |
+| `lets_encrypt.staging` | `PROKSI_LETS_ENCRYPT__STAGING` | Whether lets encrypt should be used in staging mode |
+| `paths.lets_encrypt` | `PROKSI_PATHS__LETS_ENCRYPT` | The path where we should write the lets encrypt certificates |
+| `docker.enabled` | `PROKSI_DOCKER__ENABLED` | Whether the docker service should be enabled |
+| `docker.interval_secs` | `PROKSI_DOCKER__INTERVAL_SECS` | The interval (in seconds) to check for label updates |
+| `docker.endpoint` | `PROKSI_DOCKER__ENDPOINT` | The docker endpoint to connect to the docker socket/api |
