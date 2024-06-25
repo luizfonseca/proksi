@@ -56,7 +56,7 @@ impl LetsencryptService {
         let mut chain: Option<X509> = None;
 
         if let Some(chain_pem) = chain_pem {
-            tracing::debug!("chain PEM: {:?}", chain_pem);
+            tracing::trace!("chain PEM: {:?}", chain_pem);
             chain = Some(Self::parse_x509_cert(chain_pem)?);
         }
 
