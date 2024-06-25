@@ -1,4 +1,4 @@
-# 🚀 Performance
+# Performance
 
 Early tests are promising, but there are many variants on how Proksi performs under _real_ load.&#x20;
 

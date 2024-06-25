@@ -1,4 +1,4 @@
-# 📓 Getting started
+# Getting started
 
 For a quick introduction, check the ASCII recording of a small configuration file for Proksi:
 

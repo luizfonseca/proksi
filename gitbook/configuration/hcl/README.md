@@ -4,9 +4,9 @@ description: Configuration based on the Hashicorp Configuration Language
 
 # HCL
 
-## Configuration 
+## Configuration
 
-Proksi can be configured using HCL (HashiCorp Configuration Language). This is the recommended way to configure Proksi, as it is more human-readable and easier to work with than JSON or YAML as well as it offers `functions` that you can use throughout your configuration:
+Proksi can be configured using HCL ([HashiCorp Configuration Language](https://github.com/hashicorp/hcl/blob/main/hclsyntax/spec.md)). This is the recommended way to configure Proksi, as it is more human-readable and easier to work with than JSON or YAML as well as it offers `functions` that you can use throughout your configuration:
 
 ```bash
 touch proksi.hcl
@@ -54,9 +54,5 @@ routes = [
 ]
 ```
 
-#### HCL functions
 
-HCL supports functions that can be used to generate values in the configuration file. The following functions are supported:
 
-- `env(name: string)`: Get the value of an environment variable. If the environment variable is not set, an error is thrown.
-- `import(path: string)`: Import another HCL file. The path is relative to the current file.
