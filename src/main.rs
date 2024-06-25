@@ -1,19 +1,17 @@
-use std::{borrow::Cow, sync::Arc};
-
 use ::pingora::server::Server;
 use anyhow::anyhow;
 use bytes::Bytes;
 use clap::crate_version;
 use config::{load, Config, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
-// use openssl::ssl::SslSessionCacheMode;
+use tracing_subscriber::{fmt::writer::MakeWriterExt, EnvFilter};
+
+use std::{borrow::Cow, sync::Arc};
 
 use pingora::{listeners::TlsSettings, proxy::http_proxy_service, server::configuration::Opt};
 
 use proxy_server::cert_store::CertStore;
 use services::{
-    discovery::RoutingService,
-    docker::{self},
-    health_check::HealthService,
+    config::ConfigService, discovery::RoutingService, docker, health_check::HealthService,
     letsencrypt::http01::LetsencryptService,
 };
 use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
@@ -79,6 +77,8 @@ fn get_non_blocking_writer(config: &Config) -> (NonBlocking, WorkerGuard) {
     clippy::complexity
 )]
 fn main() -> Result<(), anyhow::Error> {
+    // Configuration can be refreshed on file change
+
     // Loads configuration from command-line, YAML or TOML sources
     let proxy_config = Arc::new(
         load("/etc/proksi/configs").map_err(|e| anyhow!("Failed to load configuration: {}", e))?,
@@ -86,18 +86,32 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Receiver channel for Routes/Certificates/etc
     let (sender, mut _receiver) = tokio::sync::broadcast::channel::<MsgProxy>(10);
-
     let (appender, _guard) = get_non_blocking_writer(&proxy_config);
+
+    let cfg = proxy_config.clone();
+    let appender = appender.with_filter(move |meta| {
+        if !cfg.logging.access_logs_enabled && meta.fields().field("access_log").is_some() {
+            return false;
+        }
+
+        if !cfg.logging.error_logs_enabled && meta.level() == &tracing::Level::ERROR {
+            return false;
+        }
+
+        true
+    });
 
     // Creates a tracing/logging subscriber based on the configuration provided
     if proxy_config.logging.format == LogFormat::Json {
         tracing_subscriber::fmt()
             .json()
+            .with_env_filter(EnvFilter::from_default_env())
             .with_max_level(&proxy_config.logging.level)
             .with_writer(appender)
             .init();
     } else {
         tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
             .with_max_level(&proxy_config.logging.level)
             .with_ansi(proxy_config.logging.path.is_none())
             .with_writer(appender)
@@ -172,7 +186,7 @@ fn main() -> Result<(), anyhow::Error> {
     // let mut prometheus_service_http = Service::prometheus_http_service();
     // prometheus_service_http.add_tcp("0.0.0.0:9090");
     // pingora_server.add_service(prometheus_service_http);
-
+    pingora_server.add_service(ConfigService::new());
     pingora_server.add_service(HealthService::new());
 
     // Listen on HTTP and HTTPS ports

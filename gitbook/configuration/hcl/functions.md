@@ -19,7 +19,6 @@ worker_threads = num_cpus() - 2
 logging {
   level = "info"
 }
-
 # ... other configuration
 ```
 {% endcode %}
