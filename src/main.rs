@@ -23,6 +23,7 @@ mod channel;
 mod config;
 mod plugins;
 mod proxy_server;
+mod server;
 mod services;
 mod stores;
 mod tools;

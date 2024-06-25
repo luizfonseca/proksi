@@ -545,7 +545,7 @@ impl Default for Config {
         Config {
             config_path: Cow::Borrowed("/etc/proksi/config"),
             service_name: Cow::Borrowed("proksi"),
-            worker_threads: Some(1),
+            worker_threads: Some(num_cpus::get()),
             daemon: false,
             docker: Docker::default(),
             lets_encrypt: LetsEncrypt::default(),

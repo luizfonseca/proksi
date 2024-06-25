@@ -2143,6 +2143,7 @@ dependencies = [
  "http 1.1.0",
  "itertools",
  "jsonwebtoken",
+ "num_cpus",
  "once_cell",
  "openssl",
  "path-tree",
