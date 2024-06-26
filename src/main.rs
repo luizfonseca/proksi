@@ -171,7 +171,7 @@ fn main() -> Result<(), anyhow::Error> {
     // let mut prometheus_service_http = Service::prometheus_http_service();
     // prometheus_service_http.add_tcp("0.0.0.0:9090");
     // pingora_server.add_service(prometheus_service_http);
-    // pingora_server.add_service(ConfigService::new());
+
     pingora_server.add_service(BackgroundFunctionService::new(proxy_config.clone(), sender));
 
     // Listen on HTTP and HTTPS ports
