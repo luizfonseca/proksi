@@ -11,7 +11,10 @@ use pingora::{listeners::TlsSettings, proxy::http_proxy_service, server::configu
 
 use proxy_server::cert_store::CertStore;
 use services::BackgroundFunctionService;
-use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
+use tracing_appender::{
+    non_blocking::{NonBlocking, WorkerGuard},
+    rolling::{RollingFileAppender, Rotation},
+};
 
 mod cache;
 mod channel;
@@ -51,13 +54,19 @@ fn get_non_blocking_writer(config: &Config) -> (NonBlocking, WorkerGuard) {
     // If a path is provided, create a file appender
     if let Some(path) = config.logging.path.clone() {
         let appender = match config.logging.rotation {
-            config::LogRotation::Daily => tracing_appender::rolling::daily,
-            config::LogRotation::Hourly => tracing_appender::rolling::hourly,
-            config::LogRotation::Minutely => tracing_appender::rolling::minutely,
-            config::LogRotation::Never => tracing_appender::rolling::never,
+            config::LogRotation::Daily => Rotation::DAILY,
+            config::LogRotation::Hourly => Rotation::HOURLY,
+            config::LogRotation::Minutely => Rotation::MINUTELY,
+            config::LogRotation::Never => Rotation::NEVER,
         };
 
-        return tracing_appender::non_blocking(appender(path, "proksi"));
+        let file_appender = RollingFileAppender::builder()
+            .rotation(appender) // rotate log files once every hour
+            .filename_prefix("proksi") // log file names will be prefixed with `myapp.`
+            .filename_suffix("log") // log file names will be suffixed with `.log`
+            .build(path) // try to build an appender that stores log files in `/var/log`
+            .expect("initializing rolling file appender failed");
+        return tracing_appender::non_blocking(file_appender);
     }
 
     // otherwise, create a stdout appender (default)
