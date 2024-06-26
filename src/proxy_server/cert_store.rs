@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use openssl::ssl::{SniError, SslRef};
 use pingora::listeners::TlsAccept;
-use pingora::tls::{ext, ssl::NameType};
+use pingora::tls::ext;
+use pingora::tls::ssl::NameType;
 
 use crate::stores::{self};
 
@@ -46,11 +47,13 @@ impl TlsAccept for CertStore {
             return;
         };
 
+        let cert = cert.value();
+
         ext::ssl_use_private_key(ssl, &cert.key).unwrap();
         ext::ssl_use_certificate(ssl, &cert.leaf).unwrap();
 
-        if let Some(chain) = cert.chain {
-            ext::ssl_add_chain_cert(ssl, &chain).unwrap();
+        if let Some(chain) = &cert.chain {
+            ext::ssl_add_chain_cert(ssl, chain).unwrap();
         }
     }
 }

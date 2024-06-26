@@ -1,3 +1,3 @@
-use std::collections::HashMap;
+use dashmap::DashMap;
 
-pub type ChallengeStore = HashMap<String, (String, String)>;
+pub type ChallengeStore = DashMap<String, (String, String)>;

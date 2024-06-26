@@ -2,7 +2,6 @@ use std::{
     any::Any,
     io::{BufReader, Read},
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use async_trait::async_trait;
@@ -82,19 +81,15 @@ impl HandleHit for DiskCacheHitHandler {
         let cached_data_key = format!("{}-{}", cache_key.namespace(), cache_key.primary_key());
 
         // Skiping if the data is already in the cache
-        if DISK_MEMORY_CACHE.load().contains_key(&cached_data_key) {
+        if DISK_MEMORY_CACHE.contains_key(&cached_data_key) {
             tracing::debug!("skipping write, cach already contains data for {cache_key:?}");
             return Ok(());
         }
 
-        DISK_MEMORY_CACHE.rcu(|p| {
-            let mut map = (**p).clone();
-            map.insert(
-                cached_data_key.clone(),
-                (self.meta.clone(), self.finished_buffer.clone().freeze()),
-            );
-            Arc::new(map)
-        });
+        DISK_MEMORY_CACHE.insert(
+            cached_data_key.clone(),
+            (self.meta.clone(), self.finished_buffer.clone().freeze()),
+        );
 
         tracing::debug!("wrote to memory cache: {:?}", self.path);
         Ok(())

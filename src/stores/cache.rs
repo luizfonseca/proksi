@@ -1,3 +1,3 @@
-use std::collections::HashMap;
+use dashmap::DashMap;
 
-pub type PathCacheStorage = HashMap<String, String>;
+pub type PathCacheStorage = DashMap<String, String>;

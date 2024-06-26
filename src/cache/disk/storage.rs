@@ -1,9 +1,9 @@
-use std::{any::Any, collections::HashMap, path::PathBuf, sync::Arc};
+use std::{any::Any, path::PathBuf, sync::Arc};
 
-use arc_swap::ArcSwap;
 use async_trait::async_trait;
 
 use bytes::Buf;
+use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use pingora_cache::{
     key::CompactCacheKey, trace::SpanHandle, CacheKey, CacheMeta, HitHandler, MissHandler, Storage,
@@ -12,8 +12,8 @@ use pingora_cache::{
 use pingora::Result;
 
 pub(super) static DISK_MEMORY_CACHE: Lazy<
-    ArcSwap<HashMap<String, (DiskCacheItemMetadata, bytes::Bytes)>>,
-> = Lazy::new(|| ArcSwap::new(Arc::new(HashMap::new())));
+    Arc<DashMap<String, (DiskCacheItemMetadata, bytes::Bytes)>>,
+> = Lazy::new(|| Arc::new(DashMap::new()));
 
 use crate::{
     cache::disk::{
@@ -41,7 +41,7 @@ impl DiskCache {
             return self.directory.join(namespace);
         };
 
-        PathBuf::from(path).join(namespace)
+        PathBuf::from(path.value()).join(namespace)
     }
 
     async fn get_cached_metadata(&self, key: &CacheKey) -> Option<DiskCacheItemMetadata> {
@@ -78,7 +78,8 @@ impl Storage for DiskCache {
         // and return the file contents as the body
         let memcache_key = Self::get_memory_key(key);
 
-        if let Some((meta, body)) = DISK_MEMORY_CACHE.load().get(&memcache_key) {
+        if let Some(data) = DISK_MEMORY_CACHE.get(&memcache_key) {
+            let (meta, body) = data.value();
             tracing::debug!("found cache for {key:?} in memory");
             return Ok(Some((
                 CacheMeta::new(

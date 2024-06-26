@@ -5,6 +5,7 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 
+use dashmap::mapref;
 use http::uri::PathAndQuery;
 use http::{HeaderName, HeaderValue, Uri};
 use once_cell::sync::Lazy;
@@ -40,8 +41,10 @@ pub struct Router {
     // pub store: RouteStore,
 }
 
-fn process_route(ctx: &RouterContext) -> Arc<RouteStoreContainer> {
-    ctx.route_container.clone().unwrap()
+type Container = mapref::one::Ref<'static, String, RouteStoreContainer>;
+
+fn process_route(ctx: &RouterContext) -> Arc<Container> {
+    ctx.route_container.as_ref().unwrap().clone()
 }
 
 fn get_cache_storage(cache_type: &RouteCacheType) -> &'static (dyn pingora_cache::Storage + Sync) {
@@ -53,7 +56,7 @@ fn get_cache_storage(cache_type: &RouteCacheType) -> &'static (dyn pingora_cache
 
 pub struct RouterContext {
     pub host: String,
-    pub route_container: Option<Arc<RouteStoreContainer>>,
+    pub route_container: Option<Arc<mapref::one::Ref<'static, String, RouteStoreContainer>>>,
     pub upstream: RouteUpstream,
     pub extensions: HashMap<Cow<'static, str>, String>,
 

@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-
+use dashmap::DashMap;
 use openssl::{
     pkey::{PKey, Private},
     x509::X509,
@@ -13,4 +12,4 @@ pub struct Certificate {
     pub chain: Option<X509>,
 }
 
-pub type CertificateStore = HashMap<String, Certificate>;
+pub type CertificateStore = DashMap<String, Certificate>;
