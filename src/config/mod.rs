@@ -465,6 +465,9 @@ pub struct AutoReload {
         id = "auto_reload.interval_secs"
     )]
     pub interval_secs: Option<u64>,
+
+    #[clap(skip)]
+    pub paths: Vec<PathBuf>,
 }
 
 impl Default for AutoReload {
@@ -472,6 +475,7 @@ impl Default for AutoReload {
         Self {
             enabled: Some(false),
             interval_secs: Some(30),
+            paths: vec![],
         }
     }
 }

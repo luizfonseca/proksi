@@ -14,9 +14,10 @@ auto_reload {
 
   # extra paths to watch for changes (default: [])
   # This is useful if you are dealing with `import` in the configuration file
-  # changes on those imports will trigger a reload on the main configuration 
+  # changes on those imports will trigger a reload on the main configuration
   # file and down.
-  watch = ["/etc/sites"]
+  # This will only watch for .hcl files and ignore any other extension.
+  paths = ["/etc/sites"]
 }
 ```
 {% endcode %}

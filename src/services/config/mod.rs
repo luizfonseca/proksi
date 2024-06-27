@@ -33,10 +33,15 @@ pub struct FileWatcherServiceHandler {}
 impl EventHandler for FileWatcherServiceHandler {
     /// Handles configuration file changes and restarts the server
     fn handle_event(&mut self, notif: notify::Result<notify::Event>) {
-        let Ok(_n) = notif else {
-            tracing::error!("error handling event: {:?}", notif);
+        let Ok(n) = notif else {
+            tracing::error!("error handling auto_reload event: {:?}", notif);
             return;
         };
+
+        // If no .hcl can be found, skip
+        if !n.paths.iter().any(|v| v.ends_with(".hcl")) {
+            return;
+        }
 
         let Ok(cmd) = std::env::current_exe() else {
             return;
@@ -83,8 +88,12 @@ impl Service for FileWatcherService {
         .unwrap();
 
         Self::watch_file_or_dir(&mut watcher, &config_file_hcl);
-        // Self::watch_file_or_dir(&mut watcher, &PathBuf::from("./dist/*.hcl"));
         Self::watch_file_or_dir(&mut watcher, &config_file_yaml);
+
+        // Watch for paths in the config
+        for watch_path in &self.config.auto_reload.paths {
+            Self::watch_file_or_dir(&mut watcher, watch_path);
+        }
 
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(
             self.config.auto_reload.interval_secs.unwrap_or(60),
