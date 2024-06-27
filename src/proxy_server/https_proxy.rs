@@ -219,6 +219,12 @@ impl ProxyHttp for Router {
                 HeaderName::from_str("cache-status").unwrap(),
                 cache_state.as_str(),
             )?;
+
+            let elapsed = ctx.timings.request_filter_start.elapsed();
+            upstream_response.insert_header(
+                HeaderName::from_str("cache-duration").unwrap(),
+                elapsed.as_millis().to_string(),
+            )?;
         }
 
         // Middleware phase: response_filterx
@@ -382,15 +388,15 @@ impl ProxyHttp for Router {
     // flex purge, other filtering, returns whether asset is should be force expired or not
     async fn cache_hit_filter(
         &self,
-        _meta: &CacheMeta,
+        meta: &CacheMeta,
         ctx: &mut Self::CTX,
         _req: &RequestHeader,
     ) -> pingora::Result<bool> {
-        // if !meta.is_fresh(SystemTime::now()) {
-        //     ctx.extensions
-        //         .insert(Cow::Borrowed("cache_state"), "expired".into());
-        //     return Ok(true);
-        // }
+        if !meta.is_fresh(SystemTime::now()) {
+            ctx.extensions
+                .insert(Cow::Borrowed("cache_state"), "expired".into());
+            return Ok(true);
+        }
 
         ctx.extensions
             .insert(Cow::Borrowed("cache_state"), "hit".into());
