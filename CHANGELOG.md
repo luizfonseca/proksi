@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.0](https://github.com/luizfonseca/proksi/compare/v0.3.31...v0.4.0) (2024-06-27)
+
+
+### Features
+
+* add auto_reload configuration ([2401c32](https://github.com/luizfonseca/proksi/commit/2401c32fbaf0ccfdea658a7ddc316782fdeabbbb))
+* **config:** allow auto_reload for specific paths besides the config file ([7e2a7ac](https://github.com/luizfonseca/proksi/commit/7e2a7ac1d0159ac1567c130a5579a86c59587d73))
+* **hcl:** add num_cpus() function ([1e7dd91](https://github.com/luizfonseca/proksi/commit/1e7dd914a823fb7d1e249bb55f0e2902613ad7e8))
+* set worker_threads to the default number of logical cpus [#69](https://github.com/luizfonseca/proksi/issues/69) ([dfa23e7](https://github.com/luizfonseca/proksi/commit/dfa23e7150f691dd8d3dcd1cd76f8fce0edee6e1))
+* watch for changes in the proksi.hcl file ([a5b4b0c](https://github.com/luizfonseca/proksi/commit/a5b4b0c87fb56e52d0a80be270e021921a1de702))
+
+
+### Bug Fixes
+
+* access_logs filtering and function update ([40df3da](https://github.com/luizfonseca/proksi/commit/40df3dae9563100b42d3eab29c00924653add14e))
+* append .log to log files ([49ac548](https://github.com/luizfonseca/proksi/commit/49ac548de63af6d28d368d7ca81f388795d639f6))
+* **cache:** add cache-duration header ([a319c06](https://github.com/luizfonseca/proksi/commit/a319c06ab8b6329a8a5440c4484de4c02e73e34d))
+* **cache:** use primary_bin hex as cache keys ([c95a9da](https://github.com/luizfonseca/proksi/commit/c95a9dac2542c3ceca2f7694598e7395569b343e))
+* **config:** watch correct hcl file extensions ([133486a](https://github.com/luizfonseca/proksi/commit/133486ad226cda84a22d352333f59549b8d44e0b))
+* get real number of logical cores ([31c1174](https://github.com/luizfonseca/proksi/commit/31c117495b85e71bc0628f079a86f053e42ed96f))
+* remove log color when logging path is set ([0c260e9](https://github.com/luizfonseca/proksi/commit/0c260e959715021190cc1b3e619e05961804e751))
+
 ## [0.3.31](https://github.com/luizfonseca/proksi/compare/v0.3.30...v0.3.31) (2024-06-24)
 
 
