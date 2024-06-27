@@ -184,5 +184,6 @@ fn main() -> Result<(), anyhow::Error> {
         workers = proxy_config.worker_threads,
         "running on :443 and :80"
     );
+
     pingora_server.run_forever();
 }
