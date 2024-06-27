@@ -74,8 +74,8 @@ pub fn get_cache_routing_by_key(key: &str) -> Option<mapref::one::Ref<'static, S
 //     CACHE_ROUTING_STORE.load()
 // }
 
-pub fn insert_cache_routing(key: String, new_value: String) {
-    CACHE_ROUTING_STORE.alter(&key, |_, old_value| {
+pub fn insert_cache_routing(key: &String, new_value: String) {
+    CACHE_ROUTING_STORE.alter(key, |_, old_value| {
         if old_value != new_value {
             return new_value;
         }

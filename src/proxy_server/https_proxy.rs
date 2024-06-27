@@ -130,10 +130,7 @@ impl ProxyHttp for Router {
             let cache = arced.cache.as_ref().unwrap();
             if cache.enabled.unwrap_or(false) {
                 let storage = get_cache_storage(&cache.cache_type);
-                stores::insert_cache_routing(
-                    ctx.host.clone(),
-                    cache.path.to_string_lossy().to_string(),
-                );
+                stores::insert_cache_routing(&ctx.host, cache.path.to_string_lossy().to_string());
                 session
                     .cache
                     .enable(storage, None, None, Some(&*CACHE_LOCK));

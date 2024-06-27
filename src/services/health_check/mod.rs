@@ -31,7 +31,7 @@ async fn run_health_check_loop() {
         for data in stores::get_mutable_routes() {
             tracing::info!("Running health check for host {}", data.key());
             data.load_balancer.update().await.ok();
-            data.load_balancer.backends().run_health_check(false).await
+            data.load_balancer.backends().run_health_check(false).await;
         }
     }
 }
