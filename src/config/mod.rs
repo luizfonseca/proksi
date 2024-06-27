@@ -49,7 +49,7 @@ pub(crate) enum DockerServiceMode {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Args)]
-#[group(id = "docker", requires = "level")]
+#[group(id = "docker")]
 pub struct Docker {
     /// The interval (in seconds) to check for label updates
     /// (default: every 15 seconds)
@@ -57,7 +57,9 @@ pub struct Docker {
         long = "docker.interval_secs",
         required = false,
         value_parser,
-        default_value = "15"
+        default_value = "15",
+        group = "docker",
+        id = "docker.interval_secs"
     )]
     pub interval_secs: Option<u64>,
 
@@ -448,12 +450,20 @@ pub struct Logging {
     pub rotation: LogRotation,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Args)]
+#[group(id = "auto_reload")]
 pub struct AutoReload {
     /// Enables the auto-reload service
+    #[arg(long = "auto_reload.enabled", default_value = "false")]
     pub enabled: Option<bool>,
 
     /// The interval (in seconds) to check for changes in the configuration file
+    #[arg(
+        long = "auto_reload.interval_secs",
+        default_value = "30",
+        group = "auto_reload",
+        id = "auto_reload.interval_secs"
+    )]
     pub interval_secs: Option<u64>,
 }
 
@@ -521,6 +531,10 @@ pub(crate) struct Config {
     #[clap(short, long, default_value = "false")]
     pub daemon: bool,
 
+    /// Upgrades the service from an existing running instance
+    #[clap(short, long, default_value = "false")]
+    pub upgrade: bool,
+
     /// The number of worker threads to be used by the HTTPS proxy service.
     ///
     /// For background services the default is always (1) and cannot be changed.
@@ -532,8 +546,7 @@ pub(crate) struct Config {
     /// The configuration file should be named either `proksi.hcl` or `proksi.yaml`
     ///
     /// and be present in that path. Defaults to the current directory.
-    #[serde(skip)]
-    #[clap(short, long, default_value = "./")]
+    #[clap(short, required = false, long, default_value = "./")]
     #[allow(clippy::struct_field_names)]
     pub config_path: Cow<'static, str>,
 
@@ -541,7 +554,7 @@ pub(crate) struct Config {
     #[command(flatten)]
     pub logging: Logging,
 
-    #[clap(skip)]
+    #[command(flatten)]
     pub auto_reload: AutoReload,
 
     #[command(flatten)]
@@ -568,6 +581,7 @@ impl Default for Config {
             config_path: Cow::Borrowed("/etc/proksi/config"),
             service_name: Cow::Borrowed("proksi"),
             worker_threads: Some(2),
+            upgrade: false,
             daemon: false,
             docker: Docker::default(),
             lets_encrypt: LetsEncrypt::default(),
