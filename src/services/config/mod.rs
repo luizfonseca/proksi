@@ -39,7 +39,12 @@ impl EventHandler for FileWatcherServiceHandler {
         };
 
         // If no .hcl can be found, skip
-        if !n.paths.iter().any(|v| v.ends_with(".hcl")) {
+        if !n
+            .paths
+            .iter()
+            .any(|v| v.extension().is_some_and(|v| v == "hcl"))
+        {
+            tracing::info!("no .hcl file found, skipping {:?}", n.paths);
             return;
         }
 
