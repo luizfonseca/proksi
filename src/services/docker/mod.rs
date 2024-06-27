@@ -453,8 +453,8 @@ impl LabelService {
         );
 
         match self.config.docker.mode {
-            DockerServiceMode::Swarm => self.list_services(filters.clone()).await,
-            DockerServiceMode::Container => self.list_containers(filters.clone()).await,
+            DockerServiceMode::Swarm => self.list_services(filters).await,
+            DockerServiceMode::Container => self.list_containers(filters).await,
         }
     }
 }

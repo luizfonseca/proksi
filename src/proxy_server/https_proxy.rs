@@ -37,9 +37,7 @@ static CACHEABLE_METHODS: Lazy<Vec<http::Method>> =
 static CACHE_LOCK: Lazy<CacheLock> = Lazy::new(|| CacheLock::new(Duration::from_secs(1)));
 
 /// Load balancer proxy struct
-pub struct Router {
-    // pub store: RouteStore,
-}
+pub struct Router {}
 
 type Container = mapref::one::Ref<'static, String, RouteStoreContainer>;
 

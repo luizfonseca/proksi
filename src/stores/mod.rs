@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{hash::RandomState, sync::Arc};
 
 use certificates::{Certificate, CertificateStore};
 use challenges::ChallengeStore;
@@ -42,6 +42,11 @@ pub fn insert_route(key: String, value: RouteStoreContainer) {
     ROUTE_STORE.insert(key, value);
 }
 
+pub fn get_mutable_routes(
+) -> dashmap::iter::IterMut<'static, String, RouteStoreContainer, RandomState, RouteStore> {
+    (*ROUTE_STORE).iter_mut()
+}
+
 // CERTIFICATE store
 static CERTIFICATE_STORE: Lazy<Arc<CertificateStore>> = Lazy::new(|| Arc::new(DashMap::new()));
 
@@ -69,11 +74,12 @@ pub fn get_cache_routing_by_key(key: &str) -> Option<mapref::one::Ref<'static, S
 //     CACHE_ROUTING_STORE.load()
 // }
 
-pub fn insert_cache_routing(key: String, value: String) {
-    // Dont insert if the key already exists
-    if CACHE_ROUTING_STORE.get(&key).is_some() {
-        return;
-    }
+pub fn insert_cache_routing(key: String, new_value: String) {
+    CACHE_ROUTING_STORE.alter(&key, |_, old_value| {
+        if old_value != new_value {
+            return new_value;
+        }
 
-    CACHE_ROUTING_STORE.insert(key, value);
+        old_value
+    });
 }

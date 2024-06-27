@@ -28,11 +28,10 @@ async fn run_health_check_loop() {
     loop {
         interval.tick().await;
 
-        for (key, route) in stores::get_routes().iter() {
-            tracing::debug!("Running health check for host {}", key);
-
-            route.load_balancer.update().await.ok();
-            route.load_balancer.backends().run_health_check(true).await;
+        for data in stores::get_mutable_routes() {
+            tracing::info!("Running health check for host {}", data.key());
+            data.load_balancer.update().await.ok();
+            data.load_balancer.backends().run_health_check(false).await
         }
     }
 }

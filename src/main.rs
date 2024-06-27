@@ -48,6 +48,7 @@ pub struct MsgCert {
 pub enum MsgProxy {
     NewRoute(MsgRoute),
     NewCertificate(MsgCert),
+    ConfigUpdate(()),
 }
 
 fn get_non_blocking_writer(config: &Config) -> (NonBlocking, WorkerGuard) {

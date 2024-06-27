@@ -86,10 +86,7 @@ impl HandleHit for DiskCacheHitHandler {
             return Ok(());
         }
 
-        DISK_MEMORY_CACHE.insert(
-            cached_data_key.clone(),
-            (self.meta.clone(), self.finished_buffer.clone().freeze()),
-        );
+        DISK_MEMORY_CACHE.insert(cached_data_key, (self.meta, self.finished_buffer.freeze()));
 
         tracing::debug!("wrote to memory cache: {:?}", self.path);
         Ok(())
