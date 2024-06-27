@@ -6,7 +6,9 @@ use bytes::Buf;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use pingora_cache::{
-    key::CompactCacheKey, trace::SpanHandle, CacheKey, CacheMeta, HitHandler, MissHandler, Storage,
+    key::{CacheHashKey, CompactCacheKey},
+    trace::SpanHandle,
+    CacheKey, CacheMeta, HitHandler, MissHandler, Storage,
 };
 
 use pingora::Result;
@@ -37,6 +39,7 @@ impl DiskCache {
 
     /// Retrieves the directory for the given key using the namespace as the base path
     pub fn get_directory_for(&self, namespace: &str) -> PathBuf {
+        // If there's no cache routing, use the default directory
         let Some(path) = stores::get_cache_routing_by_key(namespace) else {
             return self.directory.join(namespace);
         };
@@ -46,14 +49,14 @@ impl DiskCache {
 
     async fn get_cached_metadata(&self, key: &CacheKey) -> Option<DiskCacheItemMetadata> {
         let path = self.get_directory_for(key.namespace());
-        let metadata_file = format!("{}.metadata", key.primary_key());
+        let metadata_file = format!("{}.metadata", key.primary());
 
         let body = tokio::fs::read(path.join(metadata_file)).await.ok()?;
         serde_json::from_slice(&body).ok()
     }
 
     fn get_memory_key(key: &CacheKey) -> String {
-        format!("{}-{}", key.namespace(), key.primary_key())
+        key.primary()
     }
 }
 
@@ -94,7 +97,7 @@ impl Storage for DiskCache {
         }
 
         let namespace = key.namespace();
-        let primary_key = key.primary_key();
+        let primary_key = key.primary();
         let main_path = self.get_directory_for(namespace);
         let cache_file = format!("{primary_key}.cache");
         let file_path = main_path.join(cache_file);
@@ -132,7 +135,7 @@ impl Storage for DiskCache {
         _: &SpanHandle,
     ) -> Result<MissHandler> {
         tracing::debug!("getting miss handler for {key:?}");
-        let primary_key = key.primary_key();
+        let primary_key = key.primary();
         let main_path = self.get_directory_for(key.namespace());
         let metadata_file = format!("{primary_key}.metadata");
 
@@ -160,7 +163,8 @@ impl Storage for DiskCache {
     /// Delete the cached asset for the given key
     ///
     /// [CompactCacheKey] is used here because it is how eviction managers store the keys
-    async fn purge(&'static self, _: &CompactCacheKey, _: &SpanHandle) -> Result<bool> {
+    async fn purge(&'static self, key: &CompactCacheKey, _: &SpanHandle) -> Result<bool> {
+        tracing::info!("purging cache for {key:?}");
         Ok(true)
     }
 
@@ -172,7 +176,7 @@ impl Storage for DiskCache {
         _: &SpanHandle,
     ) -> Result<bool> {
         let namespace = key.namespace();
-        let primary_key = key.primary_key();
+        let primary_key = key.primary();
         let main_path = self.get_directory_for(namespace);
         let metadata_file = format!("{primary_key}.metadata");
 

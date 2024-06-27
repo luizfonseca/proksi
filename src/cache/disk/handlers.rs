@@ -7,6 +7,7 @@ use std::{
 use async_trait::async_trait;
 
 use pingora_cache::{
+    key::CacheHashKey,
     storage::{HandleHit, HandleMiss},
     trace::SpanHandle,
     CacheKey, Storage,
@@ -39,7 +40,6 @@ impl DiskCacheHitHandler {
         DiskCacheHitHandler {
             target,
             path,
-
             meta,
             finished_buffer: bytes::BytesMut::new(),
         }
@@ -78,15 +78,17 @@ impl HandleHit for DiskCacheHitHandler {
         cache_key: &CacheKey,
         _: &SpanHandle,
     ) -> Result<()> {
-        let cached_data_key = format!("{}-{}", cache_key.namespace(), cache_key.primary_key());
-
         // Skiping if the data is already in the cache
-        if DISK_MEMORY_CACHE.contains_key(&cached_data_key) {
-            tracing::debug!("skipping write, cach already contains data for {cache_key:?}");
+        if DISK_MEMORY_CACHE.contains_key(&cache_key.primary()) {
+            tracing::debug!("skipping write, cache already contains data for {cache_key:?}");
+
             return Ok(());
         }
 
-        DISK_MEMORY_CACHE.insert(cached_data_key, (self.meta, self.finished_buffer.freeze()));
+        DISK_MEMORY_CACHE.insert(
+            cache_key.primary(),
+            (self.meta, self.finished_buffer.freeze()),
+        );
 
         tracing::debug!("wrote to memory cache: {:?}", self.path);
         Ok(())
@@ -151,7 +153,7 @@ impl DiskCacheMissHandler {
 impl HandleMiss for DiskCacheMissHandler {
     /// Write the given body to the storage
     async fn write_body(&mut self, data: bytes::Bytes, end: bool) -> Result<()> {
-        let primary_key = self.key.primary_key();
+        let primary_key = self.key.primary();
         let main_path = self.main_path.clone();
         let cache_file = format!("{primary_key}.cache");
 

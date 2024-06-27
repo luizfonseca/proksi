@@ -11,9 +11,7 @@ use crate::stores::{self};
 /// Health check service that will run health checks on all upstreams
 /// And update the route store with the new healthy upstreams.
 /// This service will run in a separate thread.
-pub struct HealthService {
-    // route_store: RouteStore,
-}
+pub struct HealthService {}
 
 impl HealthService {
     pub fn new() -> Self {
@@ -22,7 +20,7 @@ impl HealthService {
 }
 
 async fn run_health_check_loop() {
-    let mut interval = tokio::time::interval(Duration::from_secs(20));
+    let mut interval = tokio::time::interval(Duration::from_secs(30));
     interval.tick().await;
 
     loop {

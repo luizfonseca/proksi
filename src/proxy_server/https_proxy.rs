@@ -16,6 +16,7 @@ use pingora::proxy::{ProxyHttp, Session};
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 
 use pingora_cache::lock::CacheLock;
+
 use pingora_cache::{CacheKey, CacheMeta, NoCacheReason, RespCacheable};
 
 use crate::cache::disk::storage::DiskCache;
@@ -130,6 +131,7 @@ impl ProxyHttp for Router {
             let cache = arced.cache.as_ref().unwrap();
             if cache.enabled.unwrap_or(false) {
                 let storage = get_cache_storage(&cache.cache_type);
+
                 stores::insert_cache_routing(&ctx.host, cache.path.to_string_lossy().to_string());
                 session
                     .cache
@@ -384,9 +386,14 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
         _req: &RequestHeader,
     ) -> pingora::Result<bool> {
+        // if !meta.is_fresh(SystemTime::now()) {
+        //     ctx.extensions
+        //         .insert(Cow::Borrowed("cache_state"), "expired".into());
+        //     return Ok(true);
+        // }
+
         ctx.extensions
             .insert(Cow::Borrowed("cache_state"), "hit".into());
-
         Ok(false)
     }
 
