@@ -56,9 +56,11 @@ routes = [
 ```
 4. Run `proksi -c /path-where-proksi.hcl-is-located`
 
+For more information or guides, please refer to the [documentation](https://docs.proksi.info).
+
 
 # Documentation
-Documentation for Proksi can be found at [https://docs.proksi.info](https://docs.proksi.info) which is also available in the [gitbook](./gitbook/)  folder of this repository.
+Documentation for Proksi can be found at [https://docs.proksi.info](https://docs.proksi.info) which is also available in the [gitbook](./gitbook/) folder of this repository.
 
 
 # Contributing
