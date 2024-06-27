@@ -14,6 +14,49 @@
 Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in [Rust](https://www.rust-lang.org/) and uses [Pingora](https://github.com/cloudflare/pingora) as its core networking library.
 
 
+# Quick start
+
+1. Download the latest release from [https://github.com/luizfonseca/proksi/releases](https://github.com/luizfonseca/proksi/releases)
+2. Create a configuration file named `proksi.hcl`
+3. Add the following content to the file:
+
+```hcl
+#
+lets_encrypt {
+  enabled = true
+  email = "my@email.com"
+}
+
+paths {
+  # Where to save certificates?
+  lets_encrypt = "./"
+}
+
+# A list of routes Proksi should handle
+routes = [
+  {
+    # You might need to edit your /etc/hosts file here.
+    host = "mysite.localhost",
+
+    # Will create a certificate for mysite.localhost
+    ssl_certificate =  {
+      self_signed_on_failure = true
+    }
+
+    # Where to point mysite.localhost to
+    upstreams = [{
+      ip = "docs.proksi.info"
+      port = 443
+
+      headers = {
+        add = [{ name = "Host", value = "docs.proksi.info" }]
+    }]
+  }
+]
+```
+4. Run `proksi -c /path-where-proksi.hcl-is-located`
+
+
 # Documentation
 Documentation for Proksi can be found at [https://docs.proksi.info](https://docs.proksi.info) which is also available in the [gitbook](./gitbook/)  folder of this repository.
 
@@ -23,6 +66,3 @@ We welcome contributions to Proksi. If you have any **suggestions** or **ideas**
 
 # License
 Proksi is licensed under the [MIT License](https://github.com/luizfonseca/proksi/blob/main/LICENSE), the [Apache License 2.0](https://github.com/luizfonseca/proksi/blob/main/LICENSE-APACHE) and is free to use and modify.
-
-
-
