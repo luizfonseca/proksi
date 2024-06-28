@@ -57,7 +57,10 @@ impl EventHandler for FileWatcherServiceHandler {
         // remove the command path, take the rest
         let current_args = std::env::args().skip(1);
 
-        // kill the process
+        // restart the process
+        std::process::Command::new(cmd).args(current_args).exec();
+
+        // kill existing process
         nix::sys::signal::kill(
             nix::unistd::Pid::from_raw(current_pid.try_into().unwrap()),
             nix::sys::signal::Signal::SIGQUIT,
@@ -65,9 +68,6 @@ impl EventHandler for FileWatcherServiceHandler {
         .unwrap();
 
         tracing::warn!("restarting server");
-
-        // restart the process
-        std::process::Command::new(cmd).args(current_args).exec();
     }
 }
 
