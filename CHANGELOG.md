@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/luizfonseca/proksi/compare/v0.4.1...v0.4.2) (2024-06-28)
+
+
+### Bug Fixes
+
+* use absolute paths where possible ([0aab38e](https://github.com/luizfonseca/proksi/commit/0aab38e20615b007a58b1701225b812a5cea2d50))
+
 ## [0.4.1](https://github.com/luizfonseca/proksi/compare/v0.4.0...v0.4.1) (2024-06-28)
 
 
