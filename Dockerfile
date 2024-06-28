@@ -1,4 +1,4 @@
-FROM ubuntu:noble
+FROM debian:buster-slim
 RUN apt-get update && apt-get install -y ca-certificates && apt-get clean
 
 COPY proksi /app/proksi
