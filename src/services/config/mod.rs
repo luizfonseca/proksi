@@ -21,10 +21,24 @@ impl FileWatcherService {
     /// Watchs a file or directory for changes
     /// If the file or directory does not exist, it will be ignored
     pub fn watch_file_or_dir(watcher: &mut notify::poll::PollWatcher, path: &std::path::Path) {
+        // if the path is not absolute, make it absolute
+        let path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            if let Ok(cwd) = std::env::current_dir() {
+                cwd.join(path)
+            } else {
+                tracing::error!("could not get current directory, auto_reload will not work");
+                path.to_path_buf()
+            }
+        };
+
         if path.exists() {
             watcher
-                .watch(path, notify::RecursiveMode::Recursive)
+                .watch(&path, notify::RecursiveMode::Recursive)
                 .unwrap();
+        } else {
+            tracing::warn!("file or directory does not exist: {:?}", path);
         }
     }
 }

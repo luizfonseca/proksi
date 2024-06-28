@@ -73,9 +73,9 @@ reqwest = { version = "0.12.5", features = ["json"] }
 serde = "1.0.203"
 serde_json = "1.0.117"
 short-crypt = "1.0.28"
+time = "0.3.36"
 tokio = { version = "1.38.0", features = ["sync", "rt-multi-thread", "fs"] }
 tracing = "0.1.40"
-tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.18", features = ["json", "env-filter"] }
 uuid = { version = "1.9.0", features = ["v4"] }
 

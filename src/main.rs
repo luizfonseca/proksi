@@ -2,19 +2,15 @@ use ::pingora::server::Server;
 use anyhow::anyhow;
 use bytes::Bytes;
 use clap::crate_version;
-use config::{load, Config, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
-use tracing_subscriber::{fmt::writer::MakeWriterExt, EnvFilter};
+use config::{load, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
+use tracing_subscriber::EnvFilter;
 
 use std::{borrow::Cow, sync::Arc};
 
 use pingora::{listeners::TlsSettings, proxy::http_proxy_service, server::configuration::Opt};
 
 use proxy_server::cert_store::CertStore;
-use services::BackgroundFunctionService;
-use tracing_appender::{
-    non_blocking::{NonBlocking, WorkerGuard},
-    rolling::{RollingFileAppender, Rotation},
-};
+use services::{logger::ProxyLoggerReceiver, BackgroundFunctionService};
 
 mod cache;
 mod channel;
@@ -51,29 +47,6 @@ pub enum MsgProxy {
     ConfigUpdate(()),
 }
 
-fn get_non_blocking_writer(config: &Config) -> (NonBlocking, WorkerGuard) {
-    // If a path is provided, create a file appender
-    if let Some(path) = config.logging.path.clone() {
-        let appender = match config.logging.rotation {
-            config::LogRotation::Daily => Rotation::DAILY,
-            config::LogRotation::Hourly => Rotation::HOURLY,
-            config::LogRotation::Minutely => Rotation::MINUTELY,
-            config::LogRotation::Never => Rotation::NEVER,
-        };
-
-        let file_appender = RollingFileAppender::builder()
-            .rotation(appender) // rotate log files once every hour
-            .filename_prefix("proksi") // log file names will be prefixed with `myapp.`
-            .filename_suffix("log") // log file names will be suffixed with `.log`
-            .build(path) // try to build an appender that stores log files in `/var/log`
-            .expect("initializing rolling file appender failed");
-        return tracing_appender::non_blocking(file_appender);
-    }
-
-    // otherwise, create a stdout appender (default)
-    tracing_appender::non_blocking(std::io::stdout())
-}
-
 #[deny(
     clippy::all,
     clippy::pedantic,
@@ -91,26 +64,18 @@ fn main() -> Result<(), anyhow::Error> {
         load("/etc/proksi/configs").map_err(|e| anyhow!("Failed to load configuration: {}", e))?,
     );
 
+    // Logging channel
+    let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+
     // Receiver channel for Routes/Certificates/etc
     let (sender, mut _receiver) = tokio::sync::broadcast::channel::<MsgProxy>(10);
-    let (appender, _guard) = get_non_blocking_writer(&proxy_config);
-
-    let cfg = proxy_config.clone();
-    let appender = appender.with_filter(move |meta| {
-        // Disable all logging if it's not enabled in the config
-        if !cfg.logging.enabled {
-            return false;
-        }
-        if !cfg.logging.access_logs_enabled && meta.fields().field("access_log").is_some() {
-            return false;
-        }
-
-        if !cfg.logging.error_logs_enabled && meta.level() == &tracing::Level::ERROR {
-            return false;
-        }
-
-        true
-    });
+    // let (appender, _guard) = get_non_blocking_writer(&proxy_config);
+    let appender = services::logger::ProxyLog::new(
+        log_sender,
+        proxy_config.logging.enabled,
+        proxy_config.logging.access_logs_enabled,
+        proxy_config.logging.error_logs_enabled,
+    );
 
     // Creates a tracing/logging subscriber based on the configuration provided
     if proxy_config.logging.format == LogFormat::Json {
@@ -180,7 +145,11 @@ fn main() -> Result<(), anyhow::Error> {
     // prometheus_service_http.add_tcp("0.0.0.0:9090");
     // pingora_server.add_service(prometheus_service_http);
 
+    // Non-dedicated background services
     pingora_server.add_service(BackgroundFunctionService::new(proxy_config.clone(), sender));
+
+    // Dedicated logger service
+    pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver, proxy_config.clone()));
 
     // Listen on HTTP and HTTPS ports
     pingora_server.add_service(http_public_service);

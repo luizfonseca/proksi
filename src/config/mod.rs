@@ -374,7 +374,7 @@ impl From<&LogLevel> for tracing::level_filters::LevelFilter {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, Eq, PartialEq)]
 pub enum LogRotation {
     #[default]
     Never,
