@@ -5,4 +5,4 @@ allow-unwrap-in-tests = true
 cognitive-complexity-threshold = 15
 excessive-nesting-threshold = 8
 max-fn-params-bools = 2
-msrv = "1.78.0"
+msrv = "1.79.0"

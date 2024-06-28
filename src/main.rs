@@ -1,5 +1,5 @@
 use ::pingora::server::Server;
-use anyhow::anyhow;
+
 use bytes::Bytes;
 use clap::crate_version;
 use config::{load, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
@@ -60,9 +60,8 @@ fn main() -> Result<(), anyhow::Error> {
     // Configuration can be refreshed on file change
 
     // Loads configuration from command-line, YAML or TOML sources
-    let proxy_config = Arc::new(
-        load("/etc/proksi/configs").map_err(|e| anyhow!("Failed to load configuration: {}", e))?,
-    );
+    let proxy_config =
+        Arc::new(load("/etc/proksi/configs").expect("Failed to load configuration: "));
 
     // Logging channel
     let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();

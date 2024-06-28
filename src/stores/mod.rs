@@ -66,14 +66,22 @@ pub fn insert_certificate(key: String, value: Certificate) {
 static CACHE_ROUTING_STORE: Lazy<Arc<cache::PathCacheStorage>> =
     Lazy::new(|| Arc::new(DashMap::new()));
 
+/// Retrieves the cache routing from the store
 pub fn get_cache_routing_by_key(key: &str) -> Option<mapref::one::Ref<'static, String, String>> {
     CACHE_ROUTING_STORE.get(key)
 }
 
-// pub fn get_cache_routings() -> Guard<Arc<cache::CacheStore>> {
-//     CACHE_ROUTING_STORE.load()
-// }
+/// Insert given cache routing into the store if it does not exist
+pub fn insert_cache_routing(key: &str, new_value: String, should_override: bool) {
+    if let Some(_) = CACHE_ROUTING_STORE.get(key) {
+        if should_override {
+            CACHE_ROUTING_STORE.insert(key.to_string(), new_value);
 
-pub fn insert_cache_routing(key: &str, new_value: String) {
+            return;
+        }
+
+        return;
+    }
+
     CACHE_ROUTING_STORE.insert(key.to_string(), new_value);
 }

@@ -51,8 +51,12 @@ fn read_hcl_file(args: FuncArgs) -> Result<Value, String> {
             path.to_string_lossy()
         ));
     }
+    // convert ath to absolute path
+    let Ok(path) = std::path::absolute(path) else {
+        return Err(format!("file not found: {}", path.to_string_lossy()));
+    };
 
-    let Ok(mut file) = std::fs::File::open(path) else {
+    let Ok(mut file) = std::fs::File::open(&path) else {
         return Err(format!("file not found: {}", path.to_string_lossy()));
     };
 

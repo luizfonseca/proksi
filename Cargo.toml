@@ -24,7 +24,7 @@ exclude = [
   ".github/",
 ]
 authors = ["The Proksi Contributors <toaster.chicory-0b@icloud.com>"]
-rust-version = "1.78.0"
+rust-version = "1.79.0"
 readme = "README.md"
 homepage = "https://github.com/luizfonseca/proksi"
 repository = "https://github.com/luizfonseca/proksi"

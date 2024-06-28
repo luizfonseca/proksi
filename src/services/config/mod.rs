@@ -1,4 +1,8 @@
-use std::{os::unix::process::CommandExt, path::PathBuf, sync::Arc};
+use std::{
+    os::unix::process::CommandExt,
+    path::{self, PathBuf},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use notify::{EventHandler, Watcher};
@@ -22,21 +26,19 @@ impl FileWatcherService {
     /// If the file or directory does not exist, it will be ignored
     pub fn watch_file_or_dir(watcher: &mut notify::poll::PollWatcher, path: &std::path::Path) {
         // if the path is not absolute, make it absolute
-        let path = if path.is_absolute() {
-            path.to_path_buf()
-        } else if let Ok(cwd) = std::env::current_dir() {
-            cwd.join(path)
-        } else {
-            tracing::error!("could not get current directory, auto_reload will not work");
-            path.to_path_buf()
+        let Ok(absolute_path) = path::absolute(path) else {
+            tracing::error!("could not get absolute path, auto_reload will not work");
+            return;
         };
 
-        if path.exists() {
+        tracing::info!("auto_reload path: {:?}", absolute_path);
+
+        if absolute_path.exists() {
             watcher
-                .watch(&path, notify::RecursiveMode::Recursive)
+                .watch(&absolute_path, notify::RecursiveMode::Recursive)
                 .unwrap();
         } else {
-            tracing::warn!("file or directory does not exist: {:?}", path);
+            tracing::debug!("file or directory does not exist: {:?}", absolute_path);
         }
     }
 }

@@ -1,4 +1,9 @@
-use std::{fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    fs::create_dir_all,
+    path::{self, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use acme_v2::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
 use anyhow::anyhow;
@@ -158,7 +163,13 @@ impl LetsencryptService {
             _ => "staging",
         };
 
-        self.config.paths.lets_encrypt.join(suffix)
+        let path = self.config.paths.lets_encrypt.join(suffix);
+
+        if let Ok(res) = path::absolute(&path) {
+            return res;
+        }
+
+        path
     }
 
     /// Create a new order for a domain (HTTP-01 challenge)

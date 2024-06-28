@@ -132,7 +132,11 @@ impl ProxyHttp for Router {
             if cache.enabled.unwrap_or(false) {
                 let storage = get_cache_storage(&cache.cache_type);
 
-                stores::insert_cache_routing(&ctx.host, cache.path.to_string_lossy().to_string());
+                stores::insert_cache_routing(
+                    &ctx.host,
+                    cache.path.to_string_lossy().to_string(),
+                    false,
+                );
                 session
                     .cache
                     .enable(storage, None, None, Some(&*CACHE_LOCK));
