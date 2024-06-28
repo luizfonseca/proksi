@@ -2,7 +2,7 @@ use std::{
     io,
     pin::Pin,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicI64, Ordering},
         Arc,
     },
     task::{Context, Poll},
@@ -107,7 +107,7 @@ impl<'a> MakeWriter<'a> for ProxyLog {
     }
 }
 
-/// Common ENUM that implements the AsyncWrite trait
+/// Common ENUM that implements the `AsyncWrite` trait
 pub enum LogWriter {
     Stdout(tokio::io::Stdout),
     File(tokio::fs::File),
@@ -152,7 +152,7 @@ pub struct ProxyLoggerReceiver {
 }
 
 pub struct Inner {
-    next_date: AtomicUsize,
+    next_date: AtomicI64,
 }
 
 impl ProxyLoggerReceiver {
@@ -166,16 +166,17 @@ impl ProxyLoggerReceiver {
             ),
             suffix: String::new(),
             state: Inner {
-                next_date: AtomicUsize::new(0),
+                next_date: AtomicI64::new(0),
             },
             rotation: Rotation(LogRotation::Never),
         }
     }
 
     async fn file_buf_writer(&mut self, date: time::OffsetDateTime) {
-        self.suffix = match self.rotation {
-            Rotation::NEVER => "".to_string(),
-            _ => format!(".{}", date.format(&self.rotation.date_format()).unwrap()),
+        self.suffix = if self.rotation == Rotation::NEVER {
+            String::new()
+        } else {
+            format!(".{}", date.format(&self.rotation.date_format()).unwrap())
         };
 
         let path = &self.config.logging.path.as_ref().unwrap();
@@ -191,7 +192,7 @@ impl ProxyLoggerReceiver {
         if let Some(next_date) = self.rotation.next_date(&date) {
             self.state
                 .next_date
-                .swap(next_date.unix_timestamp() as usize, Ordering::Relaxed);
+                .swap(next_date.unix_timestamp(), Ordering::Relaxed);
         }
     }
 
@@ -206,19 +207,18 @@ impl ProxyLoggerReceiver {
         }
 
         // Default is stdout, do nothing
-        return;
     }
 
     /// If this method returns `Some`, we should roll to a new log file.
     /// Otherwise, if this returns we should not rotate the log file.
-    fn should_rollover(&self, date: time::OffsetDateTime) -> Option<usize> {
+    fn should_rollover(&self, date: time::OffsetDateTime) -> Option<i64> {
         let next_date = self.state.next_date.load(Ordering::Acquire);
         // if the next date is 0, this appender *never* rotates log files.
         if next_date == 0 {
             return None;
         }
 
-        if date.unix_timestamp() as usize >= next_date {
+        if date.unix_timestamp() >= next_date {
             return Some(next_date);
         }
 
@@ -231,7 +231,7 @@ impl ProxyLoggerReceiver {
         }
 
         if let Some(next_date) = self.should_rollover(time::OffsetDateTime::now_utc()) {
-            let date = time::OffsetDateTime::from_unix_timestamp(next_date as i64).unwrap();
+            let date = time::OffsetDateTime::from_unix_timestamp(next_date).unwrap();
             self.bufwriter.flush().await.ok();
             self.file_buf_writer(date).await;
         }
@@ -245,7 +245,7 @@ impl Service for ProxyLoggerReceiver {
         self.prepare_buf_writer().await;
 
         while let Some(buf) = self.receiver.recv().await {
-            self.bufwriter.write(&buf).await.unwrap();
+            let _ = self.bufwriter.write(&buf).await.unwrap();
 
             self.handle_log_rotation().await;
         }

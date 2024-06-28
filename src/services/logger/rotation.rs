@@ -59,7 +59,7 @@ impl Rotation {
             }
             Rotation::HOURLY => time::format_description::parse("[year]-[month]-[day]-[hour]"),
             Rotation::DAILY => time::format_description::parse("[year]-[month]-[day]"),
-            Rotation::NEVER => time::format_description::parse("[year]-[month]-[day]"),
+            Rotation::NEVER => Result::Ok(vec![]),
         }
         .expect("Unable to create a formatter; this is a bug")
     }

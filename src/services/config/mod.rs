@@ -24,13 +24,11 @@ impl FileWatcherService {
         // if the path is not absolute, make it absolute
         let path = if path.is_absolute() {
             path.to_path_buf()
+        } else if let Ok(cwd) = std::env::current_dir() {
+            cwd.join(path)
         } else {
-            if let Ok(cwd) = std::env::current_dir() {
-                cwd.join(path)
-            } else {
-                tracing::error!("could not get current directory, auto_reload will not work");
-                path.to_path_buf()
-            }
+            tracing::error!("could not get current directory, auto_reload will not work");
+            path.to_path_buf()
         };
 
         if path.exists() {
@@ -74,14 +72,14 @@ impl EventHandler for FileWatcherServiceHandler {
         // restart the process
         std::process::Command::new(cmd).args(current_args).exec();
 
+        tracing::warn!("restarting Proksi server");
+
         // kill existing process
         nix::sys::signal::kill(
             nix::unistd::Pid::from_raw(current_pid.try_into().unwrap()),
             nix::sys::signal::Signal::SIGQUIT,
         )
         .unwrap();
-
-        tracing::warn!("restarting server");
     }
 }
 
