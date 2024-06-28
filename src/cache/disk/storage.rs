@@ -83,7 +83,8 @@ impl Storage for DiskCache {
 
         if let Some(data) = DISK_MEMORY_CACHE.get(&memcache_key) {
             let (meta, body) = data.value();
-            tracing::debug!("found cache for {key:?} in memory");
+            tracing::debug!("found cache for {key:?} in memory {}", body.len());
+
             return Ok(Some((
                 CacheMeta::new(
                     meta.fresh_until,

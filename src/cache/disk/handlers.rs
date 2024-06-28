@@ -1,11 +1,12 @@
 use std::{
     any::Any,
-    io::{BufReader, Read},
+    io::Read,
     path::{Path, PathBuf},
 };
 
 use async_trait::async_trait;
 
+// use bytes::BufMut;
 use pingora_cache::{
     key::CacheHashKey,
     storage::{HandleHit, HandleMiss},
@@ -22,7 +23,7 @@ use crate::cache::disk::storage::DISK_MEMORY_CACHE;
 use super::meta::DiskCacheItemMetadata;
 
 pub struct DiskCacheHitHandler {
-    target: BufReader<std::fs::File>,
+    target: std::io::BufReader<std::fs::File>,
     path: PathBuf,
 
     meta: DiskCacheItemMetadata,
@@ -32,7 +33,7 @@ pub struct DiskCacheHitHandler {
 /// HIT handler for the cache
 impl DiskCacheHitHandler {
     pub fn new(
-        target: BufReader<std::fs::File>,
+        target: std::io::BufReader<std::fs::File>,
         path: PathBuf,
 
         meta: DiskCacheItemMetadata,
@@ -79,11 +80,13 @@ impl HandleHit for DiskCacheHitHandler {
         _: &SpanHandle,
     ) -> Result<()> {
         // Skiping if the data is already in the cache
-        if DISK_MEMORY_CACHE.contains_key(&cache_key.primary()) {
-            tracing::debug!("skipping write, cache already contains data for {cache_key:?}");
-
-            return Ok(());
+        if let Some(existing) = DISK_MEMORY_CACHE.get(&cache_key.primary()) {
+            if existing.1.len() == self.finished_buffer.len() {
+                tracing::debug!("skipping write, cache already contains data for {cache_key:?}");
+                return Ok(());
+            }
         }
+        tracing::debug!("writing to memory cache: {:?}", cache_key.primary());
 
         DISK_MEMORY_CACHE.insert(
             cache_key.primary(),
