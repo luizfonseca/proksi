@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.1](https://github.com/luizfonseca/proksi/compare/v0.4.0...v0.4.1) (2024-06-28)
+
+
+### Bug Fixes
+
+* auto_reload spawns a service before closing current ([ed89d9b](https://github.com/luizfonseca/proksi/commit/ed89d9b429d035bdc5751cbf0187ca1567f3334b))
+* check if saved disk matches memory ([4a3f33e](https://github.com/luizfonseca/proksi/commit/4a3f33ee8c90dcdc1709b2cc093a215ae6b01c56))
+* disable logging skips all logging ([e107bb1](https://github.com/luizfonseca/proksi/commit/e107bb187e506e27b1b9da950ca9cb4212dee171))
+* use a pingora-compatible rolling logger service ([e4ca77c](https://github.com/luizfonseca/proksi/commit/e4ca77c6bd0f0073f3eee8c84e3fd185b40cff8e))
+
 ## [0.4.0](https://github.com/luizfonseca/proksi/compare/v0.3.31...v0.4.0) (2024-06-27)
 
 
