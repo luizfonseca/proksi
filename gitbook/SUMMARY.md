@@ -19,6 +19,7 @@
 * [ENV](configuration/environment-variables.md)
 * [Logging](configuration/logging.md)
 * [Auto Reload](configuration/auto-reload.md)
+* [Daemon](configuration/daemon.md)
 
 ## 🔀 Routing
 
