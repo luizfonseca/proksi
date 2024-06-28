@@ -141,7 +141,6 @@ impl tokio::io::AsyncWrite for LogWriter {
 }
 
 /// A background service that receives logs from the main thread and writes them to stdout
-/// TODO: implement log rotation/write to disk (or use an existing lightweight crate)
 pub struct ProxyLoggerReceiver {
     receiver: UnboundedReceiver<Vec<u8>>,
     config: Arc<Config>,
@@ -151,6 +150,7 @@ pub struct ProxyLoggerReceiver {
     rotation: Rotation,
 }
 
+// Inner state for the LoggerReceiver
 pub struct Inner {
     next_date: AtomicI64,
 }
@@ -172,20 +172,32 @@ impl ProxyLoggerReceiver {
         }
     }
 
+    /// Based on the defined rotation strategy, create a new file for the logs
+    /// and set the suffix for the file name
+    /// If the rotation strategy is `NEVER`, the suffix is empty
+    /// If the rotation strategy is `DAILY`, the suffix is the date in the format defined in the config
+    /// The state of the rotation is updated with the next date to rotate
     async fn file_buf_writer(&mut self, date: time::OffsetDateTime) {
         self.suffix = if self.rotation == Rotation::NEVER {
             String::new()
         } else {
-            format!(".{}", date.format(&self.rotation.date_format()).unwrap())
+            format!(
+                ".{}",
+                date.format(&self.rotation.date_format())
+                    .expect("Invalid date format returned from rotation; it's a bug")
+            )
         };
 
+        let mut op = tokio::fs::OpenOptions::new();
+        let open_options = op.create(true).append(true);
         let path = &self.config.logging.path.as_ref().unwrap();
-        let file = tokio::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
+        let Ok(file) = open_options
             .open(path.join(format!("proksi{}.log", self.suffix)))
             .await
-            .unwrap();
+        else {
+            tracing::error!("Failed to open log file");
+            return;
+        };
 
         self.bufwriter = Self::new_buf_writer(LogWriter::File(file));
 
@@ -196,10 +208,12 @@ impl ProxyLoggerReceiver {
         }
     }
 
+    /// Creates a new `BufWriter` with a buffer size of 1024 bytes
     fn new_buf_writer(writer: LogWriter) -> tokio::io::BufWriter<LogWriter> {
         tokio::io::BufWriter::with_capacity(1024, writer)
     }
 
+    /// Prepares the `BufWriter` for the next log file
     async fn prepare_buf_writer(&mut self) {
         if self.config.logging.path.is_some() {
             self.rotation = Rotation(self.config.logging.clone().rotation);
@@ -225,11 +239,14 @@ impl ProxyLoggerReceiver {
         None
     }
 
+    /// Handles log rotation if the rotation strategy is not `NEVER`
+    /// Also flushes the buffer writer and creates a new file if the rollover date is reached
     async fn handle_log_rotation(&mut self) {
         if self.rotation == Rotation::NEVER {
             return;
         }
 
+        // If the rotation strategy is `NEVER`, the suffix is empty
         if let Some(next_date) = self.should_rollover(time::OffsetDateTime::now_utc()) {
             let date = time::OffsetDateTime::from_unix_timestamp(next_date).unwrap();
             self.bufwriter.flush().await.ok();
