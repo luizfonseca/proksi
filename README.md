@@ -21,7 +21,6 @@ Proksi is a simple, lightweight, and easy-to-use proxy server that automatically
 3. Add the following content to the file:
 
 ```hcl
-#
 lets_encrypt {
   enabled = true
   email = "my@email.com"
