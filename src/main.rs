@@ -97,6 +97,10 @@ fn main() -> Result<(), anyhow::Error> {
 
     let cfg = proxy_config.clone();
     let appender = appender.with_filter(move |meta| {
+        // Disable all logging if it's not enabled in the config
+        if !cfg.logging.enabled {
+            return false;
+        }
         if !cfg.logging.access_logs_enabled && meta.fields().field("access_log").is_some() {
             return false;
         }
