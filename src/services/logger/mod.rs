@@ -190,7 +190,7 @@ impl ProxyLoggerReceiver {
 
         let mut op = tokio::fs::OpenOptions::new();
         let open_options = op.create(true).append(true);
-        let Ok(path) = std::path::absolute(&self.config.logging.path.as_ref().unwrap()) else {
+        let Ok(path) = std::path::absolute(self.config.logging.path.as_ref().unwrap()) else {
             tracing::error!("Failed to get absolute path for log file");
             return;
         };

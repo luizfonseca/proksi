@@ -73,7 +73,7 @@ pub fn get_cache_routing_by_key(key: &str) -> Option<mapref::one::Ref<'static, S
 
 /// Insert given cache routing into the store if it does not exist
 pub fn insert_cache_routing(key: &str, new_value: String, should_override: bool) {
-    if let Some(_) = CACHE_ROUTING_STORE.get(key) {
+    if CACHE_ROUTING_STORE.get(key).is_some() {
         if should_override {
             CACHE_ROUTING_STORE.insert(key.to_string(), new_value);
 
