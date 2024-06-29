@@ -11,7 +11,9 @@ use once_cell::sync::Lazy;
 
 use openssl::base64;
 use pingora::http::{RequestHeader, ResponseHeader};
+use pingora::protocols::Digest;
 use pingora::proxy::{ProxyHttp, Session};
+use pingora::upstreams::peer::Peer;
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 
 use pingora_cache::lock::CacheLock;
@@ -345,6 +347,8 @@ impl ProxyHttp for Router {
             client_ip,
             status_code,
             http_version,
+            reused_connection = ctx.extensions.get("reused").unwrap_or(&String::new()),
+            peer_addr = ctx.extensions.get("peer").unwrap_or(&String::new()),
             request_id = ctx.extensions.get("request_id_header"),
             access_log = true
         );
@@ -432,6 +436,28 @@ impl ProxyHttp for Router {
             cache.stale_if_error_secs,
             resp.clone(),
         )))
+    }
+
+    /// This filter is called when the request just established or reused a connection to the upstream
+    ///
+    /// This filter allows user to log timing and connection related info.
+    async fn connected_to_upstream(
+        &self,
+        _session: &mut Session,
+        reused: bool,
+        peer: &HttpPeer,
+        _fd: std::os::unix::io::RawFd,
+        _digest: Option<&Digest>,
+        ctx: &mut Self::CTX,
+    ) -> pingora::Result<()>
+    where
+        Self::CTX: Send + Sync,
+    {
+        ctx.extensions
+            .insert(Cow::Borrowed("reused"), reused.to_string());
+        ctx.extensions
+            .insert(Cow::Borrowed("peer"), peer.address().to_string());
+        Ok(())
     }
 }
 
