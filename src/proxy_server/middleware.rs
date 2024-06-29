@@ -2,22 +2,21 @@ use std::collections::HashMap;
 
 use pingora::Result;
 
-use crate::{plugins::MiddlewarePlugin, stores::routes::RouteStoreContainer};
+use crate::plugins::MiddlewarePlugin;
 
 /// Executes the request and response plugins
 pub async fn execute_response_plugins(
-    container: &RouteStoreContainer,
     session: &mut pingora::proxy::Session,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) -> Result<()> {
-    for (name, value) in &container.plugins {
+    for (name, value) in ctx.route_container.plugins.clone() {
         match name.as_str() {
             "oauth2" => {
                 use crate::plugins::MiddlewarePlugin;
 
                 if crate::plugins::PLUGINS
                     .oauth2
-                    .response_filter(session, ctx, value)
+                    .response_filter(session, ctx, &value)
                     .await
                     .is_ok_and(|v| v)
                 {
@@ -75,12 +74,11 @@ pub async fn execute_request_plugins(
 
 /// Executes the upstream request plugins
 pub async fn execute_upstream_request_plugins(
-    container: &crate::stores::routes::RouteStoreContainer,
     session: &mut pingora::proxy::Session,
     upstream_request: &mut pingora::http::RequestHeader,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) -> Result<()> {
-    for name in container.plugins.keys() {
+    for name in ctx.route_container.plugins.clone().keys() {
         match name.as_str() {
             "request_id" => {
                 crate::plugins::PLUGINS
@@ -98,12 +96,11 @@ pub async fn execute_upstream_request_plugins(
 
 /// Executes the upstream response plugins
 pub fn execute_upstream_response_plugins(
-    container: &crate::stores::routes::RouteStoreContainer,
     session: &mut pingora::proxy::Session,
     upstream_response: &mut pingora::http::ResponseHeader,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) {
-    for name in container.plugins.keys() {
+    for name in ctx.route_container.plugins.clone().keys() {
         match name.as_str() {
             "request_id" => {
                 crate::plugins::PLUGINS

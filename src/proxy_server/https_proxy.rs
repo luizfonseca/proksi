@@ -1,11 +1,10 @@
 use std::net::ToSocketAddrs;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use std::{borrow::Cow, collections::HashMap};
 
 use async_trait::async_trait;
 
-use dashmap::mapref;
 use http::uri::PathAndQuery;
 use http::{HeaderName, HeaderValue, Uri};
 use once_cell::sync::Lazy;
@@ -40,11 +39,11 @@ static CACHE_LOCK: Lazy<CacheLock> = Lazy::new(|| CacheLock::new(Duration::from_
 /// Load balancer proxy struct
 pub struct Router {}
 
-type Container = mapref::one::Ref<'static, String, RouteStoreContainer>;
+// type Container = mapref::one::Ref<'static, String, RouteStoreContainer>;
 
-fn process_route(ctx: &RouterContext) -> Arc<Container> {
-    ctx.route_container.as_ref().unwrap().clone()
-}
+// fn process_route(ctx: &RouterContext) -> RouteStoreContainer {
+//     ctx.route_container.clone()
+// }
 
 fn get_cache_storage(cache_type: &RouteCacheType) -> &'static (dyn pingora_cache::Storage + Sync) {
     match cache_type {
@@ -55,7 +54,7 @@ fn get_cache_storage(cache_type: &RouteCacheType) -> &'static (dyn pingora_cache
 
 pub struct RouterContext {
     pub host: String,
-    pub route_container: Option<Arc<mapref::one::Ref<'static, String, RouteStoreContainer>>>,
+    pub route_container: RouteStoreContainer,
     pub upstream: RouteUpstream,
     pub extensions: HashMap<Cow<'static, str>, String>,
 
@@ -75,7 +74,7 @@ impl ProxyHttp for Router {
     fn new_ctx(&self) -> Self::CTX {
         RouterContext {
             host: String::new(),
-            route_container: None,
+            route_container: RouteStoreContainer::default(),
             upstream: RouteUpstream::default(),
             extensions: HashMap::with_capacity(2),
 
@@ -105,12 +104,10 @@ impl ProxyHttp for Router {
             return Ok(true);
         };
 
-        let arced = Arc::new(route_container);
-
         // Match request pattern based on the URI
         let uri = get_uri(session);
 
-        match &arced.path_matcher.pattern {
+        match &route_container.path_matcher.pattern {
             Some(pattern) if pattern.find(uri.path()).is_none() => {
                 session.respond_error(404).await;
                 return Ok(true);
@@ -118,17 +115,15 @@ impl ProxyHttp for Router {
             _ => {}
         }
 
-        ctx.route_container = Some(Arc::clone(&arced));
-
         // Middleware phase: request_filterx
         // We are checking to see if the request has already been handled
         // by the plugins i.e. (ok(true))
-        if let Ok(true) = execute_request_plugins(session, ctx, &arced.plugins).await {
+        if let Ok(true) = execute_request_plugins(session, ctx, &route_container.plugins).await {
             return Ok(true);
         }
 
-        if arced.cache.is_some() {
-            let cache = arced.cache.as_ref().unwrap();
+        if route_container.cache.is_some() {
+            let cache = route_container.cache.as_ref().unwrap();
             if cache.enabled.unwrap_or(false) {
                 let storage = get_cache_storage(&cache.cache_type);
 
@@ -143,6 +138,8 @@ impl ProxyHttp for Router {
             }
         }
 
+        ctx.route_container = route_container.clone();
+
         Ok(false)
     }
 
@@ -156,13 +153,13 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
         // If there's no host matching, returns a 404
-        let route_container = process_route(ctx);
+        let route_container = &ctx.route_container;
 
         if session.cache.enabled() {
             session.cache.set_max_file_size_bytes(100 * 1024 * 1024);
         }
 
-        let Some(healthy_upstream) = route_container.load_balancer.select(b"", 128) else {
+        let Some(healthy_upstream) = route_container.load_balancer.select(b"", 32) else {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
 
@@ -204,7 +201,7 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
         // If there's no host matching, returns a 404
-        let route_container = process_route(ctx);
+        let route_container = &ctx.route_container;
 
         for (name, value) in &route_container.host_header_add {
             upstream_response.insert_header(name, value)?;
@@ -232,7 +229,7 @@ impl ProxyHttp for Router {
         }
 
         // Middleware phase: response_filterx
-        execute_response_plugins(&route_container, session, ctx).await?;
+        execute_response_plugins(session, ctx).await?;
 
         Ok(())
     }
@@ -248,7 +245,7 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
         // If there's no host matching, returns a 404
-        let route_container = process_route(ctx);
+        // let route_container = &ctx.route_container;
 
         let upstream = &ctx.upstream;
 
@@ -263,7 +260,7 @@ impl ProxyHttp for Router {
             }
         }
 
-        execute_upstream_request_plugins(&route_container, session, upstream_request, ctx)
+        execute_upstream_request_plugins(session, upstream_request, ctx)
             .await
             .ok();
 
@@ -284,9 +281,9 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) {
         // If there's no host matching, returns a 404
-        let route_container = process_route(ctx);
+        // let route_container = process_route(ctx);
 
-        execute_upstream_response_plugins(&route_container, session, upstream_response, ctx);
+        execute_upstream_response_plugins(session, upstream_response, ctx);
 
         //
     }
@@ -414,7 +411,7 @@ impl ProxyHttp for Router {
         resp: &ResponseHeader,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<RespCacheable> {
-        let container = process_route(ctx);
+        let container = &ctx.route_container;
         let Some(cache) = container.cache.as_ref() else {
             return Ok(RespCacheable::Uncacheable(NoCacheReason::NeverEnabled));
         };
