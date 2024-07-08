@@ -70,7 +70,7 @@ pingora = { version = "0.2.0", features = ["lb", "openssl", "proxy", "cache"] }
 pingora-cache = "0.2.0"
 prometheus = "0.13.4"
 reqwest = { version = "0.12.5", features = ["json"] }
-serde = "1.0.203"
+serde = "1.0.204"
 serde_json = "1.0.119"
 short-crypt = "1.0.28"
 time = "0.3.36"
