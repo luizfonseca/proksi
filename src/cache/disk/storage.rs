@@ -8,7 +8,7 @@ use once_cell::sync::Lazy;
 use pingora_cache::{
     key::{CacheHashKey, CompactCacheKey},
     trace::SpanHandle,
-    CacheKey, CacheMeta, HitHandler, MissHandler, Storage,
+    CacheKey, CacheMeta, HitHandler, MissHandler, PurgeType, Storage,
 };
 
 use pingora::Result;
@@ -164,7 +164,12 @@ impl Storage for DiskCache {
     /// Delete the cached asset for the given key
     ///
     /// [CompactCacheKey] is used here because it is how eviction managers store the keys
-    async fn purge(&'static self, key: &CompactCacheKey, _: &SpanHandle) -> Result<bool> {
+    async fn purge(
+        &'static self,
+        key: &CompactCacheKey,
+        _type: PurgeType,
+        _: &SpanHandle,
+    ) -> Result<bool> {
         tracing::info!("purging cache for {key:?}");
         Ok(true)
     }

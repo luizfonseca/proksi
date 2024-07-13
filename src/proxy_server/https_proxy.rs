@@ -102,7 +102,7 @@ impl ProxyHttp for Router {
 
         // If there's no host matching, returns a 404
         let Some(route_container) = stores::get_route_by_key(host_without_port) else {
-            session.respond_error(404).await;
+            session.respond_error(404).await?;
             return Ok(true);
         };
 
@@ -111,7 +111,7 @@ impl ProxyHttp for Router {
 
         match &route_container.path_matcher.pattern {
             Some(pattern) if pattern.find(uri.path()).is_none() => {
-                session.respond_error(404).await;
+                session.respond_error(404).await?;
                 return Ok(true);
             }
             _ => {}
@@ -393,9 +393,9 @@ impl ProxyHttp for Router {
     // flex purge, other filtering, returns whether asset is should be force expired or not
     async fn cache_hit_filter(
         &self,
+        _session: &Session,
         meta: &CacheMeta,
         ctx: &mut Self::CTX,
-        _req: &RequestHeader,
     ) -> pingora::Result<bool> {
         if !meta.is_fresh(SystemTime::now()) {
             ctx.extensions

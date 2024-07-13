@@ -91,7 +91,9 @@ impl Oauth2 {
         )?;
 
         // Store the current path in the state
-        session.write_response_header(Box::new(res_headers)).await?;
+        session
+            .write_response_header(Box::new(res_headers), true)
+            .await?;
 
         // Finish the request, we don't want to continue processing
         // and the user has been redirected
@@ -103,7 +105,9 @@ impl Oauth2 {
         let res_headers = ResponseHeader::build_no_case(StatusCode::UNAUTHORIZED, Some(1))?;
 
         // Store the current path in the stat
-        session.write_response_header(Box::new(res_headers)).await?;
+        session
+            .write_response_header(Box::new(res_headers), true)
+            .await?;
 
         // Finish the request, we don't want to continue processing
         // and the user has been redirected
@@ -291,7 +295,9 @@ impl MiddlewarePlugin for Oauth2 {
                 "no-store, no-cache, must-revalidate, max-age=0",
             )?;
 
-            session.write_response_header(Box::new(res_headers)).await?;
+            session
+                .write_response_header(Box::new(res_headers), true)
+                .await?;
 
             return Ok(true);
         }

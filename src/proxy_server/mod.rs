@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use pingora::{
-    protocols::ALPN,
-    upstreams::peer::{PeerOptions, TcpKeepalive},
+    protocols::{TcpKeepalive, ALPN},
+    upstreams::peer::PeerOptions,
 };
 
 pub mod cert_store;
@@ -12,6 +12,8 @@ pub mod middleware;
 
 /// Default peer options to be used on every upstream connection
 const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
+    dscp: None,
+    tcp_fast_open: true,
     verify_hostname: true,
     read_timeout: Some(Duration::from_secs(360)),
     connection_timeout: Some(Duration::from_secs(10)),

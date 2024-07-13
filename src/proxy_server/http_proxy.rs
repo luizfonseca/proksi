@@ -40,8 +40,10 @@ impl ProxyHttp for HttpLB {
             res_headers.append_header(CONTENT_TYPE, "text/plain")?;
             res_headers.append_header(CONTENT_LENGTH, sample_body.len())?;
 
-            session.write_response_header(Box::new(res_headers)).await?;
-            session.write_response_body(sample_body).await?;
+            session
+                .write_response_header(Box::new(res_headers), false)
+                .await?;
+            session.write_response_body(Some(sample_body), true).await?;
             return Ok(true);
         }
 
@@ -73,8 +75,10 @@ impl ProxyHttp for HttpLB {
             res_headers.append_header(CONTENT_TYPE, "text/plain")?;
             res_headers.append_header(CONTENT_LENGTH, sample_body.len())?;
 
-            session.write_response_header(Box::new(res_headers)).await?;
-            session.write_response_body(sample_body).await?;
+            session
+                .write_response_header(Box::new(res_headers), false)
+                .await?;
+            session.write_response_body(Some(sample_body), true).await?;
 
             return Ok(true);
         }
@@ -95,9 +99,11 @@ impl ProxyHttp for HttpLB {
         res_headers.append_header(CONTENT_TYPE, "text/plain")?;
         res_headers.append_header(CONTENT_LENGTH, 0)?;
 
-        session.write_response_header(Box::new(res_headers)).await?;
         session
-            .write_response_body(bytes::Bytes::from_static(b""))
+            .write_response_header(Box::new(res_headers), false)
+            .await?;
+        session
+            .write_response_body(Some(bytes::Bytes::from_static(b"")), true)
             .await?;
 
         return Ok(true);

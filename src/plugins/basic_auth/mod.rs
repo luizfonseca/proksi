@@ -63,7 +63,7 @@ impl MiddlewarePlugin for BasicAuth {
 
         let Some((user, pass)) = Self::get_auth_config(config) else {
             session
-                .write_response_header(Self::respond_with_authenticate(&ctx.host)?)
+                .write_response_header(Self::respond_with_authenticate(&ctx.host)?, true)
                 .await?;
             return Ok(true);
         };
@@ -73,7 +73,7 @@ impl MiddlewarePlugin for BasicAuth {
             header.to_str()?
         } else {
             session
-                .write_response_header(Self::respond_with_authenticate(&ctx.host)?)
+                .write_response_header(Self::respond_with_authenticate(&ctx.host)?, true)
                 .await?;
             return Ok(true);
         };
@@ -82,7 +82,7 @@ impl MiddlewarePlugin for BasicAuth {
             || !Self::validate_auth_header(auth_header, &user, &pass)?
         {
             session
-                .write_response_header(Self::respond_with_authenticate(&ctx.host)?)
+                .write_response_header(Self::respond_with_authenticate(&ctx.host)?, true)
                 .await?;
             return Ok(true);
         }
