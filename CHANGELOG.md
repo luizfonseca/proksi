@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.3](https://github.com/luizfonseca/proksi/compare/v0.4.2...v0.4.3) (2024-07-13)
+
+
+### Features
+
+* upgrade to pingora 0.3.0 ([bd5f98f](https://github.com/luizfonseca/proksi/commit/bd5f98fc9c7e3e9d0ab2a25c37830b7eb85033eb))
+
+
+### Miscellaneous Chores
+
+* release marker for 0.4.3 ([9b7a72c](https://github.com/luizfonseca/proksi/commit/9b7a72cc8ae55555e398899e84bcb2c817c09b3a))
+
 ## [0.4.2](https://github.com/luizfonseca/proksi/compare/v0.4.1...v0.4.2) (2024-06-28)
 
 

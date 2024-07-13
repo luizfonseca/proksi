@@ -2422,7 +2422,7 @@ dependencies = [
 
 [[package]]
 name = "proksi"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "TinyUFO",
  "acme-v2",
