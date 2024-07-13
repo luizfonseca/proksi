@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/luizfonseca/proksi/compare/v0.4.3...v0.4.4) (2024-07-13)
+
+
+### Bug Fixes
+
+* use correct debian docker image (with glibc) ([7729e62](https://github.com/luizfonseca/proksi/commit/7729e62b1dff9bcc061f4d0182593fb1e8e4362e))
+
 ## [0.4.3](https://github.com/luizfonseca/proksi/compare/v0.4.2...v0.4.3) (2024-07-13)
 
 
