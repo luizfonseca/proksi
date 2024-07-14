@@ -27,7 +27,7 @@ services:
 
       PROKSI_PATHS__LETS_ENCRYPT: "/etc/proksi/certs"
     image: luizfonseca/proksi:latest
-    network:
+    networks:
       # Any service in the same network will be able to communicate with Proksi
       - web 
     ports:
