@@ -71,7 +71,7 @@ pingora-cache = "0.3.0"
 prometheus = "0.13.4"
 reqwest = { version = "0.12.5", features = ["json"] }
 serde = "1.0.204"
-serde_json = "1.0.120"
+serde_json = "1.0.121"
 short-crypt = "1.0.28"
 time = "0.3.36"
 tokio = { version = "1.39.2", features = ["sync", "rt-multi-thread", "fs"] }
