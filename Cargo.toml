@@ -74,7 +74,7 @@ serde = "1.0.204"
 serde_json = "1.0.120"
 short-crypt = "1.0.28"
 time = "0.3.36"
-tokio = { version = "1.38.1", features = ["sync", "rt-multi-thread", "fs"] }
+tokio = { version = "1.39.2", features = ["sync", "rt-multi-thread", "fs"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["json", "env-filter"] }
 uuid = { version = "1.10.0", features = ["v4"] }
