@@ -12,7 +12,7 @@ pub mod challenges;
 pub mod routes;
 
 // CHALLENGE store
-static CHALLENGE_STORE: Lazy<ChallengeStore> = Lazy::new(|| papaya::HashMap::new());
+static CHALLENGE_STORE: Lazy<ChallengeStore> = Lazy::new(papaya::HashMap::new);
 
 pub fn get_challenge_by_key(key: &str) -> Option<(String, String)> {
     CHALLENGE_STORE.pin().get(key).cloned()
@@ -24,7 +24,7 @@ pub fn insert_challenge(key: String, value: (String, String)) {
 }
 
 // ROUTE store
-static ROUTE_STORE: Lazy<RouteStore> = Lazy::new(|| papaya::HashMap::new());
+static ROUTE_STORE: Lazy<RouteStore> = Lazy::new(papaya::HashMap::new);
 
 pub fn get_route_by_key(key: &str) -> Option<RouteStoreContainer> {
     ROUTE_STORE.pin().get(key).cloned()
@@ -40,7 +40,7 @@ pub fn insert_route(key: String, value: RouteStoreContainer) {
 }
 
 // CERTIFICATE store
-static CERTIFICATE_STORE: Lazy<CertificateStore> = Lazy::new(|| papaya::HashMap::new());
+static CERTIFICATE_STORE: Lazy<CertificateStore> = Lazy::new(papaya::HashMap::new);
 
 pub fn get_certificate_by_key(key: &str) -> Option<Certificate> {
     CERTIFICATE_STORE.pin().get(key).cloned()
@@ -56,7 +56,7 @@ pub fn insert_certificate(key: String, value: Certificate) {
 }
 
 // Cache Routing store
-static CACHE_ROUTING_STORE: Lazy<cache::PathCacheStorage> = Lazy::new(|| papaya::HashMap::new());
+static CACHE_ROUTING_STORE: Lazy<cache::PathCacheStorage> = Lazy::new(papaya::HashMap::new);
 
 /// Retrieves the cache routing from the store
 pub fn get_cache_routing_by_key(key: &str) -> Option<String> {

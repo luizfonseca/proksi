@@ -14,7 +14,7 @@ use pingora::Result;
 
 pub(super) static DISK_MEMORY_CACHE: Lazy<
     papaya::HashMap<String, (DiskCacheItemMetadata, bytes::Bytes)>,
-> = Lazy::new(|| papaya::HashMap::new());
+> = Lazy::new(papaya::HashMap::new);
 
 use crate::{
     cache::disk::{

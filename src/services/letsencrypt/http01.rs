@@ -213,7 +213,7 @@ impl LetsencryptService {
         loop {
             interval.tick().await;
             tracing::debug!("checking for new routes to create certificates for");
-            for (key, value) in stores::get_routes().iter() {
+            for (key, value) in &stores::get_routes() {
                 if stores::get_certificates().contains_key(key) {
                     continue;
                 }
@@ -230,7 +230,7 @@ impl LetsencryptService {
         loop {
             interval.tick().await;
             tracing::debug!("checking for certificates to renew");
-            for (domain, _) in stores::get_routes().iter() {
+            for (domain, _) in &stores::get_routes() {
                 let Ok(Some(cert)) = account.certificate(domain) else {
                     continue;
                 };

@@ -26,7 +26,7 @@ async fn run_health_check_loop() {
     loop {
         interval.tick().await;
 
-        for (host, route_container) in stores::get_routes().into_iter() {
+        for (host, route_container) in &stores::get_routes() {
             tracing::trace!("Running health check for host {}", host);
 
             // clone the route_container
