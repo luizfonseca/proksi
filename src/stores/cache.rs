@@ -1,3 +1,1 @@
-use dashmap::DashMap;
-
-pub type PathCacheStorage = DashMap<String, String>;
+pub type PathCacheStorage = papaya::HashMap<String, String>;

@@ -1,8 +1,7 @@
-use std::{hash::RandomState, sync::Arc};
+use std::hash::RandomState;
 
 use certificates::{Certificate, CertificateStore};
 use challenges::ChallengeStore;
-use dashmap::{mapref, DashMap};
 use once_cell::sync::Lazy;
 use papaya::HashMapRef;
 use routes::{RouteStore, RouteStoreContainer};
@@ -57,19 +56,18 @@ pub fn insert_certificate(key: String, value: Certificate) {
 }
 
 // Cache Routing store
-static CACHE_ROUTING_STORE: Lazy<Arc<cache::PathCacheStorage>> =
-    Lazy::new(|| Arc::new(DashMap::new()));
+static CACHE_ROUTING_STORE: Lazy<cache::PathCacheStorage> = Lazy::new(|| papaya::HashMap::new());
 
 /// Retrieves the cache routing from the store
-pub fn get_cache_routing_by_key(key: &str) -> Option<mapref::one::Ref<'static, String, String>> {
-    CACHE_ROUTING_STORE.get(key)
+pub fn get_cache_routing_by_key(key: &str) -> Option<String> {
+    CACHE_ROUTING_STORE.pin().get(key).cloned()
 }
 
 /// Insert given cache routing into the store if it does not exist
 pub fn insert_cache_routing(key: &str, new_value: String, should_override: bool) {
-    if CACHE_ROUTING_STORE.get(key).is_some() {
+    if CACHE_ROUTING_STORE.pin().get(key).is_some() {
         if should_override {
-            CACHE_ROUTING_STORE.insert(key.to_string(), new_value);
+            CACHE_ROUTING_STORE.pin().insert(key.to_string(), new_value);
 
             return;
         }
@@ -77,5 +75,5 @@ pub fn insert_cache_routing(key: &str, new_value: String, should_override: bool)
         return;
     }
 
-    CACHE_ROUTING_STORE.insert(key.to_string(), new_value);
+    CACHE_ROUTING_STORE.pin().insert(key.to_string(), new_value);
 }

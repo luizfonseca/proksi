@@ -80,7 +80,7 @@ impl HandleHit for DiskCacheHitHandler {
         _: &SpanHandle,
     ) -> Result<()> {
         // Skiping if the data is already in the cache
-        if let Some(existing) = DISK_MEMORY_CACHE.get(&cache_key.primary()) {
+        if let Some(existing) = DISK_MEMORY_CACHE.pin().get(&cache_key.primary()) {
             if existing.1.len() == self.finished_buffer.len() {
                 tracing::debug!("skipping write, cache already contains data for {cache_key:?}");
                 return Ok(());
@@ -88,7 +88,7 @@ impl HandleHit for DiskCacheHitHandler {
         }
         tracing::debug!("writing to memory cache: {:?}", cache_key.primary());
 
-        DISK_MEMORY_CACHE.insert(
+        DISK_MEMORY_CACHE.pin().insert(
             cache_key.primary(),
             (self.meta, self.finished_buffer.freeze()),
         );
