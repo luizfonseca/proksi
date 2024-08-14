@@ -1,3 +1,1 @@
-use dashmap::DashMap;
-
-pub type ChallengeStore = DashMap<String, (String, String)>;
+pub type ChallengeStore = papaya::HashMap<String, (String, String)>;

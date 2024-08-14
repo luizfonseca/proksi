@@ -1,6 +1,5 @@
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
-use dashmap::DashMap;
 use http::{HeaderName, HeaderValue};
 use path_tree::PathTree;
 use pingora::lb::{selection::RoundRobin, LoadBalancer};
@@ -83,7 +82,7 @@ impl RouteStoreContainer {
 
 // LoadBalancer<RoundRobin>
 /// A store for routes that is updated in a background thread
-pub type RouteStore = DashMap<String, RouteStoreContainer>;
+pub type RouteStore = papaya::HashMap<String, RouteStoreContainer>;
 
 #[cfg(test)]
 

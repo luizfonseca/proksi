@@ -2,8 +2,9 @@ use std::{hash::RandomState, sync::Arc};
 
 use certificates::{Certificate, CertificateStore};
 use challenges::ChallengeStore;
-use dashmap::{mapref, DashMap, ReadOnlyView};
+use dashmap::{mapref, DashMap};
 use once_cell::sync::Lazy;
+use papaya::HashMapRef;
 use routes::{RouteStore, RouteStoreContainer};
 
 pub mod cache;
@@ -12,54 +13,47 @@ pub mod challenges;
 pub mod routes;
 
 // CHALLENGE store
-static CHALLENGE_STORE: Lazy<Arc<ChallengeStore>> = Lazy::new(|| Arc::new(DashMap::new()));
+static CHALLENGE_STORE: Lazy<ChallengeStore> = Lazy::new(|| papaya::HashMap::new());
 
-pub fn get_challenge_by_key(
-    key: &str,
-) -> Option<mapref::one::Ref<'static, String, (String, String)>> {
-    CHALLENGE_STORE.get(key)
+pub fn get_challenge_by_key(key: &str) -> Option<(String, String)> {
+    CHALLENGE_STORE.pin().get(key).cloned()
 }
 
 /// Insert given challenge into the store
 pub fn insert_challenge(key: String, value: (String, String)) {
-    CHALLENGE_STORE.insert(key, value);
+    CHALLENGE_STORE.pin().insert(key, value);
 }
 
 // ROUTE store
-static ROUTE_STORE: Lazy<Arc<RouteStore>> = Lazy::new(|| Arc::new(DashMap::new()));
+static ROUTE_STORE: Lazy<RouteStore> = Lazy::new(|| papaya::HashMap::new());
 
-pub fn get_route_by_key(
-    key: &str,
-) -> Option<mapref::one::Ref<'static, String, RouteStoreContainer>> {
-    ROUTE_STORE.get(key)
+pub fn get_route_by_key(key: &str) -> Option<RouteStoreContainer> {
+    ROUTE_STORE.pin().get(key).cloned()
 }
 
-pub fn get_routes() -> ReadOnlyView<String, RouteStoreContainer> {
-    (**ROUTE_STORE).clone().into_read_only()
+pub fn get_routes(
+) -> HashMapRef<'static, String, RouteStoreContainer, RandomState, seize::OwnedGuard<'static>> {
+    ROUTE_STORE.pin_owned()
 }
 
 pub fn insert_route(key: String, value: RouteStoreContainer) {
-    ROUTE_STORE.insert(key, value);
-}
-
-pub fn get_mutable_routes(
-) -> dashmap::iter::IterMut<'static, String, RouteStoreContainer, RandomState, RouteStore> {
-    (*ROUTE_STORE).iter_mut()
+    ROUTE_STORE.pin().insert(key, value);
 }
 
 // CERTIFICATE store
-static CERTIFICATE_STORE: Lazy<Arc<CertificateStore>> = Lazy::new(|| Arc::new(DashMap::new()));
+static CERTIFICATE_STORE: Lazy<CertificateStore> = Lazy::new(|| papaya::HashMap::new());
 
-pub fn get_certificate_by_key(key: &str) -> Option<mapref::one::Ref<'static, String, Certificate>> {
-    CERTIFICATE_STORE.get(key)
+pub fn get_certificate_by_key(key: &str) -> Option<Certificate> {
+    CERTIFICATE_STORE.pin().get(key).cloned()
 }
 
-pub fn get_certificates() -> ReadOnlyView<String, Certificate> {
-    (**CERTIFICATE_STORE).clone().into_read_only()
+pub fn get_certificates(
+) -> HashMapRef<'static, String, Certificate, RandomState, seize::LocalGuard<'static>> {
+    CERTIFICATE_STORE.pin()
 }
 
 pub fn insert_certificate(key: String, value: Certificate) {
-    CERTIFICATE_STORE.insert(key, value);
+    CERTIFICATE_STORE.pin().insert(key, value);
 }
 
 // Cache Routing store

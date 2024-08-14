@@ -47,8 +47,6 @@ impl TlsAccept for CertStore {
             return;
         };
 
-        let cert = cert.value();
-
         ext::ssl_use_private_key(ssl, &cert.key).unwrap();
         ext::ssl_use_certificate(ssl, &cert.leaf).unwrap();
 
