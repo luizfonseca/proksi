@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.5](https://github.com/luizfonseca/proksi/compare/v0.4.4...v0.4.5) (2024-08-14)
+
+
+### Bug Fixes
+
+* remove dashmap usage from cache storage ([d721029](https://github.com/luizfonseca/proksi/commit/d7210296e413ba3bb6eecdb72254c4dfae099c68))
+* replace dashmap with a lockfree alternative for routing ([4013f8e](https://github.com/luizfonseca/proksi/commit/4013f8e79ffefc34e9a5e4706a3ae12cf99322ea))
+
 ## [0.4.4](https://github.com/luizfonseca/proksi/compare/v0.4.3...v0.4.4) (2024-07-13)
 
 
