@@ -70,7 +70,7 @@ path-tree = "0.8.1"
 pingora = { version = "0.3.0", features = ["lb", "openssl", "proxy", "cache"] }
 pingora-cache = "0.3.0"
 prometheus = "0.13.4"
-reqwest = { version = "0.12.5", features = ["json"] }
+reqwest = { version = "0.12.7", features = ["json"] }
 seize = "0.4.5"
 serde = "1.0.208"
 serde_json = "1.0.125"
