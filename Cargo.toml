@@ -54,7 +54,7 @@ clap = { version = "4.5.18", features = ["derive", "cargo"] }
 cookie = { version = "0.18.1", features = ["private"] }
 dashmap = "6.1.0"
 figment = { version = "0.10.19", features = ["yaml", "env"] }
-hcl-rs = "0.18.0"
+hcl-rs = "0.18.1"
 http = "1.1.0"
 itertools = "0.13.0"
 jsonwebtoken = { version = "9.3.0", default-features = false }
