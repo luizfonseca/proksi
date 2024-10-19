@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.8](https://github.com/luizfonseca/proksi/compare/v0.4.7...v0.4.8) (2024-10-19)
+
+
+### Features
+
+* enable lets encrypt renewal check interval to be configured ([c26dd34](https://github.com/luizfonseca/proksi/commit/c26dd34b05f50023cd40e30723e08fe97468ca00))
+
+
+### Miscellaneous Chores
+
+* release marker for 0.4.8 ([a0005e0](https://github.com/luizfonseca/proksi/commit/a0005e041be76f9e38bae316097680559730c53a))
+
 ## [0.4.7](https://github.com/luizfonseca/proksi/compare/v0.4.6...v0.4.7) (2024-10-19)
 
 
