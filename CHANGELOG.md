@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.6](https://github.com/luizfonseca/proksi/compare/v0.4.5...v0.4.6) (2024-10-19)
+
+
+### Bug Fixes
+
+* panic when handling certificate dates that contain space-padded days ([2a0f447](https://github.com/luizfonseca/proksi/commit/2a0f447bf0635761bb701db7cd820fa068c68cde))
+
 ## [0.4.5](https://github.com/luizfonseca/proksi/compare/v0.4.4...v0.4.5) (2024-08-14)
 
 
