@@ -225,7 +225,12 @@ impl LetsencryptService {
 
     /// Check for certificates expiration and renew them if needed
     async fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) {
-        let mut interval = time::interval(Duration::from_secs(84_600));
+        let mut interval = time::interval(Duration::from_secs(
+            self.config
+                .lets_encrypt
+                .renew_interval_secs
+                .unwrap_or(84_600),
+        ));
 
         loop {
             tracing::debug!("checking for certificates to renew");
@@ -242,7 +247,7 @@ impl LetsencryptService {
                     continue;
                 }
 
-                tracing::debug!("trying to renew certificate for domain: {domain}");
+                tracing::info!("trying to renew certificate for domain: {domain}");
                 Self::create_order_for_domain(domain, account)
                     .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
                     .unwrap();

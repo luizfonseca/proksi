@@ -114,6 +114,9 @@ pub struct LetsEncrypt {
 
     /// Use the staging let's encrypt server (default: true)
     pub staging: Option<bool>,
+
+    /// Renewal check interval in seconds (default: 84600 - a day)
+    pub renew_interval_secs: Option<u64>,
 }
 
 impl Default for LetsEncrypt {
@@ -122,6 +125,7 @@ impl Default for LetsEncrypt {
             email: Cow::Borrowed("contact@example.com"),
             enabled: Some(true),
             staging: Some(true),
+            renew_interval_secs: Some(84_600),
         }
     }
 }
@@ -822,6 +826,7 @@ mod tests {
             jail.set_env("PROKSI_DOCKER__ENDPOINT", "http://localhost:2375");
             jail.set_env("PROKSI_LETS_ENCRYPT__STAGING", "false");
             jail.set_env("PROKSI_LETS_ENCRYPT__EMAIL", "my-real-email@domain.com");
+            jail.set_env("PROKSI_LETS_ENCRYPT__RENEW_INTERVAL_SECS", "60");
             jail.set_env(
                 "PROKSI_ROUTES",
                 r#"[{
@@ -848,6 +853,7 @@ mod tests {
 
             assert_eq!(proxy_config.lets_encrypt.staging, Some(false));
             assert_eq!(proxy_config.lets_encrypt.email, "my-real-email@domain.com");
+            assert_eq!(proxy_config.lets_encrypt.renew_interval_secs, Some(60));
 
             assert_eq!(proxy_config.routes[0].host, "changed.example.com");
             assert_eq!(proxy_config.routes[0].upstreams[0].ip, "10.0.1.2/24");
@@ -994,6 +1000,7 @@ mod tests {
             assert_eq!(proxy_config.lets_encrypt.email, "domain@valid.com");
             assert_eq!(proxy_config.lets_encrypt.enabled, Some(true));
             assert_eq!(proxy_config.lets_encrypt.staging, Some(false));
+            assert_eq!(proxy_config.lets_encrypt.renew_interval_secs, Some(84600));
 
             Ok(())
         });
