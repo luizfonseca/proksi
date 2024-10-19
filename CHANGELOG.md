@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.7](https://github.com/luizfonseca/proksi/compare/v0.4.6...v0.4.7) (2024-10-19)
+
+
+### Bug Fixes
+
+* check to renew certificates on server start/restart ([f83bc15](https://github.com/luizfonseca/proksi/commit/f83bc153dbfae0087a03c6278a327444e38366b6))
+
 ## [0.4.6](https://github.com/luizfonseca/proksi/compare/v0.4.5...v0.4.6) (2024-10-19)
 
 
