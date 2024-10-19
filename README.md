@@ -49,6 +49,7 @@ routes = [
 
       headers = {
         add = [{ name = "Host", value = "docs.proksi.info" }]
+      }  
     }]
   }
 ]
