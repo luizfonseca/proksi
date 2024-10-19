@@ -243,6 +243,7 @@ impl LetsencryptService {
                     continue;
                 }
 
+                tracing::debug!("trying to renew certificate for domain: {domain}");
                 Self::create_order_for_domain(domain, account)
                     .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
                     .unwrap();
