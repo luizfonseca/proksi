@@ -228,7 +228,6 @@ impl LetsencryptService {
         let mut interval = time::interval(Duration::from_secs(84_600));
 
         loop {
-            interval.tick().await;
             tracing::debug!("checking for certificates to renew");
             for (domain, _) in &stores::get_routes() {
                 let Ok(Some(cert)) = account.certificate(domain) else {
@@ -248,6 +247,8 @@ impl LetsencryptService {
                     .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
                     .unwrap();
             }
+
+            interval.tick().await;
         }
     }
 
