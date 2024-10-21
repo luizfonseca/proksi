@@ -21,6 +21,7 @@ mod server;
 mod services;
 mod stores;
 mod tools;
+mod wasm;
 
 #[derive(Clone, Default)]
 pub struct MsgRoute {
