@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/luizfonseca/proksi/compare/v0.4.8...v0.5.0) (2024-10-21)
+
+
+### Features
+
+* **wasm-plugins:** wip for enabling plugins from wasm binaries ([9f14755](https://github.com/luizfonseca/proksi/commit/9f147559581a7b272f8f571b81e5914537669128))
+
 ## [0.4.8](https://github.com/luizfonseca/proksi/compare/v0.4.7...v0.4.8) (2024-10-19)
 
 
