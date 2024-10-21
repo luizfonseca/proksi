@@ -14,6 +14,17 @@
 Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in [Rust](https://www.rust-lang.org/) and uses [Pingora](https://github.com/cloudflare/pingora) as its core networking library.
 
 
+# Features
+
+Of the many features Proksi offers is the ability to load balance to your infrastructure or any IP that supports your host configurations. Other features of Proksi also include:
+
+- Automatic Docker and Docker Swarm service discovery through labels
+- Built-in most common middlewares such as OAuth, Rate Limiting, CDN Caching and others
+- The ability of running it as a single binary in your system
+- Automatic SSL through Let's Encrypt and redirection from HTTP to HTTPS
+- Configuration through HCL with support for functions (get environment variables, etc)
+- Many others.
+
 # Quick start
 
 1. Download the latest release from [https://github.com/luizfonseca/proksi/releases](https://github.com/luizfonseca/proksi/releases)
@@ -49,7 +60,7 @@ routes = [
 
       headers = {
         add = [{ name = "Host", value = "docs.proksi.info" }]
-      }  
+      }
     }]
   }
 ]
