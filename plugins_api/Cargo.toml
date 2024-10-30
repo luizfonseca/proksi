@@ -1,5 +1,5 @@
 [package]
-name = "proksi_plugin_api"
+name = "plugins_api"
 description = "Type/WIT bindings for the Proksi plugins API."
 version = "0.1.0"
 edition = "2021"

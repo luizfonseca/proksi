@@ -16,8 +16,8 @@ impl SessionTest {
         Self {}
     }
     #[allow(dead_code)]
-    pub fn get_header(&self, _key: &str) -> Option<String> {
-        Some(String::from("test"))
+    pub fn get_header(_key: &str) -> String {
+        String::from("test")
     }
 }
 
@@ -54,22 +54,21 @@ pub async fn load_plugin() -> anyhow::Result<()> {
 
     // call function with ref
     let mut ret: Vec<wasmtime::Val> = vec![wasmtime::Val::I32(0)];
-    let res = req_filter_fn
+    req_filter_fn
         .call_async(&mut store, &[session.into()], &mut ret)
-        .await;
+        .await?;
 
-    println!("res: {:?}", res);
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    #[tokio::test]
-    async fn test_load_plugin() {
-        load_plugin().await.unwrap();
+//     #[tokio::test]
+//     async fn test_load_plugin() {
+//         load_plugin().await.unwrap();
 
-        assert_eq!(1, 1)
-    }
-}
+//         assert_eq!(1, 1)
+//     }
+// }

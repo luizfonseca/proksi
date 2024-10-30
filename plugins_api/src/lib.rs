@@ -1,3 +1,4 @@
+#[allow(clippy::wildcard_imports)]
 use wit::*;
 
 #[derive(Clone, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
@@ -6,10 +7,12 @@ pub struct Context {}
 #[derive(Clone, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
 pub struct Session {}
 impl Session {
+    #[must_use]
     pub fn get_header(&self, _key: &str) -> Option<&str> {
         unimplemented!()
     }
 
+    #[must_use]
     pub fn req_header() -> Option<bool> {
         unimplemented!()
     }
@@ -17,6 +20,8 @@ impl Session {
 
 pub trait Plugin: Send + Sync {
     fn new_ctx(ctx: String) -> String;
+
+    #[must_use]
     fn on_request_filter(
         _session: Session,
         _ctx: Context,

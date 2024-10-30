@@ -8,5 +8,4 @@
 .vscode/
 /tmp
 docker.README.md
-/proksi
 docker-compose.yml
