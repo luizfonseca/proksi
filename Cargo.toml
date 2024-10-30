@@ -1,5 +1,5 @@
 [workspace]
-members = [ "plugins_api","proxy_server"]
+members = [ "plugin_request_id", "plugins_api","proxy_server"]
 resolver = "2"
 
 [profile.dev]

@@ -1,14 +1,46 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+use wit::*;
+
+#[derive(Clone, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
+pub struct Context {}
+
+#[derive(Clone, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
+pub struct Session {}
+impl Session {
+    pub fn get_header(&self, _key: &str) -> Option<&str> {
+        unimplemented!()
+    }
+
+    pub fn req_header() -> Option<bool> {
+        unimplemented!()
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub trait Plugin: Send + Sync {
+    fn new_ctx(ctx: String) -> String;
+    fn on_request_filter(
+        _session: Session,
+        _ctx: Context,
+    ) -> impl std::future::Future<Output = Result<bool, ()>> {
+        async { Ok(true) }
+    }
+}
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+mod wit {
+    wit_bindgen::generate!({
+      world: "plugin"
+    });
+}
+
+wit::export!(Component);
+
+struct Component;
+
+impl wit::Guest for Component {
+    fn new_ctx(_ctx: String) -> String {
+        String::from("hello")
+    }
+
+    fn on_request_filter(_session: &wit::Session, _ctx: String) -> Result<bool, ()> {
+        Ok(true)
     }
 }

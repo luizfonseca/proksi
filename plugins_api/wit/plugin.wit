@@ -1,0 +1,13 @@
+package proksi:plugin;
+
+world plugin {
+
+
+  resource session {
+    get-header: func(key: string) -> option<string>;
+    req-header: func() -> option<bool>;
+  }
+
+  export new-ctx: func(ctx: string) -> string;
+  export on-request-filter: func(session: borrow<session>, ctx: string) -> result<bool>;
+}
