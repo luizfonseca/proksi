@@ -22,7 +22,8 @@ Of the many features Proksi offers is the ability to load balance to your infras
 - Built-in most common middlewares such as OAuth, Rate Limiting, CDN Caching and others
 - The ability of running it as a single binary in your system
 - Automatic SSL through Let's Encrypt and redirection from HTTP to HTTPS
-- Configuration through HCL with support for functions (get environment variables, etc)
+- Configuration through **HCL** with support for functions (get environment variables, etc)
+- Powerful plugin system for adding new middlewares and other features using **WebAssembly (WASM)**
 - Many others.
 
 # Quick start

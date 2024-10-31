@@ -64,7 +64,7 @@ jobs:
             bin: proksi
             cross: true
             target: x86_64-unknown-linux-gnu
-            cargo_command: cross 
+            cargo_command: cross
           #
           - name: proksi-macos-x86_64
             os: macos-latest
@@ -113,13 +113,13 @@ jobs:
         shell: bash
         if: contains(matrix.platform.os, 'ubuntu')
         run: |
-          ${{ matrix.platform.cargo_command }} build --release --target ${{ matrix.platform.target }}
+          ${{ matrix.platform.cargo_command }} build -p proksi --release --target ${{ matrix.platform.target }}
 
       - name: Build binary (OSX)
         shell: bash
         if: contains(matrix.platform.os, 'macos')
         run: |
-          ${{ matrix.platform.cargo_command }} build --release --target ${{ matrix.platform.target }}
+          ${{ matrix.platform.cargo_command }} build -p proksi --release --target ${{ matrix.platform.target }}
 
       - name: Package as archive
         shell: bash

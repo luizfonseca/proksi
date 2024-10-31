@@ -1,0 +1,21 @@
+[package]
+name = "plugins_api"
+description = "Type/WIT bindings for the Proksi plugins API."
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+keywords = ["proxy", "https", "reverse-proxy", "load-balancer", "pingora"]
+categories = ["web-programming::http-server", "network-programming"]
+
+authors = ["The Proksi Contributors <toaster.chicory-0b@icloud.com>"]
+rust-version = "1.82.0"
+readme = "../../README.md"
+homepage = "https://github.com/luizfonseca/proksi"
+repository = "https://github.com/luizfonseca/proksi"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+anyhow = "1.0.91"
+wit-bindgen = "0.34.0"
