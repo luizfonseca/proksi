@@ -1,7 +1,7 @@
 [workspace]
+package = { rust-version = "1.82.0" }
 members = ["crates/plugin_request_id", "crates/plugins_api", "crates/proksi"]
 resolver = "2"
-
 
 [profile.dev]
 opt-level = 0

@@ -8,10 +8,12 @@ keywords = ["proxy", "https", "reverse-proxy", "load-balancer", "pingora"]
 categories = ["web-programming::http-server", "network-programming"]
 
 authors = ["The Proksi Contributors <toaster.chicory-0b@icloud.com>"]
-rust-version = "1.82.0"
+
 readme = "../../README.md"
 homepage = "https://github.com/luizfonseca/proksi"
 repository = "https://github.com/luizfonseca/proksi"
+rust-version.workspace = true
+workspace = "../.."
 
 [lib]
 crate-type = ["cdylib"]
