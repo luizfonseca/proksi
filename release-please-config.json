@@ -1,9 +1,6 @@
 {
   "plugins": ["cargo-workspace"],
   "packages": {
-    ".": {
-      "release-type": "rust"
-    },
     "proksi": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
