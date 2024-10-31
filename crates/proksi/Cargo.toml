@@ -48,7 +48,7 @@ http = "1.1.0"
 itertools = "0.13.0"
 jsonwebtoken = { version = "9.3.0", default-features = false }
 nix = { version = "0.29.0", features = ["signal"] }
-notify = { version = "6.1.1", default-features = false, features = [
+notify = { version = "7.0.0", default-features = false, features = [
   "fsevent-sys",
 ] }
 num_cpus = "1.16.0"
