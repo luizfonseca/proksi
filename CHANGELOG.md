@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.4.8](https://github.com/luizfonseca/proksi/compare/proksi-v0.4.8...proksi-v0.4.8) (2024-10-31)
+
+
+### Miscellaneous Chores
+
+* marker for release 0.1.6 ([06d57cf](https://github.com/luizfonseca/proksi/commit/06d57cfeb1bdde8ab30732e931943ef10cc204b0))
+* release 0.1.10 ([b852f41](https://github.com/luizfonseca/proksi/commit/b852f41660c56f85abadb5b2debdc1259cd1a586))
+* release 0.1.11 ([7f8d3e1](https://github.com/luizfonseca/proksi/commit/7f8d3e16bbab8d045da309ce037d643f0c77a1fc))
+* release 0.1.3 ([ec9c02d](https://github.com/luizfonseca/proksi/commit/ec9c02d190a1c613509aed0de3eddc20c2c50858))
+* release 0.1.5 ([57cf174](https://github.com/luizfonseca/proksi/commit/57cf174b2d4fa5ae6f043044113975bf7712c4a6))
+* release 0.1.7 ([d867ea4](https://github.com/luizfonseca/proksi/commit/d867ea41bb57a4a105630d05c116577e9bb124f4))
+* release 0.1.8 ([547e1ed](https://github.com/luizfonseca/proksi/commit/547e1ed7cdea483acd9828bc5290cf1a41eae6b5))
+* release 0.1.9 ([185af43](https://github.com/luizfonseca/proksi/commit/185af43de32d180398d1bf4070785d005974ab95))
+* release marker for 0.2.1 ([cef795b](https://github.com/luizfonseca/proksi/commit/cef795b10399b18ef810abc35a24e9a3b019cf6f))
+* release marker for 0.2.12 ([3d88b27](https://github.com/luizfonseca/proksi/commit/3d88b27c33e55678b2353f26490ce7e3d64f959b))
+* release marker for 0.2.13 ([7aac672](https://github.com/luizfonseca/proksi/commit/7aac6727f643ab04e72044f4722ba133e80a3d43))
+* release marker for 0.2.5 ([fd3411f](https://github.com/luizfonseca/proksi/commit/fd3411fba644637ed56ae2df64f266a651a51e74))
+* release marker for 0.3.20 ([1b7be63](https://github.com/luizfonseca/proksi/commit/1b7be63154a4f559b0b57cfc664f8a81897f15e2))
+* release marker for 0.3.30 ([a7ac130](https://github.com/luizfonseca/proksi/commit/a7ac130d7a72e58e00f4d826f5a6359a798664cb))
+* release marker for 0.3.5 ([ace8317](https://github.com/luizfonseca/proksi/commit/ace8317cd8931832175e2d8aaf3922854c3495be))
+* release marker for 0.3.9 ([ffec88a](https://github.com/luizfonseca/proksi/commit/ffec88a3d702734b13fd8786331b08c25f992d7f))
+* release marker for 0.4.3 ([9b7a72c](https://github.com/luizfonseca/proksi/commit/9b7a72cc8ae55555e398899e84bcb2c817c09b3a))
+* release marker for 0.4.8 ([a0005e0](https://github.com/luizfonseca/proksi/commit/a0005e041be76f9e38bae316097680559730c53a))
+
+## [0.4.8](https://github.com/luizfonseca/proksi/compare/plugins_api-v0.1.0...plugins_api-v0.4.8) (2024-10-31)
+
+
+### Miscellaneous Chores
+
+* marker for release 0.1.6 ([06d57cf](https://github.com/luizfonseca/proksi/commit/06d57cfeb1bdde8ab30732e931943ef10cc204b0))
+* release 0.1.10 ([b852f41](https://github.com/luizfonseca/proksi/commit/b852f41660c56f85abadb5b2debdc1259cd1a586))
+* release 0.1.11 ([7f8d3e1](https://github.com/luizfonseca/proksi/commit/7f8d3e16bbab8d045da309ce037d643f0c77a1fc))
+* release 0.1.3 ([ec9c02d](https://github.com/luizfonseca/proksi/commit/ec9c02d190a1c613509aed0de3eddc20c2c50858))
+* release 0.1.5 ([57cf174](https://github.com/luizfonseca/proksi/commit/57cf174b2d4fa5ae6f043044113975bf7712c4a6))
+* release 0.1.7 ([d867ea4](https://github.com/luizfonseca/proksi/commit/d867ea41bb57a4a105630d05c116577e9bb124f4))
+* release 0.1.8 ([547e1ed](https://github.com/luizfonseca/proksi/commit/547e1ed7cdea483acd9828bc5290cf1a41eae6b5))
+* release 0.1.9 ([185af43](https://github.com/luizfonseca/proksi/commit/185af43de32d180398d1bf4070785d005974ab95))
+* release marker for 0.2.1 ([cef795b](https://github.com/luizfonseca/proksi/commit/cef795b10399b18ef810abc35a24e9a3b019cf6f))
+* release marker for 0.2.12 ([3d88b27](https://github.com/luizfonseca/proksi/commit/3d88b27c33e55678b2353f26490ce7e3d64f959b))
+* release marker for 0.2.13 ([7aac672](https://github.com/luizfonseca/proksi/commit/7aac6727f643ab04e72044f4722ba133e80a3d43))
+* release marker for 0.2.5 ([fd3411f](https://github.com/luizfonseca/proksi/commit/fd3411fba644637ed56ae2df64f266a651a51e74))
+* release marker for 0.3.20 ([1b7be63](https://github.com/luizfonseca/proksi/commit/1b7be63154a4f559b0b57cfc664f8a81897f15e2))
+* release marker for 0.3.30 ([a7ac130](https://github.com/luizfonseca/proksi/commit/a7ac130d7a72e58e00f4d826f5a6359a798664cb))
+* release marker for 0.3.5 ([ace8317](https://github.com/luizfonseca/proksi/commit/ace8317cd8931832175e2d8aaf3922854c3495be))
+* release marker for 0.3.9 ([ffec88a](https://github.com/luizfonseca/proksi/commit/ffec88a3d702734b13fd8786331b08c25f992d7f))
+* release marker for 0.4.3 ([9b7a72c](https://github.com/luizfonseca/proksi/commit/9b7a72cc8ae55555e398899e84bcb2c817c09b3a))
+* release marker for 0.4.8 ([a0005e0](https://github.com/luizfonseca/proksi/commit/a0005e041be76f9e38bae316097680559730c53a))
+
 ## [0.4.8](https://github.com/luizfonseca/proksi/compare/v0.4.7...v0.4.8) (2024-10-19)
 
 
