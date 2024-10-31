@@ -1,7 +1,7 @@
 {
   "plugins": ["cargo-workspace"],
   "packages": {
-    "proksi": {
+    "crates/proksi": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": false,
@@ -9,7 +9,7 @@
       "draft": false,
       "prerelease": false
     },
-    "plugins_api": {
+    "crates/plugins_api": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": false,

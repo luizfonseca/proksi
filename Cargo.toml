@@ -1,6 +1,7 @@
 [workspace]
-members = ["plugin_request_id", "plugins_api", "proksi"]
+members = ["crates/plugin_request_id", "crates/plugins_api", "crates/proksi"]
 resolver = "2"
+
 
 [profile.dev]
 opt-level = 0
