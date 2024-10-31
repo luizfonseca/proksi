@@ -1,4 +1,5 @@
 {
+  "plugins": ["cargo-workspace"],
   "packages": {
     "proksi": {
       "changelog-path": "CHANGELOG.md",
@@ -6,8 +7,7 @@
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
-      "prerelease": false,
-      "plugins": ["cargo-workspace"]
+      "prerelease": false
     },
     "plugins_api": {
       "changelog-path": "CHANGELOG.md",
@@ -15,8 +15,7 @@
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
-      "prerelease": false,
-      "plugins": ["cargo-workspace"]
+      "prerelease": false
     }
   },
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
