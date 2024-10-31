@@ -1,4 +1,5 @@
 {
+  "release-type": "rust",
   "plugins": ["cargo-workspace"],
   "packages": {
     "crates/proksi": {
