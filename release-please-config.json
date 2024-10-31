@@ -2,7 +2,7 @@
   "plugins": ["cargo-workspace"],
   "packages": {
     "crates/proksi": {
-      "changelog-path": "./CHANGELOG.md",
+      "changelog-path": "/CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": false,
       "initial-version": "0.4.8",
@@ -11,7 +11,7 @@
       "prerelease": false
     },
     "crates/plugins_api": {
-      "changelog-path": "./CHANGELOG.md",
+      "changelog-path": "/CHANGELOG.md",
       "release-type": "rust",
       "initial-version": "0.1.0",
       "bump-minor-pre-major": false,
