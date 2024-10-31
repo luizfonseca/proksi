@@ -5,6 +5,7 @@
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": false,
+      "initial-version": "0.4.8",
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
       "prerelease": false
@@ -12,6 +13,7 @@
     "crates/plugins_api": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
+      "initial-version": "0.1.0",
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
