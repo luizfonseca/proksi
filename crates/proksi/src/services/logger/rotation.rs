@@ -6,7 +6,7 @@ use crate::config::LogRotation;
 pub struct Rotation(pub LogRotation);
 
 impl Rotation {
-    /// Provides an minutely rotation
+    /// Provides a minutely rotation
     pub const MINUTELY: Self = Self(LogRotation::Minutely);
     /// Provides an hourly rotation
     pub const HOURLY: Self = Self(LogRotation::Hourly);

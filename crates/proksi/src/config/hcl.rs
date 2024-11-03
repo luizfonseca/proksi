@@ -36,7 +36,7 @@ fn num_cpus(_: FuncArgs) -> Result<Value, String> {
 /// Example:
 /// ```hcl
 /// // HCL document
-/// config = read_file("config.toml")
+/// config = import("config.toml")
 /// ```
 #[allow(clippy::needless_pass_by_value)]
 fn read_hcl_file(args: FuncArgs) -> Result<Value, String> {
