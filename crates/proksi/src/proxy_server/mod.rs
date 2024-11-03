@@ -31,11 +31,11 @@ const DEFAULT_PEER_OPTIONS: PeerOptions = PeerOptions {
     alternative_cn: None,
     alpn: ALPN::H2H1,
     ca: None,
-    no_header_eos: true,
     h2_ping_interval: Some(Duration::from_secs(60)),
     max_h2_streams: 2,
     extra_proxy_headers: BTreeMap::new(),
     curves: None,
     second_keyshare: true, // default true and noop when not using PQ curves
     tracer: None,
+    custom_l4: None,
 };

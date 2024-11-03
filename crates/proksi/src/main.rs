@@ -7,7 +7,7 @@ use tracing_subscriber::EnvFilter;
 
 use std::{borrow::Cow, sync::Arc};
 
-use pingora::{listeners::TlsSettings, proxy::http_proxy_service, server::configuration::Opt};
+use pingora::{listeners::tls::TlsSettings, proxy::http_proxy_service, server::configuration::Opt};
 
 use proxy_server::cert_store::CertStore;
 use services::{logger::ProxyLoggerReceiver, BackgroundFunctionService};
