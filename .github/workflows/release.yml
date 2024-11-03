@@ -14,8 +14,8 @@ jobs:
   release:
     name: Release
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      release_created: ${{ steps.release.outputs['crates/proksi--release_created'] }}
+      tag_name: ${{ steps.release.outputs['crates/proksi--tag_name'] }}
     permissions:
       contents: write
       pull-requests: write
