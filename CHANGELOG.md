@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.4.8...proksi-v0.5.0) (2024-11-03)
+
+
+### Features
+
+* upgrade pingora to 0.4.0 ([4dd5ba5](https://github.com/luizfonseca/proksi/commit/4dd5ba562b818138f9f4267f18de30ccdffad473))
+
+
+### Bug Fixes
+
+* pingora version bump and new struct props ([1304192](https://github.com/luizfonseca/proksi/commit/1304192e04b2dc69a6b8c001d996b3249f70cc01))
+
 ## [0.4.8](https://github.com/luizfonseca/proksi/compare/v0.4.7...v0.4.8) (2024-10-19)
 
 
