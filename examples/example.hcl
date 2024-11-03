@@ -75,8 +75,16 @@ logging  {
   # Whether error logs are enabled.
   error_logs_enabled = false
 
-  # Formats "json" or "pretty""
+  # Formats "json" or "pretty"
   format = "pretty"
+
+  # The path where the log files will be stored.
+  path = "/tmp"
+
+  # The rotation mode for the log files.
+  # The rotation mode can be "daily", "hourly", "minutely" or "never".
+  # Files will be generated with the particular rotation mode as the suffix.
+  rotation = "daily"
 }
 
 # The paths for the TLS certificates, challenges, orders, and account credentials.
@@ -112,18 +120,23 @@ routes = [
         # This is mostly important for Docker containers, but it can be used for other purposes.
         # network = "public"
         port = 443
+
+        # The SNI attribute specifies the server name that the proxy will use to connect to the upstream. 
+        # This is used to verify the identity of the upstream server (that supports TLS).
         sni = "google.com"
 
         # The headers attribute specifies the headers that will
         # be added or removed when making a request to your UPSTREAM (your server)
         headers = {
-          add = {
-            name = "Host"
-            value = "google.com"
-          }
+          add = { name = "Host", value = "google.com" }
         }
       },
-      # New upstream
+
+      
+      # New upstream record, meaning any request coming to `example.com` 
+      # will be routed to the upstream server at `10.1.2.23/24` on port `3000`
+      # with the `Host: example.com` header added.
+      # Via loadbalancing (round-robin) 
       {
         ip = "10.1.2.23/24"
         network = "shared"
