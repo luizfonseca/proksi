@@ -69,7 +69,7 @@ tokio = { version = "1.40.0", features = ["sync", "rt-multi-thread", "fs"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["json", "env-filter"] }
 uuid = { version = "1.11.0", features = ["v4"] }
-wasmtime = "26.0.0"
+wasmtime = "26.0.1"
 wasmtime-wasi = "26.0.0"
 
 [[bench]]
