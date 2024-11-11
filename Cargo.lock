@@ -463,9 +463,9 @@ checksum = "9ac0150caa2ae65ca5bd83f25c7de183dea78d4d366469f148435e2acfbad0da"
 
 [[package]]
 name = "cap-fs-ext"
-version = "3.4.0"
+version = "3.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8205d31472af3d15f036e8723215aa750b749cdbf1c2bac2e58a6acfc90e521e"
+checksum = "e16619ada836f12897a72011fe99b03f0025b87a8dbbea4f3c9f89b458a23bf3"
 dependencies = [
  "cap-primitives",
  "cap-std",
@@ -475,9 +475,9 @@ dependencies = [
 
 [[package]]
 name = "cap-net-ext"
-version = "3.4.0"
+version = "3.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05284a64b8bf45d7b0ac3ac7c8f5f2e489ffe6cd66f39a6208ca6294e2ffbda3"
+checksum = "710b0eb776410a22c89a98f2f80b2187c2ac3a8206b99f3412332e63c9b09de0"
 dependencies = [
  "cap-primitives",
  "cap-std",
@@ -504,9 +504,9 @@ dependencies = [
 
 [[package]]
 name = "cap-rand"
-version = "3.4.0"
+version = "3.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a88573bc4d42836246ac1afc9c5e0b14cb7c2b314c13283267252e1f50d3045"
+checksum = "53774d49369892b70184f8312e50c1b87edccb376691de4485b0ff554b27c36c"
 dependencies = [
  "ambient-authority",
  "rand",
@@ -526,9 +526,9 @@ dependencies = [
 
 [[package]]
 name = "cap-time-ext"
-version = "3.4.0"
+version = "3.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fc7a67f8ec1f1b9a0ebd28f44cf6c550aaec610c38b752efd4cfa1d81c93683"
+checksum = "69dd48afa2363f746c93f961c211f6f099fb594a3446b8097bc5f79db51b6816"
 dependencies = [
  "ambient-authority",
  "cap-primitives",
@@ -4617,9 +4617,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-wasi"
-version = "26.0.0"
+version = "26.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21b64853b8377a9ae6522ff1566661978b8a16bcc1bc08cf64149c94bf4e3784"
+checksum = "f16c8d87a45168131be6815045e6d46d7f6ddf65897c49444ab210488bce10dc"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4727,9 +4727,9 @@ dependencies = [
 
 [[package]]
 name = "wiggle"
-version = "26.0.0"
+version = "26.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c62986dac93e6de4e542c9861e0bfb375a796e880938bb2f5833a7dfaed07352"
+checksum = "b0f25588cf5ea16f56c1af13244486d50c5a2cf67cc0c4e990c665944d741546"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4742,9 +4742,9 @@ dependencies = [
 
 [[package]]
 name = "wiggle-generate"
-version = "26.0.0"
+version = "26.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b7602686d5d43b23ae28ad5d730921064b634ae6a9d78e8dbdc595326319232"
+checksum = "28ff23bed568b335dac6a324b8b167318a0c60555199445fcc89745a5eb42452"
 dependencies = [
  "anyhow",
  "heck 0.5.0",
@@ -4757,9 +4757,9 @@ dependencies = [
 
 [[package]]
 name = "wiggle-macro"
-version = "26.0.0"
+version = "26.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a376173abfaaa6cebf8aedd03366fcd528db2b8f5ccc3f422102a3f4014c3855"
+checksum = "7f13be83541aa0b033ac5ec8a8b59c9a8d8b32305845b8466dd066e722cb0004"
 dependencies = [
  "proc-macro2",
  "quote",
