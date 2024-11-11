@@ -33,7 +33,7 @@ workspace = "../.."
 [dependencies]
 TinyUFO = "0.4.0"
 acme-v2 = "0.9.3"
-anyhow = "1.0.92"
+anyhow = "1.0.93"
 arc-swap = "1.7.1"
 async-trait = "0.1.83"
 bollard = "0.16.1"
