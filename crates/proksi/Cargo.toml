@@ -70,7 +70,7 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["json", "env-filter"] }
 uuid = { version = "1.11.0", features = ["v4"] }
 wasmtime = "26.0.1"
-wasmtime-wasi = "26.0.1"
+wasmtime-wasi = "27.0.0"
 
 [[bench]]
 name = "dashmap_arc"
