@@ -67,7 +67,7 @@ short-crypt = "1.0.28"
 time = "0.3.36"
 tokio = { version = "1.42.0", features = ["sync", "rt-multi-thread", "fs"] }
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.18", features = ["json", "env-filter"] }
+tracing-subscriber = { version = "0.3.19", features = ["json", "env-filter"] }
 uuid = { version = "1.11.0", features = ["v4"] }
 wasmtime = "27.0.0"
 wasmtime-wasi = "27.0.0"
