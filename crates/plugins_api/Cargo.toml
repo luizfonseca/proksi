@@ -15,8 +15,8 @@ repository = "https://github.com/luizfonseca/proksi"
 rust-version.workspace = true
 workspace = "../.."
 
-[lib]
-crate-type = ["cdylib"]
+# [lib]
+# crate-type = ["lib"]
 
 [dependencies]
 anyhow = "1.0.91"

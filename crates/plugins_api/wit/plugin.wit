@@ -2,6 +2,8 @@ package proksi:plugin;
 
 world plugin {
 
+  /// Initializes the extension.
+  export init-plugin: func();
 
   resource session {
     get-header: func(key: string) -> option<string>;

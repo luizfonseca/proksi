@@ -222,7 +222,7 @@ jobs:
           components: rustfmt,clippy
 
       - name: Publish to crates.io
-        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+        run: cargo publish -p proksi --token ${{ secrets.CRATES_IO_TOKEN }}
 
   upload-artifacts:
     continue-on-error: true

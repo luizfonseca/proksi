@@ -1,14 +1,19 @@
-// use std::sync::Arc;
+use wasmtime::{
+    component::{Linker, Resource},
+    Engine, Store,
+};
+use wasmtime_wasi::{add_to_linker_async, preview1::WasiP1Ctx, WasiCtxBuilder, WasiView};
 
-// // use wasmer::{imports, Instance, Module, Store, ValueType};
-// use wasmtime::{Engine, Linker, Store};
-// use wasmtime_wasi::{
-//     preview1::{self, WasiP1Ctx},
-//     WasiCtxBuilder,
-// };
+// wasmtime::component::bindgen!({
+//   path: "../plugins_api/wit/plugin.wit",
+//   with: {
+//     "session": SessionTest,
+//   }
+// });
 
 #[allow(dead_code)]
-struct SessionTest {}
+#[derive(Clone)]
+pub struct SessionTest {}
 
 impl SessionTest {
     #[allow(dead_code)]
@@ -16,59 +21,114 @@ impl SessionTest {
         Self {}
     }
     #[allow(dead_code)]
-    pub fn get_header(_key: &str) -> String {
+    pub fn get_header(&self, _key: String) -> String {
         String::from("test")
     }
 }
 
-// #[allow(dead_code)]
-// pub async fn load_plugin() -> anyhow::Result<()> {
-//     let mut config = wasmtime::Config::new();
-//     config.wasm_reference_types(true);
-//     config.debug_info(false);
-//     config.async_support(true);
+#[allow(dead_code)]
+pub async fn load_plugin(path: &[u8]) -> anyhow::Result<()> {
+    let mut config = wasmtime::Config::new();
+    config.wasm_reference_types(true);
+    config.debug_info(false);
+    config.async_support(true);
 
-//     let engine = Engine::new(&config)?;
-//     let wasi_ctx = WasiCtxBuilder::new()
-//         .inherit_stdio()
-//         .inherit_stdout()
-//         .build_p1();
+    let engine = Engine::new(&config)?;
+    let wasi_ctx = WasiCtxBuilder::new()
+        .inherit_stdio()
+        .inherit_stdout()
+        .build_p1();
 
-//     let mut linker: Linker<WasiP1Ctx> = Linker::new(&engine);
-//     preview1::add_to_linker_async(&mut linker, |t| t)?;
-//     let mut store = Store::new(&engine, wasi_ctx);
+    let mut linker: Linker<WasiP1Ctx> = wasmtime::component::Linker::new(&engine);
 
-//     let module = wasmtime::Module::from_binary(
-//         &engine,
-//         include_bytes!("../../../../mid-test/target/wasm32-wasip1/release/mid_test.wasm"),
-//     )?;
+    let session_now = SessionTest::new();
+    // let mut abc = wasmtime_wasi::ResourceTable::new();
+    // let res = wasi_ctx.table().push(session_now.clone())?;
 
-//     // instance
+    add_to_linker_async(&mut linker)?;
+    let mut store = Store::new(&engine, wasi_ctx);
+    let resource = store.data_mut().table().push(session_now.clone())?;
+    let resource_id = resource.rep();
+    let module = wasmtime::component::Component::from_binary(&engine, path)?;
 
-//     let instance = linker.instantiate_async(&mut store, &module).await?;
+    // instance
 
-//     let req_filter_fn = instance.get_func(&mut store, "on_request_filter").unwrap();
+    let ty = wasmtime::component::ResourceType::host::<SessionTest>();
+    linker.root().resource("session", ty, |mut storex, rep| {
+        storex
+            .data_mut()
+            .table()
+            .delete::<SessionTest>(Resource::new_own(rep));
+        Ok(())
+    })?;
 
-//     let scope = wasmtime::RootScope::new(&mut store);
-//     let session = wasmtime::ExternRef::new(scope, Arc::new(SessionTest::new()))?;
+    // let res_before_move: Resource<SessionTest> =
+    //     wasmtime::component::Resource::new_own(resource.rep());
 
-//     // call function with ref
-//     let mut ret: Vec<wasmtime::Val> = vec![wasmtime::Val::I32(0)];
-//     req_filter_fn
-//         .call_async(&mut store, &[session.into()], &mut ret)
-//         .await?;
+    // let into_any = res.try_into_resource_any(&mut store)?;
 
-//     Ok(())
-// }
+    // linker
+    //     .root()
+    //     .func_wrap("[method]session.get-header", |mut st, (input,)| {
+    //         let result = 1;
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+    //         Ok(())
+    //     });
+    // linker.root().func_new(
+    //     "[method]session.get-header",
+    //     move |mut storex, params, results| {
+    //         // in resources, the first param is the resource (self)
+    //         // let input = match params[1].clone() {
+    //         //     wasmtime::component::Val::String(v) => v,
+    //         //     _ => panic!("invalid input"),
+    //         // };
+    //         // let ss = storex.data_mut().table().get(&resource)?;
+    //         // let v = ss.get_header(input);
+    //         results[0] = wasmtime::component::Val::Option(Some(Box::new(
+    //             wasmtime::component::Val::String("123".into()),
+    //         )));
 
-//     #[tokio::test]
-//     async fn test_load_plugin() {
-//         load_plugin().await.unwrap();
+    //         // storex.data_mut().table().delete(resource)?;
 
-//         assert_eq!(1, 1)
-//     }
-// }
+    //         Ok(())
+    //     },
+    // )?;
+
+    let instance = linker.instantiate_async(&mut store, &module).await?;
+    let req_filter_fn = instance
+        .get_typed_func::<(Resource<SessionTest>, String), (Result<bool, ()>,)>(
+            &mut store,
+            "on-request-filter",
+        )
+        .unwrap();
+
+    let resource = store.data_mut().table().push(session_now.clone())?;
+
+    let ret = req_filter_fn
+        .call_async(
+            &mut store,
+            (Resource::new_own(resource.rep()), String::from("hello")),
+        )
+        .await?;
+
+    req_filter_fn.post_return(store)?;
+
+    println!("ret: {:?}", ret);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_load_plugin() {
+        load_plugin(include_bytes!(
+            "../../../../target/wasm32-wasip2/debug/plugin_request_id.wasm"
+        ))
+        .await
+        .unwrap();
+
+        assert_eq!(1, 1)
+    }
+}
