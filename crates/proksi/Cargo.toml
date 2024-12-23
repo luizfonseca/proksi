@@ -62,7 +62,7 @@ prometheus = "0.13.4"
 reqwest = { version = "0.12.8", features = ["json"] }
 seize = "0.4.9"
 serde = "1.0.216"
-serde_json = "1.0.133"
+serde_json = "1.0.134"
 short-crypt = "1.0.28"
 time = "0.3.37"
 tokio = { version = "1.42.0", features = ["sync", "rt-multi-thread", "fs"] }
