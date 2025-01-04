@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.5.0...proksi-v0.5.1) (2025-01-04)
+
+
+### Bug Fixes
+
+* avoid renewal e-mails from Let's Encrypt ([#183](https://github.com/luizfonseca/proksi/issues/183)) ([0ab5c12](https://github.com/luizfonseca/proksi/commit/0ab5c121504638c259a2501d21328f1f384e1282))
+
 ## [0.5.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.4.8...proksi-v0.5.0) (2024-11-03)
 
 
