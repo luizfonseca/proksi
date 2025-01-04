@@ -103,7 +103,8 @@ jobs:
           cache: false
 
       - name: Setup Cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        # TODO: remove workaround once the issue is resolved: https://github.com/cross-rs/cross/issues/1561
+        run: RUSTFLAGS="" cargo install cross --git https://github.com/cross-rs/cross
         if: ${{ matrix.platform.cross }}
 
       - name: Install musl-tools on Linux
