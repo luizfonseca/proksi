@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.5.1...proksi-v0.5.1) (2025-01-04)
+
+
+### Bug Fixes
+
+* allow https and http addresses to be provided via configuration ([bb52d17](https://github.com/luizfonseca/proksi/commit/bb52d173d11c4506e5bcae5c0a38c2bb7c56aba5))
+* failing certificate renewal causing a panic due to .unwrap() call ([6e11bc9](https://github.com/luizfonseca/proksi/commit/6e11bc938f2feb72de898530f774df8f56421d5e))
+* linting ([5de49ba](https://github.com/luizfonseca/proksi/commit/5de49ba28975da8b89b648e492653498539ef06a))
+
 ## [0.5.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.5.0...proksi-v0.5.1) (2025-01-04)
 
 
