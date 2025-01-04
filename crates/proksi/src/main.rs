@@ -64,12 +64,18 @@ fn main() -> Result<(), anyhow::Error> {
     let proxy_config =
         Arc::new(load("/etc/proksi/configs").expect("Failed to load configuration: "));
 
+    let https_address = proxy_config
+        .server
+        .https_address
+        .clone()
+        .unwrap_or_default();
+    let http_address = proxy_config.server.http_address.clone().unwrap_or_default();
+
     // Logging channel
     let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
 
     // Receiver channel for Routes/Certificates/etc
     let (sender, mut _receiver) = tokio::sync::broadcast::channel::<MsgProxy>(10);
-    // let (appender, _guard) = get_non_blocking_writer(&proxy_config);
     let appender = services::logger::ProxyLog::new(
         log_sender,
         proxy_config.logging.enabled,
@@ -118,7 +124,7 @@ fn main() -> Result<(), anyhow::Error> {
     // The router will also handle health checks and failover in case of upstream failure
     let router = proxy_server::https_proxy::Router {};
     let mut https_secure_service = http_proxy_service(&pingora_server.configuration, router);
-    http_public_service.add_tcp("0.0.0.0:80");
+    http_public_service.add_tcp(&http_address);
 
     // Worker threads per configuration
     https_secure_service.threads = proxy_config.worker_threads;
@@ -138,7 +144,7 @@ fn main() -> Result<(), anyhow::Error> {
     tls_settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
 
     // Add TLS settings to the HTTPS service
-    https_secure_service.add_tls_with_settings("0.0.0.0:443", None, tls_settings);
+    https_secure_service.add_tls_with_settings(&https_address, None, tls_settings);
 
     // Add Prometheus service
     // let mut prometheus_service_http = Service::prometheus_http_service();
@@ -155,10 +161,14 @@ fn main() -> Result<(), anyhow::Error> {
     pingora_server.add_service(http_public_service);
     pingora_server.add_service(https_secure_service);
 
+    let server_info = format!(
+        "running HTTPS service on {} and HTTP service on {}",
+        &http_address, &https_address
+    );
     tracing::info!(
         version = crate_version!(),
         workers = proxy_config.worker_threads,
-        "running on :443 and :80"
+        server_info,
     );
 
     pingora_server.run_forever();

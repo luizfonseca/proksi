@@ -21,6 +21,18 @@ service_name: "proksi"
 # (and other background services) is single threaded.
 worker_threads: 4
 
+# The configuration for the HTTPS & HTTP service.
+server:
+  # The address that the server will listen on while serving HTTPS.
+  # This can be a TCP address or a Unix socket.
+  # The default value is "0.0.0.0:443".
+  https_address: "0.0.0.0:443"
+
+  # The address that the server will listen on for HTTP requests.
+  # This can be a TCP address or a Unix socket.
+  # The default value is "0.0.0.0:80".
+  http_address: "0.0.0.0:80"
+
 # The configuration for the Docker integration
 docker:
   # Whether the Docker integration is enabled
@@ -49,7 +61,6 @@ docker:
 
 # The configuration for the Let's Encrypt integration.
 lets_encrypt:
-
   # Whether the Let's Encrypt integration is enabled
   # (the background service will run and issue certificates for your routes).
   enabled: true
@@ -88,17 +99,14 @@ logging:
 # The paths for the TLS certificates, challenges, orders, and account credentials.
 # You can override any, these are the current defaults.
 paths:
-
   # The path where the TLS certificates will be stored.
   # If the path doesn't exist, it will be created if the binary has the right permissions.
   lets_encrypt: "/etc/proksi/letsencrypt"
-
 
 # The list of routes that the server will use to route incoming requests
 # to different upstream servers.
 # Each route is an item in the list and it has the following attributes:
 routes:
-
   # The host attribute specifies the hostname that the route will match.
   # This is normally the domain, subdomain that you want to route to a particular server/ip.
   # This can be a domain name or an IP address. For IP address, no certificate will be issued.
@@ -140,29 +148,28 @@ routes:
       self_signed_on_failure: true
 
       # object_storage:
-        # The object_storage attribute specifies the object storage
-        # that will be used to store the certificates.
-        # This can be "s3" or "gcs".
-        # s3:
-          # The s3 attribute specifies the configuration for the S3 object storage.
-          # The configuration includes the bucket name, region, access key, and secret key.
-          # bucket: "proksi-letsencrypt"
-          # region: "us-east-1"
-          # access_key: "<access_key>"
-          # secret_key: "<secret_key>"
+      # The object_storage attribute specifies the object storage
+      # that will be used to store the certificates.
+      # This can be "s3" or "gcs".
+      # s3:
+      # The s3 attribute specifies the configuration for the S3 object storage.
+      # The configuration includes the bucket name, region, access key, and secret key.
+      # bucket: "proksi-letsencrypt"
+      # region: "us-east-1"
+      # access_key: "<access_key>"
+      # secret_key: "<secret_key>"
 
       # path:
-        # The certificate attribute specifies the path to the certificate file.
-        # This is the certificate that will be used to secure the connection.
-        # The certificate file should be in PEM format.
-        # In the near future you will be able to pass a s3 link or any other storage link.
-        # crt: "/etc/proksi/letsencrypt/certs/example.com/cert.pem"
+      # The certificate attribute specifies the path to the certificate file.
+      # This is the certificate that will be used to secure the connection.
+      # The certificate file should be in PEM format.
+      # In the near future you will be able to pass a s3 link or any other storage link.
+      # crt: "/etc/proksi/letsencrypt/certs/example.com/cert.pem"
 
-        # The key attribute specifies the path to the private key file.
-        # This is the private key that will be used to secure the connection.
-        # The private key file should be in PEM format.
-        # key: "/etc/proksi/letsencrypt/certs/example.com/privkey.pem"
-
+      # The key attribute specifies the path to the private key file.
+      # This is the private key that will be used to secure the connection.
+      # The private key file should be in PEM format.
+      # key: "/etc/proksi/letsencrypt/certs/example.com/privkey.pem"
 
     # The headers attribute specifies the headers that will
     # be added or removed at the end of the response

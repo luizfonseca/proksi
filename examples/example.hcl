@@ -16,6 +16,20 @@ service_name = "proksi"
 # (and other background services) is single threaded.
 worker_threads = 4
 
+
+# The server block specifies the settings for the HTTP/HTTPS server.
+server {
+  # The address that the server will listen on while serving HTTPS.
+  # This can be a TCP address or a Unix socket.
+  # The default value is "0.0.0.0:443".
+  https_address = "0.0.0.0:443"
+
+  # The address that the server will listen on for HTTP requests.
+  # This can be a TCP address or a Unix socket.
+  # The default value is "0.0.0.0:80".
+  http_address = "0.0.0.0:80"
+}
+
 docker {
   # Whether the Docker integration is enabled
   # (the background service will run and listen for Docker events).
@@ -121,7 +135,7 @@ routes = [
         # network = "public"
         port = 443
 
-        # The SNI attribute specifies the server name that the proxy will use to connect to the upstream. 
+        # The SNI attribute specifies the server name that the proxy will use to connect to the upstream.
         # This is used to verify the identity of the upstream server (that supports TLS).
         sni = "google.com"
 
@@ -132,11 +146,11 @@ routes = [
         }
       },
 
-      
-      # New upstream record, meaning any request coming to `example.com` 
+
+      # New upstream record, meaning any request coming to `example.com`
       # will be routed to the upstream server at `10.1.2.23/24` on port `3000`
       # with the `Host: example.com` header added.
-      # Via loadbalancing (round-robin) 
+      # Via loadbalancing (round-robin)
       {
         ip = "10.1.2.23/24"
         network = "shared"

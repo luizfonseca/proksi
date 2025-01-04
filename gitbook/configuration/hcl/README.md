@@ -15,6 +15,10 @@ touch proksi.hcl
 ```hcl
 worker_threads = env("WORKER_THREADS")
 
+server {
+  https_address = "0.0.0.0:5143"
+}
+
 lets_encrypt {
   enabled = true
   email = env("LETS_ENCRYPT_EMAIL")
@@ -53,6 +57,3 @@ routes = [
   }
 ]
 ```
-
-
-

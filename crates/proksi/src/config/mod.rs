@@ -484,6 +484,27 @@ impl Default for AutoReload {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Parser)]
+pub struct ServerConfig {
+    /// The address to bind the HTTPS server to.
+    #[arg(
+        long = "server.https_address",
+        required = false,
+        value_parser,
+        default_value = "0.0.0.0:443"
+    )]
+    pub https_address: Option<Cow<'static, str>>,
+
+    /// The address used to solve challenges (only HTTP)
+    #[arg(
+        long = "server.http_address",
+        required = false,
+        value_parser,
+        default_value = "0.0.0.0:80"
+    )]
+    pub http_address: Option<Cow<'static, str>>,
+}
+
 /// The main configuration struct.
 /// A configuration file (YAML, TOML or through ENV) will be parsed into this struct.
 /// Example:
@@ -534,6 +555,9 @@ pub(crate) struct Config {
     #[serde(default)]
     #[clap(short, long, default_value = "proksi")]
     pub service_name: Cow<'static, str>,
+
+    #[command(flatten)]
+    pub server: ServerConfig,
 
     /// Runs the service in the background (daemon mode)
     #[clap(short, long, default_value = "false")]
@@ -588,6 +612,10 @@ impl Default for Config {
         Config {
             config_path: Cow::Borrowed("/etc/proksi/config"),
             service_name: Cow::Borrowed("proksi"),
+            server: ServerConfig {
+                https_address: Some(Cow::Borrowed("0.0.0.0:443")),
+                http_address: Some(Cow::Borrowed("0.0.0.0:80")),
+            },
             worker_threads: Some(2),
             upgrade: false,
             daemon: false,
@@ -969,6 +997,12 @@ mod tests {
                 r#"
                 service_name = "hcl-service"
                 worker_threads = 8
+
+                server {
+                    address = "0.0.0.0:443"
+                    http_address = "0.0.0.0:80"
+                }
+
                 docker {
                     enabled = true
                     interval_secs = 30
@@ -989,6 +1023,16 @@ mod tests {
             let proxy_config = config.unwrap();
 
             assert_eq!(proxy_config.service_name, "hcl-service");
+
+            assert_eq!(
+                proxy_config.server.https_address,
+                Some(Cow::Borrowed("0.0.0.0:443"))
+            );
+            assert_eq!(
+                proxy_config.server.http_address,
+                Some(Cow::Borrowed("0.0.0.0:80"))
+            );
+
             assert_eq!(proxy_config.worker_threads, Some(8));
             assert_eq!(proxy_config.docker.enabled, Some(true));
             assert_eq!(proxy_config.docker.interval_secs, Some(30));

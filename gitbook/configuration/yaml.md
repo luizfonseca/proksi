@@ -15,8 +15,8 @@ Below you can find a file with the current defaults and&#x20;
 ```yaml
 # Description: Example configuration file for Proksi
 #
-# Proksi is a reverse proxy server that can be used to route incoming requests 
-# to different upstream servers based on the request's host, path, headers, and 
+# Proksi is a reverse proxy server that can be used to route incoming requests
+# to different upstream servers based on the request's host, path, headers, and
 # other attributes.
 #
 # This configuration file specifies the following settings:
@@ -31,12 +31,25 @@ service_name: "proksi"
 # This can be adjusted based on the number of CPU cores available on the server.
 # The default value is 1.
 #
-# Note: Increasing the number of threads can improve the performance of the server, 
+# Note: Increasing the number of threads can improve the performance of the server,
 # but it can also increase the memory usage.
 #
 # Note 2: This only affect the HTTPS service, the HTTP service
 # (and other background services) is single threaded.
 worker_threads: 4
+
+# The configuration for the HTTPS & HTTP service.
+server:
+  # The address that the server will listen on while serving HTTPS.
+  # This can be a TCP address or a Unix socket.
+  # The default value is "0.0.0.0:443".
+  https_address: "0.0.0.0:443"
+
+  # The address that the server will listen on for HTTP requests.
+  # This can be a TCP address or a Unix socket.
+  # The default value is "0.0.0.0:80".
+  http_address: "0.0.0.0:80"
+
 
 # The configuration for the Let's Encrypt integration.
 lets_encrypt:
