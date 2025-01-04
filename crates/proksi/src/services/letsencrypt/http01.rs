@@ -243,7 +243,7 @@ impl LetsencryptService {
                 tracing::info!("certificate for domain {domain} expires in {valid_days_left} days",);
 
                 // Nothing to do
-                if valid_days_left > 5 {
+                if valid_days_left > 30 {
                     continue;
                 }
 
