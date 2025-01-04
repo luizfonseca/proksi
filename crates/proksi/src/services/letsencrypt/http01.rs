@@ -22,6 +22,9 @@ use crate::{
     stores::{self, certificates::Certificate},
 };
 
+/// Default interval in days to attempt renewal of certificates
+const DEFAULT_RENEW_INTERVAL_DAYS: i64 = 30;
+
 /// A service that handles the creation of certificates using the Let's Encrypt API
 
 pub struct LetsencryptService {
@@ -242,15 +245,17 @@ impl LetsencryptService {
                 let valid_days_left = cert.valid_days_left();
                 tracing::info!("certificate for domain {domain} expires in {valid_days_left} days",);
 
-                // Nothing to do
-                if valid_days_left > 30 {
+                // Nothing to do before the renewal interval
+                if valid_days_left > DEFAULT_RENEW_INTERVAL_DAYS {
                     continue;
                 }
 
                 tracing::info!("trying to renew certificate for domain: {domain}");
-                Self::create_order_for_domain(domain, account)
+                if let Err(error) = Self::create_order_for_domain(domain, account)
                     .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
-                    .unwrap();
+                {
+                    tracing::error!("failed to renew certificate for domain {domain}: {error}");
+                }
             }
 
             interval.tick().await;
