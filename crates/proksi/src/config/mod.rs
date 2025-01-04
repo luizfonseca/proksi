@@ -485,7 +485,7 @@ impl Default for AutoReload {
 }
 
 #[derive(Debug, Serialize, Deserialize, Parser)]
-pub struct ServerConfig {
+pub struct ServerCfg {
     /// The address to bind the HTTPS server to.
     #[arg(
         long = "server.https_address",
@@ -557,7 +557,7 @@ pub(crate) struct Config {
     pub service_name: Cow<'static, str>,
 
     #[command(flatten)]
-    pub server: ServerConfig,
+    pub server: ServerCfg,
 
     /// Runs the service in the background (daemon mode)
     #[clap(short, long, default_value = "false")]
@@ -612,7 +612,7 @@ impl Default for Config {
         Config {
             config_path: Cow::Borrowed("/etc/proksi/config"),
             service_name: Cow::Borrowed("proksi"),
-            server: ServerConfig {
+            server: ServerCfg {
                 https_address: Some(Cow::Borrowed("0.0.0.0:443")),
                 http_address: Some(Cow::Borrowed("0.0.0.0:80")),
             },

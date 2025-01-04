@@ -69,7 +69,7 @@ fn main() -> Result<(), anyhow::Error> {
         .https_address
         .clone()
         .unwrap_or_default();
-    let http_address = proxy_config.server.http_address.clone().unwrap_or_default();
+    let le_address = proxy_config.server.http_address.clone().unwrap_or_default();
 
     // Logging channel
     let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
@@ -124,7 +124,7 @@ fn main() -> Result<(), anyhow::Error> {
     // The router will also handle health checks and failover in case of upstream failure
     let router = proxy_server::https_proxy::Router {};
     let mut https_secure_service = http_proxy_service(&pingora_server.configuration, router);
-    http_public_service.add_tcp(&http_address);
+    http_public_service.add_tcp(&le_address);
 
     // Worker threads per configuration
     https_secure_service.threads = proxy_config.worker_threads;
@@ -163,7 +163,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     let server_info = format!(
         "running HTTPS service on {} and HTTP service on {}",
-        &http_address, &https_address
+        &https_address, &le_address
     );
     tracing::info!(
         version = crate_version!(),
