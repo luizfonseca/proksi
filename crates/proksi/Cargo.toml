@@ -68,7 +68,7 @@ time = "0.3.37"
 tokio = { version = "1.43.0", features = ["sync", "rt-multi-thread", "fs"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["json", "env-filter"] }
-uuid = { version = "1.12.1", features = ["v4"] }
+uuid = { version = "1.13.1", features = ["v4"] }
 wasmtime = "29.0.1"
 wasmtime-wasi = "29.0.1"
 
