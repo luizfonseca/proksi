@@ -60,7 +60,7 @@ pingora = { version = "0.4.0", features = ["lb", "openssl", "proxy", "cache"] }
 pingora-cache = "0.4.0"
 prometheus = "0.13.4"
 reqwest = { version = "0.12.12", features = ["json"] }
-seize = "0.4.9"
+seize = "0.5.0"
 serde = "1.0.217"
 serde_json = "1.0.138"
 short-crypt = "1.0.28"

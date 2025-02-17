@@ -2902,7 +2902,7 @@ dependencies = [
  "pingora-cache",
  "prometheus",
  "reqwest",
- "seize 0.4.9",
+ "seize 0.5.0",
  "serde",
  "serde_json",
  "short-crypt",
@@ -3350,6 +3350,16 @@ name = "seize"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d84b0c858bdd30cb56f5597f8b3bf702ec23829e652cc636a1e5a7b9de46ae93"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "seize"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4b8d813387d566f627f3ea1b914c068aac94c40ae27ec43f5f33bde65abefe7"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
