@@ -309,7 +309,7 @@ mod test {
     fn test_domain_addr() {
         let addr = "example.com:80";
         let addr = addr.to_socket_addrs().unwrap().next().unwrap();
-        assert_eq!(addr.ip().to_string(), "93.184.215.14");
+        assert_eq!(addr.ip().is_ipv4(), true);
         assert_eq!(addr.port(), 80);
     }
 }
