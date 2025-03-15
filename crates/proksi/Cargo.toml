@@ -7,21 +7,21 @@ license = "MIT OR Apache-2.0"
 keywords = ["proxy", "https", "reverse-proxy", "load-balancer", "pingora"]
 categories = ["web-programming::http-server", "network-programming"]
 exclude = [
-  "*.yaml",
-  "*.yml",
-  "*.toml",
-  "src/*.md",
-  "examples/",
-  "dist/",
-  "docs/",
-  "target/",
-  "tests/",
-  "assets/",
-  "tmp/",
-  "Makefile",
-  "Dockerfile",
-  "gitbook/",
-  ".github/",
+    "*.yaml",
+    "*.yml",
+    "*.toml",
+    "src/*.md",
+    "examples/",
+    "dist/",
+    "docs/",
+    "target/",
+    "tests/",
+    "assets/",
+    "tmp/",
+    "Makefile",
+    "Dockerfile",
+    "gitbook/",
+    ".github/",
 ]
 authors = ["The Proksi Contributors <toaster.chicory-0b@icloud.com>"]
 readme = "../../README.md"
@@ -49,13 +49,13 @@ itertools = "0.14.0"
 jsonwebtoken = { version = "9.3.1", default-features = false }
 nix = { version = "0.29.0", features = ["signal"] }
 notify = { version = "8.0.0", default-features = false, features = [
-  "fsevent-sys",
+    "fsevent-sys",
 ] }
 num_cpus = "1.16.0"
 once_cell = "1.20.3"
 openssl = { version = "0.10", features = ["vendored"] }
 papaya = "0.2.0"
-path-tree = "0.8.2"
+path-tree = "0.8.1"
 pingora = { version = "0.4.0", features = ["lb", "openssl", "proxy", "cache"] }
 pingora-cache = "0.4.0"
 prometheus = "0.13.4"

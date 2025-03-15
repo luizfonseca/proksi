@@ -72,7 +72,7 @@ impl EventHandler for FileWatcherServiceHandler {
         let current_args = std::env::args().skip(1);
 
         // restart the process
-        std::process::Command::new(cmd).args(current_args).exec();
+        let _ = std::process::Command::new(cmd).args(current_args).exec();
 
         tracing::warn!("restarting Proksi server");
 

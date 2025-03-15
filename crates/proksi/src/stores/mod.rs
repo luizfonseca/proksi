@@ -6,6 +6,7 @@ use once_cell::sync::Lazy;
 use papaya::HashMapRef;
 use routes::{RouteStore, RouteStoreContainer};
 
+pub mod adapter;
 pub mod cache;
 pub mod certificates;
 pub mod challenges;

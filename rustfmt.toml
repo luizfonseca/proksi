@@ -1,6 +1,6 @@
 # Stable https://rust-lang.github.io/rustfmt/?version=v1.7.0
 use_field_init_shorthand = true
-edition = "2021"
+edition = "2024"
 newline_style = "Unix"
 reorder_imports = true
 
