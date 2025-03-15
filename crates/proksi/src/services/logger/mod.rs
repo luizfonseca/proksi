@@ -271,7 +271,7 @@ impl Service for ProxyLoggerReceiver {
         }
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "logging_service"
     }
 

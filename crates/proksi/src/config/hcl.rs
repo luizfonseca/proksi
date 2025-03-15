@@ -43,8 +43,7 @@ fn read_hcl_file(args: FuncArgs) -> Result<Value, String> {
     let path = Path::new(args[0].as_str().unwrap());
 
     if !path
-        .extension()
-        .map_or(false, |ext| ext.eq_ignore_ascii_case("hcl"))
+        .extension().is_some_and(|ext| ext.eq_ignore_ascii_case("hcl"))
     {
         return Err(format!(
             "File must be a HCL file: {}",

@@ -52,7 +52,7 @@ impl Service for HealthService {
         run_health_check_loop().await;
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "health_check_service"
     }
 

@@ -26,7 +26,6 @@ use crate::{
 const DEFAULT_RENEW_INTERVAL_DAYS: i64 = 30;
 
 /// A service that handles the creation of certificates using the Let's Encrypt API
-
 pub struct LetsencryptService {
     pub(crate) config: Arc<Config>,
     // pub(crate) route_store: RouteStore,

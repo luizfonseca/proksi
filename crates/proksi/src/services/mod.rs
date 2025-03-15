@@ -48,7 +48,7 @@ impl pingora::services::Service for BackgroundFunctionService {
         );
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "background_services"
     }
 

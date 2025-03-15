@@ -445,7 +445,6 @@ pub struct Logging {
     pub format: LogFormat,
 
     /// If set, logs will be written to the specified file
-
     #[arg(long = "log.path", required = false, value_parser)]
     pub path: Option<PathBuf>,
 

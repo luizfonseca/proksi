@@ -44,7 +44,6 @@ fn get_required_config(
 #[async_trait]
 pub trait MiddlewarePlugin {
     /// Create a new state for the middleware
-
     /// Filter requests based on the middleware's logic
     /// Return false if the request should be allowed to pass through and was not handled
     /// Return true if the request was already handled

@@ -133,7 +133,7 @@ impl Service for RoutingService {
         }
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "proxy_service_discovery"
     }
 
@@ -309,7 +309,7 @@ mod test {
     fn test_domain_addr() {
         let addr = "example.com:80";
         let addr = addr.to_socket_addrs().unwrap().next().unwrap();
-        assert_eq!(addr.ip().is_ipv4(), true);
+        assert!(addr.ip().is_ipv4());
         assert_eq!(addr.port(), 80);
     }
 }

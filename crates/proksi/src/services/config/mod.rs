@@ -127,7 +127,7 @@ impl Service for FileWatcherService {
         }
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "config_watcher_service"
     }
 
