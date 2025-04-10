@@ -65,12 +65,17 @@ serde = "1.0.219"
 serde_json = "1.0.140"
 short-crypt = "1.0.28"
 time = "0.3.41"
-tokio = { version = "1.44.2", features = ["sync", "rt-multi-thread", "fs"] }
+tokio = { version = "1.44.2", features = [
+    "sync",
+    "rt-multi-thread",
+    "fs",
+    "io-std",
+] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["json", "env-filter"] }
 uuid = { version = "1.15.1", features = ["v4"] }
-wasmtime = "31.0.0"
-wasmtime-wasi = "31.0.0"
+# wasmtime = "31.0.0"
+# wasmtime-wasi = "31.0.0"
 
 [[bench]]
 name = "dashmap_arc"
