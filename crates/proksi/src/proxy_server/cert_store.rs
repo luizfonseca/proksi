@@ -42,7 +42,7 @@ impl TlsAccept for CertStore {
         // Due to the sni_callback function, we can safely unwrap here
         let host_name = ssl.servername(NameType::HOST_NAME).unwrap_or_default();
 
-        let Some(cert) = stores::get_certificate_by_key(host_name) else {
+        let Some(cert) = stores::global::get_store().get_certificate(host_name).await else {
             tracing::debug!("No certificate found for host: {:?}", host_name);
             return;
         };

@@ -3,6 +3,7 @@ use ::pingora::server::Server;
 use bytes::Bytes;
 use clap::crate_version;
 use config::{load, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
+use stores::{adapter::MemoryStore, global::init_store};
 use tracing_subscriber::EnvFilter;
 
 use std::{borrow::Cow, sync::Arc};
@@ -58,6 +59,10 @@ pub enum MsgProxy {
     clippy::complexity
 )]
 fn main() -> Result<(), anyhow::Error> {
+    // initialize global store
+    // TODO: use the config to switch between different stores
+    init_store(MemoryStore::new());
+
     // Configuration can be refreshed on file change
 
     // Loads configuration from command-line, YAML or TOML sources

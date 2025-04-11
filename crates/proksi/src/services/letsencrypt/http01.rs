@@ -49,7 +49,11 @@ impl LetsencryptService {
 
     /// Update global certificate store with new `X509` and `PKey` for the
     /// given domain also considering that the certificate could be a bundle file.
-    fn insert_certificate(domain: &str, bundle: &str, key_pem: &str) -> Result<(), anyhow::Error> {
+    async fn insert_certificate(
+        domain: &str,
+        bundle: &str,
+        key_pem: &str,
+    ) -> Result<(), anyhow::Error> {
         let end = "-----END CERTIFICATE-----";
         // Split certificates (leaf and chain) from the bundle
         let split = bundle
@@ -73,7 +77,10 @@ impl LetsencryptService {
 
         let key = Self::parse_private_key(key_pem)?;
 
-        stores::insert_certificate(domain.to_string(), Certificate { key, leaf, chain });
+        stores::global::get_store()
+            .set_certificate(domain, Certificate { key, leaf, chain })
+            .await
+            .map_err(|o_err| anyhow!("failed to save certificate in the store: {}", o_err))?;
 
         Ok(())
     }
@@ -85,6 +92,8 @@ impl LetsencryptService {
 
             info!("HTTP-01 challenge for domain: {}", auth.domain_name());
 
+            // TODO: multiple replicas of Proksi can handle challenges
+            // TODO: move it to the store as well
             stores::insert_challenge(
                 auth.domain_name().to_string(),
                 (
@@ -104,7 +113,10 @@ impl LetsencryptService {
     /// cannot be used.
     /// Note this is only useful for local development or testing purposes
     /// and should be used sparingly
-    fn create_self_signed_certificate(domain: &str, enabled: bool) -> Result<(), anyhow::Error> {
+    async fn create_self_signed_certificate(
+        domain: &str,
+        enabled: bool,
+    ) -> Result<(), anyhow::Error> {
         // Generate self-signed certificate only if self_signed_on_failure is set to true
         // If not provided, default to true
         if !enabled {
@@ -138,14 +150,17 @@ impl LetsencryptService {
 
         let openssl_cert = openssl_cert.build();
 
-        stores::insert_certificate(
-            domain.to_string(),
-            Certificate {
-                key,
-                leaf: openssl_cert,
-                chain: None,
-            },
-        );
+        stores::global::get_store()
+            .set_certificate(
+                domain,
+                Certificate {
+                    key,
+                    leaf: openssl_cert,
+                    chain: None,
+                },
+            )
+            .await
+            .map_err(|o_err| anyhow!("failed to save self-signed certificate {}", o_err))?;
 
         Ok(())
     }
@@ -175,7 +190,7 @@ impl LetsencryptService {
     }
 
     /// Create a new order for a domain (HTTP-01 challenge)
-    fn create_order_for_domain(
+    async fn create_order_for_domain(
         domain: &str,
         account: &Account<FilePersist>,
     ) -> Result<(), anyhow::Error> {
@@ -203,7 +218,7 @@ impl LetsencryptService {
 
         let cert = order_cert.download_and_save_cert()?;
 
-        Self::insert_certificate(domain, cert.certificate(), cert.private_key())?;
+        Self::insert_certificate(domain, cert.certificate(), cert.private_key()).await?;
 
         Ok(())
     }
@@ -216,11 +231,16 @@ impl LetsencryptService {
             interval.tick().await;
             tracing::debug!("checking for new routes to create certificates for");
             for (key, value) in &stores::get_routes() {
-                if stores::get_certificates().contains_key(key) {
+                if stores::global::get_store()
+                    .get_certificates()
+                    .await
+                    .contains_key(key)
+                {
                     continue;
                 }
 
-                Self::handle_certificate_for_domain(key, account, value.self_signed_certificate);
+                Self::handle_certificate_for_domain(key, account, value.self_signed_certificate)
+                    .await;
             }
         }
     }
@@ -251,6 +271,7 @@ impl LetsencryptService {
 
                 tracing::info!("trying to renew certificate for domain: {domain}");
                 if let Err(error) = Self::create_order_for_domain(domain, account)
+                    .await
                     .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
                 {
                     tracing::error!("failed to renew certificate for domain {domain}: {error}");
@@ -261,7 +282,7 @@ impl LetsencryptService {
         }
     }
 
-    fn handle_certificate_for_domain(
+    async fn handle_certificate_for_domain(
         domain: &str,
         account: &Account<FilePersist>,
         self_signed_on_failure: bool,
@@ -269,19 +290,28 @@ impl LetsencryptService {
         match account.certificate(domain) {
             Ok(Some(cert)) => {
                 // Certificate already exists
-                if stores::get_certificates().contains_key(domain) {
+                if stores::global::get_store()
+                    .get_certificates()
+                    .await
+                    .contains_key(domain)
+                {
                     return;
                 }
 
                 if let Err(err) =
-                    Self::insert_certificate(domain, cert.certificate(), cert.private_key())
+                    Self::insert_certificate(domain, cert.certificate(), cert.private_key()).await
                 {
                     tracing::error!("failed to insert certificate for domain {domain}: {err}");
                 };
             }
             Ok(None) => {
-                if Self::create_order_for_domain(domain, account).is_err() {
-                    Self::create_self_signed_certificate(domain, self_signed_on_failure).ok();
+                if Self::create_order_for_domain(domain, account)
+                    .await
+                    .is_err()
+                {
+                    Self::create_self_signed_certificate(domain, self_signed_on_failure)
+                        .await
+                        .ok();
                 }
             }
             _ => {}
