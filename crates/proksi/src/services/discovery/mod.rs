@@ -1,6 +1,7 @@
 use std::net::ToSocketAddrs;
 use std::{borrow::Cow, str::FromStr, sync::Arc, time::Duration};
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 
 use http::{HeaderName, HeaderValue};
@@ -33,14 +34,14 @@ impl RoutingService {
     }
 
     /// From a given configuration file, create the static load balancing configuration
-    fn add_routes_from_config(&mut self) {
+    async fn add_routes_from_config(&mut self) {
         for route in &self.config.routes {
             let self_signed_cert_on_failure = route
                 .ssl_certificate
                 .as_ref()
                 .and_then(|v| v.self_signed_on_failure);
 
-            if let Err(err) = add_route_ssl_to_store(route) {
+            if let Err(err) = add_route_ssl_to_store(route).await {
                 tracing::error!(
                     "failed to add SSL certificate to store for host {:?}: {err}",
                     route.host
@@ -124,7 +125,7 @@ impl RoutingService {
 impl Service for RoutingService {
     async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
         // Setup initial routes from config file
-        self.add_routes_from_config();
+        self.add_routes_from_config().await;
 
         // Watch for new hosts being added and configure them accordingly
         let mut receiver = self.broadcast.subscribe();
@@ -250,7 +251,7 @@ fn add_route_to_router(
 }
 
 // TODO: refactor this into its own module
-fn add_route_ssl_to_store(route: &Route) -> Result<(), anyhow::Error> {
+async fn add_route_ssl_to_store(route: &Route) -> Result<(), anyhow::Error> {
     let Some(ssl_path) = route.ssl.as_ref().and_then(|v| v.path.as_ref()) else {
         return Ok(());
     };
@@ -281,14 +282,22 @@ fn add_route_ssl_to_store(route: &Route) -> Result<(), anyhow::Error> {
         )
     })?;
 
-    stores::insert_certificate(
-        route.host.to_string(),
-        stores::certificates::Certificate {
-            key,
-            leaf: pem,
-            chain: None,
-        },
-    );
+    stores::global::get_store()
+        .set_certificate(
+            &route.host,
+            stores::certificates::Certificate {
+                key,
+                leaf: pem,
+                chain: None,
+            },
+        )
+        .await
+        .map_err(|_| {
+            anyhow!(
+                "Failed to insert certificate from config for route:  {}",
+                &route.host
+            )
+        })?;
 
     Ok(())
 }

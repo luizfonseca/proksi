@@ -1,6 +1,5 @@
 use std::hash::RandomState;
 
-use certificates::{Certificate, CertificateStore};
 use challenges::ChallengeStore;
 use once_cell::sync::Lazy;
 use papaya::HashMapRef;
@@ -10,6 +9,7 @@ pub mod adapter;
 pub mod cache;
 pub mod certificates;
 pub mod challenges;
+pub mod global;
 pub mod routes;
 
 // CHALLENGE store
@@ -41,20 +41,20 @@ pub fn insert_route(key: String, value: RouteStoreContainer) {
 }
 
 // CERTIFICATE store
-static CERTIFICATE_STORE: Lazy<CertificateStore> = Lazy::new(papaya::HashMap::new);
+// static CERTIFICATE_STORE: Lazy<CertificateStore> = Lazy::new(papaya::HashMap::new);
 
-pub fn get_certificate_by_key(key: &str) -> Option<Certificate> {
-    CERTIFICATE_STORE.pin().get(key).cloned()
-}
+// pub fn get_certificate_by_key(key: &str) -> Option<Certificate> {
+//     CERTIFICATE_STORE.pin().get(key).cloned()
+// }
 
-pub fn get_certificates(
-) -> HashMapRef<'static, String, Certificate, RandomState, seize::LocalGuard<'static>> {
-    CERTIFICATE_STORE.pin()
-}
+// pub fn get_certificates(
+// ) -> HashMapRef<'static, String, Certificate, RandomState, seize::LocalGuard<'static>> {
+//     CERTIFICATE_STORE.pin()
+// }
 
-pub fn insert_certificate(key: String, value: Certificate) {
-    CERTIFICATE_STORE.pin().insert(key, value);
-}
+// pub fn insert_certificate(key: String, value: Certificate) {
+//     CERTIFICATE_STORE.pin().insert(key, value);
+// }
 
 // Cache Routing store
 static CACHE_ROUTING_STORE: Lazy<cache::PathCacheStorage> = Lazy::new(papaya::HashMap::new);

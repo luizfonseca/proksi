@@ -3,33 +3,52 @@
 // For certificates it might be a file system, a database, or a cloud storage service.
 // The system will try to sync the information to ensure that a given server is not
 // constantly requesting the information and adding latency to requests.
-// pub trait StoreAdapter {
-//     fn new() -> Self;
-//     fn get(&self, key: &str) -> Option<String>;
-//     fn set(&self, key: &str, value: &str) -> Result<(), String>;
-//     fn delete(&self, key: &str) -> Result<(), String>;
-// }
 
-// pub struct RedisStore {
-//     // Implementation details
-// }
+use async_trait::async_trait;
+use papaya::HashMapRef;
+use std::{error::Error, hash::RandomState};
 
-// pub struct MemoryStore {}
+use super::certificates::Certificate;
 
-// impl StoreAdapter for MemoryStore {
-//     fn new() -> Self {
-//         MemoryStore::new()
-//     }
+#[async_trait]
+pub trait Store: Send + Sync + 'static {
+    // async fn get_route(&self, host: &str) -> Result<Option<String>, Box<dyn Error>>;
+    // async fn remove_route(&self, host: &str) -> Result<(), Box<dyn Error>>;
+    // async fn set_route(&self, route: &str) -> Result<(), Box<dyn Error>>;
+    async fn get_certificate(&self, domain: &str) -> Option<Certificate>;
+    async fn set_certificate(&self, domain: &str, cert: Certificate) -> Result<(), Box<dyn Error>>;
+    async fn get_certificates(
+        &self,
+    ) -> HashMapRef<'_, String, Certificate, RandomState, seize::LocalGuard<'_>>;
+}
 
-//     fn get(&self, key: &str) -> Option<String> {
-//         self.get(key)
-//     }
+pub struct MemoryStore {
+    /// Map of domain names to certificates (including leaf & chain)
+    inner_certs: papaya::HashMap<String, Certificate>,
+}
 
-//     fn set(&self, key: &str, value: &str) -> Result<(), String> {
-//         self.set(key, value)
-//     }
+impl MemoryStore {
+    pub fn new() -> Self {
+        MemoryStore {
+            inner_certs: papaya::HashMap::new(),
+        }
+    }
+}
 
-//     fn delete(&self, key: &str) -> Result<(), String> {
-//         self.delete(key)
-//     }
-// }
+#[async_trait]
+impl Store for MemoryStore {
+    async fn get_certificate(&self, host: &str) -> Option<Certificate> {
+        self.inner_certs.pin().get(host).cloned()
+    }
+
+    async fn set_certificate(&self, host: &str, cert: Certificate) -> Result<(), Box<dyn Error>> {
+        self.inner_certs.pin().insert(host.to_string(), cert);
+        Ok(())
+    }
+
+    async fn get_certificates(
+        &self,
+    ) -> HashMapRef<'_, String, Certificate, RandomState, seize::LocalGuard<'_>> {
+        self.inner_certs.pin()
+    }
+}
