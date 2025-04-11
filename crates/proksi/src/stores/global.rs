@@ -6,9 +6,10 @@ use super::adapter::Store;
 static GLOBAL_STORE: OnceCell<Arc<dyn Store>> = OnceCell::new();
 
 pub fn init_store<S: Store>(store: S) {
-    if GLOBAL_STORE.set(Arc::new(store)).is_err() {
-        panic!("Global store already initialized");
-    }
+    assert!(
+        GLOBAL_STORE.set(Arc::new(store)).is_ok(),
+        "Global store already initialized"
+    );
 }
 
 pub fn get_store() -> &'static Arc<dyn Store> {
