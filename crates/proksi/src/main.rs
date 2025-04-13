@@ -58,16 +58,11 @@ pub enum MsgProxy {
     clippy::suspicious,
     clippy::complexity
 )]
+
 fn main() -> Result<(), anyhow::Error> {
-    // initialize global store
-    // TODO: use the config to switch between different stores
-    init_store(MemoryStore::new());
-
     // Configuration can be refreshed on file change
-
     // Loads configuration from command-line, YAML or TOML sources
-    let proxy_config =
-        Arc::new(load("/etc/proksi/configs").expect("Failed to load configuration: "));
+    let proxy_config = Arc::new(load("/etc/proksi/configs").expect("Failed to load configuration"));
 
     let https_address = proxy_config
         .server
@@ -103,6 +98,24 @@ fn main() -> Result<(), anyhow::Error> {
             .with_ansi(proxy_config.logging.path.is_none())
             .with_writer(appender)
             .init();
+    };
+
+    // Initialize global store based on configuration
+    match proxy_config.store.store_type {
+        config::StoreType::Memory => {
+            tracing::info!("using Memory store for certificates");
+            init_store(MemoryStore::new());
+        }
+        config::StoreType::Redis => {
+            let redis_url =
+                proxy_config.store.redis_url.as_deref().expect(
+                    "Failed to get redis_url from configuration when store type is 'redis'",
+                );
+            let redis_store = stores::adapter::RedisStore::new(redis_url)
+                .expect("Failed to initialize Redis store");
+            tracing::info!("using Redis store for certificates");
+            init_store(redis_store);
+        }
     };
 
     // Pingora load balancer server
