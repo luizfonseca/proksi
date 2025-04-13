@@ -72,7 +72,7 @@ impl RedisStore {
     }
 
     fn certificate_key(domain: &str) -> String {
-        format!("proksi:cert:{}", domain)
+        format!("proksi:cert:{domain}")
     }
 
     fn load_from_redis(&self, domain: &str) -> Option<Certificate> {
@@ -133,7 +133,7 @@ impl Store for RedisStore {
         TEMP_MAP.pin().clear();
 
         // First, copy all cached certificates
-        for (key, value) in self.cache.pin().iter() {
+        for (key, value) in &self.cache.pin() {
             TEMP_MAP.pin().insert(key.clone(), value.clone());
         }
 

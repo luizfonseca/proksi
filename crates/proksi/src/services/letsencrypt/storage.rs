@@ -6,7 +6,7 @@ use std::{
 
 use redis::Commands;
 
-/// PersistType enum represents the type of persistence used for storing certificates.
+/// `PersistType` enum represents the type of persistence used for storing certificates.
 #[derive(Clone)]
 pub enum PersistType {
     Redis(RedisPersist),
@@ -87,7 +87,7 @@ impl CertificatePersist {
 }
 
 #[derive(Clone)]
-/// RedisPersist is a struct that implements the Persist trait for storing and retrieving Let's Encrypt certificates.
+/// `RedisPersist` is a struct that implements the Persist trait for storing and retrieving Let's Encrypt certificates.
 pub struct RedisPersist {
     client: redis::Client,
 }

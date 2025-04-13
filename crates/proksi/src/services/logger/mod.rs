@@ -156,7 +156,7 @@ pub struct Inner {
 }
 
 impl ProxyLoggerReceiver {
-    pub fn new(receiver: UnboundedReceiver<Vec<u8>>, config: Arc<Config>) -> Self {
+    pub fn new(receiver: UnboundedReceiver<Vec<u8>>, config: &Arc<Config>) -> Self {
         ProxyLoggerReceiver {
             receiver,
             config: config.clone(),

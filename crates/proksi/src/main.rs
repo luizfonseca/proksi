@@ -58,7 +58,6 @@ pub enum MsgProxy {
     clippy::suspicious,
     clippy::complexity
 )]
-
 fn main() -> Result<(), anyhow::Error> {
     // Configuration can be refreshed on file change
     // Loads configuration from command-line, YAML or TOML sources
@@ -173,7 +172,7 @@ fn main() -> Result<(), anyhow::Error> {
     pingora_server.add_service(BackgroundFunctionService::new(proxy_config.clone(), sender));
 
     // Dedicated logger service
-    pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver, proxy_config.clone()));
+    pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver, &proxy_config));
 
     // Listen on HTTP and HTTPS ports
     pingora_server.add_service(http_public_service);
