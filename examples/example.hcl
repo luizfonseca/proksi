@@ -35,17 +35,12 @@ server {
 # You can store all proksi configuration such as certificates, routes, pathing etc.
 store {
   # Defaults to use in-memory storage.
-  type = "memory"
+  store_type = "memory"
 
-  # Defaults to get data from redis
-  # type = "redis"
+  # Change to get data from redis
+  # store_type = "redis"
+  # redis_url = "redis://localhost:6479/"
 
-  # redis = {
-  #   host = "localhost"
-  #   port = 6379
-  #   password = ""
-  #   database = 0
-  # }
 
 }
 
