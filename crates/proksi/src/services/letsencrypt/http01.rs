@@ -1,11 +1,6 @@
-use std::{
-    fs::create_dir_all,
-    path::{self, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
-use acme_v2::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
+use acme_v2::{order::NewOrder, Account, DirectoryUrl};
 use anyhow::anyhow;
 use async_trait::async_trait;
 
@@ -21,6 +16,8 @@ use crate::{
     config::Config,
     stores::{self, certificates::Certificate},
 };
+
+use super::storage::PersistType;
 
 /// Default interval in days to attempt renewal of certificates
 const DEFAULT_RENEW_INTERVAL_DAYS: i64 = 30;
@@ -86,7 +83,7 @@ impl LetsencryptService {
     }
 
     /// Start an HTTP-01 challenge for a given order
-    fn handle_http_01_challenge(order: &mut NewOrder<FilePersist>) -> Result<(), anyhow::Error> {
+    fn handle_http_01_challenge(order: &mut NewOrder<PersistType>) -> Result<(), anyhow::Error> {
         for auth in order.authorizations()? {
             let challenge = auth.http_challenge();
 
@@ -173,26 +170,10 @@ impl LetsencryptService {
         }
     }
 
-    /// Return the appropriate Let's Encrypt directories for certificates based on the environment
-    fn get_lets_encrypt_directory(&self) -> PathBuf {
-        let suffix = match self.config.lets_encrypt.staging {
-            Some(false) => "production",
-            _ => "staging",
-        };
-
-        let path = self.config.paths.lets_encrypt.join(suffix);
-
-        if let Ok(res) = path::absolute(&path) {
-            return res;
-        }
-
-        path
-    }
-
     /// Create a new order for a domain (HTTP-01 challenge)
     async fn create_order_for_domain(
         domain: &str,
-        account: &Account<FilePersist>,
+        account: &Account<PersistType>,
     ) -> Result<(), anyhow::Error> {
         let mut order = account.new_order(domain, &[])?;
 
@@ -224,7 +205,7 @@ impl LetsencryptService {
     }
 
     /// Watch for route changes and create or update certificates for new routes
-    async fn watch_for_route_changes(&self, account: &Account<FilePersist>) {
+    async fn watch_for_route_changes(&self, account: &Account<PersistType>) {
         let mut interval = time::interval(Duration::from_secs(20));
 
         loop {
@@ -246,7 +227,7 @@ impl LetsencryptService {
     }
 
     /// Check for certificates expiration and renew them if needed
-    async fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) {
+    async fn check_for_certificates_expiration(&self, account: &Account<PersistType>) {
         let mut interval = time::interval(Duration::from_secs(
             self.config
                 .lets_encrypt
@@ -284,7 +265,7 @@ impl LetsencryptService {
 
     async fn handle_certificate_for_domain(
         domain: &str,
-        account: &Account<FilePersist>,
+        account: &Account<PersistType>,
         self_signed_on_failure: bool,
     ) {
         match account.certificate(domain) {
@@ -328,26 +309,10 @@ impl Service for LetsencryptService {
         }
         info!("started LetsEncrypt service");
 
-        // Get directory based on whether we are running on staging/production
-        // LetsEncrypt configurations
-        let dir = self.get_lets_encrypt_directory();
-        let certificates_dir = dir.as_os_str();
+        let persist =
+            crate::services::letsencrypt::storage::CertificatePersist::new(self.config.clone());
 
-        tracing::info!(
-            "creating certificates in folder {}",
-            certificates_dir.to_string_lossy()
-        );
-
-        // Ensures the directories exist before we start creating certificates
-        if create_dir_all(certificates_dir).is_err() {
-            tracing::error!("failed to create directory {certificates_dir:?}. Check permissions or make sure that the parent directory exists beforehand.");
-            return;
-        }
-
-        // Key-Value Store
-        let persist = acme_v2::persist::FilePersist::new(certificates_dir);
-
-        let dir = acme_v2::Directory::from_url(persist, self.get_lets_encrypt_url())
+        let dir = acme_v2::Directory::from_url(persist.get_persist(), self.get_lets_encrypt_url())
             .expect("failed to create LetsEncrypt directory");
 
         let account = dir

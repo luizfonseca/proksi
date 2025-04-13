@@ -43,7 +43,7 @@ impl TlsAccept for CertStore {
         let host_name = ssl.servername(NameType::HOST_NAME).unwrap_or_default();
 
         let Some(cert) = stores::global::get_store().get_certificate(host_name).await else {
-            tracing::debug!("No certificate found for host: {:?}", host_name);
+            tracing::info!("No certificate found for host: {:?}", host_name);
             return;
         };
 
