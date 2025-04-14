@@ -1,6 +1,6 @@
 use std::hash::RandomState;
 
-use challenges::ChallengeStore;
+// use challenges::ChallengeStore; // DEPRECATED: Use global store instead
 use once_cell::sync::Lazy;
 use papaya::HashMapRef;
 use routes::{RouteStore, RouteStoreContainer};
@@ -12,17 +12,17 @@ pub mod challenges;
 pub mod global;
 pub mod routes;
 
-// CHALLENGE store
-static CHALLENGE_STORE: Lazy<ChallengeStore> = Lazy::new(papaya::HashMap::new);
+// CHALLENGE store - DEPRECATED: Use global store instead
+// static CHALLENGE_STORE: Lazy<ChallengeStore> = Lazy::new(papaya::HashMap::new);
 
-pub fn get_challenge_by_key(key: &str) -> Option<(String, String)> {
-    CHALLENGE_STORE.pin().get(key).cloned()
-}
+// pub fn get_challenge_by_key(key: &str) -> Option<(String, String)> {
+//     CHALLENGE_STORE.pin().get(key).cloned()
+// }
 
-/// Insert given challenge into the store
-pub fn insert_challenge(key: String, value: (String, String)) {
-    CHALLENGE_STORE.pin().insert(key, value);
-}
+// /// Insert given challenge into the store
+// pub fn insert_challenge(key: String, value: (String, String)) {
+//     CHALLENGE_STORE.pin().insert(key, value);
+// }
 
 // ROUTE store
 static ROUTE_STORE: Lazy<RouteStore> = Lazy::new(papaya::HashMap::new);

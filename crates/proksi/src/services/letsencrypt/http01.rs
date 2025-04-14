@@ -83,21 +83,25 @@ impl LetsencryptService {
     }
 
     /// Start an HTTP-01 challenge for a given order
-    fn handle_http_01_challenge(order: &mut NewOrder<PersistType>) -> Result<(), anyhow::Error> {
+    async fn handle_http_01_challenge(order: &mut NewOrder<PersistType>) -> Result<(), anyhow::Error> {
         for auth in order.authorizations()? {
             let challenge = auth.http_challenge();
 
             info!("HTTP-01 challenge for domain: {}", auth.domain_name());
 
-            // TODO: multiple replicas of Proksi can handle challenges
-            // TODO: move it to the store as well
-            stores::insert_challenge(
-                auth.domain_name().to_string(),
-                (
+            // Use the global store to set the challenge
+            // This allows multiple replicas of Proksi to handle challenges
+            if let Err(err) = stores::global::get_store()
+                .set_challenge(
+                    auth.domain_name(),
                     challenge.http_token().to_string(),
                     challenge.http_proof().to_string(),
-                ),
-            );
+                )
+                .await
+            {
+                tracing::error!("Failed to set challenge in store: {}", err);
+                return Err(anyhow!("Failed to set challenge in store: {}", err));
+            }
 
             // Let's Encrypt will check the domain's URL to validate the challenge
             tracing::info!("HTTP-01 validating (retry: 5s)...");
@@ -185,7 +189,7 @@ impl LetsencryptService {
 
             // Get the possible authorizations (for a single domain
             // this will only be one element).
-            Self::handle_http_01_challenge(&mut order)
+            Self::handle_http_01_challenge(&mut order).await
                 .map_err(|err| anyhow!("Failed to handle HTTP-01 challenge: {err}"))?;
 
             order.refresh().unwrap_or_default();
