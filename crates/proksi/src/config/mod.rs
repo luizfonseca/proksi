@@ -13,6 +13,28 @@ use tracing::level_filters::LevelFilter;
 mod hcl;
 mod validate;
 
+#[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
+pub enum StoreType {
+    Memory,
+    Redis,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StoreConfig {
+    #[serde(deserialize_with = "store_type_deser")]
+    pub store_type: StoreType,
+    pub redis_url: Option<String>,
+}
+
+impl Default for StoreConfig {
+    fn default() -> Self {
+        Self {
+            store_type: StoreType::Memory,
+            redis_url: None,
+        }
+    }
+}
+
 /// Default fn for boolean values
 fn bool_true() -> bool {
     true
@@ -555,6 +577,10 @@ pub(crate) struct Config {
     #[clap(short, long, default_value = "proksi")]
     pub service_name: Cow<'static, str>,
 
+    /// Store configuration for certificate storage
+    #[clap(skip)]
+    pub store: StoreConfig,
+
     #[command(flatten)]
     pub server: ServerCfg,
 
@@ -622,6 +648,7 @@ impl Default for Config {
             lets_encrypt: LetsEncrypt::default(),
             routes: vec![],
             auto_reload: AutoReload::default(),
+            store: StoreConfig::default(),
             logging: Logging {
                 enabled: true,
                 level: LogLevel::Info,
@@ -785,11 +812,74 @@ where
     }
 }
 
+fn store_type_deser<'de, D>(deserializer: D) -> Result<StoreType, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    match s.to_lowercase().as_str() {
+        "memory" => Ok(StoreType::Memory),
+        "redis" => Ok(StoreType::Redis),
+        _ => Err(serde::de::Error::custom("expected one of: memory, redis")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn test_store_config() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.yaml", tmp_dir),
+                r#"
+                lets_encrypt:
+                  email: "user@domain.net"
+                store:
+                  store_type: "redis"
+                  redis_url: "redis://localhost:6379"
+                "#,
+            )?;
+
+            let config = load(&tmp_dir);
+            let proxy_config = config.unwrap();
+
+            assert!(matches!(proxy_config.store.store_type, StoreType::Redis));
+            assert_eq!(
+                proxy_config.store.redis_url,
+                Some("redis://localhost:6379".to_string())
+            );
+
+            Ok(())
+        });
+
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.yaml", tmp_dir),
+                r#"
+                lets_encrypt:
+                  email: "user@domain.net"
+                store:
+                  store_type: "memory"
+                "#,
+            )?;
+
+            let config = load(&tmp_dir);
+            let proxy_config = config.unwrap();
+
+            assert!(matches!(proxy_config.store.store_type, StoreType::Memory));
+            assert_eq!(proxy_config.store.redis_url, None);
+
+            Ok(())
+        });
+    }
 
     fn helper_config_file() -> &'static str {
         r#"

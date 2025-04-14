@@ -30,6 +30,18 @@ server {
   http_address = "0.0.0.0:80"
 }
 
+
+# The store block specifies the settings for the store
+# You can store all proksi configuration such as certificates, routes, pathing etc.
+store {
+  # Defaults to use in-memory storage.
+  store_type = "memory"
+
+  # Change to get data from redis
+  # store_type = "redis"
+  # redis_url = "redis://localhost:6479/"
+}
+
 docker {
   # Whether the Docker integration is enabled
   # (the background service will run and listen for Docker events).

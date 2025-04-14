@@ -3,6 +3,7 @@ use ::pingora::server::Server;
 use bytes::Bytes;
 use clap::crate_version;
 use config::{load, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
+use stores::{MemoryStore, global::init_store};
 use tracing_subscriber::EnvFilter;
 
 use std::{borrow::Cow, sync::Arc};
@@ -59,10 +60,8 @@ pub enum MsgProxy {
 )]
 fn main() -> Result<(), anyhow::Error> {
     // Configuration can be refreshed on file change
-
     // Loads configuration from command-line, YAML or TOML sources
-    let proxy_config =
-        Arc::new(load("/etc/proksi/configs").expect("Failed to load configuration: "));
+    let proxy_config = Arc::new(load("/etc/proksi/configs").expect("Failed to load configuration"));
 
     let https_address = proxy_config
         .server
@@ -98,6 +97,24 @@ fn main() -> Result<(), anyhow::Error> {
             .with_ansi(proxy_config.logging.path.is_none())
             .with_writer(appender)
             .init();
+    };
+
+    // Initialize global store based on configuration
+    match proxy_config.store.store_type {
+        config::StoreType::Memory => {
+            tracing::info!("using Memory store for certificates");
+            init_store(MemoryStore::new());
+        }
+        config::StoreType::Redis => {
+            let redis_url =
+                proxy_config.store.redis_url.as_deref().expect(
+                    "Failed to get redis_url from configuration when store type is 'redis'",
+                );
+            let redis_store = stores::RedisStore::new(redis_url)
+                .expect("Failed to initialize Redis store");
+            tracing::info!("using Redis store for certificates");
+            init_store(redis_store);
+        }
     };
 
     // Pingora load balancer server
@@ -155,7 +172,7 @@ fn main() -> Result<(), anyhow::Error> {
     pingora_server.add_service(BackgroundFunctionService::new(proxy_config.clone(), sender));
 
     // Dedicated logger service
-    pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver, proxy_config.clone()));
+    pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver, &proxy_config));
 
     // Listen on HTTP and HTTPS ports
     pingora_server.add_service(http_public_service);

@@ -10,7 +10,7 @@ use pingora::upstreams::peer::HttpPeer;
 use pingora::proxy::{ProxyHttp, Session};
 use tracing::info;
 
-use crate::stores;
+use crate::stores::global;
 
 pub struct HttpLB {}
 
@@ -52,7 +52,7 @@ impl ProxyHttp for HttpLB {
             .path()
             .starts_with("/.well-known/acme-challenge")
         {
-            let challenge_from_host = stores::get_challenge_by_key(host);
+            let challenge_from_host = global::get_store().get_challenge(host).await;
 
             if challenge_from_host.is_none() {
                 return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));

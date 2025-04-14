@@ -5,6 +5,7 @@
 * [Getting started](README.md)
 * [Performance](general/performance.md)
 * [Motivations](general/motivations.md)
+* [Specifications](general/specifications.md)
 
 ## 💾 Installation
 
@@ -20,6 +21,7 @@
 * [Logging](configuration/logging.md)
 * [Auto Reload](configuration/auto-reload.md)
 * [Daemon](configuration/daemon.md)
+* [Redis](configuration/redis.md)
 
 ## 🔀 Routing
 

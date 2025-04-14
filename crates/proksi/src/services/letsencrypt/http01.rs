@@ -1,11 +1,6 @@
-use std::{
-    fs::create_dir_all,
-    path::{self, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
-use acme_v2::{order::NewOrder, persist::FilePersist, Account, DirectoryUrl};
+use acme_v2::{order::NewOrder, Account, DirectoryUrl};
 use anyhow::anyhow;
 use async_trait::async_trait;
 
@@ -21,6 +16,8 @@ use crate::{
     config::Config,
     stores::{self, certificates::Certificate},
 };
+
+use super::storage::PersistType;
 
 /// Default interval in days to attempt renewal of certificates
 const DEFAULT_RENEW_INTERVAL_DAYS: i64 = 30;
@@ -49,7 +46,11 @@ impl LetsencryptService {
 
     /// Update global certificate store with new `X509` and `PKey` for the
     /// given domain also considering that the certificate could be a bundle file.
-    fn insert_certificate(domain: &str, bundle: &str, key_pem: &str) -> Result<(), anyhow::Error> {
+    async fn insert_certificate(
+        domain: &str,
+        bundle: &str,
+        key_pem: &str,
+    ) -> Result<(), anyhow::Error> {
         let end = "-----END CERTIFICATE-----";
         // Split certificates (leaf and chain) from the bundle
         let split = bundle
@@ -73,25 +74,34 @@ impl LetsencryptService {
 
         let key = Self::parse_private_key(key_pem)?;
 
-        stores::insert_certificate(domain.to_string(), Certificate { key, leaf, chain });
+        stores::global::get_store()
+            .set_certificate(domain, Certificate { key, leaf, chain })
+            .await
+            .map_err(|o_err| anyhow!("failed to save certificate in the store: {}", o_err))?;
 
         Ok(())
     }
 
     /// Start an HTTP-01 challenge for a given order
-    fn handle_http_01_challenge(order: &mut NewOrder<FilePersist>) -> Result<(), anyhow::Error> {
+    async fn handle_http_01_challenge(order: &mut NewOrder<PersistType>) -> Result<(), anyhow::Error> {
         for auth in order.authorizations()? {
             let challenge = auth.http_challenge();
 
             info!("HTTP-01 challenge for domain: {}", auth.domain_name());
 
-            stores::insert_challenge(
-                auth.domain_name().to_string(),
-                (
+            // Use the global store to set the challenge
+            // This allows multiple replicas of Proksi to handle challenges
+            if let Err(err) = stores::global::get_store()
+                .set_challenge(
+                    auth.domain_name(),
                     challenge.http_token().to_string(),
                     challenge.http_proof().to_string(),
-                ),
-            );
+                )
+                .await
+            {
+                tracing::error!("Failed to set challenge in store: {}", err);
+                return Err(anyhow!("Failed to set challenge in store: {}", err));
+            }
 
             // Let's Encrypt will check the domain's URL to validate the challenge
             tracing::info!("HTTP-01 validating (retry: 5s)...");
@@ -104,7 +114,10 @@ impl LetsencryptService {
     /// cannot be used.
     /// Note this is only useful for local development or testing purposes
     /// and should be used sparingly
-    fn create_self_signed_certificate(domain: &str, enabled: bool) -> Result<(), anyhow::Error> {
+    async fn create_self_signed_certificate(
+        domain: &str,
+        enabled: bool,
+    ) -> Result<(), anyhow::Error> {
         // Generate self-signed certificate only if self_signed_on_failure is set to true
         // If not provided, default to true
         if !enabled {
@@ -138,14 +151,17 @@ impl LetsencryptService {
 
         let openssl_cert = openssl_cert.build();
 
-        stores::insert_certificate(
-            domain.to_string(),
-            Certificate {
-                key,
-                leaf: openssl_cert,
-                chain: None,
-            },
-        );
+        stores::global::get_store()
+            .set_certificate(
+                domain,
+                Certificate {
+                    key,
+                    leaf: openssl_cert,
+                    chain: None,
+                },
+            )
+            .await
+            .map_err(|o_err| anyhow!("failed to save self-signed certificate {}", o_err))?;
 
         Ok(())
     }
@@ -158,26 +174,10 @@ impl LetsencryptService {
         }
     }
 
-    /// Return the appropriate Let's Encrypt directories for certificates based on the environment
-    fn get_lets_encrypt_directory(&self) -> PathBuf {
-        let suffix = match self.config.lets_encrypt.staging {
-            Some(false) => "production",
-            _ => "staging",
-        };
-
-        let path = self.config.paths.lets_encrypt.join(suffix);
-
-        if let Ok(res) = path::absolute(&path) {
-            return res;
-        }
-
-        path
-    }
-
     /// Create a new order for a domain (HTTP-01 challenge)
-    fn create_order_for_domain(
+    async fn create_order_for_domain(
         domain: &str,
-        account: &Account<FilePersist>,
+        account: &Account<PersistType>,
     ) -> Result<(), anyhow::Error> {
         let mut order = account.new_order(domain, &[])?;
 
@@ -189,7 +189,7 @@ impl LetsencryptService {
 
             // Get the possible authorizations (for a single domain
             // this will only be one element).
-            Self::handle_http_01_challenge(&mut order)
+            Self::handle_http_01_challenge(&mut order).await
                 .map_err(|err| anyhow!("Failed to handle HTTP-01 challenge: {err}"))?;
 
             order.refresh().unwrap_or_default();
@@ -203,30 +203,35 @@ impl LetsencryptService {
 
         let cert = order_cert.download_and_save_cert()?;
 
-        Self::insert_certificate(domain, cert.certificate(), cert.private_key())?;
+        Self::insert_certificate(domain, cert.certificate(), cert.private_key()).await?;
 
         Ok(())
     }
 
     /// Watch for route changes and create or update certificates for new routes
-    async fn watch_for_route_changes(&self, account: &Account<FilePersist>) {
+    async fn watch_for_route_changes(&self, account: &Account<PersistType>) {
         let mut interval = time::interval(Duration::from_secs(20));
 
         loop {
             interval.tick().await;
             tracing::debug!("checking for new routes to create certificates for");
             for (key, value) in &stores::get_routes() {
-                if stores::get_certificates().contains_key(key) {
+                if stores::global::get_store()
+                    .get_certificates()
+                    .await
+                    .contains_key(key)
+                {
                     continue;
                 }
 
-                Self::handle_certificate_for_domain(key, account, value.self_signed_certificate);
+                Self::handle_certificate_for_domain(key, account, value.self_signed_certificate)
+                    .await;
             }
         }
     }
 
     /// Check for certificates expiration and renew them if needed
-    async fn check_for_certificates_expiration(&self, account: &Account<FilePersist>) {
+    async fn check_for_certificates_expiration(&self, account: &Account<PersistType>) {
         let mut interval = time::interval(Duration::from_secs(
             self.config
                 .lets_encrypt
@@ -251,6 +256,7 @@ impl LetsencryptService {
 
                 tracing::info!("trying to renew certificate for domain: {domain}");
                 if let Err(error) = Self::create_order_for_domain(domain, account)
+                    .await
                     .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
                 {
                     tracing::error!("failed to renew certificate for domain {domain}: {error}");
@@ -261,27 +267,36 @@ impl LetsencryptService {
         }
     }
 
-    fn handle_certificate_for_domain(
+    async fn handle_certificate_for_domain(
         domain: &str,
-        account: &Account<FilePersist>,
+        account: &Account<PersistType>,
         self_signed_on_failure: bool,
     ) {
         match account.certificate(domain) {
             Ok(Some(cert)) => {
                 // Certificate already exists
-                if stores::get_certificates().contains_key(domain) {
+                if stores::global::get_store()
+                    .get_certificates()
+                    .await
+                    .contains_key(domain)
+                {
                     return;
                 }
 
                 if let Err(err) =
-                    Self::insert_certificate(domain, cert.certificate(), cert.private_key())
+                    Self::insert_certificate(domain, cert.certificate(), cert.private_key()).await
                 {
                     tracing::error!("failed to insert certificate for domain {domain}: {err}");
                 };
             }
             Ok(None) => {
-                if Self::create_order_for_domain(domain, account).is_err() {
-                    Self::create_self_signed_certificate(domain, self_signed_on_failure).ok();
+                if Self::create_order_for_domain(domain, account)
+                    .await
+                    .is_err()
+                {
+                    Self::create_self_signed_certificate(domain, self_signed_on_failure)
+                        .await
+                        .ok();
                 }
             }
             _ => {}
@@ -298,26 +313,10 @@ impl Service for LetsencryptService {
         }
         info!("started LetsEncrypt service");
 
-        // Get directory based on whether we are running on staging/production
-        // LetsEncrypt configurations
-        let dir = self.get_lets_encrypt_directory();
-        let certificates_dir = dir.as_os_str();
+        let persist =
+            crate::services::letsencrypt::storage::CertificatePersist::new(self.config.clone());
 
-        tracing::info!(
-            "creating certificates in folder {}",
-            certificates_dir.to_string_lossy()
-        );
-
-        // Ensures the directories exist before we start creating certificates
-        if create_dir_all(certificates_dir).is_err() {
-            tracing::error!("failed to create directory {certificates_dir:?}. Check permissions or make sure that the parent directory exists beforehand.");
-            return;
-        }
-
-        // Key-Value Store
-        let persist = acme_v2::persist::FilePersist::new(certificates_dir);
-
-        let dir = acme_v2::Directory::from_url(persist, self.get_lets_encrypt_url())
+        let dir = acme_v2::Directory::from_url(persist.get_persist(), self.get_lets_encrypt_url())
             .expect("failed to create LetsEncrypt directory");
 
         let account = dir

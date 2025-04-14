@@ -22,7 +22,7 @@ use tokio::{
 };
 use tracing_subscriber::fmt::MakeWriter;
 
-use crate::config::{Config, LogRotation};
+use crate::config::Config;
 
 mod rotation;
 
@@ -156,19 +156,20 @@ pub struct Inner {
 }
 
 impl ProxyLoggerReceiver {
-    pub fn new(receiver: UnboundedReceiver<Vec<u8>>, config: Arc<Config>) -> Self {
+    pub fn new(receiver: UnboundedReceiver<Vec<u8>>, config: &Arc<Config>) -> Self {
         ProxyLoggerReceiver {
             receiver,
-            config,
+            config: config.clone(),
+            // capacity is 10 for non-file logging
             bufwriter: tokio::io::BufWriter::with_capacity(
-                1024,
+                10,
                 LogWriter::Stdout(tokio::io::stdout()),
             ),
             suffix: String::new(),
             state: Inner {
                 next_date: AtomicI64::new(0),
             },
-            rotation: Rotation(LogRotation::Never),
+            rotation: Rotation(crate::config::LogRotation::Never),
         }
     }
 
@@ -211,7 +212,7 @@ impl ProxyLoggerReceiver {
         }
     }
 
-    /// Creates a new `BufWriter` with a buffer size of 1024 bytes
+    /// Creates a new `BufWriter` with a buffer size of 1024 bytes for files
     fn new_buf_writer(writer: LogWriter) -> tokio::io::BufWriter<LogWriter> {
         tokio::io::BufWriter::with_capacity(1024, writer)
     }
@@ -265,7 +266,7 @@ impl Service for ProxyLoggerReceiver {
         self.prepare_buf_writer().await;
 
         while let Some(buf) = self.receiver.recv().await {
-            let _ = self.bufwriter.write(&buf).await.unwrap();
+            let _ = self.bufwriter.write(&buf).await.ok();
 
             self.handle_log_rotation().await;
         }
