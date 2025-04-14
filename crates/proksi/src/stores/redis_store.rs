@@ -1,9 +1,3 @@
-// Adapter module for managing different types of store adapters.
-// These are used to abstract where we store certificates, routing information etc.
-// For certificates it might be a file system, a database, or a cloud storage service.
-// The system will try to sync the information to ensure that a given server is not
-// constantly requesting the information and adding latency to requests.
-
 use async_trait::async_trait;
 use papaya::HashMapRef;
 use redis::{Client, Commands};
@@ -11,78 +5,9 @@ use serde_json;
 use std::{error::Error, hash::RandomState};
 
 use super::certificates::{Certificate, SerializableCertificate};
+use super::store_trait::Store;
 
-#[async_trait]
-pub trait Store: Send + Sync + 'static {
-    // async fn get_route(&self, host: &str) -> Result<Option<String>, Box<dyn Error>>;
-    // async fn remove_route(&self, host: &str) -> Result<(), Box<dyn Error>>;
-    // async fn set_route(&self, route: &str) -> Result<(), Box<dyn Error>>;
-    async fn get_certificate(&self, domain: &str) -> Option<Certificate>;
-    async fn set_certificate(&self, domain: &str, cert: Certificate) -> Result<(), Box<dyn Error>>;
-    async fn get_certificates(
-        &self,
-    ) -> HashMapRef<'_, String, Certificate, RandomState, seize::LocalGuard<'_>>;
-
-    // Challenge methods for storing ACME challenge tokens and proofs
-    async fn get_challenge(&self, domain: &str) -> Option<(String, String)>;
-    async fn set_challenge(
-        &self,
-        domain: &str,
-        token: String,
-        proof: String,
-    ) -> Result<(), Box<dyn Error>>;
-    // async fn set_challenge_with_ttl(&self, domain: &str, token: String, proof: String, ttl_seconds: u64) -> Result<(), Box<dyn Error>>;
-}
-
-pub struct MemoryStore {
-    /// Map of domain names to certificates (including leaf & chain)
-    inner_certs: papaya::HashMap<String, Certificate>,
-    /// Map of domain names to challenge tokens and proofs (token, proof)
-    inner_challenges: papaya::HashMap<String, (String, String)>,
-}
-
-impl MemoryStore {
-    pub fn new() -> Self {
-        MemoryStore {
-            inner_certs: papaya::HashMap::new(),
-            inner_challenges: papaya::HashMap::new(),
-        }
-    }
-}
-
-#[async_trait]
-impl Store for MemoryStore {
-    async fn get_certificate(&self, host: &str) -> Option<Certificate> {
-        self.inner_certs.pin().get(host).cloned()
-    }
-
-    async fn set_certificate(&self, host: &str, cert: Certificate) -> Result<(), Box<dyn Error>> {
-        self.inner_certs.pin().insert(host.to_string(), cert);
-        Ok(())
-    }
-
-    async fn get_certificates(
-        &self,
-    ) -> HashMapRef<'_, String, Certificate, RandomState, seize::LocalGuard<'_>> {
-        self.inner_certs.pin()
-    }
-
-    async fn get_challenge(&self, domain: &str) -> Option<(String, String)> {
-        self.inner_challenges.pin().get(domain).cloned()
-    }
-
-    async fn set_challenge(
-        &self,
-        domain: &str,
-        token: String,
-        proof: String,
-    ) -> Result<(), Box<dyn Error>> {
-        self.inner_challenges
-            .pin()
-            .insert(domain.to_string(), (token, proof));
-        Ok(())
-    }
-}
+const CHALLENGE_TTL_SECONDS: u64 = 300;
 
 pub struct RedisStore {
     pool: r2d2::Pool<redis::Client>,
@@ -247,7 +172,10 @@ impl Store for RedisStore {
         let challenge_tuple = (token.clone(), proof.clone());
         let challenge_json = serde_json::to_string(&challenge_tuple)?;
 
-        conn.set_ex::<String, String, String>(key, challenge_json, 500)?;
+        conn.set_ex::<String, String, String>(key, challenge_json, CHALLENGE_TTL_SECONDS)?;
+
+        // Optionally, we could set an expiry time for the challenge
+        // conn.expire::<String, ()>(key, ttl_seconds as usize)?;
 
         // Update cache
         self.challenge_cache

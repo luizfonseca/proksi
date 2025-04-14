@@ -1,16 +1,20 @@
 use std::hash::RandomState;
 
-// use challenges::ChallengeStore; // DEPRECATED: Use global store instead
 use once_cell::sync::Lazy;
 use papaya::HashMapRef;
 use routes::{RouteStore, RouteStoreContainer};
 
-pub mod adapter;
 pub mod cache;
 pub mod certificates;
-pub mod challenges;
 pub mod global;
+pub mod memory_store;
+pub mod redis_store;
 pub mod routes;
+pub mod store_trait;
+
+// Re-export stores
+pub use memory_store::MemoryStore;
+pub use redis_store::RedisStore;
 
 // CHALLENGE store - DEPRECATED: Use global store instead
 // static CHALLENGE_STORE: Lazy<ChallengeStore> = Lazy::new(papaya::HashMap::new);

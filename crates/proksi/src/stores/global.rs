@@ -1,7 +1,7 @@
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 
-use super::adapter::Store;
+use super::store_trait::Store;
 
 static GLOBAL_STORE: OnceCell<Arc<dyn Store>> = OnceCell::new();
 

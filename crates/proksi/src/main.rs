@@ -3,7 +3,7 @@ use ::pingora::server::Server;
 use bytes::Bytes;
 use clap::crate_version;
 use config::{load, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
-use stores::{adapter::MemoryStore, global::init_store};
+use stores::{MemoryStore, global::init_store};
 use tracing_subscriber::EnvFilter;
 
 use std::{borrow::Cow, sync::Arc};
@@ -110,7 +110,7 @@ fn main() -> Result<(), anyhow::Error> {
                 proxy_config.store.redis_url.as_deref().expect(
                     "Failed to get redis_url from configuration when store type is 'redis'",
                 );
-            let redis_store = stores::adapter::RedisStore::new(redis_url)
+            let redis_store = stores::RedisStore::new(redis_url)
                 .expect("Failed to initialize Redis store");
             tracing::info!("using Redis store for certificates");
             init_store(redis_store);
