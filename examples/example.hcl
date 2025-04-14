@@ -40,8 +40,6 @@ store {
   # Change to get data from redis
   # store_type = "redis"
   # redis_url = "redis://localhost:6479/"
-
-
 }
 
 docker {
