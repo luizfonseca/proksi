@@ -19,5 +19,5 @@ workspace = "../.."
 crate-type = ["cdylib"]
 
 [dependencies]
-anyhow = "1.0.97"
+anyhow = "1.0.98"
 wit-bindgen = "0.41.0"
