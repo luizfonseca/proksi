@@ -13,11 +13,11 @@ To configure Proksi to use Redis as a distributed cache, you can set the followi
 
 {% code title="proksi.hcl" lineNumbers="true" %}
 ```hcl
-
 store {
   store_type = "redis"
   redis_url = "redis://localhost:6379"
 }
+```
 {% endcode %}
 
 This will then use Redis as backend storage for certificates, challenges and even raw routing configuration. There's a penalty in terms of performance, but it's worth it for the benefits of scalability and reliability.
