@@ -47,7 +47,7 @@ hcl-rs = "0.18.4"
 http = "1.2.0"
 itertools = "0.14.0"
 jsonwebtoken = { version = "9.3.1", default-features = false }
-nix = { version = "0.29.0", features = ["signal"] }
+nix = { version = "0.30.1", features = ["signal"] }
 notify = { version = "8.0.0", default-features = false, features = [
     "fsevent-sys",
 ] }
