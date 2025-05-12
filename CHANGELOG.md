@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.5.3...proksi-v0.6.0) (2025-05-12)
+
+
+### Features
+
+* add store adapter trait to store certificates using Redis or In-Memory storage  ([#258](https://github.com/luizfonseca/proksi/issues/258)) ([2503c5d](https://github.com/luizfonseca/proksi/commit/2503c5d6d09a526c7a4cc04f8584e450eeec3804))
+
 ## [0.5.3](https://github.com/luizfonseca/proksi/compare/proksi-v0.5.3...proksi-v0.5.3) (2025-01-04)
 
 
