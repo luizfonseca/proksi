@@ -38,6 +38,5 @@ pub fn default_peer_opts() -> PeerOptions {
     po.second_keyshare = true; // default true and noop when not using PQ curves
     po.tracer = None;
     po.custom_l4 = None;
-
-    return po;
+    po
 }
