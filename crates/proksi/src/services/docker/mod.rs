@@ -465,7 +465,7 @@ impl Service for LabelService {
         &mut self,
         _fds: Option<ListenFds>,
         mut _shutdown: ShutdownWatch,
-        _grace: usize,
+        _listeners_per_fd: usize,
     ) {
         if self.config.docker.enabled.is_some_and(|v| !v) {
             // Nothing to do, docker is disabled
