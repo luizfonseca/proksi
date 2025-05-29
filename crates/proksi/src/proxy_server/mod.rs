@@ -23,6 +23,8 @@ pub fn default_peer_opts() -> PeerOptions {
         count: 10,
         idle: Duration::from_secs(60),
         interval: Duration::from_secs(30),
+        #[cfg(target_os = "linux")]
+        user_timeout: Duration::from_secs(0),
     });
     po.total_connection_timeout = Some(Duration::from_secs(20));
     po.idle_timeout = Some(Duration::from_secs(360));
