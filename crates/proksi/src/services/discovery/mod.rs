@@ -123,7 +123,12 @@ impl RoutingService {
 
 #[async_trait]
 impl Service for RoutingService {
-    async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
+    async fn start_service(
+        &mut self,
+        _fds: Option<ListenFds>,
+        _shutdown: ShutdownWatch,
+        _graceful_shutdown_timeout: usize,
+    ) {
         // Setup initial routes from config file
         self.add_routes_from_config().await;
 

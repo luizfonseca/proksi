@@ -31,7 +31,12 @@ impl BackgroundFunctionService {
 
 #[async_trait]
 impl pingora::services::Service for BackgroundFunctionService {
-    async fn start_service(&mut self, _fds: Option<ListenFds>, shutdown: ShutdownWatch) {
+    async fn start_service(
+        &mut self,
+        _fds: Option<ListenFds>,
+        shutdown: ShutdownWatch,
+        _graceful_shutdown_timeout: usize,
+    ) {
         let mut routing_service = RoutingService::new(self.config.clone(), self.broadcast.clone());
 
         let mut health_service = health_check::HealthService::new();
@@ -40,11 +45,11 @@ impl pingora::services::Service for BackgroundFunctionService {
         let mut config_server = FileWatcherService::new(self.config.clone());
 
         let _ = tokio::join!(
-            routing_service.start_service(None, shutdown.clone()),
-            health_service.start_service(None, shutdown.clone()),
-            config_server.start_service(None, shutdown.clone()),
-            docker_service.start_service(None, shutdown.clone()),
-            letsencrypt_service.start_service(None, shutdown),
+            routing_service.start_service(None, shutdown.clone(), _graceful_shutdown_timeout),
+            health_service.start_service(None, shutdown.clone(), _graceful_shutdown_timeout),
+            config_server.start_service(None, shutdown.clone(), _graceful_shutdown_timeout),
+            docker_service.start_service(None, shutdown.clone(), _graceful_shutdown_timeout),
+            letsencrypt_service.start_service(None, shutdown, _graceful_shutdown_timeout),
         );
     }
 

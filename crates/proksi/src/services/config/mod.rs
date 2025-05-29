@@ -87,7 +87,12 @@ impl EventHandler for FileWatcherServiceHandler {
 
 #[async_trait]
 impl Service for FileWatcherService {
-    async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
+    async fn start_service(
+        &mut self,
+        _fds: Option<ListenFds>,
+        _shutdown: ShutdownWatch,
+        _graceful_shutdown_timeout: usize,
+    ) {
         if self.config.auto_reload.enabled.is_some_and(|v| !v) {
             // Nothing to do, auto reload is  disabled
             return;

@@ -9,7 +9,7 @@ use async_trait::async_trait;
 // use bytes::BufMut;
 use pingora_cache::{
     key::CacheHashKey,
-    storage::{HandleHit, HandleMiss},
+    storage::{HandleHit, HandleMiss, MissFinishType},
     trace::SpanHandle,
     CacheKey, Storage,
 };
@@ -155,7 +155,7 @@ impl DiskCacheMissHandler {
 #[async_trait]
 impl HandleMiss for DiskCacheMissHandler {
     /// Write the given body to the storage
-    async fn write_body(&mut self, data: bytes::Bytes, end: bool) -> Result<()> {
+    async fn write_body(&mut self, data: bytes::Bytes, end: bool) -> pingora::Result<()> {
         let primary_key = self.key.primary();
         let main_path = self.main_path.clone();
         let cache_file = format!("{primary_key}.cache");
@@ -182,8 +182,8 @@ impl HandleMiss for DiskCacheMissHandler {
     /// failed.
     async fn finish(
         self: Box<Self>, // because self is always used as a trait object
-    ) -> pingora::Result<usize> {
-        Ok(0)
+    ) -> Result<MissFinishType> {
+        Ok(MissFinishType::Created(0))
     }
 }
 

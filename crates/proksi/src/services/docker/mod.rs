@@ -461,7 +461,12 @@ impl LabelService {
 
 #[async_trait]
 impl Service for LabelService {
-    async fn start_service(&mut self, _fds: Option<ListenFds>, mut _shutdown: ShutdownWatch) {
+    async fn start_service(
+        &mut self,
+        _fds: Option<ListenFds>,
+        mut _shutdown: ShutdownWatch,
+        _grace: usize,
+    ) {
         if self.config.docker.enabled.is_some_and(|v| !v) {
             // Nothing to do, docker is disabled
             return;
