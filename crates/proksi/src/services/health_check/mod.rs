@@ -46,7 +46,12 @@ async fn run_health_check_loop() {
 
 #[async_trait]
 impl Service for HealthService {
-    async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
+    async fn start_service(
+        &mut self,
+        _fds: Option<ListenFds>,
+        _shutdown: ShutdownWatch,
+        _listeners_per_fd: usize,
+    ) {
         tracing::info!("Starting health check service");
 
         run_health_check_loop().await;

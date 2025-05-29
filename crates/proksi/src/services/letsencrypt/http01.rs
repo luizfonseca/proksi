@@ -83,7 +83,9 @@ impl LetsencryptService {
     }
 
     /// Start an HTTP-01 challenge for a given order
-    async fn handle_http_01_challenge(order: &mut NewOrder<PersistType>) -> Result<(), anyhow::Error> {
+    async fn handle_http_01_challenge(
+        order: &mut NewOrder<PersistType>,
+    ) -> Result<(), anyhow::Error> {
         for auth in order.authorizations()? {
             let challenge = auth.http_challenge();
 
@@ -189,7 +191,8 @@ impl LetsencryptService {
 
             // Get the possible authorizations (for a single domain
             // this will only be one element).
-            Self::handle_http_01_challenge(&mut order).await
+            Self::handle_http_01_challenge(&mut order)
+                .await
                 .map_err(|err| anyhow!("Failed to handle HTTP-01 challenge: {err}"))?;
 
             order.refresh().unwrap_or_default();
@@ -306,7 +309,12 @@ impl LetsencryptService {
 
 #[async_trait]
 impl Service for LetsencryptService {
-    async fn start_service(&mut self, _fds: Option<ListenFds>, mut _shutdown: ShutdownWatch) {
+    async fn start_service(
+        &mut self,
+        _fds: Option<ListenFds>,
+        mut _shutdown: ShutdownWatch,
+        _listeners_per_fd: usize,
+    ) {
         if self.config.lets_encrypt.enabled.is_some_and(|v| !v) {
             // Nothing to do, lets encrypt is disabled
             return;

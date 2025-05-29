@@ -261,7 +261,12 @@ impl ProxyLoggerReceiver {
 
 #[async_trait]
 impl Service for ProxyLoggerReceiver {
-    async fn start_service(&mut self, _fds: Option<ListenFds>, _shutdown: ShutdownWatch) {
+    async fn start_service(
+        &mut self,
+        _fds: Option<ListenFds>,
+        _shutdown: ShutdownWatch,
+        _listeners_per_fd: usize,
+    ) {
         tracing::info!("starting logger service");
         self.prepare_buf_writer().await;
 

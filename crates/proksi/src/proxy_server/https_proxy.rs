@@ -18,18 +18,16 @@ use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 
 use pingora_cache::lock::CacheLock;
 
-use pingora_cache::{CacheKey, CacheMeta, NoCacheReason, RespCacheable};
+use pingora_cache::{CacheKey, CacheMeta, ForcedInvalidationKind, NoCacheReason, RespCacheable};
 
 use crate::cache::disk::storage::DiskCache;
 use crate::config::{RouteCacheType, RouteUpstream};
 use crate::stores::{self, routes::RouteStoreContainer};
 
-use super::{
-    middleware::{
-        execute_request_plugins, execute_response_plugins, execute_upstream_request_plugins,
-        execute_upstream_response_plugins,
-    },
-    DEFAULT_PEER_OPTIONS,
+use super::default_peer_opts;
+use super::middleware::{
+    execute_request_plugins, execute_response_plugins, execute_upstream_request_plugins,
+    execute_upstream_response_plugins,
 };
 
 static STORAGE_MEM_CACHE: Lazy<pingora_cache::MemCache> = Lazy::new(pingora_cache::MemCache::new);
@@ -188,7 +186,7 @@ impl ProxyHttp for Router {
             healthy_port == 443,
             upstream.sni.clone().unwrap_or(String::new()),
         );
-        peer.options = DEFAULT_PEER_OPTIONS;
+        peer.options = default_peer_opts();
         Ok(Box::new(peer))
     }
 
@@ -281,13 +279,13 @@ impl ProxyHttp for Router {
         session: &mut Session,
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
-    ) {
+    ) -> Result<(), Box<pingora::Error>> {
         // If there's no host matching, returns a 404
         // let route_container = process_route(ctx);
 
         execute_upstream_response_plugins(session, upstream_response, ctx);
 
-        //
+        Ok(())
     }
 
     /// This filter is called when the entire response is sent to the downstream successfully or
@@ -395,17 +393,18 @@ impl ProxyHttp for Router {
         &self,
         _session: &Session,
         meta: &CacheMeta,
+        _enabled: bool,
         ctx: &mut Self::CTX,
-    ) -> pingora::Result<bool> {
+    ) -> pingora::Result<Option<ForcedInvalidationKind>> {
         if !meta.is_fresh(SystemTime::now()) {
             ctx.extensions
                 .insert(Cow::Borrowed("cache_state"), "expired".into());
-            return Ok(true);
+            return Ok(Some(ForcedInvalidationKind::ForceExpired));
         }
 
         ctx.extensions
             .insert(Cow::Borrowed("cache_state"), "hit".into());
-        Ok(false)
+        Ok(None)
     }
 
     /// Decide if the response is cacheable
