@@ -91,7 +91,7 @@ impl Service for FileWatcherService {
         &mut self,
         _fds: Option<ListenFds>,
         _shutdown: ShutdownWatch,
-        _graceful_shutdown_timeout: usize,
+        _listeners_per_fd: usize,
     ) {
         if self.config.auto_reload.enabled.is_some_and(|v| !v) {
             // Nothing to do, auto reload is  disabled

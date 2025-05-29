@@ -127,7 +127,7 @@ impl Service for RoutingService {
         &mut self,
         _fds: Option<ListenFds>,
         _shutdown: ShutdownWatch,
-        _graceful_shutdown_timeout: usize,
+        _listeners_per_fd: usize,
     ) {
         // Setup initial routes from config file
         self.add_routes_from_config().await;

@@ -265,7 +265,7 @@ impl Service for ProxyLoggerReceiver {
         &mut self,
         _fds: Option<ListenFds>,
         _shutdown: ShutdownWatch,
-        _graceful_shutdown_timeout: usize,
+        _listeners_per_fd: usize,
     ) {
         tracing::info!("starting logger service");
         self.prepare_buf_writer().await;

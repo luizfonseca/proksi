@@ -50,7 +50,7 @@ impl Service for HealthService {
         &mut self,
         _fds: Option<ListenFds>,
         _shutdown: ShutdownWatch,
-        _threads: usize,
+        _listeners_per_fd: usize,
     ) {
         tracing::info!("Starting health check service");
 

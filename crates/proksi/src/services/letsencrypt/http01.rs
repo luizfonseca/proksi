@@ -313,7 +313,7 @@ impl Service for LetsencryptService {
         &mut self,
         _fds: Option<ListenFds>,
         mut _shutdown: ShutdownWatch,
-        _graceful_shutdown_timeout: usize,
+        _listeners_per_fd: usize,
     ) {
         if self.config.lets_encrypt.enabled.is_some_and(|v| !v) {
             // Nothing to do, lets encrypt is disabled
