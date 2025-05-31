@@ -1,17 +1,17 @@
 
-### General
+## General
 
 * [Getting started](README.md)
 * [Performance](general/performance.md)
 * [Motivations](general/motivations.md)
 * [Specifications](general/specifications.md)
 
-### Installation
+## Installation
 
 * [Docker](installation/docker.md)
 * [Single binary](installation/single-binary.md)
 
-### Configuration
+## Configuration
 
 * [HCL](configuration/hcl/README.md)
   * [Functions](configuration/hcl/functions.md)
@@ -22,23 +22,23 @@
 * [Daemon](configuration/daemon.md)
 * [Redis](configuration/redis.md)
 
-### Routing
+## Routing
 
 * [Upstreams](routing/upstreams.md)
 * [Headers](routing/headers.md)
 
-### Plugins
+## Plugins
 
 * [Request ID](plugins/request-id.md)
 * [Basic Auth](plugins/basic-auth.md)
 * [OAuth2](plugins/oauth2.md)
 
-### Use cases
+## Use cases
 
 * [Cache](use-cases/cache.md)
 * [Docker swarm](use-cases/docker-swarm.md)
 
-### Contributing
+## Contributing
 
 * [Repository](contributing/repository.md)
 * [Github](https://github.com/luizfonseca/proksi)

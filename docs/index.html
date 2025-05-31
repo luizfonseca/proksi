@@ -2,34 +2,81 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
-        <title>
-            Proksi: A simple CDN and reverse proxy server for all your needs
-        </title>
+        <title>Proksi: reverse proxy</title>
         <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
-        <meta name="description" content="Description" />
+        <meta
+            name="description"
+            content="Batteries-included CDN, reverse proxy and Load Balancer with Docker support using Cloudflare Pingora."
+        />
         <meta
             name="viewport"
             content="width=device-width, initial-scale=1.0, minimum-scale=1.0"
         />
+
+        <!-- <link
+            rel="stylesheet"
+            href="//cdn.jsdelivr.net/npm/docsify/lib/themes/buble.css"
+        /> -->
+
+        <!-- Themes (light + dark) -->
         <link
             rel="stylesheet"
-            href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css"
+            media="(prefers-color-scheme: dark)"
+            href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple-dark.css"
         />
+        <link
+            rel="stylesheet"
+            media="(prefers-color-scheme: light)"
+            href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.css"
+        />
+
+        <style>
+            :root {
+                --base-background-color: white;
+
+                /* --cover-background-image: none; */
+                --cover-background-mask-opacity: 0.1;
+                /* --cover-background-mask-color: none; */
+                --cover-background-color: white;
+            }
+            .cover h1 {
+                color: black;
+            }
+
+            .sidebar-nav > h2 > a {
+                font-weight: bold;
+            }
+        </style>
+
+        <style media="(prefers-color-scheme: dark)">
+            .cover h1 {
+                color: white;
+            }
+            :root {
+                --base-background-color: #0d0c00;
+                --sidebar-background: #0d0c00;
+
+                --cover-background-image: none;
+
+                --cover-background-color: #0d0c00;
+                --search-input-background-color: #111;
+                --search-input-border-color: #111;
+            }
+        </style>
     </head>
     <body>
         <div id="app"></div>
         <script>
             window.$docsify = {
-                search: "auto", // default
-
-                name: "",
-                repo: "",
+                name: "Proksi",
+                repo: "https://github.com/luizfonseca/proksi",
                 loadSidebar: true,
                 coverpage: true,
             };
         </script>
         <!-- Docsify v4 -->
         <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
+        <script src="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/js/docsify-themeable.min.js"></script>
 
         <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
         <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-hcl.min.js"></script>
