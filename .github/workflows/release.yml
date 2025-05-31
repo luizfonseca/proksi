@@ -232,6 +232,8 @@ jobs:
       - build
     if: ${{ needs.build.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
