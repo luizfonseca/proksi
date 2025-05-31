@@ -48,4 +48,4 @@ cache {
 
 1 minute test using 4000 concurrent clients.
 
-<figure><img src="../.gitbook/assets/one_minute_test.png" alt=""><figcaption></figcaption></figure>
+<figure><img src="/assets/one_minute_test.png" alt=""><figcaption></figcaption></figure>

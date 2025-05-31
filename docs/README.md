@@ -1,8 +1,8 @@
 # Getting started
 
-For a quick introduction, check the ASCII recording of a small configuration file for Proksi:
+For a quick introduction, check the ASCII recording of a small configuration file for Proksi: https://asciinema.org/a/ORhG5Na2SHIBI8TH2mPPUHMVZ
 
-[![asciicast](https://asciinema.org/a/ORhG5Na2SHIBI8TH2mPPUHMVZ.svg)](https://asciinema.org/a/ORhG5Na2SHIBI8TH2mPPUHMVZ)
+<!-- [![asciicast](https://asciinema.org/a/ORhG5Na2SHIBI8TH2mPPUHMVZ.svg)](https://asciinema.org/a/ORhG5Na2SHIBI8TH2mPPUHMVZ) -->
 
 ***
 
@@ -10,7 +10,7 @@ For a quick introduction, check the ASCII recording of a small configuration fil
 
 <div data-full-width="true">
 
-<figure><picture><source srcset=".gitbook/assets/simple-flow-white-2.png" media="(prefers-color-scheme: dark)"><img src=".gitbook/assets/simple-flow-white-2-light.png" alt="" width="563"></picture><figcaption><p>Proksi can be your reverse proxy or a load balancer in front of your public IPs</p></figcaption></figure>
+<figure><picture><source srcset="/assets/simple-flow-white-2.png" media="(prefers-color-scheme: dark)"><img src=".gitbook/assets/simple-flow-white-2-light.png" alt="" width="563"></picture><figcaption><p>Proksi can be your reverse proxy or a load balancer in front of your public IPs</p></figcaption></figure>
 
 </div>
 
