@@ -39,7 +39,7 @@ async-trait = "0.1.87"
 bollard = "0.16.1"
 bollard-stubs = "=1.44.0-rc.2"
 bytes = "1.10.1"
-clap = { version = "4.5.38", features = ["derive", "cargo"] }
+clap = { version = "4.5.39", features = ["derive", "cargo"] }
 cookie = { version = "0.18.1", features = ["private"] }
 dashmap = "6.1.0"
 figment = { version = "0.10.19", features = ["yaml", "env"] }
