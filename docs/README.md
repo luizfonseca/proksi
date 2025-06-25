@@ -1,8 +1,8 @@
 # Getting started
 
-For a quick introduction, check the ASCII recording of a small configuration file for Proksi:
+For a quick introduction, check the ASCII recording of a small configuration file for Proksi: https://asciinema.org/a/ORhG5Na2SHIBI8TH2mPPUHMVZ
 
-{% embed url="https://asciinema.org/a/ORhG5Na2SHIBI8TH2mPPUHMVZ" %}
+<!-- [![asciicast](https://asciinema.org/a/ORhG5Na2SHIBI8TH2mPPUHMVZ.svg)](https://asciinema.org/a/ORhG5Na2SHIBI8TH2mPPUHMVZ) -->
 
 ***
 
@@ -10,7 +10,7 @@ For a quick introduction, check the ASCII recording of a small configuration fil
 
 <div data-full-width="true">
 
-<figure><picture><source srcset=".gitbook/assets/simple-flow-white-2.png" media="(prefers-color-scheme: dark)"><img src=".gitbook/assets/simple-flow-white-2-light.png" alt="" width="563"></picture><figcaption><p>Proksi can be your reverse proxy or a load balancer in front of your public IPs</p></figcaption></figure>
+<figure><picture><source srcset="/assets/simple-flow-white-2.png" media="(prefers-color-scheme: dark)"><img src="/assets/simple-flow-white-2-light.png" alt="" width="563"></picture><figcaption><p>Proksi can be your reverse proxy or a load balancer in front of your public IPs</p></figcaption></figure>
 
 </div>
 
@@ -30,7 +30,7 @@ touch config/proksi.hcl
 Add a simple route, let's try `docs.proksi.info` as our proxy route:
 
 ```hcl
-# 
+#
 lets_encrypt {
   enabled = true
   staging = true
@@ -41,7 +41,7 @@ lets_encrypt {
 paths {
   # Where to save certificates?
   lets_encrypt = "./"
-  
+
   # You can even use functions here
   # lets_encrypt = env("HOME")
 }
@@ -52,11 +52,11 @@ routes = [
     # You might need to edit your /etc/hosts file here.
     host = "mysite.localhost",
     upstreams = [
-     { 
+     {
        ip = "docs.proksi.info"
        port = 443
      }
-    ]  
+    ]
   }
 ]
 ```
@@ -73,4 +73,3 @@ Of the many features **Proksi** offers is the ability to **load balance** to you
 4. Automatic **SSL** through **Let's Encrypt** and redirection from HTTP to HTTPS
 5. Configuration through **HCL with support for functions**&#x20;
 6. Many others.
-

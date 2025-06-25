@@ -72,7 +72,7 @@ For more information or guides, please refer to the [documentation](https://docs
 
 
 # Documentation
-Documentation for Proksi can be found at [https://docs.proksi.info](https://docs.proksi.info) which is also available in the [gitbook](./gitbook/) folder of this repository.
+Documentation for Proksi can be found at [https://docs.proksi.info](https://docs.proksi.info) which is also available in the [docs](./docs/) folder of this repository.
 
 
 # Contributing
