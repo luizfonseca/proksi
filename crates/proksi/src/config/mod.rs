@@ -524,6 +524,20 @@ pub struct ServerCfg {
         default_value = "0.0.0.0:80"
     )]
     pub http_address: Option<Cow<'static, str>>,
+
+    /// Enable SSL/TLS support for the server (default: true)
+    /// When set to false, the server will only serve HTTP traffic
+    /// and skip all SSL/TLS configuration and certificate handling.
+    /// Useful for environments like Cloudflare Containers where
+    /// SSL termination is handled externally.
+    #[serde(default = "bool_true")]
+    #[arg(
+        long = "server.ssl_enabled", 
+        required = false,
+        value_parser,
+        default_value = "true"
+    )]
+    pub ssl_enabled: bool,
 }
 
 /// The main configuration struct.
@@ -640,6 +654,7 @@ impl Default for Config {
             server: ServerCfg {
                 https_address: Some(Cow::Borrowed("0.0.0.0:443")),
                 http_address: Some(Cow::Borrowed("0.0.0.0:80")),
+                ssl_enabled: true,
             },
             worker_threads: Some(2),
             upgrade: false,
@@ -1077,6 +1092,75 @@ mod tests {
     }
 
     #[test]
+    fn test_load_config_with_ssl_disabled() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.yaml", tmp_dir),
+                r#"
+                service_name: "proksi-no-ssl"
+                server:
+                  ssl_enabled: false
+                  https_address: "0.0.0.0:8080"
+                  http_address: "0.0.0.0:8081"
+                lets_encrypt:
+                  email: "contact@example.com"
+                routes:
+                  - host: "example.com"
+                    upstreams:
+                      - ip: "10.0.1.3"
+                        port: 3000
+                "#,
+            )?;
+
+            let config = load(&tmp_dir);
+            let proxy_config = config.unwrap();
+            
+            assert_eq!(proxy_config.service_name, "proksi-no-ssl");
+            assert!(!proxy_config.server.ssl_enabled);
+            assert_eq!(
+                proxy_config.server.https_address,
+                Some(Cow::Borrowed("0.0.0.0:8080"))
+            );
+            assert_eq!(
+                proxy_config.server.http_address,
+                Some(Cow::Borrowed("0.0.0.0:8081"))
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_load_config_with_ssl_enabled_by_default() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.yaml", tmp_dir),
+                r#"
+                lets_encrypt:
+                  email: "real-user@domain.net"
+                routes:
+                  - host: "example.com"
+                    upstreams:
+                      - ip: "10.0.1.3"
+                        port: 3000
+                "#,
+            )?;
+
+            let config = load(&tmp_dir);
+            let proxy_config = config.unwrap();
+            
+            // SSL should be enabled by default
+            assert!(proxy_config.server.ssl_enabled);
+
+            Ok(())
+        });
+    }
+
+    #[test]
     fn test_load_config_from_hcl() {
         figment::Jail::expect_with(|jail| {
             let tmp_dir = jail.directory().to_string_lossy();
@@ -1088,8 +1172,9 @@ mod tests {
                 worker_threads = 8
 
                 server {
-                    address = "0.0.0.0:443"
+                    https_address = "0.0.0.0:443"
                     http_address = "0.0.0.0:80"
+                    ssl_enabled = true
                 }
 
                 docker {
@@ -1112,6 +1197,7 @@ mod tests {
             let proxy_config = config.unwrap();
 
             assert_eq!(proxy_config.service_name, "hcl-service");
+            assert!(proxy_config.server.ssl_enabled); // Should be enabled by default
 
             assert_eq!(
                 proxy_config.server.https_address,
@@ -1134,6 +1220,46 @@ mod tests {
             assert_eq!(proxy_config.lets_encrypt.enabled, Some(true));
             assert_eq!(proxy_config.lets_encrypt.staging, Some(false));
             assert_eq!(proxy_config.lets_encrypt.renew_interval_secs, Some(84600));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_load_config_from_hcl_with_ssl_disabled() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.hcl", tmp_dir),
+                r#"
+                service_name = "hcl-no-ssl"
+
+                server {
+                    https_address = "0.0.0.0:8080"
+                    http_address = "0.0.0.0:8081"
+                    ssl_enabled = false
+                }
+
+                lets_encrypt {
+                    email = "contact@example.com"
+                }
+                    "#,
+            )?;
+
+            let config = load(&tmp_dir);
+            let proxy_config = config.unwrap();
+
+            assert_eq!(proxy_config.service_name, "hcl-no-ssl");
+            assert!(!proxy_config.server.ssl_enabled);
+            assert_eq!(
+                proxy_config.server.https_address,
+                Some(Cow::Borrowed("0.0.0.0:8080"))
+            );
+            assert_eq!(
+                proxy_config.server.http_address,
+                Some(Cow::Borrowed("0.0.0.0:8081"))
+            );
 
             Ok(())
         });

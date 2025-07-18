@@ -69,6 +69,7 @@ fn main() -> Result<(), anyhow::Error> {
         .clone()
         .unwrap_or_default();
     let le_address = proxy_config.server.http_address.clone().unwrap_or_default();
+    let ssl_enabled = proxy_config.server.ssl_enabled;
 
     // Logging channel
     let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
@@ -146,22 +147,37 @@ fn main() -> Result<(), anyhow::Error> {
     // Worker threads per configuration
     https_secure_service.threads = proxy_config.worker_threads;
 
-    // Setup tls settings and Enable HTTP/2
-    let cert_store = CertStore::new();
-    let mut tls_settings = TlsSettings::with_callbacks(Box::new(cert_store)).unwrap();
-    tls_settings.enable_h2();
+    if ssl_enabled {
+        // Setup tls settings and Enable HTTP/2 only when SSL is enabled
+        let cert_store = CertStore::new();
+        let mut tls_settings = TlsSettings::with_callbacks(Box::new(cert_store)).unwrap();
+        tls_settings.enable_h2();
 
-    // tls_settings.set_session_cache_mode(SslSessionCacheMode::SERVER);
-    tls_settings.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
+        // tls_settings.set_session_cache_mode(SslSessionCacheMode::SERVER);
+        tls_settings.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
 
-    // For now this is a hardcoded recommendation based on
-    // https://developers.cloudflare.com/ssl/reference/protocols/
-    // but will be made configurable in the future
-    tls_settings.set_min_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_2))?;
-    tls_settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
+        // For now this is a hardcoded recommendation based on
+        // https://developers.cloudflare.com/ssl/reference/protocols/
+        // but will be made configurable in the future
+        tls_settings.set_min_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_2))?;
+        tls_settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
 
-    // Add TLS settings to the HTTPS service
-    https_secure_service.add_tls_with_settings(&https_address, None, tls_settings);
+        // Add TLS settings to the HTTPS service
+        https_secure_service.add_tls_with_settings(&https_address, None, tls_settings);
+        
+        tracing::info!(
+            "SSL enabled - HTTPS service configured on {} with TLS termination",
+            &https_address
+        );
+    } else {
+        // When SSL is disabled, add the secure service as HTTP on the HTTPS port
+        https_secure_service.add_tcp(&https_address);
+        
+        tracing::info!(
+            "SSL disabled - HTTP service configured on {} (no TLS termination)",
+            &https_address
+        );
+    }
 
     // Add Prometheus service
     // let mut prometheus_service_http = Service::prometheus_http_service();
@@ -178,10 +194,17 @@ fn main() -> Result<(), anyhow::Error> {
     pingora_server.add_service(http_public_service);
     pingora_server.add_service(https_secure_service);
 
-    let server_info = format!(
-        "running HTTPS service on {} and HTTP service on {}",
-        &https_address, &le_address
-    );
+    let server_info = if ssl_enabled {
+        format!(
+            "running HTTPS service on {} and HTTP service on {}",
+            &https_address, &le_address
+        )
+    } else {
+        format!(
+            "running HTTP service on {} and {} (SSL disabled)",
+            &https_address, &le_address
+        )
+    };
     tracing::info!(
         version = crate_version!(),
         workers = proxy_config.worker_threads,
