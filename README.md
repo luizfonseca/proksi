@@ -22,9 +22,51 @@ Of the many features Proksi offers is the ability to load balance to your infras
 - Built-in most common middlewares such as OAuth, Rate Limiting, CDN Caching and others
 - The ability of running it as a single binary in your system
 - Automatic SSL through Let's Encrypt and redirection from HTTP to HTTPS
+- **Multi-proxy architecture**: Configure multiple proxies with different SSL settings
 - Configuration through **HCL** with support for functions (get environment variables, etc)
 - Powerful plugin system for adding new middlewares and other features using **WebAssembly (WASM)**
 - Many others.
+
+# Multi-Proxy Architecture
+
+Proksi now supports configuring multiple proxy services with individual SSL settings, perfect for mixed environments:
+
+```yaml
+# Multiple proxies with different SSL configurations
+proxies:
+  # HTTPS proxy with Let's Encrypt
+  - host: "0.0.0.0:443"
+    ssl:
+      enabled: true
+      acme:
+        enabled: true
+    routes:
+      - host: "secure.example.com"
+        upstreams:
+          - ip: "10.0.1.1"
+            port: 3000
+    worker_threads: 4
+
+  # HTTP-only proxy (for Cloudflare Containers, etc.)
+  - host: "0.0.0.0:8080"
+    ssl: null
+    routes:
+      - host: "internal.example.com"
+        upstreams:
+          - ip: "10.0.1.2"
+            port: 3000
+    worker_threads: 2
+```
+
+**Perfect for:**
+- **Cloudflare Containers**: HTTP-only backends with external SSL termination
+- **Mixed environments**: Some services with SSL, others without
+- **Microservices**: Different SSL requirements per service tier
+- **Development/Production**: Different configurations per environment
+
+See [`examples/multi-proxy-configs.md`](examples/multi-proxy-configs.md) for comprehensive examples.
+
+**Backward Compatibility**: All existing single-server configurations continue to work unchanged.
 
 # Quick start
 
