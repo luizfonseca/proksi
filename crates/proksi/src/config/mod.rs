@@ -10,8 +10,13 @@ use hcl::Hcl;
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
+pub use proxy::{ProxyConfig, ProxySsl, ProxyAcme};
+pub use migration::{migrate_server_config, is_legacy_config};
+
 mod hcl;
 mod validate;
+pub mod proxy;
+pub mod migration;
 
 #[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
 pub enum StoreType {
@@ -224,7 +229,7 @@ impl Default for RouteUpstream {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteSslCertificate {
     /// Whether to use a self-signed certificate if the certificate can't be
     /// retrieved from the path or object storage (or generated from letsencrypt)
@@ -256,7 +261,7 @@ pub struct RoutePlugin {
     pub config: Option<HashMap<Cow<'static, str>, serde_json::Value>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteSslPath {
     /// Path to the certificate .key file (e.g. `/etc/proksi/certs/my-host.key`)
     pub key: PathBuf,
@@ -265,7 +270,7 @@ pub struct RouteSslPath {
     pub pem: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ProtoVersion {
     V1_1,
     V1_2,
@@ -283,7 +288,7 @@ impl From<pingora::tls::ssl::SslVersion> for ProtoVersion {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteSsl {
     /// If provided, will be used instead of generating certificates from
     /// Let's Encrypt or self-signed certificates.
@@ -343,7 +348,7 @@ pub struct RouteCache {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Route {
     /// The hostname that the proxy will accept
     /// requests for the upstreams in the route.
@@ -524,6 +529,34 @@ pub struct ServerCfg {
         default_value = "0.0.0.0:80"
     )]
     pub http_address: Option<Cow<'static, str>>,
+
+    /// Disable SSL/TLS support for the server. 
+    /// When set, the server will only serve HTTP traffic
+    /// and skip all SSL/TLS configuration and certificate handling.
+    /// Useful for environments like Cloudflare Containers where
+    /// SSL termination is handled externally.
+    #[serde(default = "bool_true")]
+    #[arg(
+        long = "server.ssl_disabled",
+        action = clap::ArgAction::SetTrue,
+        conflicts_with = "ssl_enabled_flag"
+    )]
+    #[serde(skip)]
+    ssl_disabled_flag: bool,
+
+    /// Explicitly enable SSL/TLS support for the server
+    #[arg(
+        long = "server.ssl_enabled",
+        action = clap::ArgAction::SetTrue,
+        conflicts_with = "ssl_disabled_flag"
+    )]
+    #[serde(skip)]
+    ssl_enabled_flag: bool,
+
+    /// Enable/disable SSL support
+    #[serde(default = "bool_true")]
+    #[clap(skip)]
+    pub ssl_enabled: bool,
 }
 
 /// The main configuration struct.
@@ -627,6 +660,10 @@ pub(crate) struct Config {
     /// The routes to be proxied to.
     #[clap(skip)]
     pub routes: Vec<Route>,
+    
+    /// Multiple proxy configurations (new format)
+    #[clap(skip)]
+    pub proxies: Vec<ProxyConfig>,
     // Listeners -- a list of specific listeners and upstrems
     // that don't necessarily need to be HTTP/HTTPS related
     // pub listeners: Vec<ConfigListener>,
@@ -640,6 +677,9 @@ impl Default for Config {
             server: ServerCfg {
                 https_address: Some(Cow::Borrowed("0.0.0.0:443")),
                 http_address: Some(Cow::Borrowed("0.0.0.0:80")),
+                ssl_disabled_flag: false,
+                ssl_enabled_flag: false,
+                ssl_enabled: true,
             },
             worker_threads: Some(2),
             upgrade: false,
@@ -647,6 +687,7 @@ impl Default for Config {
             docker: Docker::default(),
             lets_encrypt: LetsEncrypt::default(),
             routes: vec![],
+            proxies: vec![],
             auto_reload: AutoReload::default(),
             store: StoreConfig::default(),
             logging: Logging {
@@ -702,24 +743,50 @@ pub fn load(fallback: &str) -> Result<Config, figment::Error> {
     let parsed_commands = Config::parse();
 
     let path_with_fallback = if parsed_commands.config_path.is_empty() {
-        fallback
+        fallback.to_string()
     } else {
-        &parsed_commands.config_path
+        parsed_commands.config_path.to_string()
     };
 
+    // Store flag values for later use
+    let ssl_disabled_flag = parsed_commands.server.ssl_disabled_flag;
+    let ssl_enabled_flag = parsed_commands.server.ssl_enabled_flag;
+    
+    // Create a modified version of parsed_commands with ssl_enabled set to true
+    // to avoid overriding the config file or default values
+    let mut cmd_defaults = parsed_commands;
+    cmd_defaults.server.ssl_enabled = true; // Don't override config/default
+    
     let config: Config = Figment::new()
         .merge(Config::default())
-        .merge(Serialized::defaults(&parsed_commands))
+        .merge(Serialized::defaults(&cmd_defaults))
         .merge(Yaml::file(format!("{path_with_fallback}/proksi.yml")))
         .merge(Yaml::file(format!("{path_with_fallback}/proksi.yaml")))
         .merge(Hcl::file(format!("{path_with_fallback}/proksi.hcl")))
         .merge(Env::prefixed("PROKSI_").split("__"))
         .extract()?;
 
-    // validate configuration and throw error upwards
-    validate::check_config(&config).map_err(|err| figment::Error::from(err.to_string()))?;
+    // Resolve SSL configuration from command-line flags and apply defaults
+    let mut final_config = config;
+    if ssl_disabled_flag {
+        final_config.server.ssl_enabled = false;
+    } else if ssl_enabled_flag {
+        final_config.server.ssl_enabled = true;
+    }
+    // For config files, trust the serde default or explicit value
 
-    Ok(config)
+    // validate configuration and throw error upwards
+    validate::check_config(&final_config).map_err(|err| figment::Error::from(err.to_string()))?;
+
+    // If using legacy format, log deprecation warning
+    if is_legacy_config(&final_config) {
+        tracing::warn!(
+            "Using deprecated server configuration format. Consider migrating to the new 'proxies' format. \
+            See documentation for migration guide."
+        );
+    }
+
+    Ok(final_config)
 }
 
 /// Deserialize function to convert a string to a `LogLevel` Enum
@@ -1077,6 +1144,75 @@ mod tests {
     }
 
     #[test]
+    fn test_load_config_with_ssl_disabled() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.yaml", tmp_dir),
+                r#"
+                service_name: "proksi-no-ssl"
+                server:
+                  ssl_enabled: false
+                  https_address: "0.0.0.0:8080"
+                  http_address: "0.0.0.0:8081"
+                lets_encrypt:
+                  email: "contact@example.com"
+                routes:
+                  - host: "example.com"
+                    upstreams:
+                      - ip: "10.0.1.3"
+                        port: 3000
+                "#,
+            )?;
+
+            let config = load(&tmp_dir);
+            let proxy_config = config.unwrap();
+            
+            assert_eq!(proxy_config.service_name, "proksi-no-ssl");
+            assert!(!proxy_config.server.ssl_enabled);
+            assert_eq!(
+                proxy_config.server.https_address,
+                Some(Cow::Borrowed("0.0.0.0:8080"))
+            );
+            assert_eq!(
+                proxy_config.server.http_address,
+                Some(Cow::Borrowed("0.0.0.0:8081"))
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_load_config_with_ssl_enabled_by_default() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.yaml", tmp_dir),
+                r#"
+                lets_encrypt:
+                  email: "real-user@domain.net"
+                routes:
+                  - host: "example.com"
+                    upstreams:
+                      - ip: "10.0.1.3"
+                        port: 3000
+                "#,
+            )?;
+
+            let config = load(&tmp_dir);
+            let proxy_config = config.unwrap();
+            
+            // SSL should be enabled by default
+            assert!(proxy_config.server.ssl_enabled);
+
+            Ok(())
+        });
+    }
+
+    #[test]
     fn test_load_config_from_hcl() {
         figment::Jail::expect_with(|jail| {
             let tmp_dir = jail.directory().to_string_lossy();
@@ -1088,8 +1224,9 @@ mod tests {
                 worker_threads = 8
 
                 server {
-                    address = "0.0.0.0:443"
+                    https_address = "0.0.0.0:443"
                     http_address = "0.0.0.0:80"
+                    ssl_enabled = true
                 }
 
                 docker {
@@ -1112,6 +1249,7 @@ mod tests {
             let proxy_config = config.unwrap();
 
             assert_eq!(proxy_config.service_name, "hcl-service");
+            assert!(proxy_config.server.ssl_enabled); // Should be enabled by default
 
             assert_eq!(
                 proxy_config.server.https_address,
@@ -1134,6 +1272,106 @@ mod tests {
             assert_eq!(proxy_config.lets_encrypt.enabled, Some(true));
             assert_eq!(proxy_config.lets_encrypt.staging, Some(false));
             assert_eq!(proxy_config.lets_encrypt.renew_interval_secs, Some(84600));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_load_config_from_hcl_with_ssl_disabled() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.hcl", tmp_dir),
+                r#"
+                service_name = "hcl-no-ssl"
+
+                server {
+                    https_address = "0.0.0.0:8080"
+                    http_address = "0.0.0.0:8081"
+                    ssl_enabled = false
+                }
+
+                lets_encrypt {
+                    email = "contact@example.com"
+                }
+                    "#,
+            )?;
+
+            let config = load(&tmp_dir);
+            let proxy_config = config.unwrap();
+
+            assert_eq!(proxy_config.service_name, "hcl-no-ssl");
+            assert!(!proxy_config.server.ssl_enabled);
+            assert_eq!(
+                proxy_config.server.https_address,
+                Some(Cow::Borrowed("0.0.0.0:8080"))
+            );
+            assert_eq!(
+                proxy_config.server.http_address,
+                Some(Cow::Borrowed("0.0.0.0:8081"))
+            );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_load_config_with_multi_proxy() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.yaml", tmp_dir),
+                r#"
+                service_name: "multi-proxy-test"
+                proxies:
+                  - host: "0.0.0.0:443"
+                    ssl:
+                      enabled: true
+                      acme:
+                        enabled: true
+                        challenge_port: 80
+                    routes:
+                      - host: "secure.example.com"
+                        upstreams:
+                          - ip: "10.0.1.1"
+                            port: 3000
+                    worker_threads: 4
+                  - host: "0.0.0.0:8080"
+                    ssl: null
+                    routes:
+                      - host: "insecure.example.com"
+                        upstreams:
+                          - ip: "10.0.1.2"
+                            port: 3000
+                    worker_threads: 2
+                "#,
+            )?;
+
+            let config = load(&tmp_dir);
+            let proxy_config = config.unwrap();
+            
+            assert_eq!(proxy_config.service_name, "multi-proxy-test");
+            assert_eq!(proxy_config.proxies.len(), 2);
+            
+            // First proxy (HTTPS with SSL)
+            let https_proxy = &proxy_config.proxies[0];
+            assert_eq!(https_proxy.host, "0.0.0.0:443");
+            assert!(https_proxy.ssl.is_some());
+            assert!(https_proxy.ssl.as_ref().unwrap().enabled);
+            assert_eq!(https_proxy.worker_threads, Some(4));
+            assert_eq!(https_proxy.routes.len(), 1);
+            assert_eq!(https_proxy.routes[0].host, "secure.example.com");
+            
+            // Second proxy (HTTP only)
+            let http_proxy = &proxy_config.proxies[1];
+            assert_eq!(http_proxy.host, "0.0.0.0:8080");
+            assert!(http_proxy.ssl.is_none());
+            assert_eq!(http_proxy.worker_threads, Some(2));
+            assert_eq!(http_proxy.routes.len(), 1);
+            assert_eq!(http_proxy.routes[0].host, "insecure.example.com");
 
             Ok(())
         });

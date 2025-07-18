@@ -16,15 +16,17 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
     }
 
     // validate that the lets encrypt email does not contain @example or is empty
-    if config.lets_encrypt.email.contains("@example") || config.lets_encrypt.email.is_empty() {
+    // Only required when SSL is enabled
+    if config.server.ssl_enabled && (config.lets_encrypt.email.contains("@example") || config.lets_encrypt.email.is_empty()) {
         return Err(anyhow!(
-            "lets_encrypt.email cannot be empty or an email from @example.com (the default value)"
+            "lets_encrypt.email cannot be empty or an email from @example.com (the default value) when SSL is enabled"
         ));
     }
 
     // Validate that the lets_encrypt pathbuf is not an empty string
-    if config.paths.lets_encrypt.as_os_str() == "" {
-        return Err(anyhow!("paths.lets_encrypt cannot be empty"));
+    // Only required when SSL is enabled
+    if config.server.ssl_enabled && config.paths.lets_encrypt.as_os_str() == "" {
+        return Err(anyhow!("paths.lets_encrypt cannot be empty when SSL is enabled"));
     }
 
     // Validate the routes
