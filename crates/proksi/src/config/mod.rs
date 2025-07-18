@@ -525,18 +525,32 @@ pub struct ServerCfg {
     )]
     pub http_address: Option<Cow<'static, str>>,
 
-    /// Enable SSL/TLS support for the server (default: true)
-    /// When set to false, the server will only serve HTTP traffic
+    /// Disable SSL/TLS support for the server. 
+    /// When set, the server will only serve HTTP traffic
     /// and skip all SSL/TLS configuration and certificate handling.
     /// Useful for environments like Cloudflare Containers where
     /// SSL termination is handled externally.
     #[serde(default = "bool_true")]
     #[arg(
-        long = "server.ssl_enabled", 
-        required = false,
-        value_parser,
-        default_value = "true"
+        long = "server.ssl_disabled",
+        action = clap::ArgAction::SetTrue,
+        conflicts_with = "ssl_enabled_flag"
     )]
+    #[serde(skip)]
+    ssl_disabled_flag: bool,
+
+    /// Explicitly enable SSL/TLS support for the server
+    #[arg(
+        long = "server.ssl_enabled",
+        action = clap::ArgAction::SetTrue,
+        conflicts_with = "ssl_disabled_flag"
+    )]
+    #[serde(skip)]
+    ssl_enabled_flag: bool,
+
+    /// Enable/disable SSL support
+    #[serde(default = "bool_true")]
+    #[clap(skip)]
     pub ssl_enabled: bool,
 }
 
@@ -654,6 +668,8 @@ impl Default for Config {
             server: ServerCfg {
                 https_address: Some(Cow::Borrowed("0.0.0.0:443")),
                 http_address: Some(Cow::Borrowed("0.0.0.0:80")),
+                ssl_disabled_flag: false,
+                ssl_enabled_flag: false,
                 ssl_enabled: true,
             },
             worker_threads: Some(2),
@@ -717,24 +733,42 @@ pub fn load(fallback: &str) -> Result<Config, figment::Error> {
     let parsed_commands = Config::parse();
 
     let path_with_fallback = if parsed_commands.config_path.is_empty() {
-        fallback
+        fallback.to_string()
     } else {
-        &parsed_commands.config_path
+        parsed_commands.config_path.to_string()
     };
 
+    // Store flag values for later use
+    let ssl_disabled_flag = parsed_commands.server.ssl_disabled_flag;
+    let ssl_enabled_flag = parsed_commands.server.ssl_enabled_flag;
+    
+    // Create a modified version of parsed_commands with ssl_enabled set to true
+    // to avoid overriding the config file or default values
+    let mut cmd_defaults = parsed_commands;
+    cmd_defaults.server.ssl_enabled = true; // Don't override config/default
+    
     let config: Config = Figment::new()
         .merge(Config::default())
-        .merge(Serialized::defaults(&parsed_commands))
+        .merge(Serialized::defaults(&cmd_defaults))
         .merge(Yaml::file(format!("{path_with_fallback}/proksi.yml")))
         .merge(Yaml::file(format!("{path_with_fallback}/proksi.yaml")))
         .merge(Hcl::file(format!("{path_with_fallback}/proksi.hcl")))
         .merge(Env::prefixed("PROKSI_").split("__"))
         .extract()?;
 
-    // validate configuration and throw error upwards
-    validate::check_config(&config).map_err(|err| figment::Error::from(err.to_string()))?;
+    // Resolve SSL configuration from command-line flags and apply defaults
+    let mut final_config = config;
+    if ssl_disabled_flag {
+        final_config.server.ssl_enabled = false;
+    } else if ssl_enabled_flag {
+        final_config.server.ssl_enabled = true;
+    }
+    // For config files, trust the serde default or explicit value
 
-    Ok(config)
+    // validate configuration and throw error upwards
+    validate::check_config(&final_config).map_err(|err| figment::Error::from(err.to_string()))?;
+
+    Ok(final_config)
 }
 
 /// Deserialize function to convert a string to a `LogLevel` Enum
