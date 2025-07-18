@@ -707,12 +707,44 @@ pub fn load(fallback: &str) -> Result<Config, figment::Error> {
         &parsed_commands.config_path
     };
 
-    let config: Config = Figment::new()
+    let mut figment = Figment::new()
         .merge(Config::default())
-        .merge(Serialized::defaults(&parsed_commands))
-        .merge(Yaml::file(format!("{path_with_fallback}/proksi.yml")))
-        .merge(Yaml::file(format!("{path_with_fallback}/proksi.yaml")))
-        .merge(Hcl::file(format!("{path_with_fallback}/proksi.hcl")))
+        .merge(Serialized::defaults(&parsed_commands));
+
+    // Check if the path is a file or directory
+    if std::path::Path::new(path_with_fallback).is_file() {
+        // If it's a file, load it directly based on its extension
+        let path_buf = std::path::PathBuf::from(path_with_fallback);
+        if let Some(extension) = path_buf.extension() {
+            match extension.to_str() {
+                Some("yml") | Some("yaml") => {
+                    figment = figment.merge(Yaml::file(path_with_fallback));
+                }
+                Some("hcl") => {
+                    figment = figment.merge(Hcl::file(path_with_fallback));
+                }
+                _ => {
+                    // Try to load as both formats for compatibility
+                    figment = figment
+                        .merge(Yaml::file(path_with_fallback))
+                        .merge(Hcl::file(path_with_fallback));
+                }
+            }
+        } else {
+            // No extension, try both formats
+            figment = figment
+                .merge(Yaml::file(path_with_fallback))
+                .merge(Hcl::file(path_with_fallback));
+        }
+    } else {
+        // If it's a directory or doesn't exist, use the original behavior
+        figment = figment
+            .merge(Yaml::file(format!("{path_with_fallback}/proksi.yml")))
+            .merge(Yaml::file(format!("{path_with_fallback}/proksi.yaml")))
+            .merge(Hcl::file(format!("{path_with_fallback}/proksi.hcl")));
+    }
+
+    let config: Config = figment
         .merge(Env::prefixed("PROKSI_").split("__"))
         .extract()?;
 

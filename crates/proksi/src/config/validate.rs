@@ -15,11 +15,13 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
         return Err(anyhow!("docker.interval_secs must be greater than 0"));
     }
 
-    // validate that the lets encrypt email does not contain @example or is empty
-    if config.lets_encrypt.email.contains("@example") || config.lets_encrypt.email.is_empty() {
-        return Err(anyhow!(
-            "lets_encrypt.email cannot be empty or an email from @example.com (the default value)"
-        ));
+    // validate that the lets encrypt email does not contain @example or is empty, but only if lets_encrypt is enabled
+    if config.lets_encrypt.enabled.unwrap_or(false) {
+        if config.lets_encrypt.email.contains("@example") || config.lets_encrypt.email.is_empty() {
+            return Err(anyhow!(
+                "lets_encrypt.email cannot be empty or an email from @example.com (the default value)"
+            ));
+        }
     }
 
     // Validate that the lets_encrypt pathbuf is not an empty string
