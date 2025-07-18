@@ -10,8 +10,13 @@ use hcl::Hcl;
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
+pub use proxy::{ProxyConfig, ProxySsl, ProxyAcme};
+pub use migration::{migrate_server_config, is_legacy_config};
+
 mod hcl;
 mod validate;
+pub mod proxy;
+pub mod migration;
 
 #[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
 pub enum StoreType {
@@ -224,7 +229,7 @@ impl Default for RouteUpstream {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteSslCertificate {
     /// Whether to use a self-signed certificate if the certificate can't be
     /// retrieved from the path or object storage (or generated from letsencrypt)
@@ -256,7 +261,7 @@ pub struct RoutePlugin {
     pub config: Option<HashMap<Cow<'static, str>, serde_json::Value>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteSslPath {
     /// Path to the certificate .key file (e.g. `/etc/proksi/certs/my-host.key`)
     pub key: PathBuf,
@@ -265,7 +270,7 @@ pub struct RouteSslPath {
     pub pem: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ProtoVersion {
     V1_1,
     V1_2,
@@ -283,7 +288,7 @@ impl From<pingora::tls::ssl::SslVersion> for ProtoVersion {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteSsl {
     /// If provided, will be used instead of generating certificates from
     /// Let's Encrypt or self-signed certificates.
@@ -343,7 +348,7 @@ pub struct RouteCache {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Route {
     /// The hostname that the proxy will accept
     /// requests for the upstreams in the route.
@@ -655,6 +660,10 @@ pub(crate) struct Config {
     /// The routes to be proxied to.
     #[clap(skip)]
     pub routes: Vec<Route>,
+    
+    /// Multiple proxy configurations (new format)
+    #[clap(skip)]
+    pub proxies: Vec<ProxyConfig>,
     // Listeners -- a list of specific listeners and upstrems
     // that don't necessarily need to be HTTP/HTTPS related
     // pub listeners: Vec<ConfigListener>,
@@ -678,6 +687,7 @@ impl Default for Config {
             docker: Docker::default(),
             lets_encrypt: LetsEncrypt::default(),
             routes: vec![],
+            proxies: vec![],
             auto_reload: AutoReload::default(),
             store: StoreConfig::default(),
             logging: Logging {
@@ -767,6 +777,14 @@ pub fn load(fallback: &str) -> Result<Config, figment::Error> {
 
     // validate configuration and throw error upwards
     validate::check_config(&final_config).map_err(|err| figment::Error::from(err.to_string()))?;
+
+    // If using legacy format, log deprecation warning
+    if is_legacy_config(&final_config) {
+        tracing::warn!(
+            "Using deprecated server configuration format. Consider migrating to the new 'proxies' format. \
+            See documentation for migration guide."
+        );
+    }
 
     Ok(final_config)
 }
@@ -1294,6 +1312,66 @@ mod tests {
                 proxy_config.server.http_address,
                 Some(Cow::Borrowed("0.0.0.0:8081"))
             );
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_load_config_with_multi_proxy() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.yaml", tmp_dir),
+                r#"
+                service_name: "multi-proxy-test"
+                proxies:
+                  - host: "0.0.0.0:443"
+                    ssl:
+                      enabled: true
+                      acme:
+                        enabled: true
+                        challenge_port: 80
+                    routes:
+                      - host: "secure.example.com"
+                        upstreams:
+                          - ip: "10.0.1.1"
+                            port: 3000
+                    worker_threads: 4
+                  - host: "0.0.0.0:8080"
+                    ssl: null
+                    routes:
+                      - host: "insecure.example.com"
+                        upstreams:
+                          - ip: "10.0.1.2"
+                            port: 3000
+                    worker_threads: 2
+                "#,
+            )?;
+
+            let config = load(&tmp_dir);
+            let proxy_config = config.unwrap();
+            
+            assert_eq!(proxy_config.service_name, "multi-proxy-test");
+            assert_eq!(proxy_config.proxies.len(), 2);
+            
+            // First proxy (HTTPS with SSL)
+            let https_proxy = &proxy_config.proxies[0];
+            assert_eq!(https_proxy.host, "0.0.0.0:443");
+            assert!(https_proxy.ssl.is_some());
+            assert!(https_proxy.ssl.as_ref().unwrap().enabled);
+            assert_eq!(https_proxy.worker_threads, Some(4));
+            assert_eq!(https_proxy.routes.len(), 1);
+            assert_eq!(https_proxy.routes[0].host, "secure.example.com");
+            
+            // Second proxy (HTTP only)
+            let http_proxy = &proxy_config.proxies[1];
+            assert_eq!(http_proxy.host, "0.0.0.0:8080");
+            assert!(http_proxy.ssl.is_none());
+            assert_eq!(http_proxy.worker_threads, Some(2));
+            assert_eq!(http_proxy.routes.len(), 1);
+            assert_eq!(http_proxy.routes[0].host, "insecure.example.com");
 
             Ok(())
         });
