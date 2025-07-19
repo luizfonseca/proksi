@@ -16,8 +16,8 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
     }
 
     // validate that the lets encrypt email does not contain @example or is empty
-    // Only required when SSL is enabled
-    if config.server.ssl_enabled && (config.lets_encrypt.email.contains("@example") || config.lets_encrypt.email.is_empty()) {
+    // Only required when SSL is enabled and LetsEncrypt is enabled
+    if config.server.ssl_enabled && config.lets_encrypt.enabled.unwrap_or(false) && (config.lets_encrypt.email.contains("@example") || config.lets_encrypt.email.is_empty()) {
         return Err(anyhow!(
             "lets_encrypt.email cannot be empty or an email from @example.com (the default value) when SSL is enabled"
         ));

@@ -108,7 +108,26 @@ routes = [
   }
 ]
 ```
-4. Run `proksi -c /path-where-proksi.hcl-is-located`
+4. Run Proksi with your configuration:
+   ```bash
+   # Option 1: Specify exact config file path
+   proksi -c /path/to/your/proksi.hcl
+   proksi -c /path/to/your/config.yml
+   
+   # Option 2: Specify directory (looks for proksi.hcl, proksi.yml, proksi.yaml)
+   proksi -c /path/to/config-directory/
+   
+   # Option 3: No config (uses minimal defaults with Let's Encrypt disabled)
+   proksi
+   ```
+
+## Configuration File Handling
+
+Proksi supports flexible configuration file loading:
+
+- **Direct file paths**: Specify any filename with a supported extension (`.hcl`, `.yml`, `.yaml`)
+- **Directory paths**: Proksi will look for `proksi.hcl`, `proksi.yml`, or `proksi.yaml` in the specified directory
+- **No configuration**: If no `-c` flag is provided, Proksi uses minimal default settings with Let's Encrypt disabled and emits a warning
 
 For more information or guides, please refer to the [documentation](https://docs.proksi.info).
 

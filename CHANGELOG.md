@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.6.0...proksi-v0.6.1) (2025-07-19)
+
+
+### Bug Fixes
+
+* configuration file loading to support direct file paths and improve Let's Encrypt validation ([#305](https://github.com/luizfonseca/proksi/issues/305)) ([2a438e0](https://github.com/luizfonseca/proksi/commit/2a438e0eac91824785970cba929fb7a0a3d991db))
+
 ## [0.6.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.5.3...proksi-v0.6.0) (2025-05-12)
 
 
