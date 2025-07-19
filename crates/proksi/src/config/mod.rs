@@ -145,7 +145,7 @@ impl Default for LetsEncrypt {
     fn default() -> Self {
         Self {
             email: Cow::Borrowed("contact@example.com"),
-            enabled: Some(true),
+            enabled: Some(false),
             staging: Some(true),
             renew_interval_secs: Some(84_600),
         }
