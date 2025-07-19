@@ -99,36 +99,41 @@ impl Service for FileWatcherService {
         }
 
         // watch main config file:
-        let path_buf = PathBuf::from(self.config.config_path.to_string());
-        let config_file_yaml = path_buf.join("proksi.yaml");
-        let config_file_hcl = path_buf.join("proksi.hcl");
+        if let Some(config_path) = &self.config.config_path {
+            let path_buf = PathBuf::from(config_path.to_string());
+            let config_file_yaml = path_buf.join("proksi.yaml");
+            let config_file_hcl = path_buf.join("proksi.hcl");
 
-        tracing::info!("starting config watcher service");
+            tracing::info!("starting config watcher service");
 
-        let mut watcher = notify::poll::PollWatcher::new(
-            FileWatcherServiceHandler {},
-            notify::Config::default().with_manual_polling(),
-        )
-        .unwrap();
+            let mut watcher = notify::poll::PollWatcher::new(
+                FileWatcherServiceHandler {},
+                notify::Config::default().with_manual_polling(),
+            )
+            .unwrap();
 
-        Self::watch_file_or_dir(&mut watcher, &config_file_hcl);
-        Self::watch_file_or_dir(&mut watcher, &config_file_yaml);
+            Self::watch_file_or_dir(&mut watcher, &config_file_hcl);
+            Self::watch_file_or_dir(&mut watcher, &config_file_yaml);
 
-        // Watch for paths in the config
-        for watch_path in &self.config.auto_reload.paths {
-            Self::watch_file_or_dir(&mut watcher, watch_path);
-        }
-
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
-            self.config.auto_reload.interval_secs.unwrap_or(60),
-        ));
-        interval.tick().await;
-
-        loop {
-            interval.tick().await;
-            if watcher.poll().is_ok() {
-                tracing::debug!("config watcher service tick");
+            // Watch for paths in the config
+            for watch_path in &self.config.auto_reload.paths {
+                Self::watch_file_or_dir(&mut watcher, watch_path);
             }
+
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+                self.config.auto_reload.interval_secs.unwrap_or(60),
+            ));
+            interval.tick().await;
+
+            loop {
+                interval.tick().await;
+                if watcher.poll().is_ok() {
+                    tracing::debug!("config watcher service tick");
+                }
+            }
+        } else {
+            // No config path provided, nothing to watch
+            tracing::info!("No config path provided, config watcher service not started");
         }
     }
 
