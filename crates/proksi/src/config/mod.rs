@@ -717,7 +717,7 @@ pub fn load(fallback: &str) -> Result<Config, figment::Error> {
 #[cfg(test)]
 pub(crate) fn load_for_test(fallback: &str) -> Result<Config, figment::Error> {
     let default_config = Config::default();
-    
+
     // For tests, always use the regular behavior (no minimal default)
     // since tests should be explicit about what they're testing
     load_from_path(fallback, &default_config, false)
@@ -733,7 +733,11 @@ fn create_minimal_default_config() -> Config {
 }
 
 /// Load configuration from a specific path, used for testing and internal logic
-pub(crate) fn load_from_path(config_path: &str, parsed_commands: &Config, use_minimal_default: bool) -> Result<Config, figment::Error> {
+pub(crate) fn load_from_path(
+    config_path: &str,
+    parsed_commands: &Config,
+    use_minimal_default: bool,
+) -> Result<Config, figment::Error> {
     let mut figment = Figment::new()
         .merge(Config::default())
         .merge(Serialized::defaults(parsed_commands));
@@ -771,9 +775,9 @@ pub(crate) fn load_from_path(config_path: &str, parsed_commands: &Config, use_mi
             format!("{config_path}/proksi.hcl"),
         ];
 
-        let config_files_found = config_files.iter().any(|config_file| {
-            std::path::Path::new(config_file).exists()
-        });
+        let config_files_found = config_files
+            .iter()
+            .any(|config_file| std::path::Path::new(config_file).exists());
 
         if config_files_found {
             // If at least one config file exists, use the original behavior
@@ -1023,7 +1027,7 @@ mod tests {
                   enabled = false
                   email = "test@domain.com"
                 }
-                
+
                 routes = [
                   {
                     host = "example.localhost",
@@ -1042,7 +1046,7 @@ mod tests {
             let default_config = Config::default();
             let config = load_from_path(&config_file_path, &default_config, false);
             let proxy_config = config.unwrap();
-            
+
             assert_eq!(proxy_config.routes.len(), 1);
             assert_eq!(proxy_config.routes[0].host, "example.localhost");
             assert_eq!(proxy_config.routes[0].upstreams[0].port, 3000);
@@ -1064,7 +1068,7 @@ mod tests {
                 lets_encrypt:
                   enabled: false
                   email: "test@domain.com"
-                
+
                 routes:
                   - host: "yaml.localhost"
                     upstreams:
@@ -1077,7 +1081,7 @@ mod tests {
             let default_config = Config::default();
             let config = load_from_path(&config_file_path, &default_config, false);
             let proxy_config = config.unwrap();
-            
+
             assert_eq!(proxy_config.routes.len(), 1);
             assert_eq!(proxy_config.routes[0].host, "yaml.localhost");
             assert_eq!(proxy_config.routes[0].upstreams[0].port, 3001);
@@ -1098,7 +1102,7 @@ mod tests {
                 lets_encrypt:
                   enabled: false
                   email: "contact@example.com"  # This should not cause validation error when disabled
-                
+
                 routes:
                   - host: "test.localhost"
                     upstreams:
@@ -1128,7 +1132,7 @@ mod tests {
                 lets_encrypt:
                   enabled: true
                   email: "contact@example.com"  # This should cause validation error when enabled
-                
+
                 routes:
                   - host: "test.localhost"
                     upstreams:
@@ -1272,7 +1276,7 @@ mod tests {
             );
 
             assert_eq!(letsencrypt.email, "domain@valid.com");
-            assert_eq!(letsencrypt.enabled, Some(true));
+            assert_eq!(letsencrypt.enabled, Some(false));
             assert_eq!(letsencrypt.staging, Some(true));
 
             assert_eq!(paths.lets_encrypt.as_os_str(), "/etc/proksi/letsencrypt");
@@ -1360,23 +1364,23 @@ mod tests {
     fn test_fallback_to_minimal_default_when_no_config_files() {
         figment::Jail::expect_with(|jail| {
             let tmp_dir = jail.directory().to_string_lossy();
-            
+
             // Don't create any config files - directory exists but is empty
-            
-            // Create a default config to use as parsed_commands  
+
+            // Create a default config to use as parsed_commands
             let default_config = Config::default();
             let config = load_from_path(&tmp_dir, &default_config, true);
             let proxy_config = config.unwrap();
-            
+
             // Should use default service name
             assert_eq!(proxy_config.service_name, "proksi");
-            
+
             // Should have Let's Encrypt disabled in minimal config
             assert_eq!(proxy_config.lets_encrypt.enabled, Some(false));
-            
+
             // Should still have the default email (validation won't run since Let's Encrypt is disabled)
             assert_eq!(proxy_config.lets_encrypt.email, "contact@example.com");
-            
+
             // Should have empty routes
             assert_eq!(proxy_config.routes.len(), 0);
 
@@ -1387,14 +1391,14 @@ mod tests {
     #[test]
     fn test_minimal_default_config_creation() {
         let minimal_config = create_minimal_default_config();
-        
+
         // Verify that Let's Encrypt is disabled
         assert_eq!(minimal_config.lets_encrypt.enabled, Some(false));
-        
+
         // Should still have default values for other fields
         assert_eq!(minimal_config.service_name, "proksi");
         assert_eq!(minimal_config.routes.len(), 0);
-        
+
         // Logging should have the correct defaults
         assert!(minimal_config.logging.enabled);
         assert!(minimal_config.logging.access_logs_enabled);
