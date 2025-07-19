@@ -744,7 +744,7 @@ pub(crate) fn load_from_path(config_path: &str, parsed_commands: &Config, use_mi
         let path_buf = std::path::PathBuf::from(config_path);
         if let Some(extension) = path_buf.extension() {
             match extension.to_str() {
-                Some("yml") | Some("yaml") => {
+                Some("yml" | "yaml") => {
                     figment = figment.merge(Yaml::file(config_path));
                 }
                 Some("hcl") => {
