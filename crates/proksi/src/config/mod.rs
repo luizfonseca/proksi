@@ -145,7 +145,7 @@ impl Default for LetsEncrypt {
     fn default() -> Self {
         Self {
             email: Cow::Borrowed("contact@example.com"),
-            enabled: Some(true),
+            enabled: Some(false),
             staging: Some(true),
             renew_interval_secs: Some(84_600),
         }
@@ -602,10 +602,11 @@ pub(crate) struct Config {
     ///
     /// The configuration file should be named either `proksi.hcl` or `proksi.yaml`
     ///
-    /// and be present in that path. Defaults to the current directory.
-    #[clap(short, required = false, long, default_value = "./")]
+    /// and be present in that path. If no path is provided, a minimal default
+    /// configuration will be used.
+    #[clap(short, required = false, long)]
     #[allow(clippy::struct_field_names)]
-    pub config_path: Cow<'static, str>,
+    pub config_path: Option<Cow<'static, str>>,
 
     /// General config
     #[command(flatten)]
@@ -635,7 +636,7 @@ pub(crate) struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            config_path: Cow::Borrowed("/etc/proksi/config"),
+            config_path: Some(Cow::Borrowed("/etc/proksi/config")),
             service_name: Cow::Borrowed("proksi"),
             server: ServerCfg {
                 https_address: Some(Cow::Borrowed("0.0.0.0:443")),
@@ -653,7 +654,7 @@ impl Default for Config {
                 enabled: true,
                 level: LogLevel::Info,
                 access_logs_enabled: true,
-                error_logs_enabled: false,
+                error_logs_enabled: true,
                 format: LogFormat::Json,
                 path: None,
                 rotation: LogRotation::Never,
@@ -701,18 +702,103 @@ impl Provider for Config {
 pub fn load(fallback: &str) -> Result<Config, figment::Error> {
     let parsed_commands = Config::parse();
 
-    let path_with_fallback = if parsed_commands.config_path.is_empty() {
-        fallback
-    } else {
-        &parsed_commands.config_path
+    let path_with_fallback = match &parsed_commands.config_path {
+        Some(path) => path.as_ref(),
+        None => fallback,
     };
 
-    let config: Config = Figment::new()
+    // Check if no explicit config path was provided by the user
+    let use_minimal_default = parsed_commands.config_path.is_none();
+
+    load_from_path(path_with_fallback, &parsed_commands, use_minimal_default)
+}
+
+/// Test-friendly version of load that doesn't parse command line arguments
+#[cfg(test)]
+pub(crate) fn load_for_test(fallback: &str) -> Result<Config, figment::Error> {
+    let default_config = Config::default();
+
+    // For tests, always use the regular behavior (no minimal default)
+    // since tests should be explicit about what they're testing
+    load_from_path(fallback, &default_config, false)
+}
+
+/// Creates a minimal default configuration with Let's Encrypt disabled.
+/// This is used when no configuration file is found.
+fn create_minimal_default_config() -> Config {
+    let mut config = Config::default();
+    // Disable Let's Encrypt by default in minimal config
+    config.lets_encrypt.enabled = Some(false);
+    config
+}
+
+/// Load configuration from a specific path, used for testing and internal logic
+pub(crate) fn load_from_path(
+    config_path: &str,
+    parsed_commands: &Config,
+    use_minimal_default: bool,
+) -> Result<Config, figment::Error> {
+    let mut figment = Figment::new()
         .merge(Config::default())
-        .merge(Serialized::defaults(&parsed_commands))
-        .merge(Yaml::file(format!("{path_with_fallback}/proksi.yml")))
-        .merge(Yaml::file(format!("{path_with_fallback}/proksi.yaml")))
-        .merge(Hcl::file(format!("{path_with_fallback}/proksi.hcl")))
+        .merge(Serialized::defaults(parsed_commands));
+
+    // Check if the path is a file or directory
+    if std::path::Path::new(config_path).is_file() {
+        // If it's a file, load it directly based on its extension
+        let path_buf = std::path::PathBuf::from(config_path);
+        if let Some(extension) = path_buf.extension() {
+            match extension.to_str() {
+                Some("yml" | "yaml") => {
+                    figment = figment.merge(Yaml::file(config_path));
+                }
+                Some("hcl") => {
+                    figment = figment.merge(Hcl::file(config_path));
+                }
+                _ => {
+                    // Try to load as both formats for compatibility
+                    figment = figment
+                        .merge(Yaml::file(config_path))
+                        .merge(Hcl::file(config_path));
+                }
+            }
+        } else {
+            // No extension, try both formats
+            figment = figment
+                .merge(Yaml::file(config_path))
+                .merge(Hcl::file(config_path));
+        }
+    } else {
+        // If it's a directory, check if any config files exist
+        let config_files = [
+            format!("{config_path}/proksi.yml"),
+            format!("{config_path}/proksi.yaml"),
+            format!("{config_path}/proksi.hcl"),
+        ];
+
+        let config_files_found = config_files
+            .iter()
+            .any(|config_file| std::path::Path::new(config_file).exists());
+
+        if config_files_found {
+            // If at least one config file exists, use the original behavior
+            figment = figment
+                .merge(Yaml::file(format!("{config_path}/proksi.yml")))
+                .merge(Yaml::file(format!("{config_path}/proksi.yaml")))
+                .merge(Hcl::file(format!("{config_path}/proksi.hcl")));
+        } else if use_minimal_default {
+            // No config files found and user didn't explicitly provide a path
+            eprintln!("Warning: No configuration files found. Using minimal default configuration with Let's Encrypt disabled.");
+            figment = figment.merge(Serialized::defaults(create_minimal_default_config()));
+        } else {
+            // Use original behavior - try to load the files anyway (figment will handle missing files)
+            figment = figment
+                .merge(Yaml::file(format!("{config_path}/proksi.yml")))
+                .merge(Yaml::file(format!("{config_path}/proksi.yaml")))
+                .merge(Hcl::file(format!("{config_path}/proksi.hcl")));
+        }
+    }
+
+    let config: Config = figment
         .merge(Env::prefixed("PROKSI_").split("__"))
         .extract()?;
 
@@ -846,7 +932,7 @@ mod tests {
                 "#,
             )?;
 
-            let config = load(&tmp_dir);
+            let config = load_for_test(&tmp_dir);
             let proxy_config = config.unwrap();
 
             assert!(matches!(proxy_config.store.store_type, StoreType::Redis));
@@ -871,7 +957,7 @@ mod tests {
                 "#,
             )?;
 
-            let config = load(&tmp_dir);
+            let config = load_for_test(&tmp_dir);
             let proxy_config = config.unwrap();
 
             assert!(matches!(proxy_config.store.store_type, StoreType::Memory));
@@ -920,9 +1006,144 @@ mod tests {
 
             jail.create_file(format!("{}/proksi.yaml", tmp_dir), helper_config_file())?;
 
-            let config = load(&tmp_dir);
+            let config = load_for_test(&tmp_dir);
             let proxy_config = config.unwrap();
             assert_eq!(proxy_config.service_name, "proksi");
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_load_config_from_direct_file_path_hcl() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+            let config_file_path = format!("{}/custom_config.hcl", tmp_dir);
+
+            jail.create_file(
+                &config_file_path,
+                r#"
+                lets_encrypt {
+                  enabled = false
+                  email = "test@domain.com"
+                }
+
+                routes = [
+                  {
+                    host = "example.localhost",
+                    upstreams = [
+                      {
+                        ip = "localhost"
+                        port = 3000
+                      }
+                    ]
+                  }
+                ]
+                "#,
+            )?;
+
+            // Create a default config to use as parsed_commands
+            let default_config = Config::default();
+            let config = load_from_path(&config_file_path, &default_config, false);
+            let proxy_config = config.unwrap();
+
+            assert_eq!(proxy_config.routes.len(), 1);
+            assert_eq!(proxy_config.routes[0].host, "example.localhost");
+            assert_eq!(proxy_config.routes[0].upstreams[0].port, 3000);
+            assert!(!proxy_config.lets_encrypt.enabled.unwrap_or(true));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_load_config_from_direct_file_path_yaml() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+            let config_file_path = format!("{}/custom_config.yml", tmp_dir);
+
+            jail.create_file(
+                &config_file_path,
+                r#"
+                lets_encrypt:
+                  enabled: false
+                  email: "test@domain.com"
+
+                routes:
+                  - host: "yaml.localhost"
+                    upstreams:
+                      - ip: "localhost"
+                        port: 3001
+                "#,
+            )?;
+
+            // Create a default config to use as parsed_commands
+            let default_config = Config::default();
+            let config = load_from_path(&config_file_path, &default_config, false);
+            let proxy_config = config.unwrap();
+
+            assert_eq!(proxy_config.routes.len(), 1);
+            assert_eq!(proxy_config.routes[0].host, "yaml.localhost");
+            assert_eq!(proxy_config.routes[0].upstreams[0].port, 3001);
+            assert!(!proxy_config.lets_encrypt.enabled.unwrap_or(true));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_lets_encrypt_validation_when_disabled() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.yaml", tmp_dir),
+                r#"
+                lets_encrypt:
+                  enabled: false
+                  email: "contact@example.com"  # This should not cause validation error when disabled
+
+                routes:
+                  - host: "test.localhost"
+                    upstreams:
+                      - ip: "localhost"
+                        port: 3000
+                "#,
+            )?;
+
+            let config = load_for_test(&tmp_dir);
+            // This should not panic or return error due to @example.com email when Let's Encrypt is disabled
+            assert!(config.is_ok());
+            let proxy_config = config.unwrap();
+            assert!(!proxy_config.lets_encrypt.enabled.unwrap_or(true));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_lets_encrypt_validation_when_enabled() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            jail.create_file(
+                format!("{}/proksi.yaml", tmp_dir),
+                r#"
+                lets_encrypt:
+                  enabled: true
+                  email: "contact@example.com"  # This should cause validation error when enabled
+
+                routes:
+                  - host: "test.localhost"
+                    upstreams:
+                      - ip: "localhost"
+                        port: 3000
+                "#,
+            )?;
+
+            let config = load_for_test(&tmp_dir);
+            // This should return an error due to @example.com email when Let's Encrypt is enabled
+            assert!(config.is_err());
 
             Ok(())
         });
@@ -954,7 +1175,7 @@ mod tests {
             "#,
             );
 
-            let config = load(jail.directory().to_str().unwrap());
+            let config = load_for_test(jail.directory().to_str().unwrap());
 
             let proxy_config = config.unwrap();
             assert_eq!(proxy_config.service_name, "new_name");
@@ -994,7 +1215,7 @@ mod tests {
     fn test_load_config_with_defaults_only() {
         figment::Jail::expect_with(|jail| {
             jail.set_env("PROKSI_LETS_ENCRYPT__EMAIL", "my-real-email@domain.com");
-            let config = load("/non-existent");
+            let config = load_for_test("/non-existent");
             let proxy_config = config.unwrap();
 
             let logging = proxy_config.logging;
@@ -1035,7 +1256,7 @@ mod tests {
                 "#,
             )?;
 
-            let config = load(&tmp_dir);
+            let config = load_for_test(&tmp_dir);
             let proxy_config = config.unwrap();
             let logging = proxy_config.logging;
             let paths = proxy_config.paths;
@@ -1055,7 +1276,7 @@ mod tests {
             );
 
             assert_eq!(letsencrypt.email, "domain@valid.com");
-            assert_eq!(letsencrypt.enabled, Some(true));
+            assert_eq!(letsencrypt.enabled, Some(false));
             assert_eq!(letsencrypt.staging, Some(true));
 
             assert_eq!(paths.lets_encrypt.as_os_str(), "/etc/proksi/letsencrypt");
@@ -1108,7 +1329,7 @@ mod tests {
                     "#,
             )?;
 
-            let config = load(&tmp_dir);
+            let config = load_for_test(&tmp_dir);
             let proxy_config = config.unwrap();
 
             assert_eq!(proxy_config.service_name, "hcl-service");
@@ -1137,5 +1358,50 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_fallback_to_minimal_default_when_no_config_files() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy();
+
+            // Don't create any config files - directory exists but is empty
+
+            // Create a default config to use as parsed_commands
+            let default_config = Config::default();
+            let config = load_from_path(&tmp_dir, &default_config, true);
+            let proxy_config = config.unwrap();
+
+            // Should use default service name
+            assert_eq!(proxy_config.service_name, "proksi");
+
+            // Should have Let's Encrypt disabled in minimal config
+            assert_eq!(proxy_config.lets_encrypt.enabled, Some(false));
+
+            // Should still have the default email (validation won't run since Let's Encrypt is disabled)
+            assert_eq!(proxy_config.lets_encrypt.email, "contact@example.com");
+
+            // Should have empty routes
+            assert_eq!(proxy_config.routes.len(), 0);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_minimal_default_config_creation() {
+        let minimal_config = create_minimal_default_config();
+
+        // Verify that Let's Encrypt is disabled
+        assert_eq!(minimal_config.lets_encrypt.enabled, Some(false));
+
+        // Should still have default values for other fields
+        assert_eq!(minimal_config.service_name, "proksi");
+        assert_eq!(minimal_config.routes.len(), 0);
+
+        // Logging should have the correct defaults
+        assert!(minimal_config.logging.enabled);
+        assert!(minimal_config.logging.access_logs_enabled);
+        assert!(minimal_config.logging.error_logs_enabled);
     }
 }

@@ -1,10 +1,25 @@
 # YAML
 
-Proksi can be configured using a proksi.yaml file that controls most of the functions:
+Proksi can be configured using YAML files. You have several options for specifying your configuration:
+
+## Configuration File Loading
+
+Proksi supports flexible configuration file loading via the `-c` flag:
+
+- **Direct file path**: `proksi -c /path/to/my-config.yml` - Load any YAML file directly
+- **Directory path**: `proksi -c /path/to/directory/` - Proksi looks for `proksi.yaml`, `proksi.yml`, or `proksi.hcl` in the directory
+- **No configuration**: `proksi` (without `-c`) - Uses minimal default configuration with Let's Encrypt disabled
+
+When no configuration is found, Proksi will emit a warning and start with minimal defaults that include:
+- Let's Encrypt disabled (to prevent email validation failures)
+- Basic HTTP/HTTPS proxy functionality
+- No predefined routes
+
+## Configuration Properties
 
 
 
-<table><thead><tr><th width="311.3333333333333">Property</th><th width="268">Description</th><th>Default</th></tr></thead><tbody><tr><td><code>service_name</code></td><td>Name of the service. It's used for logging.</td><td>"proksi"</td></tr><tr><td><code>worker_threads</code></td><td>Number of (real) threads the HTTPs service will use.</td><td>4</td></tr><tr><td><code>lets_encrypt</code></td><td>--</td><td>--</td></tr><tr><td><code>lets_encrypt.enabled</code></td><td>Enables issuing certificates from Let's Encrypt</td><td>true</td></tr><tr><td><code>lets_encrypt.email</code></td><td>The email to be used when asking for certificates</td><td>""</td></tr><tr><td><code>lets_encrypt.staging</code></td><td>Use the <code>staging</code> endpoint to generate certificates. Mostly useful for local testing. Change it to <code>true</code> to enable the production certificates.</td><td>true</td></tr><tr><td><code>logging</code></td><td>--</td><td>--</td></tr><tr><td><code>logging.level</code></td><td>The level of logs saved or printed to STDOUT.</td><td>INFO</td></tr><tr><td><code>logging.access_logs_enabled</code></td><td>Enables response/request logging (includes user-agent, host, duration etc)</td><td>true</td></tr><tr><td><code>logging.error_logs_enabled</code></td><td>If the logs should include errors from Pingora</td><td>false</td></tr><tr><td><code>paths</code></td><td>--</td><td>--</td></tr><tr><td><code>paths.lets_encrypt</code></td><td>Path to store certificates, challenges etc</td><td>"/etc/proksi/lets_encrypt"</td></tr><tr><td><code>routes</code></td><td>--</td><td>--</td></tr><tr><td><code>routes[*].host</code></td><td>The host name that a list of upstreams will receive requests for</td><td></td></tr><tr><td><code>routes[*].path_prefix</code></td><td>Will match host+path on every request ensuring that only requests where the <code>path</code> starts with the value defined here are matched.</td><td></td></tr><tr><td><code>routes[*].upstreams</code></td><td>--</td><td>--</td></tr><tr><td><code>routes[*].upstreams[*].ip</code></td><td>The IP of your server, container, or <strong>even an external IP</strong> you want to point requests to.</td><td></td></tr><tr><td><code>routes[*].upstreams[*].port</code></td><td>The <code>PORT</code> of your server, container or external service where we should connect to.</td><td></td></tr><tr><td><code>routes[*].upstreams[*].network</code></td><td>The network name for Proksi to use when connecting with internal services or containers</td><td></td></tr><tr><td></td><td></td><td></td></tr></tbody></table>
+<table><thead><tr><th width="311.3333333333333">Property</th><th width="268">Description</th><th>Default</th></tr></thead><tbody><tr><td><code>service_name</code></td><td>Name of the service. It's used for logging.</td><td>"proksi"</td></tr><tr><td><code>worker_threads</code></td><td>Number of (real) threads the HTTPs service will use.</td><td>4</td></tr><tr><td><code>lets_encrypt</code></td><td>--</td><td>--</td></tr><tr><td><code>lets_encrypt.enabled</code></td><td>Enables issuing certificates from Let's Encrypt</td><td>false</td></tr><tr><td><code>lets_encrypt.email</code></td><td>The email to be used when asking for certificates</td><td>""</td></tr><tr><td><code>lets_encrypt.staging</code></td><td>Use the <code>staging</code> endpoint to generate certificates. Mostly useful for local testing. Change it to <code>true</code> to enable the production certificates.</td><td>true</td></tr><tr><td><code>logging</code></td><td>--</td><td>--</td></tr><tr><td><code>logging.level</code></td><td>The level of logs saved or printed to STDOUT.</td><td>INFO</td></tr><tr><td><code>logging.access_logs_enabled</code></td><td>Enables response/request logging (includes user-agent, host, duration etc)</td><td>true</td></tr><tr><td><code>logging.error_logs_enabled</code></td><td>If the logs should include errors from Pingora</td><td>false</td></tr><tr><td><code>paths</code></td><td>--</td><td>--</td></tr><tr><td><code>paths.lets_encrypt</code></td><td>Path to store certificates, challenges etc</td><td>"/etc/proksi/lets_encrypt"</td></tr><tr><td><code>routes</code></td><td>--</td><td>--</td></tr><tr><td><code>routes[*].host</code></td><td>The host name that a list of upstreams will receive requests for</td><td></td></tr><tr><td><code>routes[*].path_prefix</code></td><td>Will match host+path on every request ensuring that only requests where the <code>path</code> starts with the value defined here are matched.</td><td></td></tr><tr><td><code>routes</code></td><td>--</td><td>--</td></tr><tr><td><code>routes[*].upstreams</code></td><td>--</td><td>--</td></tr><tr><td><code>routes[*].upstreams[*].ip</code></td><td>The IP of your server, container, or <strong>even an external IP</strong> you want to point requests to.</td><td></td></tr><tr><td><code>routes[*].upstreams[*].port</code></td><td>The <code>PORT</code> of your server, container or external service where we should connect to.</td><td></td></tr><tr><td><code>routes[*].upstreams[*].network</code></td><td>The network name for Proksi to use when connecting with internal services or containers</td><td></td></tr><tr><td></td><td></td><td></td></tr></tbody></table>
 
 
 
@@ -56,7 +71,8 @@ lets_encrypt:
 
   # Whether the Let's Encrypt integration is enabled
   # (the background service will run and issue certificates for your routes).
-  enabled: true
+  # Note: You must explicitly enable this and provide a valid email address
+  enabled: false
 
   # The email address to use for Let's Encrypt notifications and account registration.
   # Important: Make sure to replace this with your own email address.

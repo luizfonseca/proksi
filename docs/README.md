@@ -20,11 +20,15 @@ For a quick introduction, check the ASCII recording of a small configuration fil
 
 ### Quick start
 
-Create a configuration file
+Create a configuration file or specify a direct file path:
 
 ```bash
+# Option 1: Create a directory and configuration file
 mkdir config
 touch config/proksi.hcl
+
+# Option 2: Create a configuration file anywhere with any name
+touch my-proxy-config.yml
 ```
 
 Add a simple route, let's try `docs.proksi.info` as our proxy route:
@@ -32,7 +36,7 @@ Add a simple route, let's try `docs.proksi.info` as our proxy route:
 ```hcl
 #
 lets_encrypt {
-  enabled = true
+  enabled = true  # You must explicitly enable Let's Encrypt
   staging = true
   email = "my@email.com"
 }
@@ -59,6 +63,20 @@ routes = [
     ]
   }
 ]
+```
+
+Then run Proksi with your configuration:
+
+```bash
+# Direct file path (any filename)
+proksi -c ./config/proksi.hcl
+proksi -c ./my-proxy-config.yml
+
+# Directory path (looks for proksi.hcl, proksi.yml, proksi.yaml)
+proksi -c ./config/
+
+# No configuration (minimal defaults, Let's Encrypt disabled)
+proksi
 ```
 
 
