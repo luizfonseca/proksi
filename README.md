@@ -5,9 +5,9 @@
 [![Crates.io Total Downloads](https://img.shields.io/crates/d/proksi?style=for-the-badge)](https://crates.io/crates/proksi)
 
 # Proksi: Automatic SSL, HTTP, and DNS Proxy
-
+<a href="https://discord.gg/WsuV6QBW">
 <img src="./assets/discord.png" alt="discord-logo" width="200"/>
-
+</a>
 
 # About
 
@@ -66,18 +66,19 @@ routes = [
   }
 ]
 ```
+
 4. Run Proksi with your configuration:
-   ```bash
-   # Option 1: Specify exact config file path
-   proksi -c /path/to/your/proksi.hcl
-   proksi -c /path/to/your/config.yml
-   
-   # Option 2: Specify directory (looks for proksi.hcl, proksi.yml, proksi.yaml)
-   proksi -c /path/to/config-directory/
-   
-   # Option 3: No config (uses minimal defaults with Let's Encrypt disabled)
-   proksi
-   ```
+```bash
+# Option 1: Specify exact config file path
+proksi -c /path/to/your/proksi.hcl
+proksi -c /path/to/your/config.yml
+
+# Option 2: Specify directory (looks for proksi.hcl, proksi.yml, proksi.yaml)
+proksi -c /path/to/config-directory/
+
+# Option 3: No config (uses minimal defaults with Let's Encrypt disabled)
+proksi
+```
 
 ## Configuration File Handling
 
