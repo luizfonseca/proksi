@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use papaya::HashMapRef;
 use std::{error::Error, hash::RandomState};
+use crate::config::RouteUpstream;
 
 use super::certificates::Certificate;
 use super::store_trait::Store;
@@ -10,6 +11,8 @@ pub struct MemoryStore {
     inner_certs: papaya::HashMap<String, Certificate>,
     /// Map of domain names to challenge tokens and proofs (token, proof)
     inner_challenges: papaya::HashMap<String, (String, String)>,
+    /// Map of domain names to routes upstreams
+    inner_upstreams: papaya::HashMap<String, Vec<RouteUpstream>>,
 }
 
 impl MemoryStore {
@@ -17,12 +20,22 @@ impl MemoryStore {
         MemoryStore {
             inner_certs: papaya::HashMap::new(),
             inner_challenges: papaya::HashMap::new(),
+            inner_upstreams: papaya::HashMap::new(),
         }
     }
 }
 
 #[async_trait]
 impl Store for MemoryStore {
+    async fn get_upstreams(&self, domain: &str) -> Option<Vec<RouteUpstream>> {
+        self.inner_upstreams.pin().get(domain).cloned()
+    }
+
+    async fn set_upstreams(&self, domain: &str, upstreams: Vec<RouteUpstream>) -> Result<(), Box<dyn Error>> {
+        self.inner_upstreams.pin().insert(domain.to_string(), upstreams);
+        Ok(())
+    }
+
     async fn get_certificate(&self, host: &str) -> Option<Certificate> {
         self.inner_certs.pin().get(host).cloned()
     }
