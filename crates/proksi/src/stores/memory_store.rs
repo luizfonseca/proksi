@@ -70,6 +70,7 @@ impl Store for MemoryStore {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     // No need to import super since we're using specific imports
     use crate::stores::certificates::Certificate;
     use crate::stores::store_trait::Store;
@@ -80,6 +81,7 @@ mod tests {
         rsa::Rsa,
         x509::{X509Name, X509},
     };
+    use crate::config::RouteUpstream;
 
     // Helper function to create a test certificate
     fn create_test_certificate(domain: &str) -> Certificate {
@@ -222,5 +224,42 @@ mod tests {
         // Test getting nonexistent challenge
         let challenge = store.get_challenge("nonexistent.com").await;
         assert!(challenge.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_upstreams_storage() {
+        let store = MemoryStore::new();
+
+        let domain = "example.com";
+
+        let upstream1 = RouteUpstream {
+            ip: Cow::Borrowed("127.0.0.1"),
+            port: 80,
+            network: None,
+            weight: None,
+            sni: None,
+            headers: None,
+        };
+
+        let upstream2 = RouteUpstream {
+            ip: Cow::Borrowed("127.0.0.1"),
+            port: 443,
+            network: None,
+            weight: None,
+            sni: None,
+            headers: None,
+        };
+
+        let upstreams = vec!(
+            upstream1, upstream2
+        );
+
+        store.set_upstreams(domain, upstreams)
+            .await
+            .unwrap();
+
+        let store_upstreams = store.get_upstreams(domain).await.unwrap();
+
+        assert_eq!(store_upstreams.len(), 2);
     }
 }
