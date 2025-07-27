@@ -8,19 +8,19 @@ use super::store_trait::Store;
 
 pub struct MemoryStore {
     /// Map of domain names to certificates (including leaf & chain)
-    inner_certs: papaya::HashMap<String, Certificate>,
+    certs: papaya::HashMap<String, Certificate>,
     /// Map of domain names to challenge tokens and proofs (token, proof)
-    inner_challenges: papaya::HashMap<String, (String, String)>,
+    challenges: papaya::HashMap<String, (String, String)>,
     /// Map of domain names to routes upstreams
-    inner_upstreams: papaya::HashMap<String, Vec<RouteUpstream>>,
+    upstreams: papaya::HashMap<String, Vec<RouteUpstream>>,
 }
 
 impl MemoryStore {
     pub fn new() -> Self {
         MemoryStore {
-            inner_certs: papaya::HashMap::new(),
-            inner_challenges: papaya::HashMap::new(),
-            inner_upstreams: papaya::HashMap::new(),
+            certs: papaya::HashMap::new(),
+            challenges: papaya::HashMap::new(),
+            upstreams: papaya::HashMap::new(),
         }
     }
 }
@@ -28,31 +28,31 @@ impl MemoryStore {
 #[async_trait]
 impl Store for MemoryStore {
     async fn get_upstreams(&self, domain: &str) -> Option<Vec<RouteUpstream>> {
-        self.inner_upstreams.pin().get(domain).cloned()
+        self.upstreams.pin().get(domain).cloned()
     }
 
     async fn set_upstreams(&self, domain: &str, upstreams: Vec<RouteUpstream>) -> Result<(), Box<dyn Error>> {
-        self.inner_upstreams.pin().insert(domain.to_string(), upstreams);
+        self.upstreams.pin().insert(domain.to_string(), upstreams);
         Ok(())
     }
 
     async fn get_certificate(&self, host: &str) -> Option<Certificate> {
-        self.inner_certs.pin().get(host).cloned()
+        self.certs.pin().get(host).cloned()
     }
 
     async fn set_certificate(&self, host: &str, cert: Certificate) -> Result<(), Box<dyn Error>> {
-        self.inner_certs.pin().insert(host.to_string(), cert);
+        self.certs.pin().insert(host.to_string(), cert);
         Ok(())
     }
 
     async fn get_certificates(
         &self,
     ) -> HashMapRef<'_, String, Certificate, RandomState, seize::LocalGuard<'_>> {
-        self.inner_certs.pin()
+        self.certs.pin()
     }
 
     async fn get_challenge(&self, domain: &str) -> Option<(String, String)> {
-        self.inner_challenges.pin().get(domain).cloned()
+        self.challenges.pin().get(domain).cloned()
     }
 
     async fn set_challenge(
@@ -61,7 +61,7 @@ impl Store for MemoryStore {
         token: String,
         proof: String,
     ) -> Result<(), Box<dyn Error>> {
-        self.inner_challenges
+        self.challenges
             .pin()
             .insert(domain.to_string(), (token, proof));
         Ok(())
