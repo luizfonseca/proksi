@@ -85,5 +85,5 @@ harness = false
 path = "../benches"
 
 [dev-dependencies]
-criterion = { version = "0.6", features = ["html_reports"] }
+criterion = { version = "0.7", features = ["html_reports"] }
 figment = { version = "0.10.19", features = ["toml", "yaml", "env", "test"] }
