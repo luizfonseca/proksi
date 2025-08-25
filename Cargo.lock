@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "TinyUFO"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dac305af3c659b7f9929e6bfae6499e7cd4446e60e19f8049aed67ebfa1969d"
+checksum = "7507d942373e5064fd15618870e2c0c6cd2d6aa3918d93f8f104227859d5356a"
 dependencies = [
  "ahash",
  "crossbeam-queue",
