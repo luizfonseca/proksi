@@ -31,7 +31,7 @@ rust-version.workspace = true
 workspace = "../.."
 
 [dependencies]
-TinyUFO = "0.5.0"
+TinyUFO = "0.6.0"
 acme-v2 = "0.9.3"
 anyhow = "1.0.98"
 arc-swap = "1.7.1"
