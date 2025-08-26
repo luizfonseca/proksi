@@ -58,7 +58,7 @@ papaya = "0.2.3"
 path-tree = "0.8.3"
 pingora = { version = "0.5.0", features = ["lb", "openssl", "proxy", "cache"] }
 pingora-cache = "0.5.0"
-pingora-error = "0.5.0"
+pingora-error = "0.6.0"
 prometheus = "0.14.0"
 reqwest = { version = "0.12.23", features = ["json"] }
 seize = "0.5.0"
