@@ -2325,7 +2325,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "pingora-core",
- "pingora-error",
+ "pingora-error 0.5.0",
  "pingora-header-serde",
  "pingora-http",
  "pingora-lru",
@@ -2365,7 +2365,7 @@ dependencies = [
  "openssl-probe",
  "parking_lot",
  "percent-encoding",
- "pingora-error",
+ "pingora-error 0.5.0",
  "pingora-http",
  "pingora-openssl",
  "pingora-pool",
@@ -2394,6 +2394,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca838db1ee9beef844d6db7e2e85e0006b50bb6bf8f19c96fb64bf2567e59039"
 
 [[package]]
+name = "pingora-error"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52119570d3f4644e09654ad24df2b7d851bf12eaa8c4148b4674c7f90916598e"
+
+[[package]]
 name = "pingora-header-serde"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2402,7 +2408,7 @@ dependencies = [
  "bytes",
  "http",
  "httparse",
- "pingora-error",
+ "pingora-error 0.5.0",
  "pingora-http",
  "thread_local",
  "zstd",
@@ -2417,7 +2423,7 @@ checksum = "0f15f9fa5ae034435adfe2b94620e25dee7b0859c2460acec499163de3d299f1"
 dependencies = [
  "bytes",
  "http",
- "pingora-error",
+ "pingora-error 0.5.0",
 ]
 
 [[package]]
@@ -2443,7 +2449,7 @@ dependencies = [
  "http",
  "log",
  "pingora-core",
- "pingora-error",
+ "pingora-error 0.5.0",
  "pingora-http",
  "pingora-ketama",
  "pingora-runtime",
@@ -2507,7 +2513,7 @@ dependencies = [
  "once_cell",
  "pingora-cache",
  "pingora-core",
- "pingora-error",
+ "pingora-error 0.5.0",
  "pingora-http",
  "regex",
  "tokio",
@@ -2706,7 +2712,7 @@ dependencies = [
  "path-tree",
  "pingora",
  "pingora-cache",
- "pingora-error",
+ "pingora-error 0.6.0",
  "prometheus 0.14.0",
  "r2d2",
  "redis",
