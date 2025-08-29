@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use papaya::HashMapRef;
 use std::{error::Error, hash::RandomState};
+use crate::config::RouteUpstream;
 
 use super::certificates::Certificate;
 
@@ -9,6 +10,10 @@ pub trait Store: Send + Sync + 'static {
     // async fn get_route(&self, host: &str) -> Result<Option<String>, Box<dyn Error>>;
     // async fn remove_route(&self, host: &str) -> Result<(), Box<dyn Error>>;
     // async fn set_route(&self, route: &str) -> Result<(), Box<dyn Error>>;
+
+    async fn get_upstreams(&self, domain: &str) -> Option<Vec<RouteUpstream>>;
+    async fn set_upstreams(&self, domain: &str, upstreams: Vec<RouteUpstream>) -> Result<(), Box<dyn Error>>;
+
     async fn get_certificate(&self, domain: &str) -> Option<Certificate>;
     async fn set_certificate(&self, domain: &str, cert: Certificate) -> Result<(), Box<dyn Error>>;
     async fn get_certificates(
