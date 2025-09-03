@@ -3,6 +3,7 @@ use papaya::HashMapRef;
 use redis::{Client, Commands};
 use serde_json;
 use std::{error::Error, hash::RandomState};
+use crate::config::RouteUpstream;
 
 use super::certificates::{Certificate, SerializableCertificate};
 use super::store_trait::Store;
@@ -11,8 +12,9 @@ const CHALLENGE_TTL_SECONDS: u64 = 300;
 
 pub struct RedisStore {
     pool: r2d2::Pool<redis::Client>,
-    cache: papaya::HashMap<String, Certificate>,
+    certificate_cache: papaya::HashMap<String, Certificate>,
     challenge_cache: papaya::HashMap<String, (String, String)>,
+    upstream_cache: papaya::HashMap<String, Vec<RouteUpstream>>,
 }
 
 impl RedisStore {
@@ -22,9 +24,14 @@ impl RedisStore {
 
         Ok(RedisStore {
             pool,
-            cache: papaya::HashMap::new(),
+            certificate_cache: papaya::HashMap::new(),
             challenge_cache: papaya::HashMap::new(),
+            upstream_cache: papaya::HashMap::new(),
         })
+    }
+
+    fn upstreams_key(domain: &str) -> String {
+        format!("proksi:upstreams:{domain}")
     }
 
     fn certificate_key(domain: &str) -> String {
@@ -35,7 +42,7 @@ impl RedisStore {
         format!("proksi:challenge:{domain}")
     }
 
-    fn load_from_redis(&self, domain: &str) -> Option<Certificate> {
+    fn load_certificate_from_redis(&self, domain: &str) -> Option<Certificate> {
         let mut conn = self.pool.get().unwrap();
         let key = Self::certificate_key(domain);
 
@@ -66,16 +73,46 @@ impl RedisStore {
 
 #[async_trait]
 impl Store for RedisStore {
+    async fn get_upstreams(&self, domain: &str) -> Option<Vec<RouteUpstream>> {
+
+        let mut conn = self.pool.get().unwrap();
+        let key = Self::upstreams_key(domain);
+
+        let upstreams_data: Option<String> = conn.get(&key).ok()?;
+
+        if let Some(data) = upstreams_data {
+            if let Ok(upstreams) = serde_json::from_str::<Vec<RouteUpstream>>(&data) {
+                return Some(upstreams);
+            }
+        }
+        None
+    }
+
+    async fn set_upstreams(&self, domain: &str, upstreams: Vec<RouteUpstream>) -> Result<(), Box<dyn Error>> {
+        let mut conn = self.pool.get()?;
+        let key = Self::certificate_key(domain);
+
+        let upstreams_json = serde_json::to_string(&upstreams.clone())?;
+
+        conn.set::<String, String, String>(key, upstreams_json)?;
+
+        // Update cache
+        self.upstream_cache.pin().insert(domain.to_string(), upstreams);
+
+        Ok(())
+    }
+
+
     async fn get_certificate(&self, domain: &str) -> Option<Certificate> {
         // Check cache first
-        if let Some(cert) = self.cache.pin().get(domain) {
+        if let Some(cert) = self.certificate_cache.pin().get(domain) {
             return Some(cert.clone());
         }
 
         // If not in cache, load from Redis
-        if let Some(cert) = self.load_from_redis(domain) {
+        if let Some(cert) = self.load_certificate_from_redis(domain) {
             // Store in cache for future use
-            self.cache.pin().insert(domain.to_string(), cert.clone());
+            self.certificate_cache.pin().insert(domain.to_string(), cert.clone());
             return Some(cert);
         }
 
@@ -93,7 +130,7 @@ impl Store for RedisStore {
         conn.set::<String, String, String>(key, cert_json)?;
 
         // Update cache
-        self.cache.pin().insert(domain.to_string(), cert);
+        self.certificate_cache.pin().insert(domain.to_string(), cert);
 
         Ok(())
     }
@@ -107,7 +144,7 @@ impl Store for RedisStore {
         TEMP_MAP.pin().clear();
 
         // First, copy all cached certificates
-        for (key, value) in &self.cache.pin() {
+        for (key, value) in &self.certificate_cache.pin() {
             TEMP_MAP.pin().insert(key.clone(), value.clone());
         }
 
@@ -130,7 +167,7 @@ impl Store for RedisStore {
                             if let Ok(cert) = Certificate::from_serializable(serializable_cert) {
                                 TEMP_MAP.pin().insert(domain.clone(), cert.clone());
                                 // Update cache with newly found certificate
-                                self.cache.pin().insert(domain, cert);
+                                self.certificate_cache.pin().insert(domain, cert);
                             }
                         }
                     }
