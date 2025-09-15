@@ -154,7 +154,9 @@ routes = [
         # The headers attribute specifies the headers that will
         # be added or removed when making a request to your UPSTREAM (your server)
         headers = {
-          add = { name = "Host", value = "google.com" }
+          add = [
+            { name = "Host", value = "google.com" }
+          ]
         }
       },
 
@@ -213,14 +215,15 @@ routes = [
     # Plugins can be used to extend the functionality of Proksi.
     # For example, the oauth2 plugin can be used to authenticate users using OAuth2 providers.
     plugins = [
-    { name:  "request_id" },
-    { name:  "basic_auth", config: { user: "<user>", pass: "<pass>" } },
-    { name:  "oauth2", config: {
-      provider: "github",
-      client_id: "<client_id>",
-      client_secret: "<client_secret>",
-      jwt_secret: "<jwt_secret>",
-      validations: [ { key: "team_id", value: [ "<team_id>" ] } ] }
-    }
+      { name:  "request_id" },
+      { name:  "basic_auth", config: { user: "<user>", pass: "<pass>" } },
+      { name:  "oauth2", config: {
+        provider: "github",
+        client_id: "<client_id>",
+        client_secret: "<client_secret>",
+        jwt_secret: "<jwt_secret>",
+        validations: [ { key: "team_id", value: [ "<team_id>" ] } ] }
+      }
+    ]
   }
 ]
