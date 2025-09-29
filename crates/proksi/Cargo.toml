@@ -65,7 +65,7 @@ seize = "0.5.1"
 serde = "1.0.228"
 serde_json = "1.0.145"
 short-crypt = "1.0.28"
-redis = { version = "0.32.5", features = ["r2d2"] }
+redis = { version = "0.32.6", features = ["r2d2"] }
 r2d2 = { version = "0.8.10" }
 time = "0.3.44"
 tokio = { version = "1.47.1", features = [
