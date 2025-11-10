@@ -68,7 +68,7 @@ short-crypt = "1.0.28"
 redis = { version = "0.32.7", features = ["r2d2"] }
 r2d2 = { version = "0.8.10" }
 time = "0.3.44"
-tokio = { version = "1.47.1", features = [
+tokio = { version = "1.48.0", features = [
     "sync",
     "rt-multi-thread",
     "fs",
