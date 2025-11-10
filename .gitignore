@@ -6,6 +6,7 @@
 /proksi.hcl
 .zed/
 .vscode/
+.idea/
 /tmp
 docker.README.md
 docker-compose.yml
