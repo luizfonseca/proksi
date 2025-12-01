@@ -57,7 +57,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 papaya = "0.2.3"
 path-tree = "0.8.3"
 pingora = { version = "0.5.0", features = ["lb", "openssl", "proxy", "cache"] }
-pingora-cache = "0.5.0"
+pingora-cache = "0.6.0"
 pingora-error = "0.6.0"
 prometheus = "0.14.0"
 reqwest = { version = "0.12.24", features = ["json"] }
