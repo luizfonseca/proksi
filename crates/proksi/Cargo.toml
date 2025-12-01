@@ -74,7 +74,7 @@ tokio = { version = "1.48.0", features = [
     "fs",
     "io-std",
 ] }
-tracing = "0.1.41"
+tracing = "0.1.43"
 tracing-subscriber = { version = "0.3.20", features = ["json", "env-filter"] }
 uuid = { version = "1.18.1", features = ["v4"] }
 # wasmtime = "31.0.0"
