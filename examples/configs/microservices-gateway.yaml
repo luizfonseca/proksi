@@ -1,0 +1,101 @@
+# Microservices Gateway Configuration
+# Multiple proxies handling different service tiers
+
+service_name: "microservices-gateway"
+
+proxies:
+  # Public API Gateway (HTTPS)
+  - host: "0.0.0.0:443"
+    ssl:
+      enabled: true
+      min_proto: "v1.2"
+      max_proto: "v1.3"
+      acme:
+        enabled: true
+        challenge_port: 80
+    routes:
+      # Authentication service
+      - host: "api.mycompany.com"
+        match_with:
+          path:
+            patterns: ["/auth/*", "/login/*", "/logout/*"]
+        upstreams:
+          - ip: "10.0.1.10"
+            port: 3001
+            network: "auth-network"
+        plugins:
+          - name: "rate_limiting"
+            config:
+              requests_per_minute: 100
+      
+      # User management service  
+      - host: "api.mycompany.com"
+        match_with:
+          path:
+            patterns: ["/users/*", "/profiles/*"]
+        upstreams:
+          - ip: "10.0.1.20"
+            port: 3002
+          - ip: "10.0.1.21"
+            port: 3002
+        
+      # Payment processing service
+      - host: "api.mycompany.com"
+        match_with:
+          path:
+            patterns: ["/payments/*", "/billing/*"]
+        upstreams:
+          - ip: "10.0.1.30"
+            port: 3003
+        plugins:
+          - name: "oauth2"
+            config:
+              required_scopes: ["payment.write"]
+    worker_threads: 8
+
+  # Internal service mesh (HTTP)
+  - host: "0.0.0.0:8080"
+    ssl: null
+    routes:
+      - host: "internal.mycompany.com"
+        upstreams:
+          - ip: "10.0.2.10"
+            port: 4001
+          - ip: "10.0.2.20"
+            port: 4002
+          - ip: "10.0.2.30"
+            port: 4003
+        headers:
+          add:
+            - name: "X-Internal-Request"
+              value: "true"
+    worker_threads: 4
+
+  # Health checks and monitoring
+  - host: "0.0.0.0:9090"
+    ssl: null
+    routes:
+      - host: "health.mycompany.com"
+        match_with:
+          path:
+            patterns: ["/health/*", "/metrics/*", "/status/*"]
+        upstreams:
+          - ip: "10.0.3.1"
+            port: 8080
+    worker_threads: 1
+
+logging:
+  level: "info"
+  format: "json"
+  access_logs_enabled: true
+  error_logs_enabled: true
+
+lets_encrypt:
+  email: "devops@mycompany.com"
+  staging: false
+  enabled: true
+  renew_interval_secs: 86400
+
+store:
+  store_type: "redis"
+  redis_url: "redis://localhost:6379"
