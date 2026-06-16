@@ -1,45 +1,58 @@
 use async_trait::async_trait;
 use papaya::HashMapRef;
 use std::{error::Error, hash::RandomState};
+use crate::config::RouteUpstream;
 
 use super::certificates::Certificate;
 use super::store_trait::Store;
 
 pub struct MemoryStore {
     /// Map of domain names to certificates (including leaf & chain)
-    inner_certs: papaya::HashMap<String, Certificate>,
+    certs: papaya::HashMap<String, Certificate>,
     /// Map of domain names to challenge tokens and proofs (token, proof)
-    inner_challenges: papaya::HashMap<String, (String, String)>,
+    challenges: papaya::HashMap<String, (String, String)>,
+    /// Map of domain names to routes upstreams
+    upstreams: papaya::HashMap<String, Vec<RouteUpstream>>,
 }
 
 impl MemoryStore {
     pub fn new() -> Self {
         MemoryStore {
-            inner_certs: papaya::HashMap::new(),
-            inner_challenges: papaya::HashMap::new(),
+            certs: papaya::HashMap::new(),
+            challenges: papaya::HashMap::new(),
+            upstreams: papaya::HashMap::new(),
         }
     }
 }
 
 #[async_trait]
 impl Store for MemoryStore {
+    async fn get_upstreams(&self, domain: &str) -> Option<Vec<RouteUpstream>> {
+        self.upstreams.pin().get(domain).cloned()
+    }
+
+    async fn set_upstreams(&self, domain: &str, upstreams: Vec<RouteUpstream>) -> Result<(), Box<dyn Error>> {
+        self.upstreams.pin().insert(domain.to_string(), upstreams);
+        Ok(())
+    }
+
     async fn get_certificate(&self, host: &str) -> Option<Certificate> {
-        self.inner_certs.pin().get(host).cloned()
+        self.certs.pin().get(host).cloned()
     }
 
     async fn set_certificate(&self, host: &str, cert: Certificate) -> Result<(), Box<dyn Error>> {
-        self.inner_certs.pin().insert(host.to_string(), cert);
+        self.certs.pin().insert(host.to_string(), cert);
         Ok(())
     }
 
     async fn get_certificates(
         &self,
     ) -> HashMapRef<'_, String, Certificate, RandomState, seize::LocalGuard<'_>> {
-        self.inner_certs.pin()
+        self.certs.pin()
     }
 
     async fn get_challenge(&self, domain: &str) -> Option<(String, String)> {
-        self.inner_challenges.pin().get(domain).cloned()
+        self.challenges.pin().get(domain).cloned()
     }
 
     async fn set_challenge(
@@ -48,7 +61,7 @@ impl Store for MemoryStore {
         token: String,
         proof: String,
     ) -> Result<(), Box<dyn Error>> {
-        self.inner_challenges
+        self.challenges
             .pin()
             .insert(domain.to_string(), (token, proof));
         Ok(())
@@ -57,6 +70,7 @@ impl Store for MemoryStore {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     // No need to import super since we're using specific imports
     use crate::stores::certificates::Certificate;
     use crate::stores::store_trait::Store;
@@ -67,6 +81,7 @@ mod tests {
         rsa::Rsa,
         x509::{X509Name, X509},
     };
+    use crate::config::RouteUpstream;
 
     // Helper function to create a test certificate
     fn create_test_certificate(domain: &str) -> Certificate {
@@ -209,5 +224,42 @@ mod tests {
         // Test getting nonexistent challenge
         let challenge = store.get_challenge("nonexistent.com").await;
         assert!(challenge.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_upstreams_storage() {
+        let store = MemoryStore::new();
+
+        let domain = "example.com";
+
+        let upstream1 = RouteUpstream {
+            ip: Cow::Borrowed("127.0.0.1"),
+            port: 80,
+            network: None,
+            weight: None,
+            sni: None,
+            headers: None,
+        };
+
+        let upstream2 = RouteUpstream {
+            ip: Cow::Borrowed("127.0.0.1"),
+            port: 443,
+            network: None,
+            weight: None,
+            sni: None,
+            headers: None,
+        };
+
+        let upstreams = vec!(
+            upstream1, upstream2
+        );
+
+        store.set_upstreams(domain, upstreams)
+            .await
+            .unwrap();
+
+        let store_upstreams = store.get_upstreams(domain).await.unwrap();
+
+        assert_eq!(store_upstreams.len(), 2);
     }
 }
