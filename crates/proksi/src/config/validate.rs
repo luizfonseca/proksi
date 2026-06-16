@@ -15,16 +15,18 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
         return Err(anyhow!("docker.interval_secs must be greater than 0"));
     }
 
-    // validate that the lets encrypt email does not contain @example or is empty, but only if lets_encrypt is enabled
-    if config.lets_encrypt.enabled.unwrap_or(false) && (config.lets_encrypt.email.contains("@example") || config.lets_encrypt.email.is_empty()) {
+    // validate that the lets encrypt email does not contain @example or is empty
+    // Only required when SSL is enabled and LetsEncrypt is enabled
+    if config.server.ssl_enabled && config.lets_encrypt.enabled.unwrap_or(false) && (config.lets_encrypt.email.contains("@example") || config.lets_encrypt.email.is_empty()) {
         return Err(anyhow!(
-            "lets_encrypt.email cannot be empty or an email from @example.com (the default value)"
+            "lets_encrypt.email cannot be empty or an email from @example.com (the default value) when SSL is enabled"
         ));
     }
 
     // Validate that the lets_encrypt pathbuf is not an empty string
-    if config.paths.lets_encrypt.as_os_str() == "" {
-        return Err(anyhow!("paths.lets_encrypt cannot be empty"));
+    // Only required when SSL is enabled
+    if config.server.ssl_enabled && config.paths.lets_encrypt.as_os_str() == "" {
+        return Err(anyhow!("paths.lets_encrypt cannot be empty when SSL is enabled"));
     }
 
     // Validate the routes

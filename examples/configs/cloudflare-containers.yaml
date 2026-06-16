@@ -1,0 +1,31 @@
+# Cloudflare Containers Configuration
+# Perfect for environments where SSL is handled externally
+
+service_name: "cloudflare-containers"
+
+proxies:
+  # HTTP-only proxy for Cloudflare-terminated SSL traffic
+  - host: "0.0.0.0:8080"
+    ssl: null  # No SSL - handled by Cloudflare
+    routes:
+      - host: "app.example.com"
+        upstreams:
+          - ip: "127.0.0.1"
+            port: 3000
+        headers:
+          add:
+            - name: "X-Forwarded-Proto"
+              value: "https"
+            - name: "X-Proxy-Via"
+              value: "proksi-cloudflare"
+    worker_threads: 4
+
+logging:
+  level: "info"
+  format: "json"
+  access_logs_enabled: true
+
+# Let's Encrypt not needed since SSL is handled by Cloudflare
+lets_encrypt:
+  email: "admin@example.com"
+  enabled: false

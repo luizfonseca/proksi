@@ -1,0 +1,29 @@
+# Legacy Configuration Example
+# This format is still supported but will show deprecation warnings
+
+service_name: "legacy-ssl-disabled"
+
+# Old server configuration format
+server:
+  ssl_enabled: false
+  https_address: "0.0.0.0:8080"
+  http_address: "0.0.0.0:8081"
+
+# Traditional route configuration
+routes:
+  - host: "legacy.example.com"
+    upstreams:
+      - ip: "127.0.0.1"
+        port: 3000
+  - host: "api-legacy.example.com"
+    upstreams:
+      - ip: "127.0.0.1"
+        port: 8080
+
+logging:
+  level: "info"
+  format: "json"
+
+lets_encrypt:
+  email: "admin@example.com"
+  enabled: false
