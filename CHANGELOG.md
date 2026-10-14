@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/luizfonseca/proksi/compare/proksi-v0.6.1...proksi-v0.6.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* route discovery stopping and upstream lookup panic under load ([#371](https://github.com/luizfonseca/proksi/issues/371)) ([ce49a3f](https://github.com/luizfonseca/proksi/commit/ce49a3f1b942f28abce929cfe8ebf944cf5189a6))
+
 ## [0.6.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.6.0...proksi-v0.6.1) (2025-07-19)
 
 
