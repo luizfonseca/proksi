@@ -43,7 +43,11 @@ logging {
 ```
 {% endcode %}
 
-This will then create a log file named `proksi.log.<date>` in the `/var/log/proksi` directory and rotate it daily.
+This will then create a log file named `proksi.<date>.log` in the `/var/log/proksi` directory and rotate it daily.
+
+### Logging under heavy load
+
+Logs are written in the background, so writing them never slows down requests. Up to 100,000 log lines can be waiting to be written; if the output can't keep up beyond that (e.g. a slow disk or a stalled pipe), new lines are dropped and a warning with the number of dropped lines is logged once it catches up.
 
 ### Logging Levels (CLI)
 
