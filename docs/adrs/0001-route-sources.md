@@ -86,7 +86,7 @@ Backends:
 
 - Redis writes use `MULTI`/`EXEC`; SQL writes use a transaction.
 - SQLite and Postgres are optional (cargo features `store-sqlite` and `store-postgres`, using `sqlx`), with embedded migrations run at startup. They also store certificates and challenges.
-- Listing hosts uses the `proksi:routes` set instead of `KEYS`; listing certificates moves to a set as well.
+- Listing hosts uses the `proksi:routes` set instead of `KEYS`; listing certificates uses `SCAN` instead of `KEYS` (no migration needed for existing data).
 
 ### Syncing replicas
 
