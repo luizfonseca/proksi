@@ -46,7 +46,9 @@ fn extract_cookie_domain(host: &str) -> String {
     if parts.len() <= 2 {
         host.to_owned()
     } else {
-        parts[parts.len() - 2..].join(".")
+        parts
+            .get(parts.len() - 2..)
+            .map_or_else(|| host.to_owned(), |domain| domain.join("."))
     }
 }
 

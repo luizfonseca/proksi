@@ -1,6 +1,7 @@
 [workspace]
 package = { rust-version = "1.99.0" }
 members = ["crates/plugin_request_id", "crates/plugins_api", "crates/proksi"]
+exclude = ["vendor"]
 resolver = "2"
 
 [profile.dev]
@@ -14,3 +15,8 @@ debug = false
 codegen-units = 1
 incremental = true
 panic = "abort"    # Abort on panic.
+
+# Patched until https://github.com/cloudflare/pingora/issues/946 is fixed upstream,
+# see vendor/README.md
+[patch.crates-io]
+pingora-proxy = { path = "vendor/pingora-proxy" }

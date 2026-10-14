@@ -54,12 +54,10 @@ impl MiddlewarePlugin for BasicAuth {
         ctx: &mut RouterContext,
         plugin: &RoutePlugin,
     ) -> anyhow::Result<bool> {
-        if plugin.config.is_none() {
+        let Some(config) = plugin.config.as_ref() else {
             // Nothing to do if the plugin configuration is not present
             return Ok(false);
-        }
-
-        let config = plugin.config.as_ref().unwrap();
+        };
 
         let Some((user, pass)) = Self::get_auth_config(config) else {
             session

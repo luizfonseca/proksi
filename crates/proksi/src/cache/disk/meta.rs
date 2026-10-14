@@ -21,15 +21,15 @@ pub struct DiskCacheItemMetadata {
 
 impl DiskCacheItemMetadata {
     /// Converts a `DiskCacheItemMeta` `BTreeMap` to a `ResponseHeader`
-    pub fn convert_headers(meta: &DiskCacheItemMetadata) -> ResponseHeader {
+    pub fn convert_headers(meta: &DiskCacheItemMetadata) -> pingora::Result<ResponseHeader> {
         let status_code = StatusCode::from_u16(meta.status).unwrap_or(StatusCode::OK);
-        let mut res_headers = ResponseHeader::build(status_code, None).unwrap();
+        let mut res_headers = ResponseHeader::build(status_code, None)?;
 
         for (k, v) in &meta.headers {
             res_headers.insert_header(k.to_owned(), v).ok();
         }
 
-        res_headers
+        Ok(res_headers)
     }
 }
 
@@ -45,8 +45,48 @@ impl From<&CacheMeta> for DiskCacheItemMetadata {
             headers: meta
                 .headers()
                 .into_iter()
-                .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_string()))
+                // Header values aren't necessarily ASCII (e.g. UTF-8 filenames), only values that
+                // can't be stored as a string are left out
+                .filter_map(|(k, v)| {
+                    let value = String::from_utf8(v.as_bytes().to_vec()).ok()?;
+                    Some((k.to_string(), value))
+                })
                 .collect(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, SystemTime};
+
+    use pingora::http::ResponseHeader;
+    use pingora_cache::CacheMeta;
+
+    use super::DiskCacheItemMetadata;
+
+    #[test]
+    fn test_metadata_keeps_non_ascii_header_values() {
+        let mut headers = ResponseHeader::build(200, None).unwrap();
+        headers
+            .insert_header("content-disposition", "attachment; filename=\"résumé.pdf\"")
+            .unwrap();
+        headers.insert_header("x-plain", "ascii").unwrap();
+
+        let now = SystemTime::now();
+        let meta = CacheMeta::new(now + Duration::from_secs(60), now, 0, 0, headers);
+
+        let stored = DiskCacheItemMetadata::from(&meta);
+        let restored = DiskCacheItemMetadata::convert_headers(&stored).unwrap();
+
+        assert_eq!(
+            restored
+                .headers
+                .get("content-disposition")
+                .unwrap()
+                .as_bytes(),
+            "attachment; filename=\"résumé.pdf\"".as_bytes()
+        );
+        assert_eq!(restored.headers.get("x-plain").unwrap(), "ascii");
     }
 }

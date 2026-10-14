@@ -182,16 +182,21 @@ impl ProxyLoggerReceiver {
         self.suffix = if self.rotation == Rotation::NEVER {
             String::new()
         } else {
-            format!(
-                ".{}",
-                date.format(&self.rotation.date_format())
-                    .expect("Invalid date format returned from rotation; it's a bug")
-            )
+            let Ok(formatted_date) = date.format(self.rotation.date_format()) else {
+                tracing::error!("Failed to format date for log file");
+                return;
+            };
+            format!(".{formatted_date}")
+        };
+
+        let Some(log_path) = self.config.logging.path.as_ref() else {
+            tracing::error!("No path configured for log file");
+            return;
         };
 
         let mut op = tokio::fs::OpenOptions::new();
         let open_options = op.create(true).append(true);
-        let Ok(path) = std::path::absolute(self.config.logging.path.as_ref().unwrap()) else {
+        let Ok(path) = std::path::absolute(log_path) else {
             tracing::error!("Failed to get absolute path for log file");
             return;
         };
@@ -252,7 +257,10 @@ impl ProxyLoggerReceiver {
 
         // If the rotation strategy is `NEVER`, the suffix is empty
         if let Some(next_date) = self.should_rollover(time::OffsetDateTime::now_utc()) {
-            let date = time::OffsetDateTime::from_unix_timestamp(next_date).unwrap();
+            let Ok(date) = time::OffsetDateTime::from_unix_timestamp(next_date) else {
+                tracing::error!("Invalid log rotation date: {next_date}");
+                return;
+            };
             self.bufwriter.flush().await.ok();
             self.file_buf_writer(date).await;
         }

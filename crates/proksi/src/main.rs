@@ -64,7 +64,10 @@ pub enum MsgProxy {
 fn main() -> Result<(), anyhow::Error> {
     // Configuration can be refreshed on file change
     // Loads configuration from command-line, YAML or TOML sources
-    let proxy_config = Arc::new(load("/etc/proksi/configs").expect("Failed to load configuration"));
+    let proxy_config = Arc::new(
+        load("/etc/proksi/configs")
+            .map_err(|err| anyhow::anyhow!("Failed to load configuration: {err}"))?,
+    );
 
     let https_address = proxy_config
         .server
@@ -109,12 +112,13 @@ fn main() -> Result<(), anyhow::Error> {
             init_store(MemoryStore::new());
         }
         config::StoreType::Redis => {
-            let redis_url =
-                proxy_config.store.redis_url.as_deref().expect(
-                    "Failed to get redis_url from configuration when store type is 'redis'",
-                );
-            let redis_store =
-                stores::RedisStore::new(redis_url).expect("Failed to initialize Redis store");
+            let redis_url = proxy_config.store.redis_url.as_deref().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Failed to get redis_url from configuration when store type is 'redis'"
+                )
+            })?;
+            let redis_store = stores::RedisStore::new(redis_url)
+                .map_err(|err| anyhow::anyhow!("Failed to initialize Redis store: {err}"))?;
             tracing::info!("using Redis store for certificates");
             init_store(redis_store);
         }
@@ -151,7 +155,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Setup tls settings and Enable HTTP/2
     let cert_store = CertStore::new();
-    let mut tls_settings = TlsSettings::with_callbacks(Box::new(cert_store)).unwrap();
+    let mut tls_settings = TlsSettings::with_callbacks(Box::new(cert_store))?;
     tls_settings.enable_h2();
 
     // tls_settings.set_session_cache_mode(SslSessionCacheMode::SERVER);

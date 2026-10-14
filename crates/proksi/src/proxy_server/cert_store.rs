@@ -40,18 +40,32 @@ impl TlsAccept for CertStore {
     /// based on the server name
     async fn certificate_callback(&self, ssl: &mut pingora::tls::ssl::SslRef) {
         // Due to the sni_callback function, we can safely unwrap here
-        let host_name = ssl.servername(NameType::HOST_NAME).unwrap_or_default();
+        let host_name = ssl
+            .servername(NameType::HOST_NAME)
+            .unwrap_or_default()
+            .to_string();
 
-        let Some(cert) = stores::global::get_store().get_certificate(host_name).await else {
+        let Some(cert) = stores::global::get_store()
+            .get_certificate(&host_name)
+            .await
+        else {
             tracing::info!("No certificate found for host: {:?}", host_name);
             return;
         };
 
-        ext::ssl_use_private_key(ssl, &cert.key).unwrap();
-        ext::ssl_use_certificate(ssl, &cert.leaf).unwrap();
+        if let Err(err) = ext::ssl_use_private_key(ssl, &cert.key) {
+            tracing::error!("Failed to use private key for host {host_name:?}: {err}");
+            return;
+        }
+        if let Err(err) = ext::ssl_use_certificate(ssl, &cert.leaf) {
+            tracing::error!("Failed to use certificate for host {host_name:?}: {err}");
+            return;
+        }
 
         if let Some(chain) = &cert.chain {
-            ext::ssl_add_chain_cert(ssl, chain).unwrap();
+            if let Err(err) = ext::ssl_add_chain_cert(ssl, chain) {
+                tracing::error!("Failed to add chain certificate for host {host_name:?}: {err}");
+            }
         }
     }
 }

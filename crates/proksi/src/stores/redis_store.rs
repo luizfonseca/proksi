@@ -36,7 +36,7 @@ impl RedisStore {
     }
 
     fn load_from_redis(&self, domain: &str) -> Option<Certificate> {
-        let mut conn = self.pool.get().unwrap();
+        let mut conn = self.pool.get().ok()?;
         let key = Self::certificate_key(domain);
 
         let cert_data: Option<String> = conn.get(&key).ok()?;
@@ -50,7 +50,7 @@ impl RedisStore {
     }
 
     fn load_challenge_from_redis(&self, domain: &str) -> Option<(String, String)> {
-        let mut conn = self.pool.get().unwrap();
+        let mut conn = self.pool.get().ok()?;
         let key = Self::challenge_key(domain);
 
         let challenge_data: Option<String> = conn.get(&key).ok()?;
@@ -112,7 +112,10 @@ impl Store for RedisStore {
         }
 
         // Then get any additional certificates from Redis
-        let mut conn_guard = self.pool.get().unwrap();
+        let Ok(mut conn_guard) = self.pool.get() else {
+            tracing::warn!("failed to get Redis connection, returning cached certificates only");
+            return TEMP_MAP.pin();
+        };
         let pattern = "proksi:cert:*".to_string();
         if let Ok(keys) = conn_guard.keys::<_, Vec<String>>(&pattern) {
             for key in keys {

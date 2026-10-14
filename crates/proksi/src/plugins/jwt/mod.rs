@@ -25,7 +25,7 @@ pub(crate) fn encode_jwt(sub: &str, secret: &[u8]) -> Result<String, anyhow::Err
     let one_day_in_secs = 60 * 60 * 24;
     let in_one_day = since
         .checked_add(Duration::from_secs(one_day_in_secs))
-        .unwrap();
+        .ok_or_else(|| anyhow::anyhow!("JWT expiration out of range"))?;
 
     let claims = JwtClaims {
         sub: Cow::Owned(sub.to_string()),
