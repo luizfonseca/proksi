@@ -9,7 +9,10 @@ use config::{load, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
 use stores::{global::init_store, MemoryStore};
 use tracing_subscriber::EnvFilter;
 
-use std::{borrow::Cow, sync::Arc};
+use std::{
+    borrow::Cow,
+    sync::{atomic::AtomicU64, Arc},
+};
 
 use pingora::{listeners::tls::TlsSettings, proxy::http_proxy_service, server::configuration::Opt};
 
@@ -77,12 +80,14 @@ fn main() -> Result<(), anyhow::Error> {
     let le_address = proxy_config.server.http_address.clone().unwrap_or_default();
 
     // Logging channel
-    let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+    let (log_sender, log_receiver) = services::logger::log_queue();
+    let dropped_logs = Arc::new(AtomicU64::new(0));
 
     // Receiver channel for Routes/Certificates/etc
     let (sender, mut _receiver) = tokio::sync::broadcast::channel::<MsgProxy>(256);
     let appender = services::logger::ProxyLog::new(
         log_sender,
+        dropped_logs.clone(),
         proxy_config.logging.enabled,
         proxy_config.logging.access_logs_enabled,
         proxy_config.logging.error_logs_enabled,
@@ -179,7 +184,7 @@ fn main() -> Result<(), anyhow::Error> {
     pingora_server.add_service(BackgroundFunctionService::new(proxy_config.clone(), sender));
 
     // Dedicated logger service
-    pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver, &proxy_config));
+    pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver, dropped_logs, &proxy_config));
 
     // Listen on HTTP and HTTPS ports
     pingora_server.add_service(http_public_service);
