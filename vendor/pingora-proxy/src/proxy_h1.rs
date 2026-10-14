@@ -324,12 +324,23 @@ where
                 },
 
                 body = rx.recv(), if !request_done => {
+                    // proksi: the downstream half only sends `UpgradedBody` tasks once it has
+                    // seen the upgrade, so the end of the upgrade request's own (empty) body is
+                    // a plain `Body` task. When the upstream's 101 is read before that task is
+                    // consumed, it must not be mistaken for the end of the tunnel.
+                    // See https://github.com/cloudflare/pingora/issues/946
+                    let ends_tunnel = !matches!(body, Some(HttpTask::Body(..)));
                     match send_body_to1(client_session, body).await {
                         Ok(send_done) => {
                             request_done = send_done;
                             // An upgraded request is terminated when either side is done
                             if request_done && client_session.was_upgraded() {
-                                response_done = true;
+                                if ends_tunnel {
+                                    response_done = true;
+                                } else {
+                                    // Keep streaming the downstream half of the tunnel
+                                    request_done = false;
+                                }
                             }
                         },
                         Err(e) => {
