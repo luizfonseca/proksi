@@ -20,6 +20,7 @@ use proxy_server::cert_store::CertStore;
 use services::{logger::ProxyLoggerReceiver, BackgroundFunctionService};
 
 mod cache;
+mod routing;
 mod channel;
 mod config;
 mod plugins;
