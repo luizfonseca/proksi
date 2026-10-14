@@ -300,7 +300,7 @@ async fn add_route_ssl_to_store(route: &Route) -> Result<(), anyhow::Error> {
         .map_err(|_| {
             anyhow!(
                 "Failed to insert certificate from config for route:  {}",
-                &route.host
+                route.host
             )
         })?;
 

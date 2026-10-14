@@ -1,9 +1,12 @@
+// Paths are formatted with `{:?}` on purpose, see `disallowed-methods` in clippy.toml
+#![allow(clippy::unnecessary_debug_formatting)]
+
 use ::pingora::server::Server;
 
 use bytes::Bytes;
 use clap::crate_version;
 use config::{load, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
-use stores::{MemoryStore, global::init_store};
+use stores::{global::init_store, MemoryStore};
 use tracing_subscriber::EnvFilter;
 
 use std::{borrow::Cow, sync::Arc};
@@ -97,7 +100,7 @@ fn main() -> Result<(), anyhow::Error> {
             .with_ansi(proxy_config.logging.path.is_none())
             .with_writer(appender)
             .init();
-    };
+    }
 
     // Initialize global store based on configuration
     match proxy_config.store.store_type {
@@ -110,12 +113,12 @@ fn main() -> Result<(), anyhow::Error> {
                 proxy_config.store.redis_url.as_deref().expect(
                     "Failed to get redis_url from configuration when store type is 'redis'",
                 );
-            let redis_store = stores::RedisStore::new(redis_url)
-                .expect("Failed to initialize Redis store");
+            let redis_store =
+                stores::RedisStore::new(redis_url).expect("Failed to initialize Redis store");
             tracing::info!("using Redis store for certificates");
             init_store(redis_store);
         }
-    };
+    }
 
     // Pingora load balancer server
     let pingora_opts = Opt {
@@ -178,10 +181,8 @@ fn main() -> Result<(), anyhow::Error> {
     pingora_server.add_service(http_public_service);
     pingora_server.add_service(https_secure_service);
 
-    let server_info = format!(
-        "running HTTPS service on {} and HTTP service on {}",
-        &https_address, &le_address
-    );
+    let server_info =
+        format!("running HTTPS service on {https_address} and HTTP service on {le_address}");
     tracing::info!(
         version = crate_version!(),
         workers = proxy_config.worker_threads,

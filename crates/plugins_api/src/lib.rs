@@ -21,7 +21,6 @@ impl Session {
 pub trait Plugin: Send + Sync {
     fn new_ctx(ctx: String) -> String;
 
-    #[must_use]
     fn on_request_filter(
         _session: Session,
         _ctx: Context,
@@ -30,6 +29,8 @@ pub trait Plugin: Send + Sync {
     }
 }
 
+// Generated bindings
+#[allow(clippy::same_length_and_capacity)]
 mod wit {
     wit_bindgen::generate!({
       world: "plugin"

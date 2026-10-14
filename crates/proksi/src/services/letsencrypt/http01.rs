@@ -77,7 +77,7 @@ impl LetsencryptService {
         stores::global::get_store()
             .set_certificate(domain, Certificate { key, leaf, chain })
             .await
-            .map_err(|o_err| anyhow!("failed to save certificate in the store: {}", o_err))?;
+            .map_err(|o_err| anyhow!("failed to save certificate in the store: {o_err}"))?;
 
         Ok(())
     }
@@ -97,12 +97,12 @@ impl LetsencryptService {
                 .set_challenge(
                     auth.domain_name(),
                     challenge.http_token().to_string(),
-                    challenge.http_proof().to_string(),
+                    challenge.http_proof().clone(),
                 )
                 .await
             {
                 tracing::error!("Failed to set challenge in store: {}", err);
-                return Err(anyhow!("Failed to set challenge in store: {}", err));
+                return Err(anyhow!("Failed to set challenge in store: {err}"));
             }
 
             // Let's Encrypt will check the domain's URL to validate the challenge
@@ -163,13 +163,13 @@ impl LetsencryptService {
                 },
             )
             .await
-            .map_err(|o_err| anyhow!("failed to save self-signed certificate {}", o_err))?;
+            .map_err(|o_err| anyhow!("failed to save self-signed certificate {o_err}"))?;
 
         Ok(())
     }
 
     // Based on the letsencrypt configuration, return the appropriate URL
-    fn get_lets_encrypt_url(&self) -> DirectoryUrl {
+    fn get_lets_encrypt_url(&self) -> DirectoryUrl<'_> {
         match self.config.lets_encrypt.staging {
             Some(false) => DirectoryUrl::LetsEncrypt,
             _ => DirectoryUrl::LetsEncryptStaging,
@@ -292,15 +292,14 @@ impl LetsencryptService {
                     tracing::error!("failed to insert certificate for domain {domain}: {err}");
                 };
             }
-            Ok(None) => {
+            Ok(None)
                 if Self::create_order_for_domain(domain, account)
                     .await
-                    .is_err()
-                {
-                    Self::create_self_signed_certificate(domain, self_signed_on_failure)
-                        .await
-                        .ok();
-                }
+                    .is_err() =>
+            {
+                Self::create_self_signed_certificate(domain, self_signed_on_failure)
+                    .await
+                    .ok();
             }
             _ => {}
         }

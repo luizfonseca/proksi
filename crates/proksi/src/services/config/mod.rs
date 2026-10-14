@@ -131,10 +131,9 @@ impl Service for FileWatcherService {
                     tracing::debug!("config watcher service tick");
                 }
             }
-        } else {
-            // No config path provided, nothing to watch
-            tracing::info!("No config path provided, config watcher service not started");
         }
+        // No config path provided, nothing to watch
+        tracing::info!("No config path provided, config watcher service not started");
     }
 
     fn name(&self) -> &'static str {

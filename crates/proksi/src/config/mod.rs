@@ -699,6 +699,7 @@ impl Provider for Config {
 /// Nested keys can be separated by double underscores (__) in the environment variables.
 /// E.g. `PROKSI__LOGGING__LEVEL=DEBUG` will set the `level` key in the
 /// `logging` key in the `proksi` key.
+#[allow(clippy::result_large_err)]
 pub fn load(fallback: &str) -> Result<Config, figment::Error> {
     let parsed_commands = Config::parse();
 
@@ -715,6 +716,7 @@ pub fn load(fallback: &str) -> Result<Config, figment::Error> {
 
 /// Test-friendly version of load that doesn't parse command line arguments
 #[cfg(test)]
+#[allow(clippy::result_large_err)]
 pub(crate) fn load_for_test(fallback: &str) -> Result<Config, figment::Error> {
     let default_config = Config::default();
 
@@ -733,6 +735,7 @@ fn create_minimal_default_config() -> Config {
 }
 
 /// Load configuration from a specific path, used for testing and internal logic
+#[allow(clippy::result_large_err)]
 pub(crate) fn load_from_path(
     config_path: &str,
     parsed_commands: &Config,

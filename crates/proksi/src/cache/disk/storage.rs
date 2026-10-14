@@ -129,7 +129,7 @@ impl Storage for DiskCache {
         )))
     }
 
-    /// Write the given [CacheMeta] to the storage. Return [MissHandler] to write the body later.
+    /// Write the given [`CacheMeta`] to the storage. Return [`MissHandler`] to write the body later.
     async fn get_miss_handler(
         &'static self,
         key: &CacheKey,

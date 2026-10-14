@@ -124,8 +124,7 @@ impl ProxyHttp for Router {
             return Ok(true);
         }
 
-        if route_container.cache.is_some() {
-            let cache = route_container.cache.as_ref().unwrap();
+        if let Some(cache) = &route_container.cache {
             if cache.enabled.unwrap_or(false) {
                 let storage = get_cache_storage(&cache.cache_type);
 
@@ -147,7 +146,7 @@ impl ProxyHttp for Router {
 
     /// Define where the proxy should send the request to.
     ///
-    /// The returned [HttpPeer] contains the information regarding
+    /// The returned [`HttpPeer`] contains the information regarding
     /// where and how this request should forwarded to."]
     async fn upstream_peer(
         &self,
@@ -215,8 +214,7 @@ impl ProxyHttp for Router {
         }
 
         let cache_state = ctx.extensions.get("cache_state").cloned();
-        if session.cache.enabled() && cache_state.is_some() {
-            let cache_state = cache_state.unwrap();
+        if let Some(cache_state) = cache_state.filter(|_| session.cache.enabled()) {
             // indicates whether it was HIT or MISS in the cache
             upstream_response.insert_header(
                 HeaderName::from_str("cache-status").unwrap(),
@@ -238,7 +236,7 @@ impl ProxyHttp for Router {
 
     /// Modify the request before it is sent to the upstream
     ///
-    /// Unlike [Self::request_filter()], this filter allows to change the request headers to send
+    /// Unlike [`Self::request_filter()`], this filter allows to change the request headers to send
     /// to the upstream.
     async fn upstream_request_filter(
         &self,

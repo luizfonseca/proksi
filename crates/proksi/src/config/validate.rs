@@ -16,7 +16,9 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
     }
 
     // validate that the lets encrypt email does not contain @example or is empty, but only if lets_encrypt is enabled
-    if config.lets_encrypt.enabled.unwrap_or(false) && (config.lets_encrypt.email.contains("@example") || config.lets_encrypt.email.is_empty()) {
+    if config.lets_encrypt.enabled.unwrap_or(false)
+        && (config.lets_encrypt.email.contains("@example") || config.lets_encrypt.email.is_empty())
+    {
         return Err(anyhow!(
             "lets_encrypt.email cannot be empty or an email from @example.com (the default value)"
         ));
@@ -34,17 +36,13 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
             // Validate the upstream's address
             if upstream.ip.is_empty() {
                 return Err(anyhow!(
-                    "routes{}.upstreams{}.id cannot be empty",
-                    route_index,
-                    upstream_index
+                    "routes{route_index}.upstreams{upstream_index}.id cannot be empty"
                 ));
             }
 
             if upstream.port == 0 {
                 return Err(anyhow!(
-                    "routes{}.upstreams{}.port must be greater than 0",
-                    route_index,
-                    upstream_index
+                    "routes{route_index}.upstreams{upstream_index}.port must be greater than 0"
                 ));
             }
         }
