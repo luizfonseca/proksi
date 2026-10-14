@@ -4,6 +4,8 @@ use std::{error::Error, hash::RandomState};
 
 use super::certificates::Certificate;
 
+// `async_trait` marks the generated methods as `#[must_use]`
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait Store: Send + Sync + 'static {
     // async fn get_route(&self, host: &str) -> Result<Option<String>, Box<dyn Error>>;

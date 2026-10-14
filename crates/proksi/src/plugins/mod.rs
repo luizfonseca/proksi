@@ -38,9 +38,11 @@ fn get_required_config(
         .get(key)
         .and_then(|v| v.as_str())
         .map(ToString::to_string)
-        .ok_or_else(|| anyhow!("Missing or invalid {}", key))
+        .ok_or_else(|| anyhow!("Missing or invalid {key}"))
 }
 
+// `async_trait` marks the generated methods as `#[must_use]`
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait MiddlewarePlugin {
     /// Create a new state for the middleware
@@ -56,7 +58,7 @@ pub trait MiddlewarePlugin {
 
     /// Modify the request before it is sent to the upstream
     ///
-    /// Unlike [Self::request_filter()], this filter allows to
+    /// Unlike [`Self::request_filter()`], this filter allows to
     /// change the request headers before it hits your server.
     async fn upstream_request_filter(
         &self,

@@ -237,10 +237,10 @@ impl LabelService {
                     });
                 }
 
-                if basic_auth_user.is_some() && basic_auth_password.is_some() {
+                if let (Some(user), Some(pass)) = (basic_auth_user, basic_auth_password) {
                     let mut map = HashMap::new();
-                    map.insert(Cow::Borrowed("user"), json!(basic_auth_user.unwrap()));
-                    map.insert(Cow::Borrowed("pass"), json!(basic_auth_password.unwrap()));
+                    map.insert(Cow::Borrowed("user"), json!(user));
+                    map.insert(Cow::Borrowed("pass"), json!(pass));
 
                     plugins.push(RoutePlugin {
                         name: Cow::Borrowed("basic_auth"),

@@ -63,7 +63,7 @@ impl ProxyHttp for HttpLB {
             // Get the token and proof from the challenge store
             let (token, proof) = challenge_from_host;
             // Get the token from the URL
-            let token_from_url = current_uri.path().split('/').last().unwrap();
+            let token_from_url = current_uri.path().split('/').next_back().unwrap();
 
             // Token is not the same as the one provided
             if token != token_from_url {

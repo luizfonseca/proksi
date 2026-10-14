@@ -10,21 +10,17 @@ pub async fn execute_response_plugins(
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) -> Result<()> {
     for (name, value) in ctx.route_container.plugins.clone() {
-        match name.as_str() {
-            "oauth2" => {
-                use crate::plugins::MiddlewarePlugin;
+        if name == "oauth2" {
+            use crate::plugins::MiddlewarePlugin;
 
-                if crate::plugins::PLUGINS
-                    .oauth2
-                    .response_filter(session, ctx, &value)
-                    .await
-                    .is_ok_and(|v| v)
-                {
-                    return Ok(());
-                }
+            if crate::plugins::PLUGINS
+                .oauth2
+                .response_filter(session, ctx, &value)
+                .await
+                .is_ok_and(|v| v)
+            {
+                return Ok(());
             }
-            "request_id" => continue,
-            _ => {}
         }
     }
     Ok(())
@@ -56,15 +52,14 @@ pub async fn execute_request_plugins(
                     .await
                     .ok();
             }
-            "basic_auth" => {
+            "basic_auth"
                 if crate::plugins::PLUGINS
                     .basic_auth
                     .request_filter(session, ctx, value)
                     .await
-                    .is_ok_and(|v| v)
-                {
-                    return Ok(true);
-                }
+                    .is_ok_and(|v| v) =>
+            {
+                return Ok(true);
             }
             _ => {}
         }
@@ -79,16 +74,12 @@ pub async fn execute_upstream_request_plugins(
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) -> Result<()> {
     for name in ctx.route_container.plugins.clone().keys() {
-        match name.as_str() {
-            "request_id" => {
-                crate::plugins::PLUGINS
-                    .request_id
-                    .upstream_request_filter(session, upstream_request, ctx)
-                    .await
-                    .ok();
-            }
-            "other" => continue,
-            _ => {}
+        if name == "request_id" {
+            crate::plugins::PLUGINS
+                .request_id
+                .upstream_request_filter(session, upstream_request, ctx)
+                .await
+                .ok();
         }
     }
     Ok(())
@@ -101,15 +92,11 @@ pub fn execute_upstream_response_plugins(
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) {
     for name in ctx.route_container.plugins.clone().keys() {
-        match name.as_str() {
-            "request_id" => {
-                crate::plugins::PLUGINS
-                    .request_id
-                    .upstream_response_filter(session, upstream_response, ctx)
-                    .ok();
-            }
-            "other" => continue,
-            _ => {}
+        if name == "request_id" {
+            crate::plugins::PLUGINS
+                .request_id
+                .upstream_response_filter(session, upstream_response, ctx)
+                .ok();
         }
     }
 }

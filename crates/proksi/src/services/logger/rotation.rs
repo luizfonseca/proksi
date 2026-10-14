@@ -54,11 +54,15 @@ impl Rotation {
 
     pub(super) fn date_format(&self) -> Vec<time::format_description::FormatItem<'static>> {
         match *self {
-            Rotation::MINUTELY => {
-                time::format_description::parse("[year]-[month]-[day]-[hour]-[minute]")
+            Rotation::MINUTELY => time::format_description::parse_borrowed::<1>(
+                "[year]-[month]-[day]-[hour]-[minute]",
+            ),
+            Rotation::HOURLY => {
+                time::format_description::parse_borrowed::<1>("[year]-[month]-[day]-[hour]")
             }
-            Rotation::HOURLY => time::format_description::parse("[year]-[month]-[day]-[hour]"),
-            Rotation::DAILY => time::format_description::parse("[year]-[month]-[day]"),
+            Rotation::DAILY => {
+                time::format_description::parse_borrowed::<1>("[year]-[month]-[day]")
+            }
             Rotation::NEVER => Result::Ok(vec![]),
         }
         .expect("Unable to create a formatter; this is a bug")

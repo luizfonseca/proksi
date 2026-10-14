@@ -63,4 +63,23 @@ mod tests {
         let token = encode_jwt("test", b"secret");
         assert!(token.is_ok());
     }
+
+    #[test]
+    fn test_encode_and_decode_jwt() {
+        let token = encode_jwt("user@example.com", b"secret").unwrap();
+        let claims = decode_jwt(&token, b"secret").unwrap();
+
+        assert_eq!(claims.sub, "user@example.com");
+        assert!(decode_jwt(&token, b"wrong-secret").is_err());
+    }
+
+    #[test]
+    fn test_decode_jwt_issued_by_jsonwebtoken_v9() {
+        // Issued by jsonwebtoken 9.3.1, so existing sessions stay valid after upgrading
+        let token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyQGV4YW1wbGUuY29tIiwiZXhwIjo0MTAyNDQ0ODAwLCJpYXQiOjE3NjAwMDAwMDAsInRlYW1zIjpbXSwiaWRzIjpbXX0.a2N3dj2XVgAEq41Aqm228d8VfH4uBhYCSqQDP6z2loY";
+        let claims = decode_jwt(token, b"proksi-test-secret").unwrap();
+
+        assert_eq!(claims.sub, "user@example.com");
+        assert_eq!(claims.exp, 4_102_444_800);
+    }
 }

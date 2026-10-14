@@ -4,7 +4,7 @@ use std::{borrow::Cow, collections::HashMap};
 use super::provider::OauthUser;
 
 /// Parses an HTTP str (from `http::Uri`) to a Hashmap of query parameters
-pub(super) fn from_string_to_query_params(value: &str) -> HashMap<Cow<str>, Cow<str>> {
+pub(super) fn from_string_to_query_params(value: &str) -> HashMap<Cow<'_, str>, Cow<'_, str>> {
     value
         .split('&')
         .filter_map(|kv| {

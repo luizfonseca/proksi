@@ -218,7 +218,7 @@ impl MiddlewarePlugin for Oauth2 {
         let validations = plugin_config.get("validations");
 
         // Callback path based on the selected provider
-        let callback_path = format!("/__/oauth/{}/callback", &provider);
+        let callback_path = format!("/__/oauth/{provider}/callback");
 
         // Create provider service
         let oauth_provider = Provider {
