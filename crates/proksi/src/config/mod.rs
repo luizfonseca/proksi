@@ -593,9 +593,11 @@ pub(crate) struct Config {
     pub upgrade: bool,
 
     /// The number of worker threads to be used by the HTTPS proxy service.
+    /// Defaults to 80% of the available CPUs (at least 2).
     ///
     /// For background services the default is always (1) and cannot be changed.
-    #[clap(short, long, required = false, default_value = "2")]
+    #[clap(short, long, required = false)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub worker_threads: Option<usize>,
 
     /// The PATH to the configuration file to be used.
@@ -642,7 +644,7 @@ impl Default for Config {
                 https_address: Some(Cow::Borrowed("0.0.0.0:443")),
                 http_address: Some(Cow::Borrowed("0.0.0.0:80")),
             },
-            worker_threads: Some(2),
+            worker_threads: Some(default_worker_threads()),
             upgrade: false,
             daemon: false,
             docker: Docker::default(),
@@ -712,6 +714,12 @@ pub fn load(fallback: &str) -> Result<Config, figment::Error> {
     let use_minimal_default = parsed_commands.config_path.is_none();
 
     load_from_path(path_with_fallback, &parsed_commands, use_minimal_default)
+}
+
+/// Default number of worker threads: 80% of the available CPUs (respecting container
+/// CPU limits), but at least 2
+fn default_worker_threads() -> usize {
+    (num_cpus::get() * 4 / 5).max(2)
 }
 
 /// Test-friendly version of load that doesn't parse command line arguments
@@ -1231,6 +1239,38 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    fn test_default_worker_threads() {
+        let expected = (num_cpus::get() * 4 / 5).max(2);
+
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy().to_string();
+            jail.create_file(
+                format!("{tmp_dir}/proksi.hcl"),
+                r#"service_name = "no-worker-threads""#,
+            )?;
+
+            // Nothing set (no CLI flag, nothing in the file)
+            let cli = Config::parse_from(["proksi"]);
+            let config = load_from_path(&tmp_dir, &cli, false).unwrap();
+            assert_eq!(config.worker_threads, Some(expected));
+            assert!(config.worker_threads.unwrap() >= 2);
+
+            // CLI flag
+            let cli = Config::parse_from(["proksi", "--worker-threads", "7"]);
+            let config = load_from_path(&tmp_dir, &cli, false).unwrap();
+            assert_eq!(config.worker_threads, Some(7));
+
+            // Configuration file
+            jail.create_file(format!("{tmp_dir}/proksi.hcl"), "worker_threads = 3")?;
+            let cli = Config::parse_from(["proksi"]);
+            let config = load_from_path(&tmp_dir, &cli, false).unwrap();
+            assert_eq!(config.worker_threads, Some(3));
+
+            Ok(())
+        });
     }
 
     #[test]
