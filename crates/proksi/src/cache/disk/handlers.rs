@@ -65,11 +65,9 @@ impl HandleHit for DiskCacheHitHandler {
             return Ok(None);
         }
 
-        let slice = bytes::Bytes::copy_from_slice(&buffer[..bytes_read]);
-
-        self.finished_buffer
-            .extend_from_slice(&buffer[..bytes_read]);
-        Ok(Some(slice))
+        buffer.truncate(bytes_read);
+        self.finished_buffer.extend_from_slice(&buffer);
+        Ok(Some(bytes::Bytes::from(buffer)))
     }
 
     /// Helper function to cast the trait object to concrete types
@@ -222,8 +220,8 @@ impl HandleHit for DiskCacheHitHandlerInMemory {
             return Ok(None);
         }
 
-        let slice = bytes::Bytes::copy_from_slice(&buffer[..bytes_read]);
-        Ok(Some(slice))
+        buffer.truncate(bytes_read);
+        Ok(Some(bytes::Bytes::from(buffer)))
     }
 
     /// Helper function to cast the trait object to concrete types

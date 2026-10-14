@@ -11,7 +11,7 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
     }
 
     // Validate that the docker interval secs is greater than 0
-    if config.docker.interval_secs.unwrap() == 0 {
+    if config.docker.interval_secs.is_some_and(|v| v == 0) {
         return Err(anyhow!("docker.interval_secs must be greater than 0"));
     }
 

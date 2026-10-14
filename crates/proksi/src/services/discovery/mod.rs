@@ -228,11 +228,15 @@ fn add_route_to_router(
         if let Some(headers) = headers.add.as_ref() {
             route_store_container.host_header_add = headers
                 .iter()
-                .map(|v| {
-                    (
-                        HeaderName::from_str(&v.name).unwrap(),
-                        HeaderValue::from_str(&v.value).unwrap(),
-                    )
+                .filter_map(|v| {
+                    let (Ok(name), Ok(value)) = (
+                        HeaderName::from_str(&v.name),
+                        HeaderValue::from_str(&v.value),
+                    ) else {
+                        tracing::warn!("skipping invalid header {:?} for host: {host}", v.name);
+                        return None;
+                    };
+                    Some((name, value))
                 })
                 .collect();
         }

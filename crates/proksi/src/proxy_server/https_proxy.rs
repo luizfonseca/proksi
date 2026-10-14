@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use std::{borrow::Cow, collections::HashMap};
 
@@ -94,7 +93,7 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
         let req_host = get_host(session);
-        let host_without_port = req_host.split(':').collect::<Vec<_>>()[0];
+        let host_without_port = req_host.split(':').next().unwrap_or_default();
         host_without_port.clone_into(&mut ctx.host);
 
         ctx.host = host_without_port.to_string();
@@ -210,13 +209,13 @@ impl ProxyHttp for Router {
         if let Some(cache_state) = cache_state.filter(|_| session.cache.enabled()) {
             // indicates whether it was HIT or MISS in the cache
             upstream_response.insert_header(
-                HeaderName::from_str("cache-status").unwrap(),
+                HeaderName::from_static("cache-status"),
                 cache_state.as_str(),
             )?;
 
             let elapsed = ctx.timings.request_filter_start.elapsed();
             upstream_response.insert_header(
-                HeaderName::from_str("cache-duration").unwrap(),
+                HeaderName::from_static("cache-duration"),
                 elapsed.as_millis().to_string(),
             )?;
         }
@@ -418,11 +417,16 @@ impl ProxyHttp for Router {
             )));
         }
 
+        let now = SystemTime::now();
+        let Some(fresh_until) = now.checked_add(Duration::from_secs(cache.expires_in_secs)) else {
+            return Ok(RespCacheable::Uncacheable(NoCacheReason::Custom(
+                "cache expiration out of range",
+            )));
+        };
+
         Ok(RespCacheable::Cacheable(CacheMeta::new(
-            SystemTime::now()
-                .checked_add(Duration::from_secs(cache.expires_in_secs))
-                .unwrap(),
-            SystemTime::now(),
+            fresh_until,
+            now,
             cache.stale_while_revalidate_secs,
             cache.stale_if_error_secs,
             resp.clone(),

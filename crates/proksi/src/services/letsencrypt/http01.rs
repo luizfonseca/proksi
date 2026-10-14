@@ -168,6 +168,18 @@ impl LetsencryptService {
         Ok(())
     }
 
+    // Creates or retrieves the existing LetsEncrypt account
+    fn get_account(&self) -> Result<Account<PersistType>, anyhow::Error> {
+        let persist =
+            crate::services::letsencrypt::storage::CertificatePersist::new(self.config.clone());
+
+        let dir = acme_v2::Directory::from_url(persist.get_persist()?, self.get_lets_encrypt_url())
+            .map_err(|err| anyhow!("failed to create LetsEncrypt directory: {err}"))?;
+
+        dir.account(&self.config.lets_encrypt.email)
+            .map_err(|err| anyhow!("failed to create or retrieve existing account: {err}"))
+    }
+
     // Based on the letsencrypt configuration, return the appropriate URL
     fn get_lets_encrypt_url(&self) -> DirectoryUrl<'_> {
         match self.config.lets_encrypt.staging {
@@ -320,15 +332,16 @@ impl Service for LetsencryptService {
         }
         info!("started LetsEncrypt service");
 
-        let persist =
-            crate::services::letsencrypt::storage::CertificatePersist::new(self.config.clone());
-
-        let dir = acme_v2::Directory::from_url(persist.get_persist(), self.get_lets_encrypt_url())
-            .expect("failed to create LetsEncrypt directory");
-
-        let account = dir
-            .account(&self.config.lets_encrypt.email)
-            .expect("failed to create or retrieve existing account");
+        // Retry until the account is available (e.g. network not ready yet)
+        let account = loop {
+            match self.get_account() {
+                Ok(account) => break account,
+                Err(err) => {
+                    tracing::error!("failed to setup LetsEncrypt, retrying in 60s: {err}");
+                    time::sleep(Duration::from_secs(60)).await;
+                }
+            }
+        };
 
         let _ = tokio::join!(
             self.watch_for_route_changes(&account),

@@ -1,4 +1,4 @@
-use time::Duration;
+use time::{format_description::StaticFormatDescription, macros::format_description, Duration};
 
 use crate::config::LogRotation;
 
@@ -28,43 +28,66 @@ impl Rotation {
         Some(self.round_date(&unrounded_next_date))
     }
 
-    // note that this method will panic if passed a `Rotation::NEVER`.
     pub(super) fn round_date(&self, date: &time::OffsetDateTime) -> time::OffsetDateTime {
         match *self {
-            Rotation::MINUTELY => {
-                let time = time::Time::from_hms(date.hour(), date.minute(), 0)
-                    .expect("Invalid time; this is a bug");
-                date.replace_time(time)
-            }
-            Rotation::HOURLY => {
-                let time =
-                    time::Time::from_hms(date.hour(), 0, 0).expect("Invalid time; this is a bug");
-                date.replace_time(time)
-            }
-            Rotation::DAILY => {
-                let time = time::Time::from_hms(0, 0, 0).expect("Invalid time; this is a bug");
-                date.replace_time(time)
-            }
-            // Rotation::NEVER is impossible to round.
-            Rotation::NEVER => {
-                unreachable!("Rotation::NEVER is impossible to round.")
-            }
+            Rotation::MINUTELY => date.truncate_to_minute(),
+            Rotation::HOURLY => date.truncate_to_hour(),
+            Rotation::DAILY => date.truncate_to_day(),
+            // Rotation::NEVER doesn't rotate, so there's nothing to round
+            Rotation::NEVER => *date,
         }
     }
 
-    pub(super) fn date_format(&self) -> Vec<time::format_description::FormatItem<'static>> {
+    pub(super) fn date_format(&self) -> StaticFormatDescription {
         match *self {
-            Rotation::MINUTELY => time::format_description::parse_borrowed::<1>(
-                "[year]-[month]-[day]-[hour]-[minute]",
-            ),
-            Rotation::HOURLY => {
-                time::format_description::parse_borrowed::<1>("[year]-[month]-[day]-[hour]")
+            Rotation::MINUTELY => {
+                format_description!(version = 1, "[year]-[month]-[day]-[hour]-[minute]")
             }
-            Rotation::DAILY => {
-                time::format_description::parse_borrowed::<1>("[year]-[month]-[day]")
-            }
-            Rotation::NEVER => Result::Ok(vec![]),
+            Rotation::HOURLY => format_description!(version = 1, "[year]-[month]-[day]-[hour]"),
+            Rotation::DAILY => format_description!(version = 1, "[year]-[month]-[day]"),
+            Rotation::NEVER => &[],
         }
-        .expect("Unable to create a formatter; this is a bug")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Rotation;
+
+    // 2026-10-15 15:30:45.123 UTC
+    fn sample_date() -> time::OffsetDateTime {
+        time::OffsetDateTime::from_unix_timestamp_nanos(1_792_078_245_123_000_000).unwrap()
+    }
+
+    fn suffix(rotation: &Rotation, date: time::OffsetDateTime) -> String {
+        date.format(rotation.date_format()).unwrap()
+    }
+
+    #[test]
+    fn test_rotation_round_date() {
+        let date = sample_date();
+
+        assert_eq!(
+            Rotation::MINUTELY.round_date(&date).unix_timestamp_nanos(),
+            1_792_078_200_000_000_000
+        );
+        assert_eq!(
+            Rotation::HOURLY.round_date(&date).unix_timestamp_nanos(),
+            1_792_076_400_000_000_000
+        );
+        assert_eq!(
+            Rotation::DAILY.round_date(&date).unix_timestamp_nanos(),
+            1_792_022_400_000_000_000
+        );
+    }
+
+    #[test]
+    fn test_rotation_date_format() {
+        let date = sample_date();
+
+        assert_eq!(suffix(&Rotation::MINUTELY, date), "2026-10-15-15-30");
+        assert_eq!(suffix(&Rotation::HOURLY, date), "2026-10-15-15");
+        assert_eq!(suffix(&Rotation::DAILY, date), "2026-10-15");
+        assert_eq!(suffix(&Rotation::NEVER, date), "");
     }
 }
