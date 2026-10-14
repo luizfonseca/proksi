@@ -5,6 +5,7 @@
 * [Performance](general/performance.md)
 * [Motivations](general/motivations.md)
 * [Specifications](general/specifications.md)
+* [Architecture decisions](adrs/README.md)
 
 ## Installation
 
