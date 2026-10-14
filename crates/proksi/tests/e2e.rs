@@ -145,22 +145,49 @@ async fn test_many_concurrent_websockets() {
     .await;
 
     // Open every connection at once and keep them all open
-    let sockets = join_all((0..CONNECTIONS).map(|_| proksi.websocket("ws.test", "/ws"))).await;
-    let mut sockets = sockets
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-
-    let echoes = join_all(
-        sockets
-            .iter_mut()
-            .enumerate()
-            .map(|(i, ws)| async move { websocket_echo(ws, &format!("message {i}")).await }),
+    let sockets = join_all(
+        (0..CONNECTIONS).map(|i| proksi.websocket("ws.test", format!("/ws?id={i}"))),
     )
     .await;
-    for (i, echo) in echoes.into_iter().enumerate() {
-        assert_eq!(echo.unwrap(), format!("message {i}"));
-    }
+    let (mut sockets, errors): (Vec<_>, Vec<_>) = sockets.into_iter().partition(Result::is_ok);
+    assert!(
+        errors.is_empty(),
+        "{} of {CONNECTIONS} websockets failed to connect: {:?}\n{}",
+        errors.len(),
+        errors.iter().take(5).collect::<Vec<_>>(),
+        proksi.error_logs()
+    );
+
+    let echoes = join_all(sockets.iter_mut().enumerate().map(|(i, ws)| async move {
+        let message = format!("message {i}");
+        let path = format!("/ws?id={i}");
+        match websocket_echo(ws.as_mut().unwrap(), &message).await {
+            Ok(echo) if echo == message => Ok(()),
+            Ok(echo) => Err((path, format!("unexpected echo {echo:?}"))),
+            Err(err) => Err((path, err)),
+        }
+    }))
+    .await;
+    // Give proksi a moment to write access logs for closed connections
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let errors = echoes
+        .into_iter()
+        .filter_map(Result::err)
+        .map(|(path, err)| {
+            format!(
+                "{path}: {err}\n  upstream: {:?}\n  proksi: {}",
+                proksi.websocket_upstream.event(&path),
+                proksi.access_log(&path)
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        errors.is_empty(),
+        "{} of {CONNECTIONS} websockets failed to echo: {:?}\n{}",
+        errors.len(),
+        errors.iter().take(5).collect::<Vec<_>>(),
+        proksi.error_logs()
+    );
 
     // Other routes keep working while the websockets are open
     let res = proksi.get("app.test", "/").await.unwrap();

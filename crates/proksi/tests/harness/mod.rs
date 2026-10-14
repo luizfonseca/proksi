@@ -110,6 +110,7 @@ pub struct Harness {
     pub https_port: u16,
     pub http_port: u16,
     pub http_upstream: HttpUpstream,
+    pub websocket_upstream: WebSocketUpstream,
 }
 
 impl Harness {
@@ -120,7 +121,8 @@ impl Harness {
         let (cert, key) = write_self_signed_cert(dir.path());
 
         let http_upstream = HttpUpstream::start().await;
-        let ws_upstream_port = start_websocket_upstream().await;
+        let websocket_upstream = WebSocketUpstream::start().await;
+        let ws_upstream_port = websocket_upstream.port;
 
         let https_port = free_port();
         let http_port = free_port();
@@ -207,7 +209,9 @@ routes = [
 
         let stdout = std::fs::File::create(dir.path().join("stdout.log")).unwrap();
         let stderr = std::fs::File::create(dir.path().join("stderr.log")).unwrap();
-        let child = Command::new(env!("CARGO_BIN_EXE_proksi"))
+        // `PROKSI_BIN` allows running the tests against another build (e.g. a release binary)
+        let bin = std::env::var("PROKSI_BIN").unwrap_or(env!("CARGO_BIN_EXE_proksi").to_string());
+        let child = Command::new(bin)
             .arg("-c")
             .arg(&config_path)
             .stdout(Stdio::from(stdout))
@@ -222,6 +226,7 @@ routes = [
             https_port,
             http_port,
             http_upstream,
+            websocket_upstream,
         };
         harness.wait_until_ready().await;
         harness
@@ -288,7 +293,8 @@ routes = [
     }
 
     /// Opens a websocket connection through proksi
-    pub async fn websocket(&self, host: &str, path: &str) -> Result<WebSocket, String> {
+    pub async fn websocket(&self, host: &str, path: impl AsRef<str>) -> Result<WebSocket, String> {
+        let path = path.as_ref();
         let tcp = TcpStream::connect(("127.0.0.1", self.https_port))
             .await
             .map_err(|e| e.to_string())?;
@@ -324,6 +330,41 @@ routes = [
             read("stdout.log"),
             read("stderr.log")
         )
+    }
+
+    /// Access log line for the given path (and query)
+    pub fn access_log(&self, path_and_query: &str) -> String {
+        let (path, query) = path_and_query
+            .split_once('?')
+            .unwrap_or((path_and_query, ""));
+        let stdout =
+            std::fs::read_to_string(self.dir.path().join("stdout.log")).unwrap_or_default();
+        stdout
+            .lines()
+            .find(|l| {
+                l.contains("\"access_log\":true")
+                    && l.contains(&format!("\"path\":\"{path}\""))
+                    && l.contains(&format!("\"query\":\"{query}\""))
+            })
+            .unwrap_or("no access log")
+            .to_string()
+    }
+
+    /// Warning and error lines from proksi's logs (and anything on stderr)
+    pub fn error_logs(&self) -> String {
+        let stdout =
+            std::fs::read_to_string(self.dir.path().join("stdout.log")).unwrap_or_default();
+        let stderr =
+            std::fs::read_to_string(self.dir.path().join("stderr.log")).unwrap_or_default();
+        let mut lines = stdout
+            .lines()
+            .filter(|l| l.contains("\"level\":\"ERROR\"") || l.contains("\"level\":\"WARN\""))
+            .take(50)
+            .collect::<Vec<_>>()
+            .join("\n");
+        lines.push_str("\n--- stderr\n");
+        lines.push_str(&stderr);
+        lines
     }
 
     /// Asserts proksi is still running and didn't panic
@@ -458,28 +499,69 @@ async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<Strin
 }
 
 /// Websocket upstream that echoes every message back
-async fn start_websocket_upstream() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = listener.local_addr().unwrap().port();
+pub struct WebSocketUpstream {
+    pub port: u16,
+    /// How each connection ended, by request path
+    events: Arc<Mutex<HashMap<String, String>>>,
+}
 
-    tokio::spawn(async move {
-        while let Ok((stream, _)) = listener.accept().await {
-            tokio::spawn(async move {
-                let Ok(mut ws) = tokio_tungstenite::accept_async(stream).await else {
-                    return;
-                };
-                while let Some(Ok(message)) = ws.next().await {
-                    if message.is_text() || message.is_binary() {
-                        if ws.send(message).await.is_err() {
-                            return;
-                        }
-                    }
+impl WebSocketUpstream {
+    async fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let events = Arc::new(Mutex::new(HashMap::new()));
+
+        let state = events.clone();
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = listener.accept().await {
+                tokio::spawn(handle_websocket_connection(stream, state.clone()));
+            }
+        });
+
+        Self { port, events }
+    }
+
+    /// How the connection for the given path ended (if it was received at all)
+    pub fn event(&self, path: &str) -> Option<String> {
+        self.events.lock().unwrap().get(path).cloned()
+    }
+}
+
+async fn handle_websocket_connection(stream: TcpStream, events: Arc<Mutex<HashMap<String, String>>>) {
+    let path = Arc::new(Mutex::new(String::new()));
+    let request_path = path.clone();
+    let accept = tokio_tungstenite::accept_hdr_async(
+        stream,
+        move |req: &tokio_tungstenite::tungstenite::handshake::server::Request, res| {
+            *request_path.lock().unwrap() = req.uri().to_string();
+            Ok(res)
+        },
+    )
+    .await;
+    let path = path.lock().unwrap().clone();
+    let record = |event: String| {
+        events.lock().unwrap().insert(path.clone(), event);
+    };
+
+    let mut ws = match accept {
+        Ok(ws) => ws,
+        Err(err) => return record(format!("handshake failed: {err}")),
+    };
+    record("open".to_string());
+
+    loop {
+        match ws.next().await {
+            Some(Ok(message)) if message.is_text() || message.is_binary() => {
+                if let Err(err) = ws.send(message).await {
+                    return record(format!("send failed: {err}"));
                 }
-            });
+                record("echoed".to_string());
+            }
+            Some(Ok(_)) => {}
+            Some(Err(err)) => return record(format!("read failed: {err}")),
+            None => return record("closed by proksi".to_string()),
         }
-    });
-
-    port
+    }
 }
 
 fn free_port() -> u16 {
