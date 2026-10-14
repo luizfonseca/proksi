@@ -41,6 +41,19 @@ routes = [
 ]
 ```
 
+## Memory limit (disk cache)
+
+Responses served from the `disk` cache are also kept in memory, so that frequently requested responses don't need to be read from disk. The memory used for this is limited by `cache.memory_limit_mb` (shared by all routes, defaults to `256`). When the limit is reached, the least popular responses are only served from disk. Responses larger than 64MB are always served from disk.
+
+```hcl
+# proksi.hcl file
+cache {
+  memory_limit_mb = 256 # 0 disables keeping responses in memory
+}
+```
+
+The limit applies to the cached responses themselves; the process will use somewhat more memory than this.
+
 ## Cache usage
 
 When a request is made to a route with a cache configuration, Proksi will check if the response is already in the cache. If it is, the response will be served from the cache instead of making a new request to the upstream server.
