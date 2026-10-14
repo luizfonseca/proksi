@@ -12,7 +12,7 @@ use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
-use tokio::sync::broadcast::Sender;
+use tokio::sync::broadcast::{error::RecvError, Receiver, Sender};
 
 use crate::config::{Route, RouteCache, RouteUpstream};
 use crate::MsgRoute;
@@ -133,10 +133,8 @@ impl Service for RoutingService {
         self.add_routes_from_config().await;
 
         // Watch for new hosts being added and configure them accordingly
-        let mut receiver = self.broadcast.subscribe();
-        while let Ok(MsgProxy::NewRoute(route)) = receiver.recv().await {
-            Self::watch_for_route_changes(route);
-        }
+        let receiver = self.broadcast.subscribe();
+        receive_route_messages(receiver, Self::watch_for_route_changes).await;
     }
 
     fn name(&self) -> &'static str {
@@ -145,6 +143,26 @@ impl Service for RoutingService {
 
     fn threads(&self) -> Option<usize> {
         Some(1)
+    }
+}
+
+/// Handles route messages until all senders are dropped.
+///
+/// Lagging behind the channel must not stop the receiver: route sources (e.g. docker)
+/// send their full state periodically, so skipped messages are recovered on the next round.
+async fn receive_route_messages(
+    mut receiver: Receiver<MsgProxy>,
+    mut on_route: impl FnMut(MsgRoute),
+) {
+    loop {
+        match receiver.recv().await {
+            Ok(MsgProxy::NewRoute(route)) => on_route(route),
+            Ok(_) => {}
+            Err(RecvError::Lagged(skipped)) => {
+                tracing::warn!("route discovery lagged behind, skipped {skipped} messages");
+            }
+            Err(RecvError::Closed) => break,
+        }
     }
 }
 
@@ -203,7 +221,7 @@ fn add_route_to_router(
     // Create new routing container
     let mut route_store_container = RouteStoreContainer::new(upstreams);
     route_store_container.self_signed_certificate = should_self_sign_cert_on_failure;
-    route_store_container.upstreams = upstream_input;
+    route_store_container.set_upstreams(upstream_input);
     route_store_container.cache = cache.cloned();
 
     if let Some(headers) = headers {
@@ -309,7 +327,44 @@ async fn add_route_ssl_to_store(route: &Route) -> Result<(), anyhow::Error> {
 
 #[cfg(test)]
 mod test {
+    use std::borrow::Cow;
     use std::net::ToSocketAddrs;
+
+    use crate::{MsgProxy, MsgRoute};
+
+    use super::receive_route_messages;
+
+    fn route_message(host: &str) -> MsgProxy {
+        MsgProxy::NewRoute(MsgRoute {
+            host: Cow::Owned(host.to_string()),
+            upstreams: vec![],
+            path_matchers: vec![],
+            host_headers_add: vec![],
+            host_headers_remove: vec![],
+            plugins: vec![],
+            self_signed_certs: false,
+        })
+    }
+
+    #[tokio::test]
+    async fn test_receive_route_messages_survives_lagging() {
+        let (sender, receiver) = tokio::sync::broadcast::channel::<MsgProxy>(10);
+
+        // Overflow the channel before the receiver gets a chance to read
+        for i in 0..25 {
+            sender.send(route_message(&format!("host-{i}.test"))).ok();
+        }
+        // Messages other than routes must not stop the receiver either
+        sender.send(MsgProxy::ConfigUpdate(())).ok();
+        sender.send(route_message("after.test")).ok();
+        drop(sender);
+
+        let mut hosts = vec![];
+        receive_route_messages(receiver, |route| hosts.push(route.host.to_string())).await;
+
+        assert!(hosts.contains(&"host-24.test".to_string()));
+        assert!(hosts.contains(&"after.test".to_string()));
+    }
 
     #[test]
     fn test_socket_addr() {

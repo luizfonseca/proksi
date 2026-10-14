@@ -77,7 +77,7 @@ fn main() -> Result<(), anyhow::Error> {
     let (log_sender, log_receiver) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
 
     // Receiver channel for Routes/Certificates/etc
-    let (sender, mut _receiver) = tokio::sync::broadcast::channel::<MsgProxy>(10);
+    let (sender, mut _receiver) = tokio::sync::broadcast::channel::<MsgProxy>(256);
     let appender = services::logger::ProxyLog::new(
         log_sender,
         proxy_config.logging.enabled,
