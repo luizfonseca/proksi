@@ -221,7 +221,7 @@ fn add_route_to_router(
     // Create new routing container
     let mut route_store_container = RouteStoreContainer::new(upstreams);
     route_store_container.self_signed_certificate = should_self_sign_cert_on_failure;
-    route_store_container.upstreams = upstream_input;
+    route_store_container.set_upstreams(upstream_input);
     route_store_container.cache = cache.cloned();
 
     if let Some(headers) = headers {

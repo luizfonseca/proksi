@@ -1,4 +1,3 @@
-use std::net::ToSocketAddrs;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use std::{borrow::Cow, collections::HashMap};
@@ -164,18 +163,12 @@ impl ProxyHttp for Router {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
 
-        let (healthy_ip, healthy_port) = if let Some(scr) = healthy_upstream.addr.as_inet() {
-            (scr.ip().to_string(), scr.port())
-        } else {
+        let Some(healthy_addr) = healthy_upstream.addr.as_inet() else {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
+        let healthy_port = healthy_addr.port();
 
-        let Some(upstream) = route_container.upstreams.iter().find(|u| {
-            format!("{}:{}", u.ip, u.port)
-                .to_socket_addrs()
-                .unwrap()
-                .any(|s| s.ip().to_string() == healthy_ip && s.port() == healthy_port)
-        }) else {
+        let Some(upstream) = route_container.upstream_for(healthy_addr) else {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
 
