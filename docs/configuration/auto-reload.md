@@ -16,8 +16,14 @@ auto_reload {
   # This is useful if you are dealing with `import` in the configuration file
   # changes on those imports will trigger a reload on the main configuration
   # file and down.
-  # This will only watch for .hcl files and ignore any other extension.
+  # Only .hcl, .yml and .yaml files are considered.
   paths = ["/etc/sites"]
 }
 ```
 {% endcode %}
+
+When the configuration file changes:
+
+- if it's invalid, the change is ignored (and logged): Proksi keeps running with the current configuration;
+- if only `routes` changed, the new routes are applied without restarting;
+- if other settings changed, Proksi restarts with the new configuration.

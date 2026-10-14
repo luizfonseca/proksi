@@ -11,7 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
 mod hcl;
-mod validate;
+pub mod validate;
 
 #[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
 pub enum StoreType {

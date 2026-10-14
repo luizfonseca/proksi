@@ -66,7 +66,8 @@ impl pingora::services::Service for BackgroundFunctionService {
         let mut health_service = health_check::HealthService::new();
         let mut docker_service = LabelService::new(self.config.clone(), self.route_sender.clone());
         let mut letsencrypt_service = LetsencryptService::new(self.config.clone());
-        let mut config_server = FileWatcherService::new(self.config.clone());
+        let mut config_server =
+            FileWatcherService::new(self.config.clone(), self.route_sender.clone());
 
         let _ = tokio::join!(
             routing_service.start_service(None, shutdown.clone(), _listeners_per_fd),
