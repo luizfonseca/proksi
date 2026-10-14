@@ -18,7 +18,9 @@ use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 
 use pingora_cache::lock::CacheLock;
 
-use pingora_cache::{CacheKey, CacheMeta, ForcedInvalidationKind, NoCacheReason, RespCacheable};
+use pingora_cache::{
+    CacheKey, CacheMeta, ForcedFreshness, HitHandler, NoCacheReason, RespCacheable,
+};
 
 use crate::cache::disk::storage::DiskCache;
 use crate::config::{RouteCacheType, RouteUpstream};
@@ -134,7 +136,7 @@ impl ProxyHttp for Router {
                 );
                 session
                     .cache
-                    .enable(storage, None, None, Some(&*CACHE_LOCK));
+                    .enable(storage, None, None, Some(&*CACHE_LOCK), None);
             }
         }
 
@@ -274,12 +276,12 @@ impl ProxyHttp for Router {
     /// Responses served from cache won't trigger this filter. If the cache needed revalidation,
     /// only the 304 from upstream will trigger the filter (though it will be merged into the
     /// cached header, not served directly to downstream).
-    fn upstream_response_filter(
+    async fn upstream_response_filter(
         &self,
         session: &mut Session,
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
-    ) -> Result<(), Box<pingora::Error>> {
+    ) -> pingora::Result<()> {
         // If there's no host matching, returns a 404
         // let route_container = process_route(ctx);
 
@@ -362,19 +364,13 @@ impl ProxyHttp for Router {
         session: &Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<CacheKey> {
-        let req_header = session.req_header();
-        Ok(CacheKey::new(
-            ctx.host.clone(),
-            base64::encode_block(
-                req_header
-                    .uri
-                    .path_and_query()
-                    .unwrap_or(&PathAndQuery::from_static("/"))
-                    .as_str()
-                    .as_bytes(),
-            ),
-            "",
-        ))
+        let path_and_query = session
+            .req_header()
+            .uri
+            .path_and_query()
+            .map_or("/", PathAndQuery::as_str);
+
+        Ok(cache_key_for(&ctx.host, path_and_query))
     }
 
     /// This callback is invoked when a cacheable response is ready to be admitted to cache
@@ -391,15 +387,20 @@ impl ProxyHttp for Router {
     // flex purge, other filtering, returns whether asset is should be force expired or not
     async fn cache_hit_filter(
         &self,
-        _session: &Session,
+        _session: &mut Session,
         meta: &CacheMeta,
-        _enabled: bool,
+        _hit_handler: &mut HitHandler,
+        _is_fresh: bool,
         ctx: &mut Self::CTX,
-    ) -> pingora::Result<Option<ForcedInvalidationKind>> {
+    ) -> pingora::Result<Option<ForcedFreshness>> {
         if !meta.is_fresh(SystemTime::now()) {
             ctx.extensions
                 .insert(Cow::Borrowed("cache_state"), "expired".into());
-            return Ok(Some(ForcedInvalidationKind::ForceExpired));
+            // Keeps the asset's stale-while-revalidate/stale-if-error windows open,
+            // matching the pre-0.9 `ForceExpired` behavior
+            return Ok(Some(ForcedFreshness::ForceExpiredServeStale {
+                expired_at: None,
+            }));
         }
 
         ctx.extensions
@@ -460,6 +461,17 @@ impl ProxyHttp for Router {
     }
 }
 
+/// Builds the cache key for a request to `host`.
+///
+/// Pingora 0.9 dropped the separate cache key namespace. Prefixing the host keeps the same hash
+/// as `namespace + primary` did before, so existing cache entries stay valid (the base64 of a
+/// path always starts with `L` and is never followed by another `L`, so the boundary is
+/// unambiguous). The host is kept in `user_tag` for the disk cache directory lookup.
+fn cache_key_for(host: &str, path_and_query: &str) -> CacheKey {
+    let primary = format!("{host}{}", base64::encode_block(path_and_query.as_bytes()));
+    CacheKey::new(primary, host)
+}
+
 fn get_uri(session: &mut Session) -> Uri {
     session.req_header().uri.clone()
 }
@@ -476,4 +488,21 @@ fn get_host(session: &mut Session) -> &str {
     }
 
     ""
+}
+
+#[cfg(test)]
+mod tests {
+    use pingora_cache::key::CacheHashKey;
+
+    use super::cache_key_for;
+
+    #[test]
+    fn test_cache_key_matches_pre_pingora_0_9_hash() {
+        // Hash produced by pingora-cache 0.5 for
+        // `CacheKey::new("example.com", base64("/assets/app.js?v=1"), "")`
+        let key = cache_key_for("example.com", "/assets/app.js?v=1");
+
+        assert_eq!(key.primary(), "6d8d9b6395c298da5763bb93958a01c0");
+        assert_eq!(key.user_tag, "example.com");
+    }
 }

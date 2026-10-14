@@ -72,6 +72,11 @@ impl HandleHit for DiskCacheHitHandler {
         Ok(Some(slice))
     }
 
+    /// Helper function to cast the trait object to concrete types
+    fn as_any_mut(&mut self) -> &mut (dyn Any + Send + Sync) {
+        self
+    }
+
     /// Finish the current cache hit
     async fn finish(
         self: Box<Self>, // because self is always used as a trait object
@@ -219,6 +224,11 @@ impl HandleHit for DiskCacheHitHandlerInMemory {
 
         let slice = bytes::Bytes::copy_from_slice(&buffer[..bytes_read]);
         Ok(Some(slice))
+    }
+
+    /// Helper function to cast the trait object to concrete types
+    fn as_any_mut(&mut self) -> &mut (dyn Any + Send + Sync) {
+        self
     }
 
     /// Finish the current cache hit
