@@ -87,6 +87,9 @@ mod tests {
             remove: None,
         });
         let err = validate_route(&route).unwrap_err();
-        assert_eq!(err, "headers.add[0] is not a valid header: \"invalid header\"");
+        assert_eq!(
+            err,
+            "headers.add[0] is not a valid header: \"invalid header\""
+        );
     }
 }

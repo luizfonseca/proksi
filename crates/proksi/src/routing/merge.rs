@@ -64,7 +64,10 @@ pub fn merge(snapshots: &BTreeMap<RouteSourceKind, Vec<Route>>) -> MergeResult {
                 continue;
             }
 
-            sources_by_host.entry(host.clone()).or_default().push(*source);
+            sources_by_host
+                .entry(host.clone())
+                .or_default()
+                .push(*source);
             result
                 .routes
                 .entry(host)
@@ -110,8 +113,14 @@ mod tests {
         let result = merge(&snapshots);
 
         assert_eq!(result.routes.len(), 2);
-        assert_eq!(upstream_of(&result, "a.com"), (RouteSourceKind::File, "10.0.0.1".into()));
-        assert_eq!(upstream_of(&result, "b.com"), (RouteSourceKind::File, "10.0.0.2".into()));
+        assert_eq!(
+            upstream_of(&result, "a.com"),
+            (RouteSourceKind::File, "10.0.0.1".into())
+        );
+        assert_eq!(
+            upstream_of(&result, "b.com"),
+            (RouteSourceKind::File, "10.0.0.2".into())
+        );
         assert!(result.conflicts.is_empty());
         assert!(result.invalid.is_empty());
     }
@@ -126,7 +135,10 @@ mod tests {
 
         let result = merge(&snapshots);
 
-        assert_eq!(upstream_of(&result, "a.com"), (RouteSourceKind::Store, "10.0.0.2".into()));
+        assert_eq!(
+            upstream_of(&result, "a.com"),
+            (RouteSourceKind::Store, "10.0.0.2".into())
+        );
         assert_eq!(
             result.conflicts,
             vec![Conflict {
@@ -147,7 +159,10 @@ mod tests {
 
         let result = merge(&snapshots);
 
-        assert_eq!(upstream_of(&result, "a.com"), (RouteSourceKind::File, "10.0.0.1".into()));
+        assert_eq!(
+            upstream_of(&result, "a.com"),
+            (RouteSourceKind::File, "10.0.0.1".into())
+        );
         assert!(result.conflicts.is_empty());
     }
 
@@ -181,7 +196,10 @@ mod tests {
 
         let result = merge(&snapshots);
 
-        assert_eq!(upstream_of(&result, "a.com"), (RouteSourceKind::File, "10.0.0.1".into()));
+        assert_eq!(
+            upstream_of(&result, "a.com"),
+            (RouteSourceKind::File, "10.0.0.1".into())
+        );
         assert_eq!(result.invalid.len(), 1);
     }
 
@@ -194,7 +212,10 @@ mod tests {
 
         let result = merge(&snapshots);
 
-        assert_eq!(upstream_of(&result, "a.com"), (RouteSourceKind::File, "10.0.0.1".into()));
+        assert_eq!(
+            upstream_of(&result, "a.com"),
+            (RouteSourceKind::File, "10.0.0.1".into())
+        );
         assert_eq!(
             result.invalid,
             vec![InvalidRoute {
@@ -208,8 +229,14 @@ mod tests {
     #[test]
     fn test_merge_hosts_are_case_insensitive() {
         let snapshots = BTreeMap::from([
-            (RouteSourceKind::File, vec![route("Example.com", "10.0.0.1")]),
-            (RouteSourceKind::Store, vec![route("example.COM", "10.0.0.2")]),
+            (
+                RouteSourceKind::File,
+                vec![route("Example.com", "10.0.0.1")],
+            ),
+            (
+                RouteSourceKind::Store,
+                vec![route("example.COM", "10.0.0.2")],
+            ),
         ]);
 
         let result = merge(&snapshots);

@@ -6,7 +6,9 @@ use serde::Serialize;
 
 use crate::config::Route;
 
+pub mod build;
 pub mod merge;
+pub mod reconciler;
 pub mod validate;
 
 /// Where a route comes from. The order is the priority when several sources
