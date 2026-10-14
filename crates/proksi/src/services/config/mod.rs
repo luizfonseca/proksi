@@ -34,9 +34,9 @@ impl FileWatcherService {
         tracing::info!("auto_reload path: {:?}", absolute_path);
 
         if absolute_path.exists() {
-            watcher
-                .watch(&absolute_path, notify::RecursiveMode::Recursive)
-                .unwrap();
+            if let Err(err) = watcher.watch(&absolute_path, notify::RecursiveMode::Recursive) {
+                tracing::error!("failed to watch {absolute_path:?}: {err}");
+            }
         } else {
             tracing::debug!("file or directory does not exist: {:?}", absolute_path);
         }
@@ -77,11 +77,16 @@ impl EventHandler for FileWatcherServiceHandler {
         tracing::warn!("restarting Proksi server");
 
         // kill existing process
-        nix::sys::signal::kill(
-            nix::unistd::Pid::from_raw(current_pid.try_into().unwrap()),
+        let Ok(current_pid) = current_pid.try_into() else {
+            tracing::error!("invalid process id: {current_pid}");
+            return;
+        };
+        if let Err(err) = nix::sys::signal::kill(
+            nix::unistd::Pid::from_raw(current_pid),
             nix::sys::signal::Signal::SIGQUIT,
-        )
-        .unwrap();
+        ) {
+            tracing::error!("failed to stop the current process: {err}");
+        }
     }
 }
 
@@ -106,11 +111,13 @@ impl Service for FileWatcherService {
 
             tracing::info!("starting config watcher service");
 
-            let mut watcher = notify::poll::PollWatcher::new(
+            let Ok(mut watcher) = notify::poll::PollWatcher::new(
                 FileWatcherServiceHandler {},
                 notify::Config::default().with_manual_polling(),
-            )
-            .unwrap();
+            ) else {
+                tracing::error!("could not create config watcher, auto_reload will not work");
+                return;
+            };
 
             Self::watch_file_or_dir(&mut watcher, &config_file_hcl);
             Self::watch_file_or_dir(&mut watcher, &config_file_yaml);

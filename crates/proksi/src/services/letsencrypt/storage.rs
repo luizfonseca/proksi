@@ -40,7 +40,7 @@ impl CertificatePersist {
     }
 
     // This ensures that any match logic returns the exact same type (impl Persist)
-    pub fn get_persist(&self) -> PersistType {
+    pub fn get_persist(&self) -> Result<PersistType, anyhow::Error> {
         match self.config.store.store_type {
             crate::config::StoreType::Redis => {
                 let url = self
@@ -49,7 +49,7 @@ impl CertificatePersist {
                     .redis_url
                     .as_deref()
                     .unwrap_or("redis://localhost:6379");
-                PersistType::Redis(RedisPersist::new(url))
+                Ok(PersistType::Redis(RedisPersist::new(url)?))
             }
             crate::config::StoreType::Memory => {
                 // Get directory based on whether we are running on staging/production
@@ -60,11 +60,13 @@ impl CertificatePersist {
                     "creating certificates in folder {}",
                     certificates_dir.to_string_lossy()
                 );
-                create_dir_all(certificates_dir).expect("failed to create directory {certificates_dir:?}. Check permissions or make sure that the parent directory exists beforehand.");
+                create_dir_all(&certificates_dir).map_err(|err| {
+                    anyhow::anyhow!("failed to create directory {certificates_dir:?}: {err}. Check permissions or make sure that the parent directory exists beforehand.")
+                })?;
 
-                PersistType::File(acme_v2::persist::FilePersist::new(
-                    self.get_lets_encrypt_directory(),
-                ))
+                Ok(PersistType::File(acme_v2::persist::FilePersist::new(
+                    certificates_dir,
+                )))
             }
         }
     }
@@ -93,10 +95,10 @@ pub struct RedisPersist {
 }
 
 impl RedisPersist {
-    pub fn new(redis_url: &str) -> Self {
-        Self {
-            client: redis::Client::open(redis_url).expect("Failed to create client to Redis"),
-        }
+    pub fn new(redis_url: &str) -> redis::RedisResult<Self> {
+        Ok(Self {
+            client: redis::Client::open(redis_url)?,
+        })
     }
 }
 
@@ -105,7 +107,7 @@ impl acme_v2::persist::Persist for RedisPersist {
         let mut conn = self
             .client
             .get_connection()
-            .expect("Failed to get Redis connection");
+            .map_err(|e| acme_v2::Error::Other(e.to_string()))?;
 
         if let Ok(value) = conn.get::<String, String>(key.to_string()) {
             if value.is_empty() {
@@ -122,7 +124,7 @@ impl acme_v2::persist::Persist for RedisPersist {
         let mut conn = self
             .client
             .get_connection()
-            .expect("Failed to get Redis connection");
+            .map_err(|e| acme_v2::Error::Other(e.to_string()))?;
 
         conn.set::<String, &[u8], String>(key.to_string(), value)
             .map_err(|e| acme_v2::Error::Other(e.to_string()))?;

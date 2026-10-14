@@ -3,7 +3,6 @@ use std::{
     time::Duration,
 };
 
-use anyhow::anyhow;
 use async_trait::async_trait;
 use bollard::{
     container::ListContainersOptions, service::ListServicesOptions, Docker, API_DEFAULT_VERSION,
@@ -62,7 +61,7 @@ impl ProksiDockerRoute {
 /// This service will run in a separate thread.
 pub struct LabelService {
     config: Arc<Config>,
-    inner: Docker,
+    inner: Option<Docker>,
     sender: Sender<MsgProxy>,
 }
 
@@ -70,14 +69,20 @@ impl LabelService {
     pub fn new(config: Arc<Config>, sender: Sender<MsgProxy>) -> Self {
         let endpoint = config.docker.endpoint.clone().unwrap_or_default();
 
-        let docker = connect_to_docker(&endpoint);
+        let docker = match connect_to_docker(&endpoint) {
+            Ok(docker) => Some(docker),
+            Err(e) => {
+                if config.docker.enabled.unwrap_or(false) {
+                    tracing::error!("could not connect to the docker daemon: {e}");
+                }
+                None
+            }
+        };
 
         Self {
             config,
             sender,
-            inner: docker
-                .map_err(|e| anyhow!("could not connect to the docker daemon: {e}"))
-                .unwrap(),
+            inner: docker,
         }
     }
 
@@ -93,33 +98,40 @@ impl LabelService {
         T: Into<String> + Hash + serde::ser::Serialize + Eq,
     {
         let mut host_map = HashMap::<String, ProksiDockerRoute>::new();
-        let services = self
-            .inner
+        let Some(docker) = &self.inner else {
+            return host_map;
+        };
+
+        let services = match docker
             .list_services(Some(ListServicesOptions {
                 filters,
                 status: true,
             }))
-            .await;
-
-        if services.is_err() {
-            info!("Could not list services {:?}", services.err().unwrap());
-            return host_map;
-        }
-
-        let services = services.unwrap();
+            .await
+        {
+            Ok(services) => services,
+            Err(err) => {
+                info!("Could not list services {err:?}");
+                return host_map;
+            }
+        };
 
         for service in services {
-            let service_id = service.id.unwrap();
-            let service_spec = service.spec.clone().unwrap();
-            let service_name = service_spec.name.as_ref();
+            let service_id = service.id.unwrap_or_default();
+            let Some(service_spec) = service.spec.clone() else {
+                info!("Service {service_id:?} does not have a spec");
+                continue;
+            };
 
-            if service_name.is_none() {
+            let Some(service_name) = service_spec.name.as_ref() else {
                 info!("Service {service_id:?} does not have a name");
                 continue;
-            }
+            };
 
-            let service_name = service_name.unwrap();
-            let service_labels = service_spec.labels.as_ref().unwrap();
+            let Some(service_labels) = service_spec.labels.as_ref() else {
+                info!("Service {service_id:?} does not have labels");
+                continue;
+            };
 
             let mut proxy_enabled = false;
             let mut proxy_host = "";
@@ -259,6 +271,7 @@ impl LabelService {
     /// Generate a list of containers based on the provided filters
     /// This will return a mapping between host <> ips for each container
     /// Does not work for docker in Swarm mode
+    #[allow(clippy::too_many_lines)]
     async fn list_containers<T>(
         &self,
         filters: HashMap<T, Vec<T>>,
@@ -267,28 +280,34 @@ impl LabelService {
         T: Into<String> + Hash + serde::ser::Serialize + Eq,
     {
         let mut host_map = HashMap::<String, ProksiDockerRoute>::new();
-        let containers = self
-            .inner
+        let Some(docker) = &self.inner else {
+            return host_map;
+        };
+
+        let containers = match docker
             .list_containers(Some(ListContainersOptions {
                 all: false,
                 limit: Some(1000),
                 filters,
                 size: false,
             }))
-            .await;
-
-        if containers.is_err() {
-            info!("Could not list containers {:?}", containers.err().unwrap());
-            return host_map;
-        }
-
-        let containers = containers.unwrap();
+            .await
+        {
+            Ok(containers) => containers,
+            Err(err) => {
+                info!("Could not list containers {err:?}");
+                return host_map;
+            }
+        };
 
         for container in containers {
             // Get specified container labels
             let container_names = &container.names;
 
-            let container_labels = container.labels.as_ref().unwrap();
+            let Some(container_labels) = container.labels.as_ref() else {
+                info!("Container {container_names:?} does not have labels");
+                continue;
+            };
 
             let mut proxy_enabled = false;
             let mut proxy_host = "";
@@ -356,11 +375,19 @@ impl LabelService {
             }
 
             // map container endpoints
-            let network_settings = &container.network_settings.as_ref().unwrap();
-            let networks = network_settings.networks.as_ref().unwrap();
+            let Some(networks) = container
+                .network_settings
+                .as_ref()
+                .and_then(|settings| settings.networks.as_ref())
+            else {
+                info!("Container {container_names:?} does not have networks");
+                continue;
+            };
 
             for network in networks.values() {
-                let ip_on_network = network.ip_address.as_ref().unwrap();
+                let Some(ip_on_network) = network.ip_address.as_ref() else {
+                    continue;
+                };
                 let ip_plus_port = format!("{ip_on_network}:{proxy_port}");
 
                 let socket_addr = SocketAddr::from_str(&ip_plus_port);
@@ -371,11 +398,9 @@ impl LabelService {
                     continue;
                 }
 
-                host_map
-                    .get_mut(proxy_host)
-                    .unwrap()
-                    .upstreams
-                    .push(ip_plus_port);
+                if let Some(route) = host_map.get_mut(proxy_host) {
+                    route.upstreams.push(ip_plus_port);
+                }
             }
         }
 
@@ -390,26 +415,25 @@ impl LabelService {
         jwt_secret: Option<String>,
         validations: Option<serde_json::Value>,
     ) -> Option<RoutePlugin> {
-        if provider.is_none()
-            || client_id.is_none()
-            || client_secret.is_none()
-            || jwt_secret.is_none()
-            || validations.is_none()
-        {
+        let (
+            Some(provider),
+            Some(client_id),
+            Some(client_secret),
+            Some(jwt_secret),
+            Some(validations),
+        ) = (provider, client_id, client_secret, jwt_secret, validations)
+        else {
             return None;
-        }
+        };
 
         let mut plugin_hashmap = HashMap::new();
-        plugin_hashmap.insert(Cow::Borrowed("client_id"), json!(client_id.unwrap()));
+        plugin_hashmap.insert(Cow::Borrowed("client_id"), json!(client_id));
 
-        plugin_hashmap.insert(Cow::Borrowed("provider"), json!(provider.unwrap()));
+        plugin_hashmap.insert(Cow::Borrowed("provider"), json!(provider));
 
-        plugin_hashmap.insert(
-            Cow::Borrowed("client_secret"),
-            json!(client_secret.unwrap()),
-        );
-        plugin_hashmap.insert(Cow::Borrowed("jwt_secret"), json!(jwt_secret.unwrap()));
-        plugin_hashmap.insert(Cow::Borrowed("validations"), json!(validations.unwrap()));
+        plugin_hashmap.insert(Cow::Borrowed("client_secret"), json!(client_secret));
+        plugin_hashmap.insert(Cow::Borrowed("jwt_secret"), json!(jwt_secret));
+        plugin_hashmap.insert(Cow::Borrowed("validations"), json!(validations));
 
         Some(RoutePlugin {
             name: Cow::Borrowed("oauth2"),

@@ -40,10 +40,14 @@ fn num_cpus(_: FuncArgs) -> Result<Value, String> {
 /// ```
 #[allow(clippy::needless_pass_by_value)]
 fn read_hcl_file(args: FuncArgs) -> Result<Value, String> {
-    let path = Path::new(args[0].as_str().unwrap());
+    let Some(path) = args.first().and_then(Value::as_str) else {
+        return Err("import() expects a file path".to_string());
+    };
+    let path = Path::new(path);
 
     if !path
-        .extension().is_some_and(|ext| ext.eq_ignore_ascii_case("hcl"))
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("hcl"))
     {
         return Err(format!(
             "File must be a HCL file: {}",
@@ -60,7 +64,12 @@ fn read_hcl_file(args: FuncArgs) -> Result<Value, String> {
     };
 
     let mut contents = String::new();
-    file.read_to_string(&mut contents).unwrap();
+    if let Err(err) = file.read_to_string(&mut contents) {
+        return Err(format!(
+            "failed to read file {}: {err}",
+            path.to_string_lossy()
+        ));
+    }
 
     let value = match hcl::eval::from_str::<Value>(&contents, &get_hcl_context()) {
         Ok(v) => v,
@@ -84,7 +93,9 @@ fn read_hcl_file(args: FuncArgs) -> Result<Value, String> {
 /// ```
 #[allow(clippy::needless_pass_by_value)]
 fn get_env_var(args: FuncArgs) -> Result<Value, String> {
-    let key = args[0].as_str().unwrap();
+    let Some(key) = args.first().and_then(Value::as_str) else {
+        return Err("env() expects a variable name".to_string());
+    };
     let Ok(var) = std::env::var(key) else {
         return Err(format!("Environment variable {key} not found"));
     };

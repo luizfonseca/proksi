@@ -34,16 +34,16 @@ impl GithubOauthService {
     ) -> Result<OauthUser, anyhow::Error> {
         let token = Self::get_oauth_token(client_id, client_secret, code).await?;
 
-        if token.access_token.is_none() {
+        let Some(access_token) = token.access_token else {
             bail!("Failed to get access token from Github: {:?}", token.error);
-        }
-
-        let access_token = token.access_token.unwrap();
+        };
 
         let user = Self::get_user_info(&access_token).await?;
         let emails = Self::get_user_emails(&access_token).await?;
 
-        let primary_email = emails.iter().find(|e| e.primary).unwrap();
+        let Some(primary_email) = emails.iter().find(|e| e.primary) else {
+            bail!("Failed to get primary email from Github");
+        };
 
         Ok(OauthUser {
             email: Cow::Owned(primary_email.email.to_string()),

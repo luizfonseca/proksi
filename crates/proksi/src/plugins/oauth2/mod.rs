@@ -34,7 +34,7 @@ const COOKIE_NAME: &str = "__Secure_Auth_PRK_JWT";
 fn get_current_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs()
 }
 
@@ -127,7 +127,9 @@ impl Oauth2 {
         let mut secure_jwt: Option<Cookie> = None;
 
         for cookie in cookie_header {
-            let cookie_str = cookie.to_str().unwrap();
+            let Ok(cookie_str) = cookie.to_str() else {
+                continue;
+            };
 
             let Ok(ck) = Cookie::parse(cookie_str) else {
                 continue;
@@ -138,11 +140,11 @@ impl Oauth2 {
             }
         }
 
-        if secure_jwt.is_none() {
+        let Some(secure_jwt) = secure_jwt else {
             return Ok(false); // will redirect to oauth callback
-        }
+        };
 
-        let decoded = jwt::decode_jwt(secure_jwt.unwrap().value(), jwt_secret.as_bytes());
+        let decoded = jwt::decode_jwt(secure_jwt.value(), jwt_secret.as_bytes());
 
         // Token expired or another err
         if decoded.is_err() {
@@ -204,11 +206,9 @@ impl MiddlewarePlugin for Oauth2 {
         plugin: &RoutePlugin,
     ) -> Result<bool> {
         // Nothing to do if the plugin configuration is not present
-        if plugin.config.is_none() {
+        let Some(plugin_config) = plugin.config.as_ref() else {
             return Ok(false);
-        }
-
-        let plugin_config = plugin.config.as_ref().unwrap();
+        };
 
         let provider = Self::parse_provider(plugin_config)?;
 
@@ -258,12 +258,18 @@ impl MiddlewarePlugin for Oauth2 {
                 return self.unauthorized_response(session).await;
             };
 
-            let (timestamp, current_address) = redirect_from_state.split_once(';').unwrap();
-            let timestamp = timestamp.parse::<u64>().unwrap();
+            let Some((timestamp, current_address)) = redirect_from_state.split_once(';') else {
+                tracing::info!("state is not in the expected format");
+                return self.unauthorized_response(session).await;
+            };
+            let Ok(timestamp) = timestamp.parse::<u64>() else {
+                tracing::info!("state has an invalid timestamp");
+                return self.unauthorized_response(session).await;
+            };
             let current_address = current_address.to_string();
 
             // Check if the state is still valid from the last 120 seconds (2 minutes)
-            if timestamp + 120 < get_current_timestamp() {
+            if timestamp.saturating_add(120) < get_current_timestamp() {
                 tracing::info!("state has expired");
                 return self.unauthorized_response(session).await;
             }

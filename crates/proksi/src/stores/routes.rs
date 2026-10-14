@@ -1,13 +1,13 @@
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     net::{SocketAddr, ToSocketAddrs},
     sync::Arc,
 };
 
 use http::{HeaderName, HeaderValue};
 use path_tree::PathTree;
-use pingora::lb::{selection::RoundRobin, LoadBalancer};
+use pingora::lb::{discovery::Static, selection::RoundRobin, Backends, LoadBalancer};
 
 use crate::config::{RouteCache, RoutePlugin, RouteUpstream};
 
@@ -58,9 +58,9 @@ pub struct RouteStoreContainer {
 impl Default for RouteStoreContainer {
     fn default() -> Self {
         RouteStoreContainer {
-            load_balancer: Arc::new(
-                LoadBalancer::<RoundRobin>::try_from_iter(vec!["127.0.0.1:80"]).unwrap(),
-            ),
+            load_balancer: Arc::new(LoadBalancer::<RoundRobin>::from_backends(Backends::new(
+                Static::new(BTreeSet::new()),
+            ))),
             path_matcher: RouteStorePathMatcher::default(),
             host_header_remove: Vec::new(),
             host_header_add: Vec::new(),

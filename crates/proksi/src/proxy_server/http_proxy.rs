@@ -52,18 +52,13 @@ impl ProxyHttp for HttpLB {
             .path()
             .starts_with("/.well-known/acme-challenge")
         {
-            let challenge_from_host = global::get_store().get_challenge(host).await;
-
-            if challenge_from_host.is_none() {
-                return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));
-            }
-
-            let challenge_from_host = challenge_from_host.unwrap();
-
             // Get the token and proof from the challenge store
-            let (token, proof) = challenge_from_host;
+            let Some((token, proof)) = global::get_store().get_challenge(host).await else {
+                return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));
+            };
+
             // Get the token from the URL
-            let token_from_url = current_uri.path().split('/').next_back().unwrap();
+            let token_from_url = current_uri.path().rsplit('/').next().unwrap_or_default();
 
             // Token is not the same as the one provided
             if token != token_from_url {
@@ -84,12 +79,17 @@ impl ProxyHttp for HttpLB {
         }
 
         // Redirect to https
-        let new_uri = Uri::builder()
+        let path_and_query = current_uri
+            .path_and_query()
+            .map_or("/", http::uri::PathAndQuery::as_str);
+        let Ok(new_uri) = Uri::builder()
             .scheme(Scheme::HTTPS)
             .authority(host)
-            .path_and_query(current_uri.path_and_query().unwrap().to_owned())
+            .path_and_query(path_and_query)
             .build()
-            .unwrap();
+        else {
+            return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(400)));
+        };
 
         let mut res_headers =
             ResponseHeader::build_no_case(StatusCode::PERMANENT_REDIRECT, Some(1))?;
