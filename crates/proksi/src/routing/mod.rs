@@ -7,8 +7,10 @@ use serde::Serialize;
 use crate::config::Route;
 
 pub mod build;
+pub mod file_source;
 pub mod merge;
 pub mod reconciler;
+pub mod service;
 pub mod validate;
 
 /// Where a route comes from. The order is the priority when several sources
@@ -17,6 +19,8 @@ pub mod validate;
 pub enum RouteSourceKind {
     File,
     Docker,
+    // Kubernetes ingress (#381)
+    #[allow(dead_code)]
     Kubernetes,
     Store,
 }

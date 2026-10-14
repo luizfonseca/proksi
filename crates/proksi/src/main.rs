@@ -3,16 +3,12 @@
 
 use ::pingora::server::Server;
 
-use bytes::Bytes;
 use clap::crate_version;
-use config::{load, LogFormat, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
+use config::{load, LogFormat};
 use stores::{global::init_store, MemoryStore};
 use tracing_subscriber::EnvFilter;
 
-use std::{
-    borrow::Cow,
-    sync::{atomic::AtomicU64, Arc},
-};
+use std::sync::{atomic::AtomicU64, Arc};
 
 use pingora::{listeners::tls::TlsSettings, proxy::http_proxy_service, server::configuration::Opt};
 
@@ -20,41 +16,16 @@ use proxy_server::cert_store::CertStore;
 use services::{logger::ProxyLoggerReceiver, BackgroundFunctionService};
 
 mod cache;
-mod routing;
 mod channel;
 mod config;
 mod plugins;
 mod proxy_server;
+mod routing;
 mod server;
 mod services;
 mod stores;
 mod tools;
 mod wasm;
-
-#[derive(Clone, Default)]
-pub struct MsgRoute {
-    host: Cow<'static, str>,
-    upstreams: Vec<String>,
-    path_matchers: Vec<String>,
-    host_headers_add: Vec<RouteHeaderAdd>,
-    host_headers_remove: Vec<RouteHeaderRemove>,
-    plugins: Vec<RoutePlugin>,
-
-    self_signed_certs: bool,
-}
-
-#[derive(Clone)]
-pub struct MsgCert {
-    _cert: Bytes,
-    _key: Bytes,
-}
-
-#[derive(Clone)]
-pub enum MsgProxy {
-    NewRoute(MsgRoute),
-    NewCertificate(MsgCert),
-    ConfigUpdate(()),
-}
 
 #[deny(
     clippy::all,
@@ -84,8 +55,8 @@ fn main() -> Result<(), anyhow::Error> {
     let (log_sender, log_receiver) = services::logger::log_queue();
     let dropped_logs = Arc::new(AtomicU64::new(0));
 
-    // Receiver channel for Routes/Certificates/etc
-    let (sender, mut _receiver) = tokio::sync::broadcast::channel::<MsgProxy>(256);
+    // Route sources send their routes to the reconciler through this channel
+    let (route_sender, route_receiver) = routing::service::snapshot_channel();
     let appender = services::logger::ProxyLog::new(
         log_sender,
         dropped_logs.clone(),
@@ -185,10 +156,18 @@ fn main() -> Result<(), anyhow::Error> {
     // pingora_server.add_service(prometheus_service_http);
 
     // Non-dedicated background services
-    pingora_server.add_service(BackgroundFunctionService::new(proxy_config.clone(), sender));
+    pingora_server.add_service(BackgroundFunctionService::new(
+        proxy_config.clone(),
+        route_sender,
+        route_receiver,
+    ));
 
     // Dedicated logger service
-    pingora_server.add_service(ProxyLoggerReceiver::new(log_receiver, dropped_logs, &proxy_config));
+    pingora_server.add_service(ProxyLoggerReceiver::new(
+        log_receiver,
+        dropped_logs,
+        &proxy_config,
+    ));
 
     // Listen on HTTP and HTTPS ports
     pingora_server.add_service(http_public_service);

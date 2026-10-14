@@ -26,6 +26,22 @@ async fn test_proxies_requests_to_upstream() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_host_header_is_case_insensitive() {
+    let mut proksi = Harness::start(vec![Route::new("app.test", Upstream::Http)]).await;
+
+    let res = proksi
+        .client()
+        .get(format!("https://app.test:{}/", proksi.https_port))
+        .header("host", "App.Test")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+
+    proksi.assert_healthy();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_unmatched_path_returns_404_and_unknown_host_is_rejected() {
     let mut proksi =
         Harness::start(vec![Route::new("app.test", Upstream::Http).paths(&["/api/*"])]).await;

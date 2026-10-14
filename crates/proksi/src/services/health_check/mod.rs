@@ -26,20 +26,17 @@ async fn run_health_check_loop() {
     loop {
         interval.tick().await;
 
-        for (host, route_container) in &stores::get_routes() {
+        // The load balancers are shared with the route table, so health checks
+        // update the routes being served
+        let load_balancers = stores::get_routes()
+            .iter()
+            .map(|(host, route)| (host.clone(), route.load_balancer.clone()))
+            .collect::<Vec<_>>();
+
+        for (host, load_balancer) in load_balancers {
             tracing::trace!("Running health check for host {}", host);
-
-            // clone the route_container
-            let route_container = route_container.clone();
-            route_container.load_balancer.update().await.ok();
-            route_container
-                .load_balancer
-                .backends()
-                .run_health_check(false)
-                .await;
-
-            // insert it back into the store
-            stores::insert_route(host.clone(), route_container);
+            load_balancer.update().await.ok();
+            load_balancer.backends().run_health_check(false).await;
         }
     }
 }

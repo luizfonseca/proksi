@@ -11,14 +11,16 @@ use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
+use routes::DockerRoutes;
 use serde_json::json;
-use tokio::sync::broadcast::Sender;
 use tracing::{debug, info};
 
 use crate::{
     config::{Config, DockerServiceMode, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin},
-    MsgProxy, MsgRoute,
+    routing::{RouteSnapshot, RouteSourceKind, SnapshotSender},
 };
+
+pub mod routes;
 
 /// Based on the provided endpoint, returns the correct Docker client
 fn connect_to_docker(endpoint: &str) -> Result<Docker, bollard::errors::Error> {
@@ -34,13 +36,13 @@ fn connect_to_docker(endpoint: &str) -> Result<Docker, bollard::errors::Error> {
 
 #[derive(Debug, Default)]
 pub struct ProksiDockerRoute {
-    upstreams: Vec<String>,
-    path_matchers: Vec<String>,
+    pub(crate) upstreams: Vec<String>,
+    pub(crate) path_matchers: Vec<String>,
 
-    host_header_add: Option<Vec<RouteHeaderAdd>>,
-    host_header_remove: Option<Vec<RouteHeaderRemove>>,
-    ssl_certificate_self_signed_on_failure: bool,
-    plugins: Option<Vec<RoutePlugin>>,
+    pub(crate) host_header_add: Option<Vec<RouteHeaderAdd>>,
+    pub(crate) host_header_remove: Option<Vec<RouteHeaderRemove>>,
+    pub(crate) ssl_certificate_self_signed_on_failure: bool,
+    pub(crate) plugins: Option<Vec<RoutePlugin>>,
 }
 
 impl ProksiDockerRoute {
@@ -62,11 +64,12 @@ impl ProksiDockerRoute {
 pub struct LabelService {
     config: Arc<Config>,
     inner: Option<Docker>,
-    sender: Sender<MsgProxy>,
+    sender: SnapshotSender,
+    routes: DockerRoutes,
 }
 
 impl LabelService {
-    pub fn new(config: Arc<Config>, sender: Sender<MsgProxy>) -> Self {
+    pub fn new(config: Arc<Config>, sender: SnapshotSender) -> Self {
         let endpoint = config.docker.endpoint.clone().unwrap_or_default();
 
         let docker = match connect_to_docker(&endpoint) {
@@ -82,6 +85,7 @@ impl LabelService {
         Self {
             config,
             sender,
+            routes: DockerRoutes::default(),
             inner: docker,
         }
     }
@@ -441,32 +445,6 @@ impl LabelService {
         })
     }
 
-    /// Sends a message to the route discovery service through mspc
-    fn send_route_message(&self, hosts: HashMap<String, ProksiDockerRoute>) {
-        for (host, value) in hosts {
-            // If no upstreams can be found, skip adding the route
-            if value.upstreams.is_empty() {
-                continue;
-            }
-
-            let host_value: Cow<'static, str> = Cow::Owned(host);
-
-            // Notify the route discovery service of the new host
-            self.sender
-                .send(MsgProxy::NewRoute(MsgRoute {
-                    host: host_value,
-                    upstreams: value.upstreams,
-                    path_matchers: value.path_matchers,
-                    host_headers_add: value.host_header_add.unwrap_or_else(Vec::new),
-                    host_headers_remove: value.host_header_remove.unwrap_or_else(Vec::new),
-                    plugins: value.plugins.unwrap_or_else(Vec::new),
-
-                    self_signed_certs: value.ssl_certificate_self_signed_on_failure,
-                }))
-                .ok();
-        }
-    }
-
     // By default every container or service should have these 3 labels
     // So that Proksi can route the appropriate traffic
     async fn get_routes_from_docker(&self) -> HashMap<String, ProksiDockerRoute> {
@@ -505,7 +483,12 @@ impl Service for LabelService {
         interval.tick().await;
         loop {
             interval.tick().await;
-            self.send_route_message(self.get_routes_from_docker().await);
+            let found = self.get_routes_from_docker().await;
+            let routes = self.routes.update(found);
+            let snapshot = RouteSnapshot::new(RouteSourceKind::Docker, routes);
+            if self.sender.send(snapshot).await.is_err() {
+                tracing::error!("failed to send the routes found in docker");
+            }
         }
     }
 

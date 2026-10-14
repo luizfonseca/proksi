@@ -2,16 +2,17 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use config::FileWatcherService;
-use discovery::RoutingService;
 use docker::LabelService;
 use letsencrypt::http01::LetsencryptService;
 use pingora::server::{ListenFds, ShutdownWatch};
-use tokio::sync::broadcast::Sender;
+use tokio::sync::mpsc::Receiver;
 
-use crate::{config::Config, MsgProxy};
+use crate::{
+    config::Config,
+    routing::{file_source::file_snapshot, service::RoutingService, RouteSnapshot, SnapshotSender},
+};
 
 pub mod config;
-pub mod discovery;
 pub mod docker;
 pub mod health_check;
 pub mod letsencrypt;
@@ -20,12 +21,21 @@ pub mod logger;
 /// Exploring: what if we grouped all the services into a single service using a single thread?
 pub struct BackgroundFunctionService {
     config: Arc<Config>,
-    broadcast: Sender<MsgProxy>,
+    route_sender: SnapshotSender,
+    route_receiver: Option<Receiver<RouteSnapshot>>,
 }
 
 impl BackgroundFunctionService {
-    pub fn new(config: Arc<Config>, broadcast: Sender<MsgProxy>) -> Self {
-        Self { config, broadcast }
+    pub fn new(
+        config: Arc<Config>,
+        route_sender: SnapshotSender,
+        route_receiver: Receiver<RouteSnapshot>,
+    ) -> Self {
+        Self {
+            config,
+            route_sender,
+            route_receiver: Some(route_receiver),
+        }
     }
 }
 
@@ -37,10 +47,24 @@ impl pingora::services::Service for BackgroundFunctionService {
         shutdown: ShutdownWatch,
         _listeners_per_fd: usize,
     ) {
-        let mut routing_service = RoutingService::new(self.config.clone(), self.broadcast.clone());
+        let Some(route_receiver) = self.route_receiver.take() else {
+            tracing::error!("background services already started");
+            return;
+        };
+        let mut routing_service = RoutingService::new(route_receiver);
+
+        // Routes from the configuration file
+        if self
+            .route_sender
+            .send(file_snapshot(&self.config))
+            .await
+            .is_err()
+        {
+            tracing::error!("failed to send the routes from the configuration file");
+        }
 
         let mut health_service = health_check::HealthService::new();
-        let mut docker_service = LabelService::new(self.config.clone(), self.broadcast.clone());
+        let mut docker_service = LabelService::new(self.config.clone(), self.route_sender.clone());
         let mut letsencrypt_service = LetsencryptService::new(self.config.clone());
         let mut config_server = FileWatcherService::new(self.config.clone());
 

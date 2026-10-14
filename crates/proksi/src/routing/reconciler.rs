@@ -29,6 +29,8 @@ pub struct RoutingStatus {
 static ROUTING_STATUS: Lazy<ArcSwap<RoutingStatus>> =
     Lazy::new(|| ArcSwap::from_pointee(RoutingStatus::default()));
 
+// Read by the store source and the admin API
+#[allow(dead_code)]
 pub fn routing_status() -> Arc<RoutingStatus> {
     ROUTING_STATUS.load_full()
 }
