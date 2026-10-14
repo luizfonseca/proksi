@@ -3,7 +3,6 @@ use std::{any::Any, path::PathBuf};
 use async_trait::async_trait;
 
 use bytes::Buf;
-use once_cell::sync::Lazy;
 use pingora_cache::{
     key::CacheHashKey,
     storage::{PurgeOutcome, PurgeTarget},
@@ -13,13 +12,10 @@ use pingora_cache::{
 
 use pingora::Result;
 
-pub(super) static DISK_MEMORY_CACHE: Lazy<
-    papaya::HashMap<String, (DiskCacheItemMetadata, bytes::Bytes)>,
-> = Lazy::new(papaya::HashMap::new);
-
 use crate::{
     cache::disk::{
         handlers::{DiskCacheHitHandler, DiskCacheHitHandlerInMemory, DiskCacheMissHandler},
+        memory::memory_cache,
         meta::DiskCacheItemMetadata,
     },
     stores,
@@ -82,8 +78,8 @@ impl Storage for DiskCache {
         // and return the file contents as the body
         let memcache_key = Self::get_memory_key(key);
 
-        if let Some(data) = DISK_MEMORY_CACHE.pin().get(&memcache_key) {
-            let (meta, body) = data;
+        if let Some(data) = memory_cache().and_then(|cache| cache.get(&memcache_key)) {
+            let (meta, body) = &*data;
             tracing::debug!("found cache for {key:?} in memory {}", body.len());
 
             return Ok(Some((

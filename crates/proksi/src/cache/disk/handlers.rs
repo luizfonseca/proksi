@@ -1,5 +1,6 @@
 use std::{
     any::Any,
+    sync::Arc,
     io::Read,
     path::{Path, PathBuf},
 };
@@ -18,7 +19,7 @@ use pingora::Result;
 
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
-use crate::cache::disk::storage::DISK_MEMORY_CACHE;
+use crate::cache::disk::memory::memory_cache;
 
 use super::meta::DiskCacheItemMetadata;
 
@@ -66,7 +67,10 @@ impl HandleHit for DiskCacheHitHandler {
         }
 
         buffer.truncate(bytes_read);
-        self.finished_buffer.extend_from_slice(&buffer);
+        // The body is only kept to be copied to the memory cache
+        if memory_cache().is_some() {
+            self.finished_buffer.extend_from_slice(&buffer);
+        }
         Ok(Some(bytes::Bytes::from(buffer)))
     }
 
@@ -82,19 +86,23 @@ impl HandleHit for DiskCacheHitHandler {
         cache_key: &CacheKey,
         _: &SpanHandle,
     ) -> Result<()> {
+        let Some(memory_cache) = memory_cache() else {
+            return Ok(());
+        };
+        let key = cache_key.primary();
+
         // Skiping if the data is already in the cache
-        if let Some(existing) = DISK_MEMORY_CACHE.pin().get(&cache_key.primary()) {
+        if let Some(existing) = memory_cache.get(&key) {
             if existing.1.len() == self.finished_buffer.len() {
                 tracing::debug!("skipping write, cache already contains data for {cache_key:?}");
                 return Ok(());
             }
         }
-        tracing::debug!("writing to memory cache: {:?}", cache_key.primary());
+        tracing::debug!("writing to memory cache: {key:?}");
 
-        DISK_MEMORY_CACHE.pin().insert(
-            cache_key.primary(),
-            (self.meta, self.finished_buffer.freeze()),
-        );
+        // Copied so that the stored body doesn't keep the buffer's extra capacity
+        let body = bytes::Bytes::copy_from_slice(&self.finished_buffer);
+        memory_cache.put(key, Arc::new((self.meta, body)));
 
         tracing::debug!("wrote to memory cache: {:?}", self.path);
         Ok(())

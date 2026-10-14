@@ -110,6 +110,9 @@ fn main() -> Result<(), anyhow::Error> {
             .init();
     }
 
+    // In-memory copy of the disk cache
+    cache::disk::memory::init_memory_cache(proxy_config.cache.memory_limit_mb);
+
     // Initialize global store based on configuration
     match proxy_config.store.store_type {
         config::StoreType::Memory => {

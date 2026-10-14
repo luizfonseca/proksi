@@ -35,6 +35,28 @@ impl Default for StoreConfig {
     }
 }
 
+/// Cache settings shared by all routes
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CacheConfig {
+    /// Maximum size (in MB) of cached responses kept in memory, on top of the disk cache.
+    /// When reached, the least popular responses are only served from disk.
+    /// `0` disables keeping responses in memory.
+    #[serde(default = "default_cache_memory_limit_mb")]
+    pub memory_limit_mb: usize,
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            memory_limit_mb: default_cache_memory_limit_mb(),
+        }
+    }
+}
+
+fn default_cache_memory_limit_mb() -> usize {
+    crate::cache::disk::memory::DEFAULT_MEMORY_LIMIT_MB
+}
+
 /// Default fn for boolean values
 fn bool_true() -> bool {
     true
@@ -581,6 +603,11 @@ pub(crate) struct Config {
     #[clap(skip)]
     pub store: StoreConfig,
 
+    /// Cache configuration (shared by all routes)
+    #[clap(skip)]
+    #[serde(default)]
+    pub cache: CacheConfig,
+
     #[command(flatten)]
     pub server: ServerCfg,
 
@@ -652,6 +679,7 @@ impl Default for Config {
             routes: vec![],
             auto_reload: AutoReload::default(),
             store: StoreConfig::default(),
+            cache: CacheConfig::default(),
             logging: Logging {
                 enabled: true,
                 level: LogLevel::Info,
@@ -1268,6 +1296,25 @@ mod tests {
             let cli = Config::parse_from(["proksi"]);
             let config = load_from_path(&tmp_dir, &cli, false).unwrap();
             assert_eq!(config.worker_threads, Some(3));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_cache_memory_limit() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy().to_string();
+            jail.create_file(format!("{tmp_dir}/proksi.hcl"), r#"service_name = "cache""#)?;
+            let config = load_for_test(&tmp_dir).unwrap();
+            assert_eq!(config.cache.memory_limit_mb, 256);
+
+            jail.create_file(
+                format!("{tmp_dir}/proksi.hcl"),
+                "cache {\n  memory_limit_mb = 32\n}",
+            )?;
+            let config = load_for_test(&tmp_dir).unwrap();
+            assert_eq!(config.cache.memory_limit_mb, 32);
 
             Ok(())
         });
