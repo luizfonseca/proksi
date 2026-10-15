@@ -24,6 +24,14 @@ pub struct StoreConfig {
     #[serde(deserialize_with = "store_type_deser")]
     pub store_type: StoreType,
     pub redis_url: Option<String>,
+
+    /// Connection string for SQL stores (sqlite, postgres)
+    #[serde(default)]
+    pub database_url: Option<String>,
+
+    /// How often (in seconds) routes are synced from the store
+    #[serde(default = "default_sync_interval_secs")]
+    pub sync_interval_secs: u64,
 }
 
 impl Default for StoreConfig {
@@ -31,8 +39,14 @@ impl Default for StoreConfig {
         Self {
             store_type: StoreType::Memory,
             redis_url: None,
+            database_url: None,
+            sync_interval_secs: default_sync_interval_secs(),
         }
     }
+}
+
+fn default_sync_interval_secs() -> u64 {
+    10
 }
 
 /// Cache settings shared by all routes
@@ -1267,6 +1281,32 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    fn test_store_sync_config() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy().to_string();
+            jail.create_file(format!("{tmp_dir}/proksi.hcl"), r#"service_name = "store""#)?;
+            let config = load_for_test(&tmp_dir).unwrap();
+            assert_eq!(config.store.sync_interval_secs, 10);
+            assert_eq!(config.store.database_url, None);
+
+            jail.create_file(
+                format!("{tmp_dir}/proksi.hcl"),
+                r#"
+                store {
+                  store_type = "redis"
+                  redis_url = "redis://localhost:6379"
+                  sync_interval_secs = 30
+                }
+                "#,
+            )?;
+            let config = load_for_test(&tmp_dir).unwrap();
+            assert_eq!(config.store.sync_interval_secs, 30);
+
+            Ok(())
+        });
     }
 
     #[test]

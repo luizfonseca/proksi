@@ -11,6 +11,10 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
         return Err(anyhow!("Worker threads must be greater than 0"));
     }
 
+    if config.store.sync_interval_secs == 0 {
+        return Err(anyhow!("store.sync_interval_secs must be greater than 0"));
+    }
+
     // Validate that the docker interval secs is greater than 0
     if config.docker.interval_secs.is_some_and(|v| v == 0) {
         return Err(anyhow!("docker.interval_secs must be greater than 0"));
@@ -44,6 +48,19 @@ mod tests {
     use crate::routing::test_utils::route;
 
     use super::check_config;
+
+    #[test]
+    fn test_check_config_store_sync_interval() {
+        let mut config = Config::default();
+        config.store.sync_interval_secs = 0;
+
+        let err = check_config(&config).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "store.sync_interval_secs must be greater than 0"
+        );
+    }
 
     #[test]
     fn test_check_config_validates_routes() {

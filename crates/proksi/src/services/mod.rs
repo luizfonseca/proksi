@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use config::FileWatcherService;
@@ -8,8 +8,12 @@ use pingora::server::{ListenFds, ShutdownWatch};
 use tokio::sync::mpsc::Receiver;
 
 use crate::{
-    config::Config,
-    routing::{file_source::file_snapshot, service::RoutingService, RouteSnapshot, SnapshotSender},
+    config::{Config, StoreType},
+    routing::{
+        file_source::file_snapshot, service::RoutingService, store_source::StoreSource,
+        RouteSnapshot, SnapshotSender,
+    },
+    stores,
 };
 
 pub mod config;
@@ -69,7 +73,23 @@ impl pingora::services::Service for BackgroundFunctionService {
         let mut config_server =
             FileWatcherService::new(self.config.clone(), self.route_sender.clone());
 
+        // Routes from the store, shared by every replica
+        let store_source =
+            (!matches!(self.config.store.store_type, StoreType::Memory)).then(|| {
+                StoreSource::new(
+                    stores::global::get_store().clone(),
+                    self.route_sender.clone(),
+                    Duration::from_secs(self.config.store.sync_interval_secs),
+                )
+            });
+        let store_sync = async {
+            if let Some(store_source) = store_source {
+                store_source.run().await;
+            }
+        };
+
         let _ = tokio::join!(
+            store_sync,
             routing_service.start_service(None, shutdown.clone(), _listeners_per_fd),
             health_service.start_service(None, shutdown.clone(), _listeners_per_fd),
             config_server.start_service(None, shutdown.clone(), _listeners_per_fd),

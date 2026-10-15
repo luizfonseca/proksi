@@ -17,6 +17,7 @@ pub struct StoredRoute {
 }
 
 impl StoredRoute {
+    #[allow(dead_code)] // used by the admin API (#49)
     pub fn new(route: Route) -> Self {
         Self {
             schema_version: ROUTE_SCHEMA_VERSION,

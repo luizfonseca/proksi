@@ -24,11 +24,15 @@ This can be used for development and testing purposes.
 
 ### Store keys
 
-The following keys are used by the store to persist `Proksi` configuration data:
+The following keys are used by the Redis store (see [ADR 0001](../adrs/0001-route-sources.md) for routes):
 
 | Key | Description | Content |
 | --- | ----------- | ------- |
-|`proksi:certs:<domain>` | Stores the certificate for a given domain | `{ "key": "...", "leaf": "...", "chain": "..." }` |
-|`proksi:challenges:<domain>` | Stores the challenge for a given domain. (Ttl = 600 seconds) | `<challengeId>` |
-|`proksi:upstream:<host>` | Stores the routing information for a given host that has multiple upstreams | `{ "upstreams": []}` |
-|`proksi:config` | All non routing `proksi` configuration data | `{ "lets_encrypt": {}, "logging": {}}` |
+| `proksi:cert:<domain>` | Certificate for a domain | `{ "key": "...", "leaf": "...", "chain": "..." }` (base64-encoded PEM) |
+| `proksi:challenge:<domain>` | ACME challenge for a domain (TTL: 300 seconds) | `["<token>", "<proof>"]` |
+| `proksi:route:<host>` | Route for a host (lowercase) | `{ "schema_version": 1, "route": { ...same as a route in the configuration file } }` |
+| `proksi:routes` | Set of hosts that have a route | set of `<host>` |
+| `proksi:revision` | Revision of the routes, incremented on every change | integer |
+| `proksi:replica:<id>` | Revision applied by each proksi instance (TTL: 3 sync intervals) | `{ "id": "...", "revision": 1, "applied_at": 1700000000, "version": "...", "hostname": "..." }` |
+
+When changing routes directly in Redis, change `proksi:route:<host>`, `proksi:routes` and `proksi:revision` in a single transaction (`MULTI`/`EXEC`), otherwise replicas won't see the change.

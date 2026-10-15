@@ -18,15 +18,18 @@ pub trait Store: Send + Sync + 'static {
     async fn revision(&self) -> Result<u64, StoreError>;
 
     /// Adds or replaces the route of a host, returning the new revision
+    #[allow(dead_code)] // used by the admin API (#49)
     async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError>;
 
     /// Removes the route of a host, returning the (possibly unchanged) revision
+    #[allow(dead_code)] // used by the admin API (#49)
     async fn delete_route(&self, host: &str) -> Result<u64, StoreError>;
 
     /// Records the revision applied by a replica, expiring after `ttl`
     async fn report_replica(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError>;
 
     /// Replicas that reported recently
+    #[allow(dead_code)] // used by the admin API (#49)
     async fn replicas(&self) -> Result<Vec<ReplicaStatus>, StoreError>;
 
     async fn get_certificate(&self, domain: &str) -> Option<Certificate>;
