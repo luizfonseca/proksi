@@ -10,7 +10,7 @@ use tokio::sync::mpsc::Receiver;
 use crate::{
     config::{Config, StoreType},
     routing::{
-        file_source::file_snapshot, service::RoutingService, store_source::StoreSource,
+        file_source::file_snapshot, service::RoutingService, store_source::{spawn_isolated, StoreSource},
         RouteSnapshot, SnapshotSender,
     },
     stores,
@@ -84,7 +84,9 @@ impl pingora::services::Service for BackgroundFunctionService {
             });
         let store_sync = async {
             if let Some(store_source) = store_source {
-                store_source.run().await;
+                if let Err(err) = spawn_isolated(store_source.run()).await {
+                    tracing::error!("store sync stopped: {err}");
+                }
             }
         };
 

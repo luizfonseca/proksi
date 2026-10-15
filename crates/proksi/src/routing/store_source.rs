@@ -117,6 +117,16 @@ impl StoreSource {
     }
 }
 
+/// Runs a future on its own (blocking) thread. Store backends may block (e.g. waiting for
+/// a connection when redis is down), which must not stall the other background services.
+pub fn spawn_isolated<F>(future: F) -> tokio::task::JoinHandle<()>
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
+    let handle = tokio::runtime::Handle::current();
+    tokio::task::spawn_blocking(move || handle.block_on(future))
+}
+
 fn unix_timestamp() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -252,6 +262,19 @@ mod tests {
             .collect::<Vec<_>>();
         hosts.sort();
         hosts
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_spawn_isolated_doesnt_block_other_tasks() {
+        let start = std::time::Instant::now();
+
+        super::spawn_isolated(async {
+            // A store blocking its thread
+            std::thread::sleep(Duration::from_secs(2));
+        });
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        assert!(start.elapsed() < Duration::from_secs(1), "{:?}", start.elapsed());
     }
 
     #[tokio::test]
