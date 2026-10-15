@@ -27,9 +27,7 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
 };
-use tokio_tungstenite::{
-    tungstenite::Message, Connector, MaybeTlsStream, WebSocketStream,
-};
+use tokio_tungstenite::{tungstenite::Message, Connector, MaybeTlsStream, WebSocketStream};
 
 /// Host that is always routed to the HTTP upstream, used to know when proksi is ready
 const READY_HOST: &str = "ready.test";
@@ -380,7 +378,8 @@ routes = [
     }
 
     pub fn logs(&self) -> String {
-        let read = |name: &str| std::fs::read_to_string(self.dir.path().join(name)).unwrap_or_default();
+        let read =
+            |name: &str| std::fs::read_to_string(self.dir.path().join(name)).unwrap_or_default();
         format!(
             "--- stdout\n{}\n--- stderr\n{}",
             read("stdout.log"),
@@ -479,7 +478,12 @@ impl HttpUpstream {
 
     /// Number of requests the upstream received for the given path (and query)
     pub fn hits(&self, path: &str) -> u32 {
-        self.hits.lock().unwrap().get(path).copied().unwrap_or_default()
+        self.hits
+            .lock()
+            .unwrap()
+            .get(path)
+            .copied()
+            .unwrap_or_default()
     }
 }
 
@@ -543,12 +547,20 @@ async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<Strin
             body.len()
         );
         if path.contains("utf8") {
-            let _ = write!(response, "Content-Disposition: {UTF8_CONTENT_DISPOSITION}\r\n");
+            let _ = write!(
+                response,
+                "Content-Disposition: {UTF8_CONTENT_DISPOSITION}\r\n"
+            );
         }
         response.push_str("\r\n");
         response.push_str(&body);
 
-        if reader.get_mut().write_all(response.as_bytes()).await.is_err() {
+        if reader
+            .get_mut()
+            .write_all(response.as_bytes())
+            .await
+            .is_err()
+        {
             return;
         }
     }
@@ -583,7 +595,10 @@ impl WebSocketUpstream {
     }
 }
 
-async fn handle_websocket_connection(stream: TcpStream, events: Arc<Mutex<HashMap<String, String>>>) {
+async fn handle_websocket_connection(
+    stream: TcpStream,
+    events: Arc<Mutex<HashMap<String, String>>>,
+) {
     let path = Arc::new(Mutex::new(String::new()));
     let request_path = path.clone();
     let accept = tokio_tungstenite::accept_hdr_async(

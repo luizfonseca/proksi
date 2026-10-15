@@ -10,6 +10,8 @@ pub mod global;
 pub mod memory_store;
 pub mod redis_store;
 pub mod routes;
+#[cfg(any(feature = "store-sqlite", feature = "store-postgres"))]
+pub mod sql_store;
 pub mod store_trait;
 pub mod stored_route;
 

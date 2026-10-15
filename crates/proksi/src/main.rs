@@ -102,6 +102,9 @@ fn main() -> Result<(), anyhow::Error> {
             tracing::info!("using Redis store for certificates");
             init_store(redis_store);
         }
+        config::StoreType::Sqlite | config::StoreType::Postgres => {
+            init_sql_store(&proxy_config.store)?;
+        }
     }
 
     // Pingora load balancer server
@@ -182,4 +185,34 @@ fn main() -> Result<(), anyhow::Error> {
     );
 
     pingora_server.run_forever();
+}
+
+/// Connects to the SQL store (sqlite or postgres), if proksi was built with support for it
+fn init_sql_store(store: &config::StoreConfig) -> Result<(), anyhow::Error> {
+    let supported = (store.store_type == config::StoreType::Sqlite
+        && cfg!(feature = "store-sqlite"))
+        || (store.store_type == config::StoreType::Postgres && cfg!(feature = "store-postgres"));
+    if !supported {
+        return Err(anyhow::anyhow!(
+            "proksi was built without support for the {:?} store (cargo feature store-{})",
+            store.store_type,
+            format!("{:?}", store.store_type).to_lowercase()
+        ));
+    }
+
+    #[cfg(any(feature = "store-sqlite", feature = "store-postgres"))]
+    {
+        let database_url = store.database_url.as_deref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "store.database_url is required for the {:?} store",
+                store.store_type
+            )
+        })?;
+        let sql_store = stores::sql_store::SqlStore::connect(database_url)
+            .map_err(|err| anyhow::anyhow!("Failed to initialize the SQL store: {err}"))?;
+        tracing::info!("using {:?} store", store.store_type);
+        init_store(sql_store);
+    }
+
+    Ok(())
 }

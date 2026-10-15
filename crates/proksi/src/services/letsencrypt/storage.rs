@@ -51,7 +51,10 @@ impl CertificatePersist {
                     .unwrap_or("redis://localhost:6379");
                 Ok(PersistType::Redis(RedisPersist::new(url)?))
             }
-            crate::config::StoreType::Memory => {
+            // ACME account data is kept on disk for SQL stores (certificates are in the store)
+            crate::config::StoreType::Memory
+            | crate::config::StoreType::Sqlite
+            | crate::config::StoreType::Postgres => {
                 // Get directory based on whether we are running on staging/production
                 // LetsEncrypt configurations
                 let certificates_dir = self.get_lets_encrypt_directory();

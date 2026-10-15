@@ -21,8 +21,22 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 5
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: proksi
+          POSTGRES_PASSWORD: proksi
+          POSTGRES_DB: proksi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U proksi"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
     env:
       PROKSI_TEST_REDIS_URL: redis://127.0.0.1:6379
+      PROKSI_TEST_POSTGRES_URL: postgres://proksi:proksi@127.0.0.1:5432/proksi
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1

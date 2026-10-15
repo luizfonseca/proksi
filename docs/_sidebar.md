@@ -22,6 +22,7 @@
 * [Auto Reload](configuration/auto-reload.md)
 * [Daemon](configuration/daemon.md)
 * [Redis](configuration/redis.md)
+* [SQLite / Postgres](configuration/sql.md)
 
 ## Routing
 

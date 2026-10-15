@@ -270,7 +270,11 @@ mod tests {
         });
         tokio::time::sleep(Duration::from_millis(10)).await;
 
-        assert!(start.elapsed() < Duration::from_secs(1), "{:?}", start.elapsed());
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "{:?}",
+            start.elapsed()
+        );
     }
 
     #[tokio::test]

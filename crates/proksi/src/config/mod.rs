@@ -13,10 +13,12 @@ use tracing::level_filters::LevelFilter;
 mod hcl;
 pub mod validate;
 
-#[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ValueEnum)]
 pub enum StoreType {
     Memory,
     Redis,
+    Sqlite,
+    Postgres,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -959,7 +961,11 @@ where
     match s.to_lowercase().as_str() {
         "memory" => Ok(StoreType::Memory),
         "redis" => Ok(StoreType::Redis),
-        _ => Err(serde::de::Error::custom("expected one of: memory, redis")),
+        "sqlite" => Ok(StoreType::Sqlite),
+        "postgres" => Ok(StoreType::Postgres),
+        _ => Err(serde::de::Error::custom(
+            "expected one of: memory, redis, sqlite, postgres",
+        )),
     }
 }
 
@@ -1305,6 +1311,28 @@ mod tests {
             let config = load_for_test(&tmp_dir).unwrap();
             assert_eq!(config.store.sync_interval_secs, 30);
 
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_sql_store_types() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy().to_string();
+            for (store_type, expected) in [
+                ("sqlite", StoreType::Sqlite),
+                ("Postgres", StoreType::Postgres),
+            ] {
+                jail.create_file(
+                    format!("{tmp_dir}/proksi.hcl"),
+                    &format!(
+                        "store {{\n  store_type = \"{store_type}\"\n  database_url = \"db://url\"\n}}"
+                    ),
+                )?;
+                let config = load_for_test(&tmp_dir).unwrap();
+                assert_eq!(config.store.store_type, expected);
+                assert_eq!(config.store.database_url.as_deref(), Some("db://url"));
+            }
             Ok(())
         });
     }

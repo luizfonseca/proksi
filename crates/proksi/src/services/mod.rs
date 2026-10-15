@@ -10,7 +10,9 @@ use tokio::sync::mpsc::Receiver;
 use crate::{
     config::{Config, StoreType},
     routing::{
-        file_source::file_snapshot, service::RoutingService, store_source::{spawn_isolated, StoreSource},
+        file_source::file_snapshot,
+        service::RoutingService,
+        store_source::{spawn_isolated, StoreSource},
         RouteSnapshot, SnapshotSender,
     },
     stores,
