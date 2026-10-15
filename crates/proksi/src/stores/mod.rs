@@ -11,6 +11,10 @@ pub mod memory_store;
 pub mod redis_store;
 pub mod routes;
 pub mod store_trait;
+pub mod stored_route;
+
+#[cfg(test)]
+pub(crate) mod contract_tests;
 
 // Re-export stores
 pub use memory_store::MemoryStore;

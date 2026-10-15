@@ -2,10 +2,11 @@ use async_trait::async_trait;
 use papaya::HashMapRef;
 use redis::{Client, Commands};
 use serde_json;
-use std::{error::Error, hash::RandomState};
+use std::{error::Error, hash::RandomState, time::Duration};
 
 use super::certificates::{Certificate, SerializableCertificate};
 use super::store_trait::Store;
+use super::stored_route::{ReplicaStatus, RoutesSnapshot, StoreError, StoredRoute};
 
 const CHALLENGE_TTL_SECONDS: u64 = 300;
 
@@ -66,6 +67,34 @@ impl RedisStore {
 
 #[async_trait]
 impl Store for RedisStore {
+    async fn routes(&self) -> Result<RoutesSnapshot, StoreError> {
+        Err(StoreError::Unavailable("not implemented".to_string()))
+    }
+
+    async fn revision(&self) -> Result<u64, StoreError> {
+        Err(StoreError::Unavailable("not implemented".to_string()))
+    }
+
+    async fn put_route(&self, _route: StoredRoute) -> Result<u64, StoreError> {
+        Err(StoreError::Unavailable("not implemented".to_string()))
+    }
+
+    async fn delete_route(&self, _host: &str) -> Result<u64, StoreError> {
+        Err(StoreError::Unavailable("not implemented".to_string()))
+    }
+
+    async fn report_replica(
+        &self,
+        _status: ReplicaStatus,
+        _ttl: Duration,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Unavailable("not implemented".to_string()))
+    }
+
+    async fn replicas(&self) -> Result<Vec<ReplicaStatus>, StoreError> {
+        Err(StoreError::Unavailable("not implemented".to_string()))
+    }
+
     async fn get_certificate(&self, domain: &str) -> Option<Certificate> {
         // Check cache first
         if let Some(cert) = self.cache.pin().get(domain) {
