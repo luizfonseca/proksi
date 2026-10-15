@@ -94,6 +94,18 @@ impl EventHandler for FileWatcherServiceHandler {
     }
 }
 
+/// Watcher for configuration files, polled manually.
+/// Contents are compared too: modification times are only compared to the second, so
+/// changes made within the same second would be missed otherwise.
+fn config_watcher<H: EventHandler>(handler: H) -> notify::Result<notify::poll::PollWatcher> {
+    notify::poll::PollWatcher::new(
+        handler,
+        notify::Config::default()
+            .with_manual_polling()
+            .with_compare_contents(true),
+    )
+}
+
 /// Restarts proksi with the same arguments
 fn restart() {
     let Ok(cmd) = std::env::current_exe() else {
@@ -145,10 +157,7 @@ impl Service for FileWatcherService {
                 config_path: config_path.to_string(),
                 sender: self.sender.clone(),
             };
-            let Ok(mut watcher) = notify::poll::PollWatcher::new(
-                handler,
-                notify::Config::default().with_manual_polling(),
-            ) else {
+            let Ok(mut watcher) = config_watcher(handler) else {
                 tracing::error!("could not create config watcher, auto_reload will not work");
                 return;
             };
@@ -184,5 +193,43 @@ impl Service for FileWatcherService {
 
     fn threads(&self) -> Option<usize> {
         Some(1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::mpsc, time::Duration};
+
+    use notify::Watcher;
+
+    use super::config_watcher;
+
+    #[test]
+    fn test_config_watcher_detects_changes_within_the_same_second() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("proksi.hcl");
+        std::fs::write(&path, "host = \"a.test\"").unwrap();
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+
+        let (sender, receiver) = mpsc::channel();
+        let mut watcher = config_watcher(move |event: notify::Result<notify::Event>| {
+            sender.send(event.is_ok()).ok();
+        })
+        .unwrap();
+        watcher
+            .watch(&path, notify::RecursiveMode::Recursive)
+            .unwrap();
+
+        // Same size, and the same modification time (as when written within the same second)
+        std::fs::write(&path, "host = \"b.test\"").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+        watcher.poll().unwrap();
+
+        assert_eq!(receiver.recv_timeout(Duration::from_secs(2)), Ok(true));
     }
 }
