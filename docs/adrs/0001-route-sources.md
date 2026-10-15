@@ -1,0 +1,148 @@
+# ADR 0001: Route sources and store-backed routes
+
+- Status: accepted
+- Date: 2026-10-15
+- Related: [#49](https://github.com/luizfonseca/proksi/issues/49) (admin API/UI), [#243](https://github.com/luizfonseca/proksi/issues/243) (distributed configuration), [#381](https://github.com/luizfonseca/proksi/issues/381) (Kubernetes ingress), [#309](https://github.com/luizfonseca/proksi/pull/309) (upstreams from store)
+
+## Context
+
+Routes can come from the configuration file and from docker labels. Both send `NewRoute` messages over a broadcast channel to the discovery service, which inserts them into the in-memory route table (`ROUTE_STORE`) used by the request path.
+
+This has a few limits that block the next features:
+
+- Routes are only ever added or replaced, never removed. A route deleted from its source stays live until proksi restarts.
+- There is no notion of where a route came from, so two sources defining the same host silently overwrite each other.
+- The `Store` trait (memory, redis) only covers certificates and ACME challenges. Routes can't be stored, so replicas can't share them (#243), and there's nothing for an admin API to write to (#49).
+- `auto_reload` restarts the whole process on any change to the configuration file, and an invalid file takes proksi down.
+- Missed broadcast messages lose routes (fixed in #371, but the event model is fragile by nature).
+
+Upcoming work needs routes from more places: the store (written by an admin API) and Kubernetes. Each of these is a different _source_ of routes, and they need to coexist with the configuration file without clashing.
+
+## Decision
+
+### Route sources and the reconciler
+
+Every place routes come from is a **route source**: the configuration file, docker labels, the store, and (later) Kubernetes. A source is a long-running task that sends its **complete** list of routes (a `RouteSnapshot`) whenever it changes.
+
+A single **reconciler** keeps the latest snapshot of each source and merges them into the route table:
+
+```
+ config file ─┐
+ docker ──────┤   RouteSnapshot { source, routes }    ┌────────────┐   diff    ┌──────────────┐
+ store ───────┼──────────────────────────────────────▶│ Reconciler │─────────▶│ ROUTE_STORE  │──▶ request path
+ kubernetes ──┘   (full list, sent on every change)   └────────────┘ add/update└──────────────┘
+                                                            │        /remove
+                                                            ▼
+                                                   conflicts + status
+```
+
+- The merge is a pure function: `merge(snapshots) -> (effective routes, conflicts)`. The reconciler diffs the result against the route table and adds, updates or removes routes. A route is only rebuilt when its definition changed, so its health check state is kept otherwise.
+- The reconciler is the only writer of `ROUTE_STORE`. The health check no longer writes routes back.
+- The reconciler keeps a status (routes per source, the winner for each host, conflicts, applied store revision) for logs, metrics and the admin API.
+- This replaces the `MsgProxy::NewRoute` broadcast and `add_route_to_router`.
+
+Snapshots (instead of add/remove events) make the system self-healing: a missed update is corrected by the next snapshot, and the merge can be tested without any I/O.
+
+### Conflicts
+
+Routes are identified by host. When several sources define the same host, the source with the highest priority wins:
+
+```
+store > kubernetes > docker > file
+```
+
+The conflict is logged and reported in the status. When the winning route is removed, the next source's route for that host takes over.
+
+### Removing routes
+
+A route is removed only when its **definition** is removed: deleted from the file, from the store, or (later) its Kubernetes `Ingress` deleted. A missing or unhealthy upstream is not a reason to remove a route; it's served as a `503`.
+
+For docker, the container labels are the definition, so a stopped or removed container doesn't remove its route: the docker source keeps the last known definition and the route keeps answering `503` (as before this change). These routes are reported as having no upstreams. They're replaced when a container provides the same host again, and are otherwise kept until proksi restarts; the admin API (#49) will be able to remove them.
+
+### Routes in the store
+
+The existing `Store` trait gets route methods, so every backend (memory, redis, sqlite, postgres) stores certificates, challenges and routes:
+
+```rust
+async fn routes(&self) -> Result<RoutesSnapshot, StoreError>; // { revision, routes }
+async fn revision(&self) -> Result<u64, StoreError>;
+async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError>; // new revision
+async fn delete_route(&self, host: &str) -> Result<u64, StoreError>;      // new revision
+async fn report_replica(&self, status: ReplicaStatus) -> Result<(), StoreError>;
+async fn replicas(&self) -> Result<Vec<ReplicaStatus>, StoreError>;
+```
+
+- Each route is one JSON document per host, using the same format as a route in the configuration file: `StoredRoute { schema_version, route }`.
+- Every write changes the route and increments a store-wide **revision** atomically.
+- **Schema versioning**: older `schema_version`s are upgraded when read. A route with a newer (unknown) version, or invalid data, is skipped and reported, without affecting other routes. This keeps replicas on different proksi versions safe during rolling upgrades.
+
+Backends:
+
+| Backend | Routes | Revision | Replicas |
+| --- | --- | --- | --- |
+| memory | in-process (lost on restart) | counter | in-process |
+| redis | `proksi:route:<host>` + set `proksi:routes` | `proksi:revision` (`INCR`) | `proksi:replica:<id>` with a TTL |
+| sqlite / postgres | table `proksi_routes(host, schema_version, data, updated_at)` | row in `proksi_meta` | table `proksi_replicas` |
+
+- Redis writes use `MULTI`/`EXEC`; SQL writes use a transaction.
+- SQLite and Postgres are optional (cargo features `store-sqlite` and `store-postgres`, using `sqlx`), with embedded migrations run at startup. They also store certificates and challenges.
+- Listing hosts uses the `proksi:routes` set instead of `KEYS`; listing certificates uses `SCAN` instead of `KEYS` (no migration needed for existing data).
+
+### Syncing replicas
+
+Replicas don't read the store in the request path. The **store source** polls the store's revision every `store.sync_interval_secs` (default 10 seconds) and loads all routes when it changes. Polling works the same for every backend; push notifications (redis pub/sub, postgres `LISTEN/NOTIFY`) can be added later if the delay matters.
+
+After applying a revision, each replica reports `{ id, revision, applied_at, version, hostname }` (heartbeat), which expires after 3 sync intervals. The admin API will expose the store revision and each replica's revision, so a change can be confirmed as applied everywhere. Each replica also reports the revision it applied in its own status.
+
+If the store can't be reached, the last applied routes are kept and the error is reported. A store outage never removes routes.
+
+### Configuration and routes are separate
+
+- Process configuration (listeners, logging, Let's Encrypt, store, workers, cache) stays in `Config` and is read at startup.
+- Routes come from sources. `routes = [...]` in the configuration file keeps working; it's the input of the file source. Routes from the store never become part of `Config`.
+- Storing the process configuration itself in the store (the `proksi:config` key mentioned in the specification) is not part of this decision.
+
+```hcl
+store {
+  store_type         = "redis" # memory | redis | sqlite | postgres
+  redis_url          = "redis://..."
+  database_url       = "..."   # sqlite / postgres
+  sync_interval_secs = 10
+}
+```
+
+The store source runs when the store isn't `memory`. A store without routes doesn't change anything.
+
+### Configuration file reloads
+
+With `auto_reload` enabled, a change to the configuration file is parsed and validated first:
+
+- invalid: the change is rejected, the current routes stay, and the error is logged;
+- only `routes` changed: the new routes are applied without restarting;
+- other settings changed: proksi restarts (as before).
+
+YAML configuration files are watched as well (only HCL was before).
+
+### Validation
+
+Route validation (upstream address and port, headers, plugins) is one function used by every source (and the admin API). An invalid route is skipped and reported; the rest of its source's routes are still applied. Certificates referenced by a route (`ssl.path`) are loaded when the route is added or changed, not only at startup.
+
+## Consequences
+
+- Routes are removed when their definition is removed, and sources can't silently override each other.
+- Replicas can share routes through redis, sqlite or postgres, and an admin API (#49) can be built on top of the store.
+- Kubernetes (#381) becomes another route source, without changes to the reconciler.
+- Route changes in the configuration file no longer restart proksi, and an invalid file no longer stops it.
+- Changes in the store take up to `sync_interval_secs` to reach replicas, and replicas can briefly serve different revisions (visible through the replica heartbeats).
+- Behavior changes: YAML files are now watched by `auto_reload`; route-only changes are applied without restarting.
+
+### Testing
+
+- `merge` is tested as a pure function (priorities, conflicts, removals, fallback to the next source).
+- Every store backend runs the same contract tests (routes, revisions, schema versions, replicas). Memory and sqlite always run; redis and postgres run when `PROKSI_TEST_REDIS_URL` / `PROKSI_TEST_POSTGRES_URL` are set, which CI does with service containers.
+- End-to-end tests (`crates/proksi/tests/e2e.rs`) cover route changes in the configuration file without a restart, invalid reloads, routes added and removed through the store, and conflicts between the file and the store.
+
+### Not part of this decision
+
+- The admin API and UI (#49) and the Kubernetes ingress controller (#381) get their own ADRs.
+- Process configuration in the store, push notifications, and coordinating certificate renewals between replicas.
