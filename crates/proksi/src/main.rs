@@ -107,22 +107,25 @@ fn main() -> Result<(), anyhow::Error> {
     let mut pingora_server = Server::new(Some(pingora_opts))?;
     pingora_server.bootstrap();
 
-    // Service: HTTP Load Balancer (only used by acme-challenges)
-    // As we don't necessarily need an upstream to handle the acme-challenges,
-    // we can use a simple mock LoadBalancer
+    // Service: HTTP port (hosts without TLS, ACME challenges and redirects to HTTPS)
     let mut http_public_service = http_proxy_service(
         &pingora_server.configuration,
-        proxy_server::http_proxy::HttpLB {},
+        proxy_server::https_proxy::Router {
+            listener: proxy_server::listener::Listener::Http,
+        },
     );
 
     // Service: HTTPS Load Balancer (main service)
     // The router will also handle health checks and failover in case of upstream failure
-    let router = proxy_server::https_proxy::Router {};
+    let router = proxy_server::https_proxy::Router {
+        listener: proxy_server::listener::Listener::Https,
+    };
     let mut https_secure_service = http_proxy_service(&pingora_server.configuration, router);
     http_public_service.add_tcp(&le_address);
 
-    // Worker threads per configuration
+    // Worker threads per configuration (the HTTP port also serves hosts without TLS)
     https_secure_service.threads = proxy_config.worker_threads;
+    http_public_service.threads = proxy_config.worker_threads;
 
     // Setup tls settings and Enable HTTP/2
     let cert_store = CertStore::new();

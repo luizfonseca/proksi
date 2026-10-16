@@ -8,6 +8,7 @@ use pingora::{
 pub mod cert_store;
 pub mod http_proxy;
 pub mod https_proxy;
+pub mod listener;
 pub mod middleware;
 
 /// Default peer options to be used on every upstream connection
