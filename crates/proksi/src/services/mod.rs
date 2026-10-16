@@ -92,8 +92,16 @@ impl pingora::services::Service for BackgroundFunctionService {
             }
         };
 
+        // Certificate expiry metrics, from the store
+        let certificate_metrics = async {
+            if let Err(err) = spawn_isolated(certificate_metrics()).await {
+                tracing::error!("certificate metrics stopped: {err}");
+            }
+        };
+
         let _ = tokio::join!(
             store_sync,
+            certificate_metrics,
             routing_service.start_service(None, shutdown.clone(), _listeners_per_fd),
             health_service.start_service(None, shutdown.clone(), _listeners_per_fd),
             config_server.start_service(None, shutdown.clone(), _listeners_per_fd),
@@ -108,5 +116,26 @@ impl pingora::services::Service for BackgroundFunctionService {
 
     fn threads(&self) -> Option<usize> {
         Some(1)
+    }
+}
+
+/// Keeps `proksi_certificate_expiry_timestamp_seconds` up to date
+async fn certificate_metrics() {
+    // Once hosts (and their certificates) had time to load, then every minute
+    let mut interval = tokio::time::interval_at(
+        tokio::time::Instant::now() + Duration::from_secs(5),
+        Duration::from_secs(60),
+    );
+    loop {
+        interval.tick().await;
+        let expiry = stores::global::get_store()
+            .get_certificates()
+            .await
+            .iter()
+            .filter_map(|(domain, certificate)| {
+                crate::metrics::expiry_timestamp(certificate).map(|expiry| (domain.clone(), expiry))
+            })
+            .collect::<Vec<_>>();
+        crate::metrics::set_certificates(&expiry);
     }
 }
