@@ -13,10 +13,12 @@ use tracing::level_filters::LevelFilter;
 mod hcl;
 pub mod validate;
 
-#[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ValueEnum)]
 pub enum StoreType {
     Memory,
     Redis,
+    Sqlite,
+    Postgres,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -24,6 +26,14 @@ pub struct StoreConfig {
     #[serde(deserialize_with = "store_type_deser")]
     pub store_type: StoreType,
     pub redis_url: Option<String>,
+
+    /// Connection string for SQL stores (sqlite, postgres)
+    #[serde(default)]
+    pub database_url: Option<String>,
+
+    /// How often (in seconds) routes are synced from the store
+    #[serde(default = "default_sync_interval_secs")]
+    pub sync_interval_secs: u64,
 }
 
 impl Default for StoreConfig {
@@ -31,8 +41,14 @@ impl Default for StoreConfig {
         Self {
             store_type: StoreType::Memory,
             redis_url: None,
+            database_url: None,
+            sync_interval_secs: default_sync_interval_secs(),
         }
     }
+}
+
+fn default_sync_interval_secs() -> u64 {
+    10
 }
 
 /// Cache settings shared by all routes
@@ -945,7 +961,11 @@ where
     match s.to_lowercase().as_str() {
         "memory" => Ok(StoreType::Memory),
         "redis" => Ok(StoreType::Redis),
-        _ => Err(serde::de::Error::custom("expected one of: memory, redis")),
+        "sqlite" => Ok(StoreType::Sqlite),
+        "postgres" => Ok(StoreType::Postgres),
+        _ => Err(serde::de::Error::custom(
+            "expected one of: memory, redis, sqlite, postgres",
+        )),
     }
 }
 
@@ -1267,6 +1287,54 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    fn test_store_sync_config() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy().to_string();
+            jail.create_file(format!("{tmp_dir}/proksi.hcl"), r#"service_name = "store""#)?;
+            let config = load_for_test(&tmp_dir).unwrap();
+            assert_eq!(config.store.sync_interval_secs, 10);
+            assert_eq!(config.store.database_url, None);
+
+            jail.create_file(
+                format!("{tmp_dir}/proksi.hcl"),
+                r#"
+                store {
+                  store_type = "redis"
+                  redis_url = "redis://localhost:6379"
+                  sync_interval_secs = 30
+                }
+                "#,
+            )?;
+            let config = load_for_test(&tmp_dir).unwrap();
+            assert_eq!(config.store.sync_interval_secs, 30);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_sql_store_types() {
+        figment::Jail::expect_with(|jail| {
+            let tmp_dir = jail.directory().to_string_lossy().to_string();
+            for (store_type, expected) in [
+                ("sqlite", StoreType::Sqlite),
+                ("Postgres", StoreType::Postgres),
+            ] {
+                jail.create_file(
+                    format!("{tmp_dir}/proksi.hcl"),
+                    &format!(
+                        "store {{\n  store_type = \"{store_type}\"\n  database_url = \"db://url\"\n}}"
+                    ),
+                )?;
+                let config = load_for_test(&tmp_dir).unwrap();
+                assert_eq!(config.store.store_type, expected);
+                assert_eq!(config.store.database_url.as_deref(), Some("db://url"));
+            }
+            Ok(())
+        });
     }
 
     #[test]

@@ -43,8 +43,10 @@ async fn test_host_header_is_case_insensitive() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_unmatched_path_returns_404_and_unknown_host_is_rejected() {
-    let mut proksi =
-        Harness::start(vec![Route::new("app.test", Upstream::Http).paths(&["/api/*"])]).await;
+    let mut proksi = Harness::start(vec![
+        Route::new("app.test", Upstream::Http).paths(&["/api/*"])
+    ])
+    .await;
 
     let res = proksi.get("app.test", "/api/users").await.unwrap();
     assert_eq!(res.status, 200);
@@ -121,11 +123,10 @@ async fn test_disk_cache_keeps_non_ascii_headers() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_upstream_with_hostname() {
-    let mut proksi =
-        Harness::start(vec![
-            Route::new("app.test", Upstream::Http).upstream_ip("localhost")
-        ])
-        .await;
+    let mut proksi = Harness::start(vec![
+        Route::new("app.test", Upstream::Http).upstream_ip("localhost")
+    ])
+    .await;
 
     // `localhost` may also resolve to ::1, where the upstream isn't listening,
     // so only check that a request eventually succeeds
@@ -161,10 +162,9 @@ async fn test_many_concurrent_websockets() {
     .await;
 
     // Open every connection at once and keep them all open
-    let sockets = join_all(
-        (0..CONNECTIONS).map(|i| proksi.websocket("ws.test", format!("/ws?id={i}"))),
-    )
-    .await;
+    let sockets =
+        join_all((0..CONNECTIONS).map(|i| proksi.websocket("ws.test", format!("/ws?id={i}"))))
+            .await;
     let (mut sockets, errors): (Vec<_>, Vec<_>) = sockets.into_iter().partition(Result::is_ok);
     assert!(
         errors.is_empty(),
@@ -226,7 +226,10 @@ async fn test_config_reload_applies_route_changes() {
     assert_eq!(proksi.wait_for("a.test", "/", 404).await, Some(404));
     // Applied without restarting
     assert_eq!(
-        proksi.logs().matches("starting config watcher service").count(),
+        proksi
+            .logs()
+            .matches("starting config watcher service")
+            .count(),
         1
     );
     proksi.assert_healthy();
@@ -242,9 +245,146 @@ async fn test_invalid_config_reload_keeps_routes() {
 
     assert_eq!(proksi.get("a.test", "/").await.unwrap().status, 200);
     assert!(
-        proksi.logs().contains("is invalid, keeping the current configuration"),
+        proksi
+            .logs()
+            .contains("is invalid, keeping the current configuration"),
         "{}",
         proksi.logs()
     );
+    proksi.assert_healthy();
+}
+
+/// Redis set in `PROKSI_TEST_REDIS_URL` (e.g. `redis://127.0.0.1:6379`) with a dedicated,
+/// emptied database. `None` when it's not set.
+fn test_redis(db: u8) -> Option<(String, redis::Connection)> {
+    let Ok(url) = std::env::var("PROKSI_TEST_REDIS_URL") else {
+        eprintln!("PROKSI_TEST_REDIS_URL not set, skipping redis test");
+        return None;
+    };
+    let url = format!("{}/{db}", url.trim_end_matches('/'));
+    let mut conn = redis::Client::open(url.as_str())
+        .unwrap()
+        .get_connection()
+        .unwrap();
+    let _: () = redis::cmd("FLUSHDB").query(&mut conn).unwrap();
+    Some((url, conn))
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_store_routes_override_file_routes() {
+    use redis::Commands;
+
+    let Some((redis_url, mut redis)) = test_redis(11) else {
+        return;
+    };
+    let mut proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        &format!(
+            "store {{\n  store_type = \"redis\"\n  redis_url = \"{redis_url}\"\n  sync_interval_secs = 1\n}}"
+        ),
+    )
+    .await;
+    assert_eq!(proksi.get("app.test", "/other").await.unwrap().status, 200);
+
+    // A route for the same host in the store, only matching /store/*
+    let stored = serde_json::json!({
+        "schema_version": 1,
+        "route": {
+            "host": "app.test",
+            "upstreams": [{ "ip": "127.0.0.1", "port": proksi.http_upstream.port }],
+            "match_with": { "path": { "patterns": ["/store/*"] } },
+        },
+    });
+    let _: () = redis::pipe()
+        .atomic()
+        .set("proksi:route:app.test", stored.to_string())
+        .sadd("proksi:routes", "app.test")
+        .incr("proksi:revision", 1)
+        .query(&mut redis)
+        .unwrap();
+
+    assert_eq!(proksi.wait_for("app.test", "/other", 404).await, Some(404));
+    assert_eq!(
+        proksi.get("app.test", "/store/x").await.unwrap().status,
+        200
+    );
+
+    // Every replica reports the revision it applied
+    let replicas: Vec<String> = redis.keys("proksi:replica:*").unwrap();
+    assert_eq!(replicas.len(), 1);
+    let replica: serde_json::Value =
+        serde_json::from_str(&redis.get::<_, String>(&replicas[0]).unwrap()).unwrap();
+    assert_eq!(replica["revision"], 1);
+
+    // Removing it from the store falls back to the configuration file's route
+    let _: () = redis::pipe()
+        .atomic()
+        .del("proksi:route:app.test")
+        .srem("proksi:routes", "app.test")
+        .incr("proksi:revision", 1)
+        .query(&mut redis)
+        .unwrap();
+    assert_eq!(proksi.wait_for("app.test", "/other", 200).await, Some(200));
+
+    proksi.assert_healthy();
+}
+
+#[cfg(feature = "store-sqlite")]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_sqlite_store_routes() {
+    let db_dir = tempfile::tempdir().unwrap();
+    let db_path = db_dir.path().join("proksi.db");
+    let mut proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        &format!(
+            "store {{\n  store_type = \"sqlite\"\n  database_url = \"sqlite://{}?mode=rwc\"\n  sync_interval_secs = 1\n}}",
+            db_path.to_string_lossy()
+        ),
+    )
+    .await;
+    assert_eq!(proksi.get("app.test", "/other").await.unwrap().status, 200);
+
+    // Tables are created by proksi on startup
+    let db = sqlx::SqlitePool::connect(&format!("sqlite://{}", db_path.to_string_lossy()))
+        .await
+        .unwrap();
+    let stored = serde_json::json!({
+        "schema_version": 1,
+        "route": {
+            "host": "app.test",
+            "upstreams": [{ "ip": "127.0.0.1", "port": proksi.http_upstream.port }],
+            "match_with": { "path": { "patterns": ["/store/*"] } },
+        },
+    });
+    let mut tx = db.begin().await.unwrap();
+    sqlx::query("INSERT INTO proksi_routes (host, schema_version, data, updated_at) VALUES ('app.test', 1, ?, 0)")
+        .bind(stored.to_string())
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE proksi_meta SET value = value + 1 WHERE key = 'revision'")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    assert_eq!(proksi.wait_for("app.test", "/other", 404).await, Some(404));
+    assert_eq!(
+        proksi.get("app.test", "/store/x").await.unwrap().status,
+        200
+    );
+
+    let mut tx = db.begin().await.unwrap();
+    sqlx::query("DELETE FROM proksi_routes WHERE host = 'app.test'")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE proksi_meta SET value = value + 1 WHERE key = 'revision'")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    assert_eq!(proksi.wait_for("app.test", "/other", 200).await, Some(200));
     proksi.assert_healthy();
 }

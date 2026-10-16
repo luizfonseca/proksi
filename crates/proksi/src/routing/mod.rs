@@ -11,6 +11,7 @@ pub mod file_source;
 pub mod merge;
 pub mod reconciler;
 pub mod service;
+pub mod store_source;
 pub mod validate;
 
 /// Where a route comes from. The order is the priority when several sources

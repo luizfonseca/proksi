@@ -1,15 +1,33 @@
 use async_trait::async_trait;
 use papaya::HashMapRef;
-use std::{error::Error, hash::RandomState};
+use std::{
+    collections::{BTreeMap, HashMap},
+    error::Error,
+    hash::RandomState,
+    sync::{Mutex, MutexGuard, PoisonError},
+    time::{Duration, Instant},
+};
 
 use super::certificates::Certificate;
 use super::store_trait::Store;
+use super::stored_route::{
+    check_schema_version, ReplicaStatus, RoutesSnapshot, StoreError, StoredRoute,
+};
 
 pub struct MemoryStore {
     /// Map of domain names to certificates (including leaf & chain)
     inner_certs: papaya::HashMap<String, Certificate>,
     /// Map of domain names to challenge tokens and proofs (token, proof)
     inner_challenges: papaya::HashMap<String, (String, String)>,
+    /// Routes, their revision and replicas (changed together)
+    route_data: Mutex<MemoryRoutes>,
+}
+
+#[derive(Default)]
+struct MemoryRoutes {
+    revision: u64,
+    routes: BTreeMap<String, StoredRoute>,
+    replicas: HashMap<String, (ReplicaStatus, Instant)>,
 }
 
 impl MemoryStore {
@@ -17,12 +35,73 @@ impl MemoryStore {
         MemoryStore {
             inner_certs: papaya::HashMap::new(),
             inner_challenges: papaya::HashMap::new(),
+            route_data: Mutex::new(MemoryRoutes::default()),
         }
+    }
+
+    fn routes(&self) -> MutexGuard<'_, MemoryRoutes> {
+        // The data is still consistent if a thread panicked while holding the lock
+        self.route_data
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 }
 
 #[async_trait]
 impl Store for MemoryStore {
+    async fn routes(&self) -> Result<RoutesSnapshot, StoreError> {
+        let routes = self.routes();
+        Ok(RoutesSnapshot {
+            revision: routes.revision,
+            routes: routes
+                .routes
+                .values()
+                .cloned()
+                .map(check_schema_version)
+                .collect(),
+        })
+    }
+
+    async fn revision(&self) -> Result<u64, StoreError> {
+        Ok(self.routes().revision)
+    }
+
+    async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError> {
+        let mut routes = self.routes();
+        routes.routes.insert(route.host(), route);
+        routes.revision += 1;
+        Ok(routes.revision)
+    }
+
+    async fn delete_route(&self, host: &str) -> Result<u64, StoreError> {
+        let mut routes = self.routes();
+        if routes.routes.remove(&host.to_lowercase()).is_some() {
+            routes.revision += 1;
+        }
+        Ok(routes.revision)
+    }
+
+    async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
+        let mut routes = self.routes();
+        routes
+            .replicas
+            .insert(status.id.clone(), (status, Instant::now() + ttl));
+        Ok(())
+    }
+
+    async fn replicas(&self) -> Result<Vec<ReplicaStatus>, StoreError> {
+        let mut routes = self.routes();
+        let now = Instant::now();
+        routes
+            .replicas
+            .retain(|_, (_, expires_at)| *expires_at > now);
+        Ok(routes
+            .replicas
+            .values()
+            .map(|(status, _)| status.clone())
+            .collect())
+    }
+
     async fn get_certificate(&self, host: &str) -> Option<Certificate> {
         self.inner_certs.pin().get(host).cloned()
     }
@@ -100,6 +179,16 @@ mod tests {
             leaf: cert,
             chain: None,
         }
+    }
+
+    #[tokio::test]
+    async fn test_routes_contract() {
+        crate::stores::contract_tests::routes_contract(&MemoryStore::new()).await;
+    }
+
+    #[tokio::test]
+    async fn test_replicas_contract() {
+        crate::stores::contract_tests::replicas_contract(&MemoryStore::new()).await;
     }
 
     #[tokio::test]
