@@ -484,6 +484,14 @@ async fn test_hosts_without_tls_are_served_on_the_http_port() {
     assert!(res.to_lowercase().contains("x-host: plain"), "{res}");
     assert!(res.contains("\"path\":\"/hello\""), "{res}");
 
+    // Hosts without TLS get no certificates, so ACME paths go to the upstream too
+    let res = proksi
+        .get_http_port("plain.test", "/.well-known/acme-challenge/token")
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.to_lowercase().contains("x-host: plain"), "{res}");
+
     // Any other name is served by `host "*"`
     let res = proksi.get_http_port("other.test", "/").await.unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");

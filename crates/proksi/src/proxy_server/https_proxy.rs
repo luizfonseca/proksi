@@ -109,16 +109,19 @@ impl ProxyHttp for Router {
             if req_host.is_empty() {
                 return Err(pingora::Error::new(HTTPStatus(400)));
             }
-            if http_proxy::serve_ping(session).await?
-                || http_proxy::serve_acme_challenge(session, &req_host).await?
-            {
+            // `/ping` is proksi's own health check, whatever the host
+            if http_proxy::serve_ping(session).await? {
                 return Ok(true);
             }
-            // Hosts with TLS (and unknown hosts) are served over HTTPS
+            // Hosts with TLS (and unknown hosts): ACME challenges, then redirect to HTTPS.
+            // Hosts without TLS get no certificates, so all their paths are proxied.
             if !host_container
                 .as_ref()
                 .is_some_and(|host| serves_host(host.tls_enabled))
             {
+                if http_proxy::serve_acme_challenge(session, &req_host).await? {
+                    return Ok(true);
+                }
                 return http_proxy::redirect_to_https(session, &req_host).await;
             }
         }
