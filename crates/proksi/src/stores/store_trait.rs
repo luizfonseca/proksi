@@ -32,6 +32,19 @@ pub trait Store: Send + Sync + 'static {
     #[allow(dead_code)] // used by the admin API (#49)
     async fn replicas(&self) -> Result<Vec<ReplicaStatus>, StoreError>;
 
+    /// Takes the lease `name` for `holder` if nobody else holds it (or `holder` already does),
+    /// until it is released or `ttl` passes, by the store's clock
+    async fn try_lock(&self, name: &str, holder: &str, ttl: Duration) -> Result<bool, StoreError>;
+
+    /// Releases the lease `name`, if `holder` still holds it
+    async fn unlock(&self, name: &str, holder: &str) -> Result<(), StoreError>;
+
+    /// Revision of the certificates, incremented by every certificate written
+    async fn certificates_revision(&self) -> Result<u64, StoreError>;
+
+    /// Replaces the certificates cached by this replica with the ones in the store
+    async fn reload_certificates(&self) -> Result<(), StoreError>;
+
     async fn get_certificate(&self, domain: &str) -> Option<Certificate>;
     async fn set_certificate(&self, domain: &str, cert: Certificate) -> Result<(), Box<dyn Error>>;
     async fn get_certificates(

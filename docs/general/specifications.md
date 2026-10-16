@@ -34,5 +34,7 @@ The following keys are used by the Redis store (see [ADR 0001](adrs/0001-route-s
 | `proksi:routes` | Set of hosts that have a route | set of `<host>` |
 | `proksi:revision` | Revision of the routes, incremented on every change | integer |
 | `proksi:replica:<id>` | Revision applied by each proksi instance (TTL: 3 sync intervals) | `{ "id": "...", "revision": 1, "applied_at": 1700000000, "version": "...", "hostname": "..." }` |
+| `proksi:certificates:revision` | Revision of the certificates, incremented on every certificate written | integer |
+| `proksi:lock:<name>` | Lease held by an instance (`acme:<domain>`, `acme:account`), see [ADR 0002](adrs/0002-certificate-issuance.md) | `<id>` of the instance (expires) |
 
-When changing routes directly in Redis, change `proksi:route:<host>`, `proksi:routes` and `proksi:revision` in a single transaction (`MULTI`/`EXEC`), otherwise replicas won't see the change.
+When changing routes directly in Redis, change `proksi:route:<host>`, `proksi:routes` and `proksi:revision` in a single transaction (`MULTI`/`EXEC`), otherwise replicas won't see the change. The same goes for certificates: change `proksi:cert:<domain>` with `INCR proksi:certificates:revision`.

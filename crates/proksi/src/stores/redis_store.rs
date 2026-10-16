@@ -16,6 +16,9 @@ const ROUTE_KEY_PREFIX: &str = "proksi:route:";
 const ROUTES_SET_KEY: &str = "proksi:routes";
 const REVISION_KEY: &str = "proksi:revision";
 const REPLICA_KEY_PREFIX: &str = "proksi:replica:";
+const LOCK_KEY_PREFIX: &str = "proksi:lock:";
+const CERTIFICATE_KEY_PREFIX: &str = "proksi:cert:";
+const CERTIFICATES_REVISION_KEY: &str = "proksi:certificates:revision";
 const ROUTES_READ_ATTEMPTS: usize = 3;
 
 fn route_key(host: &str) -> String {
@@ -59,7 +62,7 @@ impl RedisStore {
     }
 
     fn certificate_key(domain: &str) -> String {
-        format!("proksi:cert:{domain}")
+        format!("{CERTIFICATE_KEY_PREFIX}{domain}")
     }
 
     fn challenge_key(domain: &str) -> String {
@@ -195,6 +198,94 @@ impl Store for RedisStore {
             .collect())
     }
 
+    async fn try_lock(&self, name: &str, holder: &str, ttl: Duration) -> Result<bool, StoreError> {
+        // Taken if free, or extended by its holder; expiry is redis' own (PX)
+        let script = redis::Script::new(
+            r"
+            local current = redis.call('GET', KEYS[1])
+            if current == false then
+                redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+                return 1
+            end
+            if current == ARGV[1] then
+                redis.call('PEXPIRE', KEYS[1], ARGV[2])
+                return 1
+            end
+            return 0
+            ",
+        );
+        let taken: i64 = script
+            .key(format!("{LOCK_KEY_PREFIX}{name}"))
+            .arg(holder)
+            .arg(u64::try_from(ttl.as_millis()).unwrap_or(u64::MAX).max(1))
+            .invoke(&mut *self.connection()?)
+            .map_err(unavailable)?;
+        Ok(taken == 1)
+    }
+
+    async fn unlock(&self, name: &str, holder: &str) -> Result<(), StoreError> {
+        let script = redis::Script::new(
+            r"
+            if redis.call('GET', KEYS[1]) == ARGV[1] then
+                redis.call('DEL', KEYS[1])
+            end
+            return 0
+            ",
+        );
+        let _: i64 = script
+            .key(format!("{LOCK_KEY_PREFIX}{name}"))
+            .arg(holder)
+            .invoke(&mut *self.connection()?)
+            .map_err(unavailable)?;
+        Ok(())
+    }
+
+    async fn certificates_revision(&self) -> Result<u64, StoreError> {
+        let revision: Option<u64> = self
+            .connection()?
+            .get(CERTIFICATES_REVISION_KEY)
+            .map_err(unavailable)?;
+        Ok(revision.unwrap_or(0))
+    }
+
+    async fn reload_certificates(&self) -> Result<(), StoreError> {
+        let mut conn = self.connection()?;
+        let keys: Vec<String> = conn
+            .scan_match(format!("{CERTIFICATE_KEY_PREFIX}*"))
+            .map_err(unavailable)?
+            .collect();
+        let values: Vec<Option<String>> = if keys.is_empty() {
+            vec![]
+        } else {
+            conn.mget(&keys).map_err(unavailable)?
+        };
+
+        let mut certificates = std::collections::HashMap::new();
+        for (key, value) in keys.iter().zip(values) {
+            let (Some(domain), Some(value)) = (key.strip_prefix(CERTIFICATE_KEY_PREFIX), value)
+            else {
+                continue;
+            };
+            match serde_json::from_str::<SerializableCertificate>(&value)
+                .map_err(|err| err.to_string())
+                .and_then(|cert| Certificate::from_serializable(cert).map_err(|e| e.to_string()))
+            {
+                Ok(certificate) => {
+                    certificates.insert(domain.to_string(), certificate);
+                }
+                Err(err) => tracing::warn!("skipping invalid certificate of {domain}: {err}"),
+            }
+        }
+
+        // Replaced in place, so handshakes always find a certificate
+        let mut cache = self.cache.pin();
+        for (domain, certificate) in &certificates {
+            cache.insert(domain.clone(), certificate.clone());
+        }
+        cache.retain(|domain, _| certificates.contains_key(domain));
+        Ok(())
+    }
+
     async fn get_certificate(&self, domain: &str) -> Option<Certificate> {
         // Check cache first
         if let Some(cert) = self.cache.pin().get(domain) {
@@ -219,7 +310,13 @@ impl Store for RedisStore {
         let serializable_cert = cert.to_serializable()?;
         let cert_json = serde_json::to_string(&serializable_cert)?;
 
-        conn.set::<String, String, String>(key, cert_json)?;
+        redis::pipe()
+            .atomic()
+            .set(key, cert_json)
+            .ignore()
+            .incr(CERTIFICATES_REVISION_KEY, 1)
+            .ignore()
+            .query::<()>(&mut *conn)?;
 
         // Update cache
         self.cache.pin().insert(domain.to_string(), cert);
@@ -354,6 +451,24 @@ mod tests {
         if let Some(store) = test_store(15) {
             crate::stores::contract_tests::replicas_contract(&store).await;
         }
+    }
+
+    #[tokio::test]
+    async fn test_leases_contract() {
+        if let Some(store) = test_store(11) {
+            crate::stores::contract_tests::leases_contract(&store).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_certificates_contract() {
+        let Some(store) = test_store(10) else {
+            return;
+        };
+        // Another replica
+        let url = std::env::var("PROKSI_TEST_REDIS_URL").unwrap();
+        let other = RedisStore::new(&format!("{}/10", url.trim_end_matches('/'))).unwrap();
+        crate::stores::contract_tests::certificates_contract(&store, &other).await;
     }
 
     #[tokio::test]

@@ -37,6 +37,23 @@ pub use redis_store::RedisStore;
 //     CHALLENGE_STORE.pin().insert(key, value);
 // }
 
+/// The id of this replica in the store (heartbeats and leases): its hostname and a random
+/// suffix, so replicas on one host (or restarts) are told apart
+pub fn replica_id() -> &'static str {
+    static REPLICA_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    REPLICA_ID.get_or_init(|| {
+        let suffix = uuid::Uuid::new_v4().simple().to_string();
+        format!("{}-{}", hostname(), suffix.get(..8).unwrap_or(&suffix))
+    })
+}
+
+pub fn hostname() -> String {
+    nix::unistd::gethostname()
+        .ok()
+        .and_then(|name| name.into_string().ok())
+        .unwrap_or_else(|| "proksi".to_string())
+}
+
 // ROUTE store
 static ROUTE_STORE: Lazy<RouteStore> = Lazy::new(papaya::HashMap::new);
 

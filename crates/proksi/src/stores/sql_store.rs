@@ -17,6 +17,9 @@ const ROUTES_READ_ATTEMPTS: usize = 3;
 
 pub struct SqlStore {
     pool: AnyPool,
+    /// The current time in milliseconds, by the database's clock (leases never use replicas'
+    /// clocks, which can drift)
+    now_ms: &'static str,
     /// Queries run on this runtime: proksi uses several runtimes, and connections
     /// belong to the runtime they were created on
     runtime: Option<tokio::runtime::Runtime>,
@@ -52,8 +55,15 @@ impl SqlStore {
             Ok::<_, StoreError>(pool)
         })?;
 
+        let now_ms = if database_url.starts_with("sqlite") {
+            "CAST((julianday('now') - 2440587.5) * 86400000 AS BIGINT)"
+        } else {
+            "CAST(EXTRACT(EPOCH FROM clock_timestamp()) * 1000 AS BIGINT)"
+        };
+
         Ok(Self {
             pool,
+            now_ms,
             runtime: Some(runtime),
             cache: papaya::HashMap::new(),
         })
@@ -314,6 +324,94 @@ impl Store for SqlStore {
         .await
     }
 
+    async fn try_lock(&self, name: &str, holder: &str, ttl: Duration) -> Result<bool, StoreError> {
+        let pool = self.pool.clone();
+        let (name, holder) = (name.to_string(), holder.to_string());
+        let ttl = i64::try_from(ttl.as_millis()).map_err(invalid)?.max(1);
+        // Taken if free (or expired), or extended by its holder
+        let query = format!(
+            "INSERT INTO proksi_locks (name, holder, expires_at) VALUES ($1, $2, {now} + $3) \
+             ON CONFLICT (name) DO UPDATE SET holder = excluded.holder, expires_at = excluded.expires_at \
+             WHERE proksi_locks.holder = excluded.holder OR proksi_locks.expires_at <= {now}",
+            now = self.now_ms
+        );
+        self.run(async move {
+            let taken = sqlx::query(sqlx::AssertSqlSafe(query))
+                .bind(name)
+                .bind(holder)
+                .bind(ttl)
+                .execute(&pool)
+                .await
+                .map_err(unavailable)?
+                .rows_affected();
+            Ok(taken == 1)
+        })
+        .await
+    }
+
+    async fn unlock(&self, name: &str, holder: &str) -> Result<(), StoreError> {
+        let pool = self.pool.clone();
+        let (name, holder) = (name.to_string(), holder.to_string());
+        self.run(async move {
+            sqlx::query("DELETE FROM proksi_locks WHERE name = $1 AND holder = $2")
+                .bind(name)
+                .bind(holder)
+                .execute(&pool)
+                .await
+                .map_err(unavailable)?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn certificates_revision(&self) -> Result<u64, StoreError> {
+        let pool = self.pool.clone();
+        self.run(async move {
+            let row =
+                sqlx::query("SELECT value FROM proksi_meta WHERE key = 'certificates_revision'")
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(unavailable)?;
+            to_revision(row.try_get("value").map_err(invalid)?)
+        })
+        .await
+    }
+
+    async fn reload_certificates(&self) -> Result<(), StoreError> {
+        let pool = self.pool.clone();
+        let rows = self
+            .run(async move {
+                sqlx::query("SELECT domain, data FROM proksi_certificates")
+                    .fetch_all(&pool)
+                    .await
+                    .map_err(unavailable)
+            })
+            .await?;
+
+        let mut certificates = std::collections::HashMap::new();
+        for row in rows {
+            let domain: String = row.try_get("domain").map_err(invalid)?;
+            let data: String = row.try_get("data").map_err(invalid)?;
+            match serde_json::from_str::<SerializableCertificate>(&data)
+                .map_err(|err| err.to_string())
+                .and_then(|cert| Certificate::from_serializable(cert).map_err(|e| e.to_string()))
+            {
+                Ok(certificate) => {
+                    certificates.insert(domain, certificate);
+                }
+                Err(err) => tracing::warn!("skipping invalid certificate of {domain}: {err}"),
+            }
+        }
+
+        // Replaced in place, so handshakes always find a certificate
+        let mut cache = self.cache.pin();
+        for (domain, certificate) in &certificates {
+            cache.insert(domain.clone(), certificate.clone());
+        }
+        cache.retain(|domain, _| certificates.contains_key(domain));
+        Ok(())
+    }
+
     async fn get_certificate(&self, domain: &str) -> Option<Certificate> {
         if let Some(certificate) = self.cache.pin().get(domain) {
             return Some(certificate.clone());
@@ -348,15 +446,23 @@ impl Store for SqlStore {
         let pool = self.pool.clone();
         let key = domain.to_string();
         self.run(async move {
+            let mut tx = pool.begin().await.map_err(unavailable)?;
             sqlx::query(
                 "INSERT INTO proksi_certificates (domain, data) VALUES ($1, $2) \
                  ON CONFLICT (domain) DO UPDATE SET data = excluded.data",
             )
             .bind(key)
             .bind(data)
-            .execute(&pool)
+            .execute(&mut *tx)
             .await
             .map_err(unavailable)?;
+            sqlx::query(
+                "UPDATE proksi_meta SET value = value + 1 WHERE key = 'certificates_revision'",
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(unavailable)?;
+            tx.commit().await.map_err(unavailable)?;
             Ok(())
         })
         .await?;
@@ -497,10 +603,13 @@ mod tests {
                 .await
                 .unwrap();
         });
+        Some(SqlStore::connect(&postgres_url(&url, schema)).unwrap())
+    }
+
+    #[cfg(feature = "store-postgres")]
+    fn postgres_url(url: &str, schema: &str) -> String {
         let separator = if url.contains('?') { '&' } else { '?' };
-        Some(
-            SqlStore::connect(&format!("{url}{separator}options=-c search_path={schema}")).unwrap(),
-        )
+        format!("{url}{separator}options=-c search_path={schema}")
     }
 
     fn certificate() -> Certificate {
@@ -585,6 +694,43 @@ mod tests {
     async fn test_postgres_replicas_contract() {
         if let Some(store) = postgres_store("proksi_test_replicas") {
             contract_tests::replicas_contract(&store).await;
+        }
+    }
+
+    #[cfg(feature = "store-sqlite")]
+    #[tokio::test]
+    async fn test_sqlite_leases_contract() {
+        let (store, _dir) = sqlite_store();
+        contract_tests::leases_contract(&store).await;
+    }
+
+    #[cfg(feature = "store-sqlite")]
+    #[tokio::test]
+    async fn test_sqlite_certificates_contract() {
+        let (store, dir) = sqlite_store();
+        let url = format!(
+            "sqlite://{}?mode=rwc",
+            dir.path().join("proksi.db").to_string_lossy()
+        );
+        let other = SqlStore::connect(&url).unwrap();
+        contract_tests::certificates_contract(&store, &other).await;
+    }
+
+    #[cfg(feature = "store-postgres")]
+    #[tokio::test]
+    async fn test_postgres_leases_contract() {
+        if let Some(store) = postgres_store("proksi_test_leases") {
+            contract_tests::leases_contract(&store).await;
+        }
+    }
+
+    #[cfg(feature = "store-postgres")]
+    #[tokio::test]
+    async fn test_postgres_certificates_contract() {
+        if let Some(store) = postgres_store("proksi_test_certificates") {
+            let url = std::env::var("PROKSI_TEST_POSTGRES_URL").unwrap();
+            let other = SqlStore::connect(&postgres_url(&url, "proksi_test_certificates")).unwrap();
+            contract_tests::certificates_contract(&store, &other).await;
         }
     }
 }
