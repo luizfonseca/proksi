@@ -205,7 +205,7 @@ host "db.example.com" {
 }
 ```
 
-See the [TCP documentation](https://docs.proksi.info/#/routing/tcp) for more.
+A host can also be TCP on the HTTPS port: set `listen = "0.0.0.0:443"`, and connections asking for its name are forwarded while every other name is still HTTPS. See the [TCP documentation](https://docs.proksi.info/#/routing/tcp) for more.
 
 ## Upstreams
 
@@ -436,7 +436,7 @@ host:
 
 ## What's next
 
-Sharing port `443` between HTTPS and **TCP** (chosen by ALPN) is the next step. See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
+One host being both HTTPS and **TCP** on port `443` (chosen by ALPN) is the next step. See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
 
 
 # Documentation

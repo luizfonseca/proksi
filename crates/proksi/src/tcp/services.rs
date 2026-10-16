@@ -16,15 +16,10 @@ use crate::{
 
 use super::{proxy::TcpProxy, register_load_balancers, TcpTarget};
 
-/// Services for the `tcp` blocks: plain TCP (and TLS passthrough), and TLS terminated with the
-/// hosts' certificates
-pub fn tcp_services(
-    routes: &[TcpRoute],
-    worker_threads: Option<usize>,
-) -> Result<Vec<Box<dyn ServiceWithDependents>>, anyhow::Error> {
-    let mut services: Vec<Box<dyn ServiceWithDependents>> = vec![];
+/// The `tcp` blocks, ready to accept connections (their upstreams are health checked with
+/// the ones of the locations, see `services::health_check`)
+pub fn tcp_targets(routes: &[TcpRoute]) -> Result<Arc<Vec<TcpTarget>>, anyhow::Error> {
     let mut targets = vec![];
-
     for route in routes {
         let mut load_balancer = load_balancer(&route.upstreams)?;
         load_balancer.set_health_check(TcpHealthCheck::new());
@@ -36,18 +31,29 @@ pub fn tcp_services(
             load_balancer: Arc::new(load_balancer),
         });
     }
-    // Checked with the upstreams of the locations (see `services::health_check`)
     register_load_balancers(&targets);
+    Ok(Arc::new(targets))
+}
+
+/// Services for the `tcp` blocks: plain TCP (and TLS passthrough), and TLS terminated with the
+/// hosts' certificates. Addresses shared with HTTPS hosts are served by the HTTPS service.
+pub fn tcp_services(
+    routes: &[TcpRoute],
+    targets: &Arc<Vec<TcpTarget>>,
+    https: &BTreeSet<String>,
+    worker_threads: Option<usize>,
+) -> Result<Vec<Box<dyn ServiceWithDependents>>, anyhow::Error> {
+    let mut services: Vec<Box<dyn ServiceWithDependents>> = vec![];
 
     let addresses = |tls: bool| {
         routes
             .iter()
             .filter(|route| (route.tls == TcpTls::Terminate) == tls)
+            .filter(|route| !https.contains(&route.listen))
             .map(|route| route.listen.clone())
             .collect::<BTreeSet<_>>()
     };
     let (plain, with_tls) = (addresses(false), addresses(true));
-    let targets = Arc::new(targets);
 
     if !plain.is_empty() {
         let mut service = Service::new("tcp".to_string(), TcpProxy::new(targets.clone()));
@@ -58,7 +64,7 @@ pub fn tcp_services(
         services.push(Box::new(service));
     }
     if !with_tls.is_empty() {
-        let mut service = Service::new("tcp with tls".to_string(), TcpProxy::new(targets));
+        let mut service = Service::new("tcp with tls".to_string(), TcpProxy::new(targets.clone()));
         service.threads = worker_threads;
         for address in &with_tls {
             service.add_tls_with_settings(address, None, tls_settings()?);

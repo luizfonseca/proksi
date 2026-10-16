@@ -721,6 +721,58 @@ async fn test_tcp_blocks() {
     proksi.assert_healthy();
 }
 
+const TCP_ON_THE_HTTPS_PORT: &str = r#"
+host "game.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  # proksi's own HTTP port, which redirects game.test to HTTPS
+  tcp "game" {
+    listen = "127.0.0.1:{https_port}"
+    upstream "127.0.0.1:{http_port}" {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_tcp_on_the_https_port() {
+    let mut proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        TCP_ON_THE_HTTPS_PORT,
+    )
+    .await;
+    let get =
+        |host: &str| format!("GET /game HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
+
+    // game.test is TCP: the bytes reach the HTTP port, which redirects them
+    let res = proksi
+        .tls_request(proksi.https_port, "game.test", &get("game.test"))
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 308"), "{res}");
+
+    // Other names on the same port are still HTTPS, over HTTP/1.1 and HTTP/2
+    let res = proksi
+        .tls_request(proksi.https_port, "app.test", &get("app.test"))
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.contains("\"path\":\"/game\""), "{res}");
+
+    // HTTP/2 answers with a SETTINGS frame (type 4)
+    let frame = proksi
+        .h2_first_frame(proksi.https_port, "app.test")
+        .await
+        .unwrap();
+    assert_eq!(frame[3], 4, "{frame:?}");
+
+    proksi.assert_healthy();
+}
+
 const PLAIN_HTTP_HOSTS: &str = r#"
 host "plain.test" {
   tls = false
