@@ -9,3 +9,4 @@
 /tmp
 docker.README.md
 docker-compose.yml
+__pycache__/
