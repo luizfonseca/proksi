@@ -68,7 +68,7 @@ Proksi writes the addresses of `publish_service` (its load balancer IPs or hostn
 - A `Deployment` (or `DaemonSet`), its `ServiceAccount`, and a `ClusterRole` that can read `Ingress`es, `IngressClass`es, `Service`s, `EndpointSlice`s and `Secret`s, write `Ingress` status, and create `Event`s.
 - A `Service` of type `LoadBalancer` for ports 80 and 443, and the `IngressClass`.
 
-With more than one replica, the store must be shared (redis or postgres): certificates are then ordered once (ADR 0002), and every replica serves them. The memory store with several replicas is rejected when the kubernetes source is enabled.
+With more than one replica, the store must be shared (redis or postgres): certificates are then ordered once (ADR 0002), and every replica serves them. Proksi can't tell how many replicas run, so with the kubernetes source and the memory store it logs a warning at startup.
 
 `tcp` blocks, the admin API and other process settings keep coming from proksi's configuration file (a `ConfigMap`).
 
