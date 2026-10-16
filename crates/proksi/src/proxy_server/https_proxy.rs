@@ -99,7 +99,9 @@ impl ProxyHttp for Router {
         ctx.host = host_without_port.to_string();
 
         // If there's no host matching, returns a 404
-        let Some(route_container) = stores::get_route_by_key(host_without_port) else {
+        // Routes are stored with lowercase hosts (hosts are case-insensitive)
+        let Some(route_container) = stores::get_route_by_key(&host_without_port.to_lowercase())
+        else {
             session.respond_error(404).await?;
             return Ok(true);
         };

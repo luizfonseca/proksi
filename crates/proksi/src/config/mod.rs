@@ -11,7 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
 mod hcl;
-mod validate;
+pub mod validate;
 
 #[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
 pub enum StoreType {
@@ -189,7 +189,7 @@ impl Default for Path {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RouteHeaderAdd {
     /// The name of the header
     pub name: Cow<'static, str>,
@@ -198,13 +198,13 @@ pub struct RouteHeaderAdd {
     pub value: Cow<'static, str>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RouteHeaderRemove {
     /// The name of the header to remove (ex.: "Server")
     pub name: Cow<'static, str>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RouteHeader {
     /// The name of the header
     pub add: Option<Vec<RouteHeaderAdd>>,
@@ -213,7 +213,7 @@ pub struct RouteHeader {
     pub remove: Option<Vec<RouteHeaderRemove>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RouteUpstream {
     /// The TCP address of the upstream (ex. 10.0.0.1/24 etc)
     pub ip: Cow<'static, str>,
@@ -246,7 +246,7 @@ impl Default for RouteUpstream {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RouteSslCertificate {
     /// Whether to use a self-signed certificate if the certificate can't be
     /// retrieved from the path or object storage (or generated from letsencrypt)
@@ -254,19 +254,19 @@ pub struct RouteSslCertificate {
     pub self_signed_on_failure: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RoutePathMatcher {
     /// Optional: pattern to match the path
     /// (ex: /api/v1/*)
     pub patterns: Vec<Cow<'static, str>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RouteMatcher {
     pub path: Option<RoutePathMatcher>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RoutePlugin {
     /// The name of the plugin (must be a valid plugin name)
     pub name: Cow<'static, str>,
@@ -278,7 +278,7 @@ pub struct RoutePlugin {
     pub config: Option<HashMap<Cow<'static, str>, serde_json::Value>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RouteSslPath {
     /// Path to the certificate .key file (e.g. `/etc/proksi/certs/my-host.key`)
     pub key: PathBuf,
@@ -287,7 +287,7 @@ pub struct RouteSslPath {
     pub pem: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum ProtoVersion {
     V1_1,
     V1_2,
@@ -305,7 +305,7 @@ impl From<pingora::tls::ssl::SslVersion> for ProtoVersion {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RouteSsl {
     /// If provided, will be used instead of generating certificates from
     /// Let's Encrypt or self-signed certificates.
@@ -344,7 +344,7 @@ pub enum RouteCacheType {
     MemCache,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RouteCache {
     pub enabled: Option<bool>,
 
@@ -365,7 +365,7 @@ pub struct RouteCache {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Route {
     /// The hostname that the proxy will accept
     /// requests for the upstreams in the route.

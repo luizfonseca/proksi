@@ -44,6 +44,10 @@ pub fn insert_route(key: String, value: RouteStoreContainer) {
     ROUTE_STORE.pin().insert(key, value);
 }
 
+pub fn remove_route(key: &str) {
+    ROUTE_STORE.pin().remove(key);
+}
+
 // CERTIFICATE store
 // static CERTIFICATE_STORE: Lazy<CertificateStore> = Lazy::new(papaya::HashMap::new);
 

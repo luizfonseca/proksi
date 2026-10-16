@@ -26,6 +26,22 @@ async fn test_proxies_requests_to_upstream() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_host_header_is_case_insensitive() {
+    let mut proksi = Harness::start(vec![Route::new("app.test", Upstream::Http)]).await;
+
+    let res = proksi
+        .client()
+        .get(format!("https://app.test:{}/", proksi.https_port))
+        .header("host", "App.Test")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+
+    proksi.assert_healthy();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_unmatched_path_returns_404_and_unknown_host_is_rejected() {
     let mut proksi =
         Harness::start(vec![Route::new("app.test", Upstream::Http).paths(&["/api/*"])]).await;
@@ -193,5 +209,42 @@ async fn test_many_concurrent_websockets() {
     let res = proksi.get("app.test", "/").await.unwrap();
     assert_eq!(res.status, 200);
 
+    proksi.assert_healthy();
+}
+
+const AUTO_RELOAD: &str = "auto_reload {\n  enabled = true\n  interval_secs = 1\n}";
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_config_reload_applies_route_changes() {
+    let mut proksi =
+        Harness::start_with(vec![Route::new("a.test", Upstream::Http)], AUTO_RELOAD).await;
+    assert_eq!(proksi.get("a.test", "/").await.unwrap().status, 200);
+
+    proksi.rewrite_routes(vec![Route::new("b.test", Upstream::Http)]);
+
+    assert_eq!(proksi.wait_for("b.test", "/", 200).await, Some(200));
+    assert_eq!(proksi.wait_for("a.test", "/", 404).await, Some(404));
+    // Applied without restarting
+    assert_eq!(
+        proksi.logs().matches("starting config watcher service").count(),
+        1
+    );
+    proksi.assert_healthy();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_invalid_config_reload_keeps_routes() {
+    let mut proksi =
+        Harness::start_with(vec![Route::new("a.test", Upstream::Http)], AUTO_RELOAD).await;
+
+    proksi.write_config("routes = [ { this is not valid");
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+    assert_eq!(proksi.get("a.test", "/").await.unwrap().status, 200);
+    assert!(
+        proksi.logs().contains("is invalid, keeping the current configuration"),
+        "{}",
+        proksi.logs()
+    );
     proksi.assert_healthy();
 }

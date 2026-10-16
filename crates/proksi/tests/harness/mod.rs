@@ -107,6 +107,8 @@ pub struct Harness {
     child: Child,
     dir: tempfile::TempDir,
     hosts: Vec<String>,
+    /// Extra configuration added to the generated one (e.g. `auto_reload`)
+    extra_config: String,
     pub https_port: u16,
     pub http_port: u16,
     pub http_upstream: HttpUpstream,
@@ -115,27 +117,90 @@ pub struct Harness {
 
 impl Harness {
     pub async fn start(routes: Vec<Route>) -> Self {
+        Self::start_with(routes, "").await
+    }
+
+    /// Starts proksi with extra configuration (e.g. an `auto_reload` block)
+    pub async fn start_with(routes: Vec<Route>, extra_config: &str) -> Self {
         raise_open_files_limit();
 
         let dir = tempfile::tempdir().unwrap();
-        let (cert, key) = write_self_signed_cert(dir.path());
+        write_self_signed_cert(dir.path());
 
         let http_upstream = HttpUpstream::start().await;
         let websocket_upstream = WebSocketUpstream::start().await;
-        let ws_upstream_port = websocket_upstream.port;
 
         let https_port = free_port();
         let http_port = free_port();
 
+        let stdout = std::fs::File::create(dir.path().join("stdout.log")).unwrap();
+        let stderr = std::fs::File::create(dir.path().join("stderr.log")).unwrap();
+        // Replaced once the configuration is written
+        let placeholder = Command::new("true").spawn().unwrap();
+
+        let mut harness = Self {
+            child: placeholder,
+            dir,
+            hosts: vec![],
+            extra_config: extra_config.to_string(),
+            https_port,
+            http_port,
+            http_upstream,
+            websocket_upstream,
+        };
+        harness.rewrite_routes(routes);
+
+        // `PROKSI_BIN` allows running the tests against another build (e.g. a release binary)
+        let bin = std::env::var("PROKSI_BIN").unwrap_or(env!("CARGO_BIN_EXE_proksi").to_string());
+        harness.child = Command::new(bin)
+            .arg("-c")
+            .arg(harness.config_path())
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
+            .spawn()
+            .unwrap();
+
+        harness.wait_until_ready().await;
+        harness
+    }
+
+    pub fn config_path(&self) -> PathBuf {
+        self.dir.path().join("proksi.hcl")
+    }
+
+    /// Writes the configuration file with the given routes
+    pub fn rewrite_routes(&mut self, routes: Vec<Route>) {
         let mut routes = routes;
         routes.push(Route::new(READY_HOST, Upstream::Http));
-        let hosts = routes.iter().map(|r| r.host.clone()).collect();
+        // Hosts of removed routes are kept, so that the client still resolves them
+        for route in &routes {
+            if !self.hosts.contains(&route.host) {
+                self.hosts.push(route.host.clone());
+            }
+        }
+
+        let config = self.render_config(&routes);
+        // Written to another file first, so proksi never reads a partial file
+        let tmp_path = self.dir.path().join("proksi.hcl.tmp");
+        std::fs::write(&tmp_path, config).unwrap();
+        std::fs::rename(&tmp_path, self.config_path()).unwrap();
+    }
+
+    /// Replaces the configuration file with arbitrary content
+    pub fn write_config(&self, content: &str) {
+        std::fs::write(self.config_path(), content).unwrap();
+    }
+
+    fn render_config(&self, routes: &[Route]) -> String {
+        let dir = self.dir.path();
+        let cert = dir.join("cert.pem");
+        let key = dir.join("key.pem");
 
         let mut routes_hcl = String::new();
-        for route in &routes {
+        for route in routes {
             let upstream_port = match route.upstream {
-                Upstream::Http => http_upstream.port,
-                Upstream::WebSocket => ws_upstream_port,
+                Upstream::Http => self.http_upstream.port,
+                Upstream::WebSocket => self.websocket_upstream.port,
             };
             let _ = writeln!(routes_hcl, "  {{");
             let _ = writeln!(routes_hcl, "    host = \"{}\"", route.host);
@@ -163,7 +228,7 @@ impl Harness {
                 );
             }
             if route.cache {
-                let cache_dir = dir.path().join("cache");
+                let cache_dir = dir.join("cache");
                 let _ = writeln!(
                     routes_hcl,
                     "    cache = {{ enabled = true, cache_type = \"disk\", expires_in_secs = 60, path = \"{}\" }}",
@@ -173,7 +238,7 @@ impl Harness {
             let _ = writeln!(routes_hcl, "  }},");
         }
 
-        let config = format!(
+        format!(
             r#"
 service_name = "proksi-e2e"
 worker_threads = 2
@@ -198,38 +263,29 @@ paths {{
   lets_encrypt = "{le}"
 }}
 
+{extra_config}
+
 routes = [
 {routes_hcl}]
 "#,
-            le = dir.path().join("le").to_string_lossy(),
-        );
+            https_port = self.https_port,
+            http_port = self.http_port,
+            le = dir.join("le").to_string_lossy(),
+            extra_config = self.extra_config,
+        )
+    }
 
-        let config_path = dir.path().join("proksi.hcl");
-        std::fs::write(&config_path, config).unwrap();
-
-        let stdout = std::fs::File::create(dir.path().join("stdout.log")).unwrap();
-        let stderr = std::fs::File::create(dir.path().join("stderr.log")).unwrap();
-        // `PROKSI_BIN` allows running the tests against another build (e.g. a release binary)
-        let bin = std::env::var("PROKSI_BIN").unwrap_or(env!("CARGO_BIN_EXE_proksi").to_string());
-        let child = Command::new(bin)
-            .arg("-c")
-            .arg(&config_path)
-            .stdout(Stdio::from(stdout))
-            .stderr(Stdio::from(stderr))
-            .spawn()
-            .unwrap();
-
-        let mut harness = Self {
-            child,
-            dir,
-            hosts,
-            https_port,
-            http_port,
-            http_upstream,
-            websocket_upstream,
-        };
-        harness.wait_until_ready().await;
-        harness
+    /// Waits until a request returns the given status (or 10 seconds), returning the last status
+    pub async fn wait_for(&self, host: &str, path: &str, status: u16) -> Option<u16> {
+        let mut last = None;
+        for _ in 0..50 {
+            last = self.get(host, path).await.ok().map(|res| res.status);
+            if last == Some(status) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        last
     }
 
     async fn wait_until_ready(&mut self) {
@@ -585,8 +641,8 @@ fn raise_open_files_limit() {
     }
 }
 
-/// Writes a self-signed certificate (valid for `*.test`) and returns (cert, key) paths
-fn write_self_signed_cert(dir: &Path) -> (PathBuf, PathBuf) {
+/// Writes a self-signed certificate (valid for `*.test`) to `cert.pem` and `key.pem`
+fn write_self_signed_cert(dir: &Path) {
     let rsa = Rsa::generate(2048).unwrap();
     let key = PKey::from_rsa(rsa).unwrap();
 
@@ -620,5 +676,4 @@ fn write_self_signed_cert(dir: &Path) -> (PathBuf, PathBuf) {
     let key_path = dir.join("key.pem");
     std::fs::write(&cert_path, cert.to_pem().unwrap()).unwrap();
     std::fs::write(&key_path, key.private_key_to_pem_pkcs8().unwrap()).unwrap();
-    (cert_path, key_path)
 }

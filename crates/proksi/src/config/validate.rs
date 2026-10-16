@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 
 use super::Config;
+use crate::routing::validate::validate_route;
 
 /// given a Config struct, validate the values to ensure
 /// That we program won't panic when we try to use them
@@ -31,22 +32,31 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
 
     // Validate the routes
     for (route_index, route) in config.routes.iter().enumerate() {
-        // Validate the route's upstreams
-        for (upstream_index, upstream) in route.upstreams.iter().enumerate() {
-            // Validate the upstream's address
-            if upstream.ip.is_empty() {
-                return Err(anyhow!(
-                    "routes{route_index}.upstreams{upstream_index}.id cannot be empty"
-                ));
-            }
-
-            if upstream.port == 0 {
-                return Err(anyhow!(
-                    "routes{route_index}.upstreams{upstream_index}.port must be greater than 0"
-                ));
-            }
-        }
+        validate_route(route).map_err(|err| anyhow!("routes[{route_index}]: {err}"))?;
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::Config;
+    use crate::routing::test_utils::route;
+
+    use super::check_config;
+
+    #[test]
+    fn test_check_config_validates_routes() {
+        let mut config = Config::default();
+        let mut invalid = route("example.com", "10.0.0.1");
+        invalid.upstreams[0].port = 0;
+        config.routes = vec![route("valid.com", "10.0.0.1"), invalid];
+
+        let err = check_config(&config).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "routes[1]: upstreams[0].port must be greater than 0"
+        );
+    }
 }
