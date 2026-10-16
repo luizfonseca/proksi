@@ -14,27 +14,17 @@ use pingora::proxy::{ProxyHttp, Session};
 use pingora::upstreams::peer::Peer;
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 
-use pingora_cache::lock::CacheLock;
-
 use pingora_cache::{
     CacheKey, CacheMeta, ForcedFreshness, HitHandler, NoCacheReason, RespCacheable,
 };
 
-use crate::cache::disk::storage::DiskCache;
-use crate::config::{RouteCacheType, RouteUpstream};
+use crate::config::RouteUpstream;
 use crate::stores::{self, routes::RouteStoreContainer};
 
-use super::middleware::{
-    execute_request_plugins, execute_response_plugins, execute_upstream_request_plugins,
-    execute_upstream_response_plugins,
-};
 use super::{default_peer_opts, http_proxy, listener::Listener};
 
-static STORAGE_MEM_CACHE: Lazy<pingora_cache::MemCache> = Lazy::new(pingora_cache::MemCache::new);
-static STORAGE_CACHE: Lazy<DiskCache> = Lazy::new(DiskCache::new);
 static CACHEABLE_METHODS: Lazy<Vec<http::Method>> =
     Lazy::new(|| vec![http::Method::GET, http::Method::HEAD]);
-static CACHE_LOCK: Lazy<CacheLock> = Lazy::new(|| CacheLock::new(Duration::from_secs(1)));
 
 /// Proxies requests to the location of their host, on the HTTPS or the HTTP port
 pub struct Router {
@@ -48,13 +38,6 @@ pub struct Router {
 // fn process_route(ctx: &RouterContext) -> RouteStoreContainer {
 //     ctx.route_container.clone()
 // }
-
-fn get_cache_storage(cache_type: &RouteCacheType) -> &'static (dyn pingora_cache::Storage + Sync) {
-    match cache_type {
-        RouteCacheType::Disk => &*STORAGE_CACHE,
-        RouteCacheType::MemCache => &*STORAGE_MEM_CACHE,
-    }
-}
 
 pub struct RouterContext {
     pub host: String,
@@ -149,26 +132,9 @@ impl ProxyHttp for Router {
             return Ok(true);
         };
 
-        // Middleware phase: request_filterx
-        // We are checking to see if the request has already been handled
-        // by the plugins i.e. (ok(true))
-        if let Ok(true) = execute_request_plugins(session, ctx, &route_container.plugins).await {
+        // The location's building blocks, in order: a block can answer the request (e.g. a `401`)
+        if route_container.blocks.request(session, ctx).await {
             return Ok(true);
-        }
-
-        if let Some(cache) = &route_container.cache {
-            if cache.enabled.unwrap_or(false) {
-                let storage = get_cache_storage(&cache.cache_type);
-
-                stores::insert_cache_routing(
-                    &ctx.host,
-                    cache.path.to_string_lossy().to_string(),
-                    false,
-                );
-                session
-                    .cache
-                    .enable(storage, None, None, Some(&*CACHE_LOCK), None);
-            }
         }
 
         ctx.route_container = Some(route_container.clone());
@@ -229,15 +195,11 @@ impl ProxyHttp for Router {
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
-        if let Some(route_container) = &ctx.route_container {
-            for (name, value) in &route_container.host_header_add {
-                upstream_response.insert_header(name, value)?;
-            }
-
-            // Remove headers from the upstream response
-            for name in &route_container.host_header_remove {
-                upstream_response.remove_header(name);
-            }
+        if let Some(location) = ctx.route_container.clone() {
+            location
+                .blocks
+                .response(session, upstream_response, ctx)
+                .await;
         }
 
         let cache_state = ctx.extensions.get("cache_state").cloned();
@@ -254,9 +216,6 @@ impl ProxyHttp for Router {
                 elapsed.as_millis().to_string(),
             )?;
         }
-
-        // Middleware phase: response_filterx
-        execute_response_plugins(session, ctx).await?;
 
         Ok(())
     }
@@ -287,9 +246,12 @@ impl ProxyHttp for Router {
             }
         }
 
-        execute_upstream_request_plugins(session, upstream_request, ctx)
-            .await
-            .ok();
+        if let Some(location) = ctx.route_container.clone() {
+            location
+                .blocks
+                .upstream_request(session, upstream_request, ctx)
+                .await;
+        }
 
         Ok(())
     }
@@ -310,7 +272,11 @@ impl ProxyHttp for Router {
         // If there's no host matching, returns a 404
         // let route_container = process_route(ctx);
 
-        execute_upstream_response_plugins(session, upstream_response, ctx);
+        if let Some(location) = ctx.route_container.clone() {
+            location
+                .blocks
+                .upstream_response(session, upstream_response, ctx);
+        }
 
         Ok(())
     }

@@ -254,7 +254,7 @@ host "example.com" {
 
 ## Plugins
 
-Built-in plugins are enabled per location:
+Built-in plugins are enabled per location, and run in order of their `priority` (see the [HCL documentation](https://docs.proksi.info/#/configuration/hcl/)):
 
 ```hcl
 location "/" {

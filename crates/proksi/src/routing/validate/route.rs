@@ -1,4 +1,7 @@
-use crate::config::Route;
+use crate::{
+    blocks::Blocks,
+    config::{host::Host, Route},
+};
 
 use super::common::{validate_headers, validate_upstreams};
 
@@ -9,7 +12,12 @@ pub fn validate_route(route: &Route) -> Result<(), String> {
         return Err("host cannot be empty".to_string());
     }
     validate_upstreams(&route.upstreams)?;
-    validate_headers(route.headers.as_ref())
+    validate_headers(route.headers.as_ref())?;
+    // The plugins, headers and cache of the route, as building blocks
+    for location in Host::from_route(route).locations {
+        Blocks::build(&location)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -24,6 +32,20 @@ mod tests {
     #[test]
     fn test_valid_route() {
         assert!(validate_route(&route("example.com", "10.0.0.1")).is_ok());
+    }
+
+    #[test]
+    fn test_route_with_invalid_plugin() {
+        let mut route = route("example.com", "10.0.0.1");
+        route.plugins = Some(vec![crate::config::RoutePlugin {
+            name: "oauth2".into(),
+            config: None,
+        }]);
+
+        assert_eq!(
+            validate_route(&route),
+            Err("oauth2: `provider` is required".to_string())
+        );
     }
 
     #[test]
@@ -62,6 +84,7 @@ mod tests {
                 value: Cow::Borrowed("value"),
             }]),
             remove: None,
+            priority: None,
         });
         let err = validate_route(&route).unwrap_err();
         assert_eq!(

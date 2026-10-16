@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::config::host::Host;
+use crate::{blocks::Blocks, config::host::Host};
 
 use super::common::{validate_headers, validate_upstreams};
 
@@ -28,6 +28,7 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
         }
         validate_upstreams(&location.upstreams).map_err(in_location)?;
         validate_headers(location.headers.as_ref()).map_err(in_location)?;
+        Blocks::build(location).map_err(in_location)?;
     }
 
     Ok(())
@@ -143,6 +144,20 @@ mod tests {
         assert_eq!(
             validate_host(&host),
             Err("location \"/*\": upstreams[0].port must be greater than 0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_invalid_blocks_are_rejected() {
+        let mut host = host("a.test", "10.0.0.1");
+        host.locations[0].plugins = Some(vec![crate::config::RoutePlugin {
+            name: "basic_auth".into(),
+            config: None,
+        }]);
+
+        assert_eq!(
+            validate_host(&host),
+            Err("location \"/*\": basic_auth: `user` is required".to_string())
         );
     }
 

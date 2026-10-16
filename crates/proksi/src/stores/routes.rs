@@ -4,24 +4,25 @@ use std::{
     sync::Arc,
 };
 
-use http::{HeaderName, HeaderValue};
 use pingora::lb::{discovery::Static, selection::RoundRobin, Backends, LoadBalancer};
 
-use crate::config::{RouteCache, RoutePlugin, RouteUpstream};
+use crate::{
+    blocks::Blocks,
+    config::{RouteCache, RouteUpstream},
+};
 
 use super::host_container::HostContainer;
 
 #[derive(Clone)]
 pub struct RouteStoreContainer {
     pub load_balancer: Arc<LoadBalancer<RoundRobin>>,
-    pub host_header_remove: Vec<String>,
-    pub host_header_add: Vec<(HeaderName, HeaderValue)>,
 
     pub upstreams: Vec<RouteUpstream>,
     /// Resolved address of each upstream (index into `upstreams`)
     upstream_addrs: HashMap<SocketAddr, usize>,
 
-    pub plugins: HashMap<String, RoutePlugin>,
+    /// Building blocks (plugins, headers, cache), in the order they run
+    pub blocks: Blocks,
 
     pub cache: Option<RouteCache>,
 }
@@ -32,9 +33,7 @@ impl Default for RouteStoreContainer {
             load_balancer: Arc::new(LoadBalancer::<RoundRobin>::from_backends(Backends::new(
                 Static::new(BTreeSet::new()),
             ))),
-            host_header_remove: Vec::new(),
-            host_header_add: Vec::new(),
-            plugins: HashMap::new(),
+            blocks: Blocks::default(),
             upstreams: Vec::new(),
             upstream_addrs: HashMap::new(),
             cache: None,
@@ -46,9 +45,7 @@ impl RouteStoreContainer {
     pub fn new(load_balancer: LoadBalancer<RoundRobin>) -> Self {
         RouteStoreContainer {
             load_balancer: Arc::new(load_balancer),
-            host_header_remove: Vec::with_capacity(5),
-            host_header_add: Vec::with_capacity(5),
-            plugins: HashMap::new(),
+            blocks: Blocks::default(),
             upstreams: Vec::with_capacity(5),
             upstream_addrs: HashMap::new(),
             cache: None,

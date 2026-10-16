@@ -443,6 +443,81 @@ async fn test_host_blocks_choose_the_location_by_path() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_BLOCKS: &str = r#"
+host "auth.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    basic_auth {
+      user = "user"
+      pass = "pass"
+    }
+    oauth2 {
+      provider      = "github"
+      client_id     = "client"
+      client_secret = "secret"
+      jwt_secret    = "jwt"
+    }
+  }
+
+  location "/oauth-first" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    basic_auth {
+      user = "user"
+      pass = "pass"
+    }
+    oauth2 {
+      provider      = "github"
+      client_id     = "client"
+      client_secret = "secret"
+      jwt_secret    = "jwt"
+      priority      = 10
+    }
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_blocks_run_by_priority() {
+    let mut proksi = Harness::start_with(vec![], HOST_WITH_BLOCKS).await;
+    proksi.resolve("auth.test");
+    let url = |path: &str| format!("https://auth.test:{}{path}", proksi.https_port);
+
+    // Same priority (20): basic_auth runs first, then oauth2
+    let res = proksi.client().get(url("/")).send().await.unwrap();
+    assert_eq!(res.status(), 401);
+
+    let res = proksi
+        .client()
+        .get(url("/"))
+        .basic_auth("user", Some("pass"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 307);
+
+    // `priority = 10`: oauth2 runs before basic_auth
+    let res = proksi
+        .client()
+        .get(url("/oauth-first"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 307);
+    let location = res.headers()["location"].to_str().unwrap();
+    assert!(location.starts_with("https://github.com/"), "{location}");
+
+    proksi.assert_healthy();
+}
+
 const PLAIN_HTTP_HOSTS: &str = r#"
 host "plain.test" {
   tls = false
