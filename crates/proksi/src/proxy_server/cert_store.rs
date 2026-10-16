@@ -6,6 +6,10 @@ use pingora::tls::ssl::NameType;
 
 use crate::stores::{self};
 
+/// The server name a TLS client asked for (SNI), attached to its connection once the
+/// handshake completes (read by `tcp` blocks)
+pub struct ServerName(pub String);
+
 /// Provides the correct certificates when performing SSL handshakes
 #[derive(Debug, Clone)]
 pub struct CertStore {}
@@ -67,5 +71,13 @@ impl TlsAccept for CertStore {
                 tracing::error!("Failed to add chain certificate for host {host_name:?}: {err}");
             }
         }
+    }
+
+    async fn handshake_complete_callback(
+        &self,
+        ssl: &pingora::tls::ssl::SslRef,
+    ) -> Option<std::sync::Arc<dyn std::any::Any + Send + Sync>> {
+        let name = ssl.servername(NameType::HOST_NAME)?;
+        Some(std::sync::Arc::new(ServerName(name.to_lowercase())))
     }
 }

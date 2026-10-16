@@ -102,6 +102,15 @@ paths:
   # If the path doesn't exist, it will be created if the binary has the right permissions.
   lets_encrypt: "/etc/proksi/letsencrypt"
 
+# TCP connections forwarded as they are, for services that don't speak HTTP.
+# Inside a host, `tcp` blocks use the host's certificate (see docs/routing/tcp.md).
+tcp:
+  game:
+    listen: "0.0.0.0:7777"
+    upstream:
+      "10.1.2.40:7777": { weight: 2 }
+      "10.1.2.41:7777": {}
+
 # Hosts that the server will accept requests for.
 # The key is the hostname (or IP address) matched against the Host header of each request,
 # and used to issue certificates when Let's Encrypt is enabled.

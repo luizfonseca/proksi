@@ -28,6 +28,7 @@
 
 * [Upstreams](routing/upstreams.md)
 * [Headers](routing/headers.md)
+* [TCP](routing/tcp.md)
 
 ## Plugins
 

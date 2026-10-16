@@ -113,6 +113,8 @@ pub struct Harness {
     pub http_port: u16,
     /// A free port for hosts listening elsewhere (`{extra_port}` in `extra_config`)
     pub extra_port: u16,
+    /// Free ports for `tcp` blocks (`{tcp_port_0}`... in `extra_config`)
+    pub tcp_ports: [u16; 3],
     pub http_upstream: HttpUpstream,
     pub websocket_upstream: WebSocketUpstream,
 }
@@ -146,6 +148,7 @@ impl Harness {
         let https_port = free_port();
         let http_port = free_port();
         let extra_port = free_port();
+        let tcp_ports = [free_port(), free_port(), free_port()];
 
         let stdout = std::fs::File::create(dir.path().join("stdout.log")).unwrap();
         let stderr = std::fs::File::create(dir.path().join("stderr.log")).unwrap();
@@ -161,6 +164,7 @@ impl Harness {
             https_port,
             http_port,
             extra_port,
+            tcp_ports,
             http_upstream,
             websocket_upstream,
         };
@@ -302,11 +306,18 @@ paths {{
         )
     }
 
-    /// Extra configuration, with `{http_upstream_port}`, `{cert_pem}` and `{cert_key}` replaced
+    /// Extra configuration, with `{http_upstream_port}`, the ports of proksi, `{cert_pem}` and
+    /// `{cert_key}` replaced
     fn render_extra_config(&self) -> String {
         let dir = self.dir.path();
-        self.extra_config
+        let mut config = self.extra_config.clone();
+        for (index, port) in self.tcp_ports.iter().enumerate() {
+            config = config.replace(&format!("{{tcp_port_{index}}}"), &port.to_string());
+        }
+        config
             .replace("{http_upstream_port}", &self.http_upstream.port.to_string())
+            .replace("{https_port}", &self.https_port.to_string())
+            .replace("{http_port}", &self.http_port.to_string())
             .replace("{extra_port}", &self.extra_port.to_string())
             .replace("{cert_pem}", &dir.join("cert.pem").to_string_lossy())
             .replace("{cert_key}", &dir.join("key.pem").to_string_lossy())
@@ -405,6 +416,35 @@ paths {{
         )
         .await??;
         Ok(response)
+    }
+
+    /// Sends `request` over TLS to proksi on `port`, asking for `server_name` (SNI),
+    /// returning the raw response
+    pub async fn tls_request(
+        &self,
+        port: u16,
+        server_name: &str,
+        request: &str,
+    ) -> std::io::Result<String> {
+        let (server_name, request) = (server_name.to_string(), request.to_string());
+        tokio::task::spawn_blocking(move || {
+            let connector = native_tls::TlsConnector::builder()
+                .danger_accept_invalid_certs(true)
+                .danger_accept_invalid_hostnames(true)
+                .build()
+                .map_err(std::io::Error::other)?;
+            let stream = std::net::TcpStream::connect(("127.0.0.1", port))?;
+            stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+            let mut stream = connector
+                .connect(&server_name, stream)
+                .map_err(|err| std::io::Error::other(err.to_string()))?;
+            std::io::Write::write_all(&mut stream, request.as_bytes())?;
+            let mut response = String::new();
+            std::io::Read::read_to_string(&mut stream, &mut response)?;
+            Ok(response)
+        })
+        .await
+        .unwrap()
     }
 
     /// Opens a websocket connection through proksi
@@ -652,6 +692,12 @@ async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<Strin
             .write_all(response.as_bytes())
             .await
             .is_err()
+        {
+            return;
+        }
+        if headers
+            .get("connection")
+            .is_some_and(|value| value.as_str() == Some("close"))
         {
             return;
         }

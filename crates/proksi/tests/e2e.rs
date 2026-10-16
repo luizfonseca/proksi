@@ -614,6 +614,113 @@ async fn test_body_limit() {
     proksi.assert_healthy();
 }
 
+const TCP_BLOCKS: &str = r#"
+tcp "web" {
+  listen = "127.0.0.1:{tcp_port_0}"
+  upstream "127.0.0.1:{http_upstream_port}" {}
+}
+
+host "a.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  tcp "app" {
+    listen = "127.0.0.1:{tcp_port_1}"
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+
+host "b.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  # proksi's own HTTP port, which redirects b.test to HTTPS
+  tcp "app" {
+    listen = "127.0.0.1:{tcp_port_1}"
+    upstream "127.0.0.1:{http_port}" {}
+  }
+}
+
+host "pass.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+
+  # TLS goes untouched to proksi's own HTTPS port, which serves the location above
+  tcp "raw" {
+    listen = "127.0.0.1:{tcp_port_2}"
+    tls    = "passthrough"
+    upstream "127.0.0.1:{https_port}" {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_tcp_blocks() {
+    let mut proksi = Harness::start_with(vec![], TCP_BLOCKS).await;
+    let [plain_port, tls_port, passthrough_port] = proksi.tcp_ports;
+    let get = |host: &str, path: &str| {
+        format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n")
+    };
+
+    // Plain TCP
+    let res = proksi
+        .raw_http_on(plain_port, get("tcp.test", "/plain").as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.contains("\"path\":\"/plain\""), "{res}");
+
+    // TLS terminated with the certificate of the host, chosen by SNI
+    let res = proksi
+        .tls_request(tls_port, "a.test", &get("a.test", "/terminated"))
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.contains("\"path\":\"/terminated\""), "{res}");
+
+    let res = proksi
+        .tls_request(tls_port, "b.test", &get("b.test", "/"))
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 308"), "{res}");
+
+    // No block for other names
+    let res = proksi
+        .tls_request(tls_port, "c.test", &get("c.test", "/"))
+        .await;
+    assert!(res.as_deref().map_or(true, str::is_empty), "{res:?}");
+
+    // TLS passthrough
+    let res = proksi
+        .tls_request(
+            passthrough_port,
+            "pass.test",
+            &get("pass.test", "/passthrough"),
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.contains("\"path\":\"/passthrough\""), "{res}");
+
+    proksi.assert_healthy();
+}
+
 const PLAIN_HTTP_HOSTS: &str = r#"
 host "plain.test" {
   tls = false
