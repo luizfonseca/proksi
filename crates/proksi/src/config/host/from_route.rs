@@ -30,6 +30,7 @@ impl Host {
         Self {
             name: route.host.to_string(),
             tls: HostTls {
+                enabled: true,
                 certificate: route.ssl.as_ref().and_then(|ssl| ssl.path.clone()),
                 self_signed_on_failure: route
                     .ssl_certificate
@@ -80,6 +81,7 @@ mod tests {
         assert_eq!(
             host.tls,
             HostTls {
+                enabled: true,
                 certificate: Some(RouteSslPath {
                     key: PathBuf::from("/certs/a.key"),
                     pem: PathBuf::from("/certs/a.pem"),
