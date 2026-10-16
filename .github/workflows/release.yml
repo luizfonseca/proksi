@@ -151,6 +151,10 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.tag_name }}
 
+      # To run the arm64 image on the amd64 runner
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -169,16 +173,22 @@ jobs:
         run: |
           ls -R ./data
 
+      # The static (musl) binaries don't depend on the image's glibc.
+      # Each image is checked to start before it's pushed.
       - name: x86_64 Build Linux image
         run: |
-          tar -xzvf ./data/proksi-linux-gnu-x86_64/proksi-linux-gnu-x86_64.tar.gz proksi
-          docker buildx build --platform linux/amd64 -t luizfonseca/proksi:${{needs.release.outputs.tag_name}}-amd64 -f Dockerfile . --push
+          tar -xzvf ./data/proksi-linux-musl-x86_64/proksi-linux-musl-x86_64.tar.gz proksi
+          docker buildx build --platform linux/amd64 -t luizfonseca/proksi:${{needs.release.outputs.tag_name}}-amd64 -f Dockerfile . --load
+          docker run --rm --platform linux/amd64 luizfonseca/proksi:${{needs.release.outputs.tag_name}}-amd64 --version
+          docker push luizfonseca/proksi:${{needs.release.outputs.tag_name}}-amd64
 
       - name: aarch64 Build Linux image
         run: |
           rm proksi
-          tar -xzvf ./data/proksi-linux-gnu-aarch64/proksi-linux-gnu-aarch64.tar.gz proksi
-          docker buildx build --platform linux/arm64 -t luizfonseca/proksi:${{needs.release.outputs.tag_name}}-arm64 -f Dockerfile . --push
+          tar -xzvf ./data/proksi-linux-musl-aarch64/proksi-linux-musl-aarch64.tar.gz proksi
+          docker buildx build --platform linux/arm64 -t luizfonseca/proksi:${{needs.release.outputs.tag_name}}-arm64 -f Dockerfile . --load
+          docker run --rm --platform linux/arm64 luizfonseca/proksi:${{needs.release.outputs.tag_name}}-arm64 --version
+          docker push luizfonseca/proksi:${{needs.release.outputs.tag_name}}-arm64
 
       - name: Docker (latest)
         run: |
