@@ -14,7 +14,12 @@ use crate::{
     routing::build::load_balancer,
 };
 
-use super::{proxy::TcpProxy, register_load_balancers, TcpTarget};
+use super::{
+    alpn::{select_protocols, AlpnProtocols},
+    on_address,
+    proxy::TcpProxy,
+    register_load_balancers, TcpTarget,
+};
 
 /// The `tcp` blocks, ready to accept connections (their upstreams are health checked with
 /// the ones of the locations, see `services::health_check`)
@@ -28,6 +33,7 @@ pub fn tcp_targets(routes: &[TcpRoute]) -> Result<Arc<Vec<TcpTarget>>, anyhow::E
             host: route.host.clone(),
             listen: route.listen.parse::<SocketAddr>()?,
             tls: route.tls,
+            alpn: route.alpn.clone(),
             load_balancer: Arc::new(load_balancer),
         });
     }
@@ -67,7 +73,10 @@ pub fn tcp_services(
         let mut service = Service::new("tcp with tls".to_string(), TcpProxy::new(targets.clone()));
         service.threads = worker_threads;
         for address in &with_tls {
-            service.add_tls_with_settings(address, None, tls_settings()?);
+            let mut settings = tls_settings()?;
+            let protocols = AlpnProtocols::new(on_address(targets, address));
+            select_protocols(&mut settings, protocols, false);
+            service.add_tls_with_settings(address, None, settings);
         }
         services.push(Box::new(service));
     }

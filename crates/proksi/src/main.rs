@@ -160,16 +160,11 @@ fn add_listeners(
         ));
     }
     if !listeners.https.is_empty() {
-        // `tcp` blocks of hosts sharing the HTTPS addresses (chosen by SNI)
-        let shared = listeners
-            .tcp
-            .iter()
-            .any(|route| listeners.https.contains(&route.listen));
         server.add_service(proxy_server::services::https_service(
             &server.configuration,
             &listeners.https,
             default_https,
-            shared.then(|| tcp::proxy::TcpProxy::new(tcp_targets.clone())),
+            &tcp_targets,
             proxy_config.worker_threads,
         )?);
     }

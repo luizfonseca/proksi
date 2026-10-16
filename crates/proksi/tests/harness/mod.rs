@@ -426,11 +426,26 @@ paths {{
         server_name: &str,
         request: &str,
     ) -> std::io::Result<String> {
+        self.tls_request_with_alpn(port, server_name, &[], request)
+            .await
+    }
+
+    /// Like `tls_request`, offering the protocols `alpn`
+    pub async fn tls_request_with_alpn(
+        &self,
+        port: u16,
+        server_name: &str,
+        alpn: &[&str],
+        request: &str,
+    ) -> std::io::Result<String> {
         let (server_name, request) = (server_name.to_string(), request.to_string());
+        let alpn = alpn.iter().map(ToString::to_string).collect::<Vec<_>>();
         tokio::task::spawn_blocking(move || {
+            let alpn = alpn.iter().map(String::as_str).collect::<Vec<_>>();
             let connector = native_tls::TlsConnector::builder()
                 .danger_accept_invalid_certs(true)
                 .danger_accept_invalid_hostnames(true)
+                .request_alpns(&alpn)
                 .build()
                 .map_err(std::io::Error::other)?;
             let stream = std::net::TcpStream::connect(("127.0.0.1", port))?;

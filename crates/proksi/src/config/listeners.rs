@@ -105,12 +105,13 @@ fn tcp_routes(
                     "{label}: address {address} is also used by HTTPS hosts (only tcp blocks in a host with TLS can share it, chosen by SNI)"
                 ));
             }
+            // The host's connections go to the block, unless it is chosen by its protocols
             let has_locations = hosts
                 .iter()
                 .any(|host| Some(&host.name) == route.host.as_ref() && !host.locations.is_empty());
-            if has_locations {
+            if has_locations && route.alpn.is_empty() {
                 return Err(format!(
-                    "{label}: the host also has locations, served on {address} too (a host on that address is either HTTPS or TCP)"
+                    "{label}: the host also has locations on {address}, so the block needs `alpn` to tell them apart"
                 ));
             }
         }
@@ -310,6 +311,15 @@ host "b.test" {
     }
 
     #[test]
+    fn test_tcp_and_locations_of_a_host_chosen_by_alpn() {
+        let config = config(
+            "host \"a.test\" {\n  location \"/\" {\n    upstream \"app:80\" {}\n  }\n  tcp \"game\" {\n    listen = \"0.0.0.0:443\"\n    alpn = [\"game/1\"]\n    upstream \"game:7777\" {}\n  }\n}\n",
+        );
+
+        assert_eq!(listeners(&config).unwrap().tcp.len(), 1);
+    }
+
+    #[test]
     fn test_invalid_tcp_addresses() {
         for (hcl, expected) in [
             (
@@ -334,7 +344,7 @@ host "b.test" {
             ),
             (
                 "host \"h\" {\n  location \"/\" {\n    upstream \"b:1\" {}\n  }\n  tcp \"a\" {\n    listen = \"0.0.0.0:443\"\n    upstream \"b:1\" {}\n  }\n}\n",
-                "tcp \"a\" in host \"h\": the host also has locations, served on 0.0.0.0:443 too (a host on that address is either HTTPS or TCP)",
+                "tcp \"a\" in host \"h\": the host also has locations on 0.0.0.0:443, so the block needs `alpn` to tell them apart",
             ),
             (
                 "tcp \"a\" {\n  listen = \"0.0.0.0:7\"\n  upstream \"b:1\" {}\n}\ntcp \"b\" {\n  listen = \"0.0.0.0:7\"\n  upstream \"b:1\" {}\n}\n",

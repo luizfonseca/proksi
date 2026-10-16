@@ -49,7 +49,29 @@ host "app.example.com" {
 }
 ```
 
-A host on that port is either HTTPS or TCP: a `tcp` block there is rejected when its host also has locations. The block needs the same address as the HTTPS hosts (`server.https_address`, or their `listen`).
+The block needs the same address as the HTTPS hosts (`server.https_address`, or their `listen`).
+
+### One host, HTTPS and TCP
+
+When clients use the same name for both, the `tcp` block is chosen by the protocol the client asks for during the TLS handshake (ALPN). Connections asking for one of its `alpn` protocols go to the block, and the rest (browsers, HTTP clients) to the host's locations:
+
+```hcl
+host "ride.example.com" {
+  location "/" {
+    upstream "10.0.0.8:3000" {}
+  }
+
+  tcp "game" {
+    listen = "0.0.0.0:443"
+    alpn   = ["game/1"]
+    upstream "10.0.0.7:7777" {}
+  }
+}
+```
+
+The client has to send the protocol: most TLS libraries call it ALPN (for example `NextProtos` in Go, `alpn_protocols` in rustls, `ALPNProtocols` in Node.js, `SslApplicationProtocol` in .NET). A `tcp` block on the HTTPS port without `alpn` is rejected when its host also has locations, and `alpn` can't be `h2` or `http/1.1`, used by HTTPS.
+
+`alpn` also works on a `tcp` block's own address: connections that don't ask for one of its protocols are closed.
 
 ## TLS passthrough
 
@@ -72,5 +94,5 @@ In a host with `tls = false`, a `tcp` block is plain TCP.
 - Each `tcp` block needs its own address: it can't be used by HTTP hosts, or by other `tcp` blocks. Blocks of different hosts with TLS are the exception: they can share an address with each other and with HTTPS hosts (see above).
 - `tcp` blocks come from the configuration file (not from docker labels or the store), and are set up when Proksi starts: changing them restarts Proksi.
 - Upstreams of a `tcp` block only take `weight`.
-- On the HTTPS port, connections are chosen by name only. The same host being both HTTPS and TCP (chosen by ALPN), and TLS passthrough on that port, aren't supported yet.
+- TLS passthrough can't share the HTTPS port yet.
 - A host with a `tcp` block on the HTTPS port takes every connection asking for its name, including names added later through docker labels or the store.

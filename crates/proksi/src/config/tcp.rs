@@ -24,6 +24,8 @@ pub struct TcpRoute {
     pub host: Option<String>,
     pub listen: String,
     pub tls: TcpTls,
+    /// Protocols (ALPN) the block is chosen by, next to the host's locations
+    pub alpn: Vec<String>,
     pub upstreams: Vec<RouteUpstream>,
 }
 
@@ -145,6 +147,7 @@ host "plain.example.com" {
                     host: None,
                     listen: "0.0.0.0:7777".to_string(),
                     tls: TcpTls::None,
+                    alpn: vec![],
                     upstreams: vec![
                         upstream("game-1", 7777, Some(2)),
                         upstream("game-2", 7777, None)
@@ -155,6 +158,7 @@ host "plain.example.com" {
                     host: Some("db.example.com".to_string()),
                     listen: "0.0.0.0:5433".to_string(),
                     tls: TcpTls::Terminate,
+                    alpn: vec![],
                     upstreams: vec![upstream("db", 5432, None)],
                 },
                 TcpRoute {
@@ -162,6 +166,7 @@ host "plain.example.com" {
                     host: Some("db.example.com".to_string()),
                     listen: "0.0.0.0:6000".to_string(),
                     tls: TcpTls::Passthrough,
+                    alpn: vec![],
                     upstreams: vec![upstream("tls-app", 443, None)],
                 },
                 TcpRoute {
@@ -169,10 +174,21 @@ host "plain.example.com" {
                     host: Some("plain.example.com".to_string()),
                     listen: "0.0.0.0:6380".to_string(),
                     tls: TcpTls::None,
+                    alpn: vec![],
                     upstreams: vec![upstream("redis", 6379, None)],
                 },
             ])
         );
+    }
+
+    #[test]
+    fn test_tcp_alpn() {
+        let config = config(
+            "host \"a.test\" {\n  tcp \"game\" {\n    listen = \"0.0.0.0:443\"\n    alpn = [\"game/1\", \"game/2\"]\n    upstream \"game:7777\" {}\n  }\n}\n",
+        );
+
+        let routes = config.tcp_routes().unwrap();
+        assert_eq!(routes[0].alpn, vec!["game/1", "game/2"]);
     }
 
     #[test]
@@ -189,6 +205,22 @@ host "plain.example.com" {
             (
                 "host \"h\" {\n  tcp \"a\" {\n    listen = \"0.0.0.0:1\"\n    tls = \"terminate\"\n    upstream \"b:1\" {}\n  }\n}\n",
                 "tcp \"a\" in host \"h\": `tls` can only be \"passthrough\", not \"terminate\"",
+            ),
+            (
+                "tcp \"a\" {\n  listen = \"0.0.0.0:1\"\n  alpn = [\"x\"]\n  upstream \"b:1\" {}\n}\n",
+                "tcp \"a\": `alpn` is only for tcp blocks in a host with TLS (not passthrough)",
+            ),
+            (
+                "host \"h\" {\n  tcp \"a\" {\n    listen = \"0.0.0.0:1\"\n    tls = \"passthrough\"\n    alpn = [\"x\"]\n    upstream \"b:1\" {}\n  }\n}\n",
+                "tcp \"a\" in host \"h\": `alpn` is only for tcp blocks in a host with TLS (not passthrough)",
+            ),
+            (
+                "host \"h\" {\n  tcp \"a\" {\n    listen = \"0.0.0.0:1\"\n    alpn = [\"h2\"]\n    upstream \"b:1\" {}\n  }\n}\n",
+                "tcp \"a\" in host \"h\": `alpn` can't be \"h2\" or \"http/1.1\" (used by HTTPS)",
+            ),
+            (
+                "host \"h\" {\n  tcp \"a\" {\n    listen = \"0.0.0.0:1\"\n    alpn = [\"\"]\n    upstream \"b:1\" {}\n  }\n}\n",
+                "tcp \"a\" in host \"h\": `alpn` protocols must be 1 to 255 bytes long",
             ),
             (
                 "tcp \"a\" {\n  listen = \"0.0.0.0:1\"\n  upstream \"b\" {}\n}\n",

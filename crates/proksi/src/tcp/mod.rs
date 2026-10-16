@@ -10,6 +10,7 @@ use pingora::lb::{selection::RoundRobin, LoadBalancer};
 
 use crate::{config::tcp::TcpTls, stores::host_container::binds};
 
+pub mod alpn;
 pub mod proxy;
 pub mod services;
 
@@ -20,6 +21,8 @@ pub struct TcpTarget {
     pub host: Option<String>,
     pub listen: SocketAddr,
     pub tls: TcpTls,
+    /// Protocols (ALPN) the block is chosen by, if any
+    pub alpn: Vec<String>,
     pub load_balancer: Arc<LoadBalancer<RoundRobin>>,
 }
 
@@ -39,22 +42,39 @@ pub fn load_balancers() -> &'static [(String, Arc<LoadBalancer<RoundRobin>>)] {
     LOAD_BALANCERS.get().map_or(&[], Vec::as_slice)
 }
 
+/// The blocks listening on `address`
+pub fn on_address<'a>(
+    targets: &'a [TcpTarget],
+    address: &'a str,
+) -> impl Iterator<Item = &'a TcpTarget> {
+    targets
+        .iter()
+        .filter(move |target| target.listen.to_string() == address)
+}
+
 /// The block for a connection accepted on `local`. With TLS terminated, the block of the host
-/// the client asked for (`sni`), so a host's certificate never reaches another host's block.
+/// the client asked for (`sni`), so a host's certificate never reaches another host's block,
+/// and if the block has protocols, the one negotiated (`alpn`) must be one of them.
 pub fn choose<'a>(
     targets: &'a [TcpTarget],
     local: &SocketAddr,
     sni: Option<&str>,
+    alpn: Option<&[u8]>,
 ) -> Option<&'a TcpTarget> {
     targets
         .iter()
         .filter(|target| binds(&target.listen, local))
         .find(|target| match target.tls {
-            TcpTls::Terminate => target
-                .host
-                .as_deref()
-                .zip(sni)
-                .is_some_and(|(host, sni)| host.eq_ignore_ascii_case(sni)),
+            TcpTls::Terminate => {
+                let host = target
+                    .host
+                    .as_deref()
+                    .zip(sni)
+                    .is_some_and(|(host, sni)| host.eq_ignore_ascii_case(sni));
+                let protocol = target.alpn.is_empty()
+                    || alpn.is_some_and(|alpn| target.alpn.iter().any(|p| p.as_bytes() == alpn));
+                host && protocol
+            }
             // Only one block per address (checked when the configuration loads)
             TcpTls::None | TcpTls::Passthrough => true,
         })
@@ -76,12 +96,28 @@ mod tests {
             host: host.map(ToString::to_string),
             listen: listen.parse().unwrap(),
             tls,
+            alpn: vec![],
             load_balancer: Arc::new(LoadBalancer::try_from_iter(["127.0.0.1:1"]).unwrap()),
         }
     }
 
     fn chosen(targets: &[TcpTarget], local: &str, sni: Option<&str>) -> Option<String> {
-        choose(targets, &local.parse().unwrap(), sni).map(|target| target.label.clone())
+        chosen_with(targets, local, sni, None)
+    }
+
+    fn chosen_with(
+        targets: &[TcpTarget],
+        local: &str,
+        sni: Option<&str>,
+        alpn: Option<&str>,
+    ) -> Option<String> {
+        choose(
+            targets,
+            &local.parse().unwrap(),
+            sni,
+            alpn.map(str::as_bytes),
+        )
+        .map(|target| target.label.clone())
     }
 
     #[test]
@@ -122,5 +158,30 @@ mod tests {
         assert_eq!(chosen(&targets, "10.0.0.1:5433", Some("c.test")), None);
         assert_eq!(chosen(&targets[..1], "10.0.0.1:5433", Some("c.test")), None);
         assert_eq!(chosen(&targets[..1], "10.0.0.1:5433", None), None);
+    }
+
+    #[test]
+    fn test_choose_by_protocol() {
+        let mut game = target("game", Some("a.test"), "0.0.0.0:443", TcpTls::Terminate);
+        game.alpn = vec!["game/1".to_string()];
+        let targets = [game];
+
+        assert_eq!(
+            chosen_with(&targets, "10.0.0.1:443", Some("a.test"), Some("game/1")).as_deref(),
+            Some("game")
+        );
+        // Other protocols (or none) are the host's locations
+        assert_eq!(
+            chosen_with(&targets, "10.0.0.1:443", Some("a.test"), Some("h2")),
+            None
+        );
+        assert_eq!(
+            chosen_with(&targets, "10.0.0.1:443", Some("a.test"), None),
+            None
+        );
+        assert_eq!(
+            chosen_with(&targets, "10.0.0.1:443", Some("b.test"), Some("game/1")),
+            None
+        );
     }
 }

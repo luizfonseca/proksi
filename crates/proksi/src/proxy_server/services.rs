@@ -12,7 +12,12 @@ use pingora::{
     services::listening::Service,
 };
 
-use crate::tcp::proxy::TcpProxy;
+use crate::tcp::{
+    alpn::{select_protocols, AlpnProtocols},
+    on_address,
+    proxy::TcpProxy,
+    TcpTarget,
+};
 
 use super::{cert_store::CertStore, https_proxy::Router, listener::Listener};
 
@@ -70,9 +75,15 @@ pub fn https_service(
     configuration: &Arc<ServerConf>,
     addresses: &BTreeSet<String>,
     default_address: SocketAddr,
-    tcp: Option<TcpProxy>,
+    tcp_targets: &Arc<Vec<TcpTarget>>,
     worker_threads: Option<usize>,
 ) -> Result<Service<HttpsApp>, anyhow::Error> {
+    // `tcp` blocks of hosts sharing these addresses (chosen by SNI, and ALPN)
+    let tcp = addresses
+        .iter()
+        .any(|address| on_address(tcp_targets, address).next().is_some())
+        .then(|| TcpProxy::new(tcp_targets.clone()));
+
     let router = Router {
         listener: Listener::Https,
         default_address,
@@ -84,7 +95,10 @@ pub fn https_service(
     let mut service = Service::new("Pingora HTTP Proxy Service".to_string(), app);
     service.threads = worker_threads;
     for address in addresses {
-        service.add_tls_with_settings(address, None, tls_settings()?);
+        let mut settings = tls_settings()?;
+        let protocols = AlpnProtocols::new(on_address(tcp_targets, address));
+        select_protocols(&mut settings, protocols, true);
+        service.add_tls_with_settings(address, None, settings);
     }
     Ok(service)
 }

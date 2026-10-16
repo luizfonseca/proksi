@@ -18,6 +18,9 @@ pub struct TcpBlock {
     pub listen: String,
     /// `"passthrough"`: forward TLS untouched instead of terminating it (in a host)
     pub tls: Option<String>,
+    /// Protocols (ALPN) the block is chosen by, so a host can be HTTPS and TCP on one address
+    #[serde(default)]
+    pub alpn: Vec<String>,
     #[serde(default)]
     pub upstream: BTreeMap<String, TcpUpstreamBlock>,
 }
@@ -48,6 +51,20 @@ impl TcpBlock {
             }
         };
 
+        if !self.alpn.is_empty() && tls != TcpTls::Terminate {
+            return Err(
+                "`alpn` is only for tcp blocks in a host with TLS (not passthrough)".to_string(),
+            );
+        }
+        for protocol in &self.alpn {
+            if protocol == "h2" || protocol == "http/1.1" {
+                return Err("`alpn` can't be \"h2\" or \"http/1.1\" (used by HTTPS)".to_string());
+            }
+            if protocol.is_empty() || protocol.len() > 255 {
+                return Err("`alpn` protocols must be 1 to 255 bytes long".to_string());
+            }
+        }
+
         let upstreams = self
             .upstream
             .iter()
@@ -67,6 +84,7 @@ impl TcpBlock {
             host: host.map(|(name, _)| name.to_string()),
             listen: self.listen.clone(),
             tls,
+            alpn: self.alpn.clone(),
             upstreams,
         })
     }

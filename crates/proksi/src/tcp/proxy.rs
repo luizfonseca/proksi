@@ -3,7 +3,11 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use pingora::{apps::ServerApp, protocols::Stream, server::ShutdownWatch};
+use pingora::{
+    apps::ServerApp,
+    protocols::{Stream, ALPN},
+    server::ShutdownWatch,
+};
 use tokio::net::TcpStream;
 
 use crate::proxy_server::cert_store::ServerName;
@@ -33,7 +37,17 @@ impl TcpProxy {
                 .map(|name| name.0.clone())
         });
 
-        let target = choose(&self.targets, &local, sni.as_deref());
+        let alpn = match downstream.selected_alpn_proto() {
+            Some(ALPN::Custom(protocol)) => Some(protocol),
+            _ => None,
+        };
+
+        let target = choose(
+            &self.targets,
+            &local,
+            sni.as_deref(),
+            alpn.as_ref().map(pingora::protocols::tls::CustomALPN::protocol),
+        );
         if target.is_none() {
             tracing::debug!("no tcp block for a connection on {local} (server name: {sni:?})");
         }
