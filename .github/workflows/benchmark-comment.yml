@@ -1,0 +1,51 @@
+name: Benchmark comment
+
+# Posts (or updates) the report of `benchmark.yml` on its pull request.
+# Runs from the default branch with permission to comment, and only reads the report,
+# so pull requests from forks get a comment without running their code with that permission.
+
+on:
+  workflow_run:
+    workflows:
+      - Benchmark
+    types:
+      - completed
+
+permissions:
+  actions: read
+  pull-requests: write
+
+jobs:
+  comment:
+    name: Comment
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results
+          path: results
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          pr=$(cat results/pr-number)
+          if ! [[ "$pr" =~ ^[0-9]+$ ]]; then
+            echo "invalid pull request number: $pr"
+            exit 1
+          fi
+
+          # One comment per pull request, updated on every run
+          marker="<!-- proksi-benchmark -->"
+          comment_id=$(gh api "repos/$REPO/issues/$pr/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id" | head -n 1)
+
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F body=@results/report.md
+          else
+            gh api --method POST "repos/$REPO/issues/$pr/comments" -F body=@results/report.md
+          fi
