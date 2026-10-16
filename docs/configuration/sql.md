@@ -50,4 +50,4 @@ COMMIT;
 
 Each instance reports the revision it applied in `proksi_replicas`. As with Redis, routes from the store win over docker labels and the configuration file, and the routes from the last sync are kept if the database can't be reached.
 
-ACME account data is kept on disk (`paths.lets_encrypt`); certificates themselves are stored in the database.
+Let's Encrypt data (account, certificates and challenges) is stored in the database too, so all instances share the same account.

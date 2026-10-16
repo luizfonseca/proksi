@@ -75,6 +75,47 @@ impl SqlStore {
     }
 }
 
+impl SqlStore {
+    /// Reads Let's Encrypt data (blocking, as required by `acme_v2`)
+    pub fn acme_get(&self, key: &str) -> Result<Option<String>, StoreError> {
+        let Some(runtime) = self.runtime.as_ref() else {
+            return Err(StoreError::Unavailable("store closed".to_string()));
+        };
+        let pool = self.pool.clone();
+        let key = key.to_string();
+        block_on(runtime, async move {
+            let row = sqlx::query("SELECT value FROM proksi_acme WHERE key = $1")
+                .bind(key)
+                .fetch_optional(&pool)
+                .await
+                .map_err(unavailable)?;
+            row.map(|row| row.try_get::<String, _>("value").map_err(invalid))
+                .transpose()
+        })
+    }
+
+    /// Writes Let's Encrypt data (blocking, as required by `acme_v2`)
+    pub fn acme_put(&self, key: &str, value: String) -> Result<(), StoreError> {
+        let Some(runtime) = self.runtime.as_ref() else {
+            return Err(StoreError::Unavailable("store closed".to_string()));
+        };
+        let pool = self.pool.clone();
+        let key = key.to_string();
+        block_on(runtime, async move {
+            sqlx::query(
+                "INSERT INTO proksi_acme (key, value) VALUES ($1, $2) \
+                 ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            )
+            .bind(key)
+            .bind(value)
+            .execute(&pool)
+            .await
+            .map_err(unavailable)?;
+            Ok(())
+        })
+    }
+}
+
 impl Drop for SqlStore {
     fn drop(&mut self) {
         if let Some(runtime) = self.runtime.take() {
