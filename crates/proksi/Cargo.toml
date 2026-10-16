@@ -31,6 +31,9 @@ rust-version.workspace = true
 workspace = "../.."
 
 [features]
+default = ["kubernetes"]
+# Kubernetes ingress controller (ADR 0005)
+kubernetes = ["dep:kube", "dep:k8s-openapi", "dep:futures-util"]
 store-sqlite = ["dep:sqlx", "sqlx/sqlite"]
 store-postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/tls-native-tls"]
 
@@ -84,6 +87,9 @@ tracing-subscriber = { version = "0.3.20", features = ["json", "env-filter"] }
 uuid = { version = "1.18.1", features = ["v4"] }
 mimalloc = { version = "0.1.52", default-features = false }
 pingora-limits = "0.9.0"
+kube = { version = "4.2.0", default-features = false, features = ["client", "openssl-tls", "runtime"], optional = true }
+k8s-openapi = { version = "0.28.0", features = ["v1_32"], optional = true }
+futures-util = { version = "0.3.34", optional = true }
 # wasmtime = "31.0.0"
 
 [[bench]]

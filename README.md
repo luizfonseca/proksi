@@ -362,6 +362,16 @@ services:
 
 Routes from labels are kept when a container stops (requests get a `503`) and are removed when Proksi restarts.
 
+## Kubernetes
+
+Proksi can run as a Kubernetes ingress controller, serving the `Ingress` resources of class `proksi` and sending requests straight to the ready pods of each service:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/luizfonseca/proksi/main/deploy/kubernetes/proksi.yaml
+```
+
+See the [Kubernetes documentation](https://docs.proksi.info/#/installation/kubernetes) for paths, TLS and running more than one replica.
+
 ## Running many servers
 
 To run more than one Proksi server with the same routes and certificates, use a shared store. Routes in the store take priority over the configuration file and docker labels, and every server syncs them every `sync_interval_secs`:

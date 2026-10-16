@@ -1,0 +1,134 @@
+# Proksi as a Kubernetes ingress controller (see docs/kubernetes.md and ADR 0005)
+#
+#   kubectl apply -f https://raw.githubusercontent.com/luizfonseca/proksi/main/deploy/kubernetes/proksi.yaml
+#
+# Ingresses with `ingressClassName: proksi` are then served on the `proksi` Service.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: proksi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: proksi
+  namespace: proksi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: proksi
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "ingressclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: proksi
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: proksi
+subjects:
+  - kind: ServiceAccount
+    name: proksi
+    namespace: proksi
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: proksi
+  # Uncomment to also serve Ingresses without a class
+  # annotations:
+  #   ingressclass.kubernetes.io/is-default-class: "true"
+spec:
+  controller: proksi.info/ingress-controller
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: proksi
+  namespace: proksi
+data:
+  proksi.hcl: |
+    kubernetes {
+      enabled = true
+    }
+
+    # Certificates for the hosts of Ingresses (hosts with the annotation
+    # `proksi.info/tls: "false"` are served over plain HTTP instead)
+    lets_encrypt {
+      enabled = false
+      # enabled = true
+      # email   = "you@your-domain.com"
+      # staging = false
+    }
+
+    # With more than one replica, share certificates through redis or postgres:
+    # store {
+    #   store_type = "redis"
+    #   redis_url  = "redis://redis.proksi:6379"
+    # }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proksi
+  namespace: proksi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: proksi
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: proksi
+    spec:
+      serviceAccountName: proksi
+      containers:
+        - name: proksi
+          image: luizfonseca/proksi:latest
+          imagePullPolicy: IfNotPresent
+          args: ["-c", "/etc/proksi"]
+          ports:
+            - name: http
+              containerPort: 80
+            - name: https
+              containerPort: 443
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/proksi
+      volumes:
+        - name: config
+          configMap:
+            name: proksi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proksi
+  namespace: proksi
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: proksi
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: https
+      port: 443
+      targetPort: https

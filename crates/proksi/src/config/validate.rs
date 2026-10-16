@@ -13,6 +13,12 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
         return Err(anyhow!("Worker threads must be greater than 0"));
     }
 
+    if config.kubernetes.enabled && !cfg!(feature = "kubernetes") {
+        return Err(anyhow!(
+            "proksi was built without the kubernetes ingress controller (cargo feature kubernetes)"
+        ));
+    }
+
     if config.store.sync_interval_secs == 0 {
         return Err(anyhow!("store.sync_interval_secs must be greater than 0"));
     }

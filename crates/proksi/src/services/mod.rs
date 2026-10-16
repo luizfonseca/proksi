@@ -107,8 +107,26 @@ impl pingora::services::Service for BackgroundFunctionService {
             }
         };
 
+        // Hosts from Kubernetes `Ingress`es (ADR 0005)
+        let kubernetes = async {
+            #[cfg(feature = "kubernetes")]
+            if self.config.kubernetes.enabled {
+                if matches!(self.config.store.store_type, StoreType::Memory) {
+                    tracing::warn!(
+                        "the kubernetes ingress controller uses the memory store: with more than one replica, each orders its own certificates (use redis or postgres to share them)"
+                    );
+                }
+                crate::kubernetes::source::run(
+                    self.config.kubernetes.clone(),
+                    self.route_sender.clone(),
+                )
+                .await;
+            }
+        };
+
         let _ = tokio::join!(
             store_sync,
+            kubernetes,
             certificate_metrics,
             live_stats,
             routing_service.start_service(None, shutdown.clone(), _listeners_per_fd),

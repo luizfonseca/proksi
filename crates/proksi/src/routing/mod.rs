@@ -22,8 +22,7 @@ pub mod validate;
 pub enum RouteSourceKind {
     File,
     Docker,
-    // Kubernetes ingress (#381)
-    #[allow(dead_code)]
+    /// Kubernetes `Ingress`es (ADR 0005)
     Kubernetes,
     Store,
 }
