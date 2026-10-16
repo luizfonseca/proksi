@@ -92,7 +92,9 @@ host "api.example.com" {
 
 - `tls = false` serves a host over plain HTTP on `server.http_address` instead of redirecting to HTTPS, and no certificate is issued for it.
 - `host "*"` serves requests whose `Host` has no host of its own. It needs `tls = false` (certificates are issued per name). Other wildcards (`*.example.com`) aren't supported yet.
-- `server { https_enabled = false }` doesn't open the HTTPS port at all. Every host in the configuration file then needs `tls = false`, and `routes = [...]` can't be used.
+- `listen = ["ip:port", ...]` sets the addresses a host is served on, instead of `server.https_address` (or `server.http_address` with `tls = false`). Proksi only opens the ports its hosts need: with only `tls = false` hosts, the HTTPS port isn't opened at all.
+- A port is either HTTP or HTTPS: a host with TLS and a host without it can't share an address. Hosts with TLS also need `server.http_address` (port 80) for redirects and Let's Encrypt challenges.
+- Hosts from `routes = [...]`, docker labels and the store use the default addresses, as they can appear while proksi runs (ports are opened at startup). A configuration change that needs other ports restarts proksi.
 
 ```hcl
 host "*" {

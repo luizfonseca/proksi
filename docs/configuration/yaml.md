@@ -65,10 +65,6 @@ server:
   # The default value is "0.0.0.0:80".
   http_address: "0.0.0.0:80"
 
-  # Set to false to only serve plain HTTP (every host then needs `tls: false`).
-  # The default value is true.
-  https_enabled: true
-
 
 # The configuration for the Let's Encrypt integration.
 lets_encrypt:

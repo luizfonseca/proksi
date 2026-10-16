@@ -110,7 +110,8 @@ An `upstream` label is an address (`host:port`, `[ipv6]:port`). Its body holds t
 
 - `host "*"` serves requests whose `Host` header has no host of its own, for running proksi on an address without caring about names. A named host always wins over `*`. An IP is already a valid host name (`host "192.168.1.10"`), since hosts are matched on the `Host` header.
 - `tls = false` serves a host over plain HTTP on `server.http_address`, instead of redirecting to HTTPS, and gets no certificate (no Let's Encrypt, no self-signed). Hosts with TLS keep redirecting from HTTP to HTTPS.
-- Not opening the HTTPS port at all (for when no host uses TLS, [#293](https://github.com/luizfonseca/proksi/issues/293)) is a `server` setting.
+- `listen = ["ip:port", ...]` sets where a host is served, instead of the defaults (`server.https_address`, or `server.http_address` with `tls = false`). Which ports a host uses belongs to the host, not to a global setting: proksi opens the ports its hosts need, so with only `tls = false` hosts the HTTPS port isn't opened at all ([#293](https://github.com/luizfonseca/proksi/issues/293)). The protocol of a port follows from `tls`, so a host with TLS and a host without it can't share an address.
+- Hosts from `routes`, docker labels and the store use the default addresses, since they can appear while proksi runs and ports are opened at startup. Port 80 stays open for hosts with TLS (redirects, and Let's Encrypt only validates on port 80).
 
 ```hcl
 host "*" {
@@ -197,7 +198,7 @@ Each step ships on its own:
 
 1. The model, `host` and `location` in HCL/YAML, with `routes = [...]`, docker labels and stored routes converted into it.
 2. Choosing a location by path within a host.
-3. `host "*"`, `tls = false` (plain HTTP) and an optional HTTPS port.
+3. `host "*"`, `tls = false` (plain HTTP) and `listen` addresses per host.
 4. The existing plugins, headers and cache as building blocks.
 5. `rate_limit`, then `body_limit`.
 6. `tcp` on its own port.
