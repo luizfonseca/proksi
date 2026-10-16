@@ -5,27 +5,25 @@
 # This configuration file specifies the following settings:
 service_name = "proksi"
 
-# Number of threads that the HTTPS service will use to handle incoming requests.
+# Number of threads used to handle requests (on the HTTPS and HTTP ports).
 # This can be adjusted based on the number of CPU cores available on the server.
-# The default value is 1.
+# The default value is 80% of the available CPUs (at least 2).
 #
 # Note: Increasing the number of threads can improve the performance of the server,
 # but it can also increase the memory usage.
-#
-# Note 2: This only affect the HTTPS service, the HTTP service
-# (and other background services) is single threaded.
 worker_threads = 4
 
 
-# The server block specifies the settings for the HTTP/HTTPS server.
+# The server block specifies the default addresses of the server.
+# Hosts are served on these addresses unless they set their own (see `listen` below).
+# Proksi only opens the ports its hosts need.
 server {
-  # The address that the server will listen on while serving HTTPS.
-  # This can be a TCP address or a Unix socket.
+  # Where hosts with TLS are served.
   # The default value is "0.0.0.0:443".
   https_address = "0.0.0.0:443"
 
-  # The address that the server will listen on for HTTP requests.
-  # This can be a TCP address or a Unix socket.
+  # Where hosts without TLS are served. Hosts with TLS also use it to redirect
+  # HTTP requests to HTTPS and to answer Let's Encrypt challenges.
   # The default value is "0.0.0.0:80".
   http_address = "0.0.0.0:80"
 }
@@ -39,7 +37,14 @@ store {
 
   # Change to get data from redis
   # store_type = "redis"
-  # redis_url = "redis://localhost:6479/"
+  # redis_url = "redis://localhost:6379/"
+
+  # Or from SQLite / Postgres (requires the `store-sqlite` / `store-postgres` features)
+  # store_type = "postgres"
+  # database_url = "postgres://user:pass@localhost/proksi"
+
+  # How often (in seconds) routes are synced from the store.
+  # sync_interval_secs = 10
 }
 
 docker {
@@ -70,8 +75,9 @@ docker {
 
 lets_encrypt {
   # Whether the Let's Encrypt integration is enabled
-  # (the background service will run and issue certificates for your routes).
-  enabled = true
+  # (the background service will run and issue certificates for your hosts).
+  # Note: You must explicitly enable this and provide a valid email address.
+  enabled = false
 
   # The email address to use for Let's Encrypt notifications and account registration.
   # Important: Make sure to replace this with your own email address.
@@ -126,6 +132,10 @@ paths {
 # The label is the hostname (or IP address) matched against the Host header of each request,
 # and used to issue certificates when Let's Encrypt is enabled.
 host "example.com" {
+  # The addresses this host is served on (optional).
+  # Defaults to `server.https_address` (or `server.http_address` when `tls = false`).
+  # listen = ["0.0.0.0:8443"]
+
   # TLS settings of the host (optional).
   tls {
     # Certificate files, used instead of Let's Encrypt.
@@ -194,5 +204,28 @@ host "example.com" {
         add = { "X-Location" = "root" }
       }
     }
+  }
+}
+
+# A host served over plain HTTP, without certificates.
+# Useful behind another proxy or load balancer that already handles TLS.
+host "internal.example.com" {
+  tls = false
+
+  # Served only on this address (Proksi opens it at startup).
+  listen = ["10.0.0.1:8080"]
+
+  location "/" {
+    upstream "10.1.2.30:3000" {}
+  }
+}
+
+# Any other name: requests whose Host header doesn't match a host of their own.
+# It needs `tls = false`, as certificates are issued per name.
+host "*" {
+  tls = false
+
+  location "/" {
+    upstream "10.1.2.31:3000" {}
   }
 }

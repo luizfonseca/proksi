@@ -19,9 +19,11 @@ Proksi is a simple, lightweight, and easy-to-use proxy server that automatically
 Of the many features Proksi offers is the ability to load balance to your infrastructure or any IP that supports your host configurations. Other features of Proksi also include:
 
 - Automatic Docker and Docker Swarm service discovery through labels
-- Built-in most common middlewares such as OAuth, Rate Limiting, CDN Caching and others
+- Built-in most common middlewares such as OAuth, Basic Auth, CDN Caching and others
 - The ability of running it as a single binary in your system
 - Automatic SSL through Let's Encrypt and redirection from HTTP to HTTPS
+- Hosts with their own ports, plain HTTP hosts (e.g. behind another load balancer) and a catch-all host
+- Running many servers with the same routes and certificates (Redis, SQLite, Postgres)
 - Configuration through **HCL** with support for functions (get environment variables, etc)
 - Powerful plugin system for adding new middlewares and other features using **WebAssembly (WASM)**
 - Many others.
@@ -188,7 +190,7 @@ Upstreams are where requests are sent. They are labelled by their address (`host
 
 ```hcl
 location "/" {
-  upstream "10.0.0.1:3000" { weight = 2 }
+  upstream "10.0.0.1:3000" {}
   upstream "10.0.0.2:3000" {}
 
   # An external service using TLS
@@ -396,6 +398,11 @@ host:
 ## Migrating from `routes = [...]`
 
 `routes = [...]` still works but is deprecated (Proksi logs a warning). The [HCL documentation](https://docs.proksi.info/#/configuration/hcl/) shows how each route becomes a `host` block.
+
+
+## What's next
+
+**TCP** proxying (chosen by port and SNI, sharing the host's certificate), **rate limiting** and **body limits** are the next steps. See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
 
 
 # Documentation

@@ -83,6 +83,18 @@ mod tests {
     use super::check_config;
 
     #[test]
+    fn test_example_files_are_valid() {
+        for file in ["example.hcl", "example.yaml"] {
+            let path = format!("{}/../../examples/{file}", env!("CARGO_MANIFEST_DIR"));
+            let config = crate::config::load_for_test(&path)
+                .unwrap_or_else(|err| panic!("{file} can't be loaded: {err}"));
+
+            check_config(&config).unwrap_or_else(|err| panic!("{file} is invalid: {err}"));
+            assert_eq!(config.hosts().len(), 3, "{file}");
+        }
+    }
+
+    #[test]
     fn test_check_config_store_sync_interval() {
         let mut config = Config::default();
         config.store.sync_interval_secs = 0;

@@ -19,20 +19,18 @@ When no configuration is found, Proksi will emit a warning and start with minima
 
 
 
-<table><thead><tr><th width="311.3333333333333">Property</th><th width="268">Description</th><th>Default</th></tr></thead><tbody><tr><td><code>service_name</code></td><td>Name of the service. It's used for logging.</td><td>"proksi"</td></tr><tr><td><code>worker_threads</code></td><td>Number of (real) threads the HTTPs service will use.</td><td>80% of the available CPUs (at least 2)</td></tr><tr><td><code>lets_encrypt</code></td><td>--</td><td>--</td></tr><tr><td><code>lets_encrypt.enabled</code></td><td>Enables issuing certificates from Let's Encrypt</td><td>false</td></tr><tr><td><code>lets_encrypt.email</code></td><td>The email to be used when asking for certificates</td><td>""</td></tr><tr><td><code>lets_encrypt.staging</code></td><td>Use the <code>staging</code> endpoint to generate certificates. Mostly useful for local testing. Change it to <code>true</code> to enable the production certificates.</td><td>true</td></tr><tr><td><code>logging</code></td><td>--</td><td>--</td></tr><tr><td><code>logging.level</code></td><td>The level of logs saved or printed to STDOUT.</td><td>INFO</td></tr><tr><td><code>logging.access_logs_enabled</code></td><td>Enables response/request logging (includes user-agent, host, duration etc)</td><td>true</td></tr><tr><td><code>logging.error_logs_enabled</code></td><td>If the logs should include errors from Pingora</td><td>false</td></tr><tr><td><code>paths</code></td><td>--</td><td>--</td></tr><tr><td><code>paths.lets_encrypt</code></td><td>Path to store certificates, challenges etc</td><td>"/etc/proksi/lets_encrypt"</td></tr><tr><td><code>host</code></td><td>The hosts proksi accepts requests for, by name (matched against the <code>Host</code> header)</td><td></td></tr><tr><td><code>host.&lt;name&gt;.tls</code></td><td>Certificate files (<code>certificate.pem</code>, <code>certificate.key</code>) and <code>self_signed_on_failure</code></td><td></td></tr><tr><td><code>host.&lt;name&gt;.headers.response</code></td><td>Headers added (<code>add</code>) or removed (<code>remove</code>) in every response of the host</td><td></td></tr><tr><td><code>host.&lt;name&gt;.location.&lt;path&gt;</code></td><td>Requests whose path is <code>&lt;path&gt;</code> or below it; the most specific location wins</td><td></td></tr><tr><td><code>host.&lt;name&gt;.location.&lt;path&gt;.upstream.&lt;host:port&gt;</code></td><td>Where requests are sent (load balanced), with optional <code>weight</code>, <code>network</code>, <code>sni</code> and request <code>headers.add</code></td><td></td></tr><tr><td></td><td></td><td></td></tr></tbody></table>
+<table><thead><tr><th width="311.3333333333333">Property</th><th width="268">Description</th><th>Default</th></tr></thead><tbody><tr><td><code>service_name</code></td><td>Name of the service. It's used for logging.</td><td>"proksi"</td></tr><tr><td><code>worker_threads</code></td><td>Number of threads used to handle requests.</td><td>80% of the available CPUs (at least 2)</td></tr><tr><td><code>server.https_address</code></td><td>Where hosts with TLS are served, unless they set <code>listen</code></td><td>"0.0.0.0:443"</td></tr><tr><td><code>server.http_address</code></td><td>Where hosts without TLS are served, unless they set <code>listen</code>. Also used to redirect to HTTPS and for Let's Encrypt challenges</td><td>"0.0.0.0:80"</td></tr><tr><td><code>lets_encrypt</code></td><td>--</td><td>--</td></tr><tr><td><code>lets_encrypt.enabled</code></td><td>Enables issuing certificates from Let's Encrypt</td><td>false</td></tr><tr><td><code>lets_encrypt.email</code></td><td>The email to be used when asking for certificates</td><td>""</td></tr><tr><td><code>lets_encrypt.staging</code></td><td>Use the <code>staging</code> endpoint to generate certificates. Mostly useful for local testing. Change it to <code>true</code> to enable the production certificates.</td><td>true</td></tr><tr><td><code>logging</code></td><td>--</td><td>--</td></tr><tr><td><code>logging.level</code></td><td>The level of logs saved or printed to STDOUT.</td><td>INFO</td></tr><tr><td><code>logging.access_logs_enabled</code></td><td>Enables response/request logging (includes user-agent, host, duration etc)</td><td>true</td></tr><tr><td><code>logging.error_logs_enabled</code></td><td>If the logs should include errors from Pingora</td><td>false</td></tr><tr><td><code>paths</code></td><td>--</td><td>--</td></tr><tr><td><code>paths.lets_encrypt</code></td><td>Path to store certificates, challenges etc</td><td>"/etc/proksi/lets_encrypt"</td></tr><tr><td><code>host</code></td><td>The hosts proksi accepts requests for, by name (matched against the <code>Host</code> header). <code>"*"</code> serves names without a host of their own (requires <code>tls: false</code>)</td><td></td></tr><tr><td><code>host.&lt;name&gt;.listen</code></td><td>Addresses the host is served on (<code>["ip:port"]</code>)</td><td><code>server.https_address</code> (or <code>server.http_address</code> without TLS)</td></tr><tr><td><code>host.&lt;name&gt;.tls</code></td><td><code>false</code> to serve the host over plain HTTP, or certificate files (<code>certificate.pem</code>, <code>certificate.key</code>) and <code>self_signed_on_failure</code></td><td>true</td></tr><tr><td><code>host.&lt;name&gt;.headers.response</code></td><td>Headers added (<code>add</code>) or removed (<code>remove</code>) in every response of the host</td><td></td></tr><tr><td><code>host.&lt;name&gt;.location.&lt;path&gt;</code></td><td>Requests whose path is <code>&lt;path&gt;</code> or below it; the most specific location wins</td><td></td></tr><tr><td><code>host.&lt;name&gt;.location.&lt;path&gt;.upstream.&lt;host:port&gt;</code></td><td>Where requests are sent (load balanced), with optional <code>network</code>, <code>sni</code> and request <code>headers.add</code></td><td></td></tr><tr><td></td><td></td><td></td></tr></tbody></table>
 
 
 
 ## Example file
 
-Below you can find a file with the current defaults and&#x20;
+Below you can find a file with the current defaults and the main settings, also available in [`examples/example.yaml`](https://github.com/luizfonseca/proksi/blob/main/examples/example.yaml).
 
 ```yaml
 # Description: Example configuration file for Proksi
 #
-# Proksi is a reverse proxy server that can be used to route incoming requests
-# to different upstream servers based on the request's host, path, headers, and
-# other attributes.
+# Proksi is a reverse proxy server that can be used to route incoming requests to different upstream servers based on the request's host, path, headers, and other attributes.
 #
 # This configuration file specifies the following settings:
 #
@@ -42,36 +40,58 @@ Below you can find a file with the current defaults and&#x20;
 # This will show in logs and it's mostly used for log filtering if needed
 service_name: "proksi"
 
-# Number of threads that the HTTPS service will use to handle incoming requests.
+# Number of threads used to handle requests (on the HTTPS and HTTP ports).
 # This can be adjusted based on the number of CPU cores available on the server.
-# The default value is 1.
+# The default value is 80% of the available CPUs (at least 2).
 #
 # Note: Increasing the number of threads can improve the performance of the server,
 # but it can also increase the memory usage.
-#
-# Note 2: This only affect the HTTPS service, the HTTP service
-# (and other background services) is single threaded.
 worker_threads: 4
 
-# The configuration for the HTTPS & HTTP service.
+# The default addresses of the server.
+# Hosts are served on these addresses unless they set their own (see `listen` below).
+# Proksi only opens the ports its hosts need.
 server:
-  # The address that the server will listen on while serving HTTPS.
-  # This can be a TCP address or a Unix socket.
+  # Where hosts with TLS are served.
   # The default value is "0.0.0.0:443".
   https_address: "0.0.0.0:443"
 
-  # The address that the server will listen on for HTTP requests.
-  # This can be a TCP address or a Unix socket.
+  # Where hosts without TLS are served. Hosts with TLS also use it to redirect
+  # HTTP requests to HTTPS and to answer Let's Encrypt challenges.
   # The default value is "0.0.0.0:80".
   http_address: "0.0.0.0:80"
 
+# The configuration for the Docker integration
+docker:
+  # Whether the Docker integration is enabled
+  # (the background service will run and listen for Docker events).
+  # Default value is <false>.
+  enabled: false
+
+  # The interval in seconds at which the Docker integration will check for new containers.
+  # The default value is 15 seconds.
+  # important: the lower the value, the more work Proksi has to do.
+  interval_secs: 15
+
+  # The mode of the Docker integration.
+  # The mode can be "container" or "swarm".
+  # When the mode is set to "container", the integration will only
+  # listen for labels in Docker containers
+  # When the mode is set to "swarm", the integration will listen for Docker
+  # events in a Docker Swarm cluster (service labels).
+  # Default value is <container>.
+  mode: "container"
+
+  # The endpoint for the Docker API.
+  # This can be a TCP endpoint or a Unix socket.
+  # The default value is "unix:///var/run/docker.sock".
+  endpoint: "unix:///var/run/docker.sock"
 
 # The configuration for the Let's Encrypt integration.
 lets_encrypt:
-
   # Whether the Let's Encrypt integration is enabled
-  # (the background service will run and issue certificates for your routes).
-  # Note: You must explicitly enable this and provide a valid email address
+  # (the background service will run and issue certificates for your hosts).
+  # Note: You must explicitly enable this and provide a valid email address.
   enabled: false
 
   # The email address to use for Let's Encrypt notifications and account registration.
@@ -88,6 +108,9 @@ lets_encrypt:
 
 # The logging configuration for the server.
 logging:
+  # Whether to log anything at all (default: true)
+  enabled: true
+
   # The log level for the server (can be "DEBUG", "INFO", "WARN", "ERROR").
   level: "INFO"
 
@@ -99,39 +122,98 @@ logging:
   # Whether error logs are enabled.
   error_logs_enabled: false
 
+  # Formats "json" or "pretty"
+  format: "pretty"
+
 # The paths for the TLS certificates, challenges, orders, and account credentials.
 # You can override any, these are the current defaults.
 paths:
-
   # The path where the TLS certificates will be stored.
   # If the path doesn't exist, it will be created if the binary has the right permissions.
-  lets_encrypt: "/etc/proksi/certificates"
+  lets_encrypt: "/etc/proksi/letsencrypt"
 
-
-# Hosts that the server will accept requests for, by name.
-# See the HCL page for how locations are matched.
+# Hosts that the server will accept requests for.
+# The key is the hostname (or IP address) matched against the Host header of each request,
+# and used to issue certificates when Let's Encrypt is enabled.
 host:
   example.com:
-    # Headers added or removed in every response of the host
+    # The addresses this host is served on (optional).
+    # Defaults to `server.https_address` (or `server.http_address` when `tls: false`).
+    # listen: ["0.0.0.0:8443"]
+
+    # TLS settings of the host (optional).
+    tls:
+      # Certificate files, used instead of Let's Encrypt.
+      certificate:
+        key: "/etc/proksi/certs/my-host.key"
+        pem: "/etc/proksi/certs/my-host.pem"
+      # Use a self-signed certificate if no certificate can be obtained.
+      self_signed_on_failure: true
+
+    # Headers added or removed from every response of the host (to the client).
     headers:
       response:
         add:
-          X-Api-Version: "1.0"
+          X-Api-Version: "<value>"
         remove:
           - "Server"
 
+    # Locations choose how requests are handled based on their path.
+    # The most specific location wins: `/api` serves `/api`, `/api/` and everything
+    # below it (not `/apis`), and `/` serves whatever no other location matches.
     location:
-      # Requests to /api and below
       /api:
+        # Upstreams are keyed by their address (host:port or [ipv6]:port).
+        # Requests are load balanced between them (round-robin), with health checks
+        # running in the background.
         upstream:
-          "10.1.2.24:3000":
-            # The docker network to reach the upstream through (optional)
-            network: "public"
           "10.1.2.23:3000":
+            # The docker network to reach the upstream through (optional).
             network: "shared"
+          "10.1.2.24:3000": {}
 
-      # Everything else
+        # Plugins (optional)
+        request_id: {}
+        oauth2:
+          provider: "github"
+          client_id: "<client_id>"
+          client_secret: "<client_secret>"
+          jwt_secret: "<jwt_secret>"
+          validations:
+            - key: "team_id"
+              value:
+                - "<team_id>"
+
       /:
         upstream:
-          "10.1.2.25:3000": {}
+          "google.com:443":
+            # The server name sent to an upstream using TLS.
+            sni: "google.com"
+            # Headers added to the request sent to the upstream.
+            headers:
+              add:
+                Host: "google.com"
+
+  # A host served over plain HTTP, without certificates.
+  # Useful behind another proxy or load balancer that already handles TLS.
+  internal.example.com:
+    tls: false
+
+    # Served only on this address (Proksi opens it at startup).
+    listen: ["10.0.0.1:8080"]
+
+    location:
+      /:
+        upstream:
+          "10.1.2.30:3000": {}
+
+  # Any other name: requests whose Host header doesn't match a host of their own.
+  # It needs `tls: false`, as certificates are issued per name.
+  "*":
+    tls: false
+
+    location:
+      /:
+        upstream:
+          "10.1.2.31:3000": {}
 ```
