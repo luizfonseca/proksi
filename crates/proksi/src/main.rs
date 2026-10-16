@@ -59,6 +59,11 @@ fn main() -> Result<(), anyhow::Error> {
     let (default_https, default_http) =
         config::listeners::default_addresses(&proxy_config).map_err(anyhow::Error::msg)?;
 
+    // Metrics are recorded only for the admin API, unless it turns them off
+    if proxy_config.admin.as_ref().is_some_and(|admin| admin.metrics) {
+        metrics::enable();
+    }
+
     // The clients of requests behind trusted proxies (validated when loading the configuration)
     proxy_server::client::init(
         proxy_server::client::TrustedProxies::parse(&proxy_config.server.trusted_proxies)

@@ -47,7 +47,7 @@ pub(super) fn build_location_container(
             return None;
         }
     };
-    container.metrics = Some(LocationMetrics::with_blocks(
+    container.metrics = crate::metrics::enabled().then(|| LocationMetrics::with_blocks(
         host,
         &location.path,
         &upstreams,

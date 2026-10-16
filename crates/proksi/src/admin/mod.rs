@@ -102,6 +102,14 @@ impl AdminApi {
             ));
         }
 
+        let metrics = ["/metrics", "/api/v1/stats", "/api/v1/stats/stream"];
+        if metrics.contains(&path) && !crate::metrics::enabled() {
+            return Answer::Reply(Reply::error(
+                StatusCode::NOT_FOUND,
+                "metrics are disabled (admin.metrics = false)",
+            ));
+        }
+
         match path {
             "/api/v1/stats" => match window(query, 60) {
                 Ok(window) => Answer::Reply(Reply::json(StatusCode::OK, &stats(window))),
@@ -415,6 +423,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_metrics() {
+        crate::metrics::enable();
         let api = AdminApi::new(Some("secret".to_string()), instance());
         crate::metrics::LocationMetrics::unknown().record(404, Duration::from_millis(1));
 
@@ -450,6 +459,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_without_a_token() {
+        crate::metrics::enable();
         // Only on a loopback address (checked when the configuration loads)
         let api = AdminApi::new(None, instance());
 
@@ -476,6 +486,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stats_windows() {
+        crate::metrics::enable();
         let api = AdminApi::new(None, instance());
         let stats = |query| api.handle(request(&Method::GET, "/api/v1/stats", query, None));
 

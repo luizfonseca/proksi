@@ -26,7 +26,8 @@ pub struct TcpTarget {
     /// Protocols (ALPN) the block is chosen by, if any
     pub alpn: Vec<String>,
     pub load_balancer: Arc<LoadBalancer<RoundRobin>>,
-    pub metrics: TcpMetrics,
+    /// None when metrics are disabled
+    pub metrics: Option<TcpMetrics>,
 }
 
 /// The load balancers of the `tcp` blocks (set once, at startup)
@@ -129,7 +130,7 @@ mod tests {
             tls,
             alpn: vec![],
             load_balancer: Arc::new(LoadBalancer::try_from_iter(["127.0.0.1:1"]).unwrap()),
-            metrics: crate::metrics::TcpMetrics::new(label),
+            metrics: None,
         }
     }
 

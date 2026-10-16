@@ -1584,3 +1584,44 @@ async fn test_forwarded_headers() {
     assert_eq!(sent["x-real-ip"], "1.2.3.4", "{sent}");
     proksi.assert_healthy();
 }
+
+const ADMIN_WITHOUT_METRICS: &str = r#"
+admin {
+  listen  = "127.0.0.1:{tcp_port_2}"
+  token   = "e2e-token"
+  metrics = false
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_admin_without_metrics() {
+    let mut proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        ADMIN_WITHOUT_METRICS,
+    )
+    .await;
+    let get = |path: &str| {
+        format!(
+            "GET {path} HTTP/1.1\r\nHost: admin\r\nAuthorization: Bearer e2e-token\r\nConnection: close\r\n\r\n"
+        )
+    };
+    proksi.resolve("app.test");
+    assert_eq!(proksi.get("app.test", "/").await.unwrap().status, 200);
+
+    for path in ["/metrics", "/api/v1/stats", "/api/v1/stats/stream"] {
+        let res = proksi
+            .raw_http_on(proksi.tcp_ports[2], get(path).as_bytes())
+            .await
+            .unwrap();
+        assert!(res.starts_with("HTTP/1.1 404"), "{path}: {res}");
+        assert!(res.contains("metrics are disabled (admin.metrics = false)"), "{res}");
+    }
+    // The rest of the API still works
+    let res = proksi
+        .raw_http_on(proksi.tcp_ports[2], get("/api/v1/status").as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+
+    proksi.assert_healthy();
+}

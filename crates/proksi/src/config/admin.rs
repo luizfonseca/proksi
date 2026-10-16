@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use serde::{Deserialize, Serialize};
 
 /// `admin { ... }`
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AdminConfig {
     /// The address of the admin API (`ip:port`)
@@ -14,6 +14,13 @@ pub struct AdminConfig {
     /// address.
     #[serde(skip_serializing)]
     pub token: Option<String>,
+    /// Record metrics (`/metrics` and live stats). Off, requests don't record anything.
+    #[serde(default = "enabled_by_default")]
+    pub metrics: bool,
+}
+
+fn enabled_by_default() -> bool {
+    true
 }
 
 impl AdminConfig {
@@ -60,6 +67,8 @@ mod tests {
         let admin = admin("admin {\n  listen = \"0.0.0.0:7555\"\n  token = \"secret\"\n}\n");
 
         assert_eq!(admin.token.as_deref(), Some("secret"));
+        assert!(admin.metrics);
+        assert!(!self::admin("admin {\n  listen = \"127.0.0.1:7555\"\n  metrics = false\n}\n").metrics);
         assert_eq!(admin.address(), Ok("0.0.0.0:7555".parse().unwrap()));
     }
 
