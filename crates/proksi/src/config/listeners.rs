@@ -6,6 +6,7 @@ use std::{
 };
 
 use super::{
+    admin::AdminConfig,
     host::Host,
     tcp::{TcpRoute, TcpTls},
     Config, StoreType,
@@ -18,6 +19,8 @@ pub struct Listeners {
     pub http: BTreeSet<String>,
     /// `tcp` blocks, each on its own address (except blocks of different hosts with TLS)
     pub tcp: Vec<TcpRoute>,
+    /// The admin API (`admin { ... }`), if enabled
+    pub admin: Option<SocketAddr>,
 }
 
 /// The addresses the hosts of the configuration need:
@@ -70,7 +73,34 @@ pub fn listeners(config: &Config) -> Result<Listeners, String> {
         ));
     }
     listeners.tcp = tcp_routes(config, &hosts, &listeners)?;
+    listeners.admin = config
+        .admin
+        .as_ref()
+        .map(|admin| admin_address(admin, &listeners))
+        .transpose()?;
     Ok(listeners)
+}
+
+/// The admin API's address, on a port of its own
+fn admin_address(admin: &AdminConfig, listeners: &Listeners) -> Result<SocketAddr, String> {
+    let address = admin.address()?;
+    // Also an address covering it (`0.0.0.0`, `[::]`) on the same port
+    let overlaps = |other: &str| {
+        other.parse::<SocketAddr>().is_ok_and(|other| {
+            other.port() == address.port()
+                && (other.ip() == address.ip()
+                    || other.ip().is_unspecified()
+                    || address.ip().is_unspecified())
+        })
+    };
+    let used = listeners.https.iter().chain(&listeners.http).any(|a| overlaps(a))
+        || listeners.tcp.iter().any(|route| overlaps(&route.listen));
+    if used {
+        return Err(format!(
+            "admin: address {address} is also used by hosts or tcp blocks"
+        ));
+    }
+    Ok(address)
 }
 
 /// The `tcp` blocks, each on an address of its own: blocks of different hosts with TLS can
@@ -194,6 +224,7 @@ mod tests {
                 https: set(&["0.0.0.0:443"]),
                 http: set(&["0.0.0.0:80"]),
                 tcp: vec![],
+                admin: None,
             })
         );
     }
@@ -207,6 +238,7 @@ mod tests {
                 https: set(&[]),
                 http: set(&["0.0.0.0:80"]),
                 tcp: vec![],
+                admin: None,
             })
         );
     }
@@ -223,6 +255,7 @@ mod tests {
                 https: set(&["127.0.0.1:8443"]),
                 http: set(&["0.0.0.0:80", "0.0.0.0:8080"]),
                 tcp: vec![],
+                admin: None,
             })
         );
     }
@@ -237,6 +270,7 @@ mod tests {
                 https: set(&["0.0.0.0:443"]),
                 http: set(&["0.0.0.0:80", "0.0.0.0:8080"]),
                 tcp: vec![],
+                admin: None,
             })
         );
     }
@@ -251,6 +285,7 @@ mod tests {
                 https: set(&["0.0.0.0:443"]),
                 http: set(&["0.0.0.0:80", "0.0.0.0:8080"]),
                 tcp: vec![],
+                admin: None,
             })
         );
     }
@@ -317,6 +352,33 @@ host "b.test" {
         );
 
         assert_eq!(listeners(&config).unwrap().tcp.len(), 1);
+    }
+
+    #[test]
+    fn test_admin_address() {
+        let mut with_admin = config("host \"a.test\" {}\n");
+        with_admin.admin = Some(crate::config::admin::AdminConfig {
+            listen: "127.0.0.1:7555".to_string(),
+            token: None,
+        });
+        assert_eq!(
+            listeners(&with_admin).unwrap().admin,
+            Some("127.0.0.1:7555".parse().unwrap())
+        );
+
+        for address in ["0.0.0.0:80", "0.0.0.0:443", "0.0.0.0:7777"] {
+            let mut config = config(
+                "tcp \"game\" {\n  listen = \"0.0.0.0:7777\"\n  upstream \"game:7777\" {}\n}\nhost \"a.test\" {}\n",
+            );
+            config.admin = Some(crate::config::admin::AdminConfig {
+                listen: address.to_string(),
+                token: Some("secret".to_string()),
+            });
+            assert_eq!(
+                listeners(&config),
+                Err(format!("admin: address {address} is also used by hosts or tcp blocks")),
+            );
+        }
     }
 
     #[test]

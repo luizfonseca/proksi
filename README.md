@@ -377,6 +377,19 @@ store {
 
 SQLite and Postgres need Proksi to be built with the `store-sqlite` / `store-postgres` features.
 
+## Metrics
+
+With an `admin` block, Proksi serves Prometheus metrics (requests, latency and upstream errors per host, location and upstream) on an address of its own:
+
+```hcl
+admin {
+  listen = "127.0.0.1:7555"
+  token  = env("PROKSI_ADMIN_TOKEN") # sent as `Authorization: Bearer <token>`
+}
+```
+
+Without a `token`, `listen` must be a loopback address. Live numbers (requests per second, p50/p90/p99 latency, errors and upstream health over the last minutes) are at `/api/v1/stats`, or streamed every second from `/api/v1/stats/stream`. See the [admin documentation](https://docs.proksi.info/#/configuration/admin) for the metrics and a Prometheus configuration.
+
 ## Auto reload
 
 Proksi can watch the configuration file and apply changes on the fly. Changes to hosts are applied without restarting; an invalid file is ignored (and logged), so Proksi keeps running:

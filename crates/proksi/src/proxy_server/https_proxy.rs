@@ -19,6 +19,7 @@ use pingora_cache::{
 };
 
 use crate::config::RouteUpstream;
+use crate::metrics::{LocationMetrics, UpstreamMetrics};
 use crate::stores::{self, routes::RouteStoreContainer};
 
 use super::{default_peer_opts, http_proxy, listener::Listener};
@@ -47,6 +48,9 @@ pub struct RouterContext {
     pub extensions: HashMap<Cow<'static, str>, String>,
     /// Bytes of the request body proxied so far
     pub request_body_bytes: u64,
+    /// The upstream chosen (index in the location's upstreams), and when
+    pub upstream_index: Option<usize>,
+    pub upstream_start: Option<std::time::Instant>,
 
     pub timings: RouterTimings,
 }
@@ -68,6 +72,8 @@ impl ProxyHttp for Router {
             upstream: RouteUpstream::default(),
             extensions: HashMap::with_capacity(2),
             request_body_bytes: 0,
+            upstream_index: None,
+            upstream_start: None,
 
             timings: RouterTimings {
                 request_filter_start: std::time::Instant::now(),
@@ -135,12 +141,16 @@ impl ProxyHttp for Router {
             return Ok(true);
         };
 
+        // Set first, so requests answered by a block are counted in the location's metrics
+        ctx.route_container = Some(route_container.clone());
+
         // The location's building blocks, in order: a block can answer the request (e.g. a `401`)
-        if route_container.blocks.request(session, ctx).await {
+        if let Some(block) = route_container.blocks.request(session, ctx).await {
+            if let Some(metrics) = &route_container.metrics {
+                metrics.blocked(block.name());
+            }
             return Ok(true);
         }
-
-        ctx.route_container = Some(route_container.clone());
 
         Ok(false)
     }
@@ -153,10 +163,18 @@ impl ProxyHttp for Router {
         _end_of_stream: bool,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
-        match ctx.route_container.clone() {
-            Some(location) => location.blocks.request_body(body.as_ref(), ctx),
-            None => Ok(()),
-        }
+        let Some(location) = ctx.route_container.clone() else {
+            return Ok(());
+        };
+        location
+            .blocks
+            .request_body(body.as_ref(), ctx)
+            .map_err(|(block, err)| {
+                if let Some(metrics) = &location.metrics {
+                    metrics.blocked(block.name());
+                }
+                err
+            })
     }
 
     /// Define where the proxy should send the request to.
@@ -186,11 +204,16 @@ impl ProxyHttp for Router {
         };
         let healthy_port = healthy_addr.port();
 
-        let Some(upstream) = route_container.upstream_for(healthy_addr) else {
+        let Some(index) = route_container.upstream_index(healthy_addr) else {
+            return Err(pingora::Error::new(HTTPStatus(503)));
+        };
+        let Some(upstream) = route_container.upstreams.get(index) else {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
 
         ctx.upstream = upstream.clone();
+        ctx.upstream_index = Some(index);
+        ctx.upstream_start = Some(std::time::Instant::now());
 
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
         let mut peer = HttpPeer::new(
@@ -290,6 +313,9 @@ impl ProxyHttp for Router {
         // let route_container = process_route(ctx);
 
         if let Some(location) = ctx.route_container.clone() {
+            if let (Some(upstream), Some(start)) = (upstream_metrics(ctx), ctx.upstream_start) {
+                upstream.record(start.elapsed());
+            }
             location
                 .blocks
                 .upstream_response(session, upstream_response, ctx);
@@ -309,7 +335,8 @@ impl ProxyHttp for Router {
         _: Option<&pingora::Error>,
         ctx: &mut Self::CTX,
     ) {
-        let duration_ms = ctx.timings.request_filter_start.elapsed().as_millis();
+        let duration = ctx.timings.request_filter_start.elapsed();
+        let duration_ms = duration.as_millis();
 
         let http_version = if session.is_http2() {
             "http/2"
@@ -343,6 +370,13 @@ impl ProxyHttp for Router {
             .response_written()
             .map(|v| v.status.as_u16())
             .unwrap_or_default();
+
+        // Requests no location served (unknown hosts, redirects to HTTPS...) are `_unknown`
+        ctx.route_container
+            .as_ref()
+            .and_then(|location| location.metrics.as_ref())
+            .unwrap_or_else(|| LocationMetrics::unknown())
+            .record(status_code, duration);
 
         tracing::info!(
             method,
@@ -453,6 +487,41 @@ impl ProxyHttp for Router {
     /// This filter is called when the request just established or reused a connection to the upstream
     ///
     /// This filter allows user to log timing and connection related info.
+    fn fail_to_connect(
+        &self,
+        _session: &mut Session,
+        _peer: &HttpPeer,
+        ctx: &mut Self::CTX,
+        e: Box<pingora::Error>,
+    ) -> Box<pingora::Error> {
+        if let Some(upstream) = upstream_metrics(ctx) {
+            upstream.error();
+        }
+        e
+    }
+
+    fn error_while_proxy(
+        &self,
+        peer: &HttpPeer,
+        session: &mut Session,
+        e: Box<pingora::Error>,
+        ctx: &mut Self::CTX,
+        client_reused: bool,
+    ) -> Box<pingora::Error> {
+        if let Some(upstream) = upstream_metrics(ctx) {
+            upstream.error();
+        }
+        // Pingora's default
+        let mut e = e.more_context(format!("Peer: {peer}"));
+        if !session.req_header().method.is_idempotent() || session.as_ref().retry_buffer_truncated()
+        {
+            e.set_retry(false);
+        } else {
+            e.retry.decide_reuse(client_reused);
+        }
+        e
+    }
+
     async fn connected_to_upstream(
         &self,
         _session: &mut Session,
@@ -471,6 +540,12 @@ impl ProxyHttp for Router {
             .insert(Cow::Borrowed("peer"), peer.address().to_string());
         Ok(())
     }
+}
+
+/// The metrics of the upstream chosen for the request
+fn upstream_metrics(ctx: &RouterContext) -> Option<&UpstreamMetrics> {
+    let location = ctx.route_container.as_ref()?.metrics.as_ref()?;
+    location.upstream(ctx.upstream_index?)
 }
 
 /// Builds the cache key for a request to `host`.

@@ -181,15 +181,15 @@ impl Blocks {
     }
 
     /// Runs the request stage, until a block answers the request (`true`)
-    pub async fn request(&self, session: &mut Session, ctx: &mut RouterContext) -> bool {
+    pub async fn request(&self, session: &mut Session, ctx: &mut RouterContext) -> Option<Kind> {
         for block in &self.0 {
             match block.middleware.request(session, ctx).await {
-                Ok(true) => return true,
+                Ok(true) => return Some(block.kind),
                 Ok(false) => {}
                 Err(err) => tracing::debug!(block = block.kind.name(), "request: {err}"),
             }
         }
-        false
+        None
     }
 
     /// Runs the request body stage, until a block ends the request
@@ -197,10 +197,28 @@ impl Blocks {
         &self,
         body: Option<&Bytes>,
         ctx: &mut RouterContext,
-    ) -> pingora::Result<()> {
+    ) -> Result<(), (Kind, Box<pingora::Error>)> {
+        self.0.iter().try_for_each(|block| {
+            block
+                .middleware
+                .request_body(body, ctx)
+                .map_err(|err| (block.kind, err))
+        })
+    }
+
+    /// The kinds of blocks that can answer a request instead of the upstream
+    pub fn answering(&self) -> Vec<&'static str> {
         self.0
             .iter()
-            .try_for_each(|block| block.middleware.request_body(body, ctx))
+            .map(|block| block.kind)
+            .filter(|kind| {
+                matches!(
+                    kind,
+                    Kind::RateLimit | Kind::BodyLimit | Kind::BasicAuth | Kind::Oauth2
+                )
+            })
+            .map(Kind::name)
+            .collect()
     }
 
     pub async fn upstream_request(

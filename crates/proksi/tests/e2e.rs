@@ -954,3 +954,261 @@ async fn test_hosts_are_only_served_on_their_addresses() {
 
     proksi.assert_healthy();
 }
+
+const ADMIN: &str = r#"
+admin {
+  listen = "127.0.0.1:{tcp_port_2}"
+  token  = "e2e-token"
+}
+
+host "limited.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  location "/" {
+    rate_limit {
+      requests = 1
+      per      = "1m"
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+
+tcp "web" {
+  listen = "127.0.0.1:{tcp_port_0}"
+  upstream "127.0.0.1:{http_upstream_port}" {}
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_admin_metrics() {
+    let mut proksi = Harness::start_with(vec![Route::new("app.test", Upstream::Http)], ADMIN).await;
+    let admin_port = proksi.tcp_ports[2];
+    let metrics = |token: Option<&str>| {
+        let authorization = token
+            .map(|token| format!("Authorization: Bearer {token}\r\n"))
+            .unwrap_or_default();
+        format!("GET /metrics HTTP/1.1\r\nHost: admin\r\n{authorization}Connection: close\r\n\r\n")
+    };
+
+    proksi.resolve("app.test");
+    assert_eq!(proksi.get("app.test", "/hello").await.unwrap().status, 200);
+    assert_eq!(proksi.get("app.test", "/hello").await.unwrap().status, 200);
+    // A host proksi doesn't serve (over a connection for one it does)
+    let res = proksi
+        .tls_request(
+            proksi.https_port,
+            "app.test",
+            "GET / HTTP/1.1\r\nHost: unknown.test\r\nConnection: close\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 404"), "{res}");
+
+    // Answered by `rate_limit` the second time
+    proksi.resolve("limited.test");
+    assert_eq!(proksi.get("limited.test", "/").await.unwrap().status, 200);
+    assert_eq!(proksi.get("limited.test", "/").await.unwrap().status, 429);
+    // Through a tcp block
+    let res = proksi
+        .raw_http_on(
+            proksi.tcp_ports[0],
+            b"GET /tcp HTTP/1.1\r\nHost: tcp.test\r\nConnection: close\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+
+    let res = proksi
+        .raw_http_on(admin_port, metrics(None).as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 401"), "{res}");
+
+    let res = proksi
+        .raw_http_on(admin_port, metrics(Some("e2e-token")).as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    let line = |prefix: &str, suffix: &str| {
+        res.lines()
+            .find(|line| line.starts_with(prefix) && line.contains(suffix))
+            .map(|line| line.rsplit(' ').next().unwrap_or_default().to_string())
+    };
+    // By host and location, and status class
+    assert_eq!(
+        line("proksi_requests_total{host=\"app.test\"", "status=\"2xx\"").as_deref(),
+        Some("2"),
+        "{res}"
+    );
+    assert_eq!(
+        line("proksi_requests_total{host=\"_unknown\"", "status=\"4xx\"").as_deref(),
+        Some("1"),
+        "{res}"
+    );
+    // Time to the upstream's response headers, by upstream
+    assert_eq!(
+        line(
+            "proksi_upstream_duration_seconds_count{host=\"app.test\"",
+            &format!("upstream=\"127.0.0.1:{}\"", proksi.http_upstream.port)
+        )
+        .as_deref(),
+        Some("2"),
+        "{res}"
+    );
+    assert_eq!(
+        line(
+            "proksi_upstream_healthy{host=\"app.test\"",
+            &format!("upstream=\"127.0.0.1:{}\"", proksi.http_upstream.port)
+        )
+        .as_deref(),
+        Some("1"),
+        "{res}"
+    );
+    // Building blocks
+    assert_eq!(
+        line(
+            "proksi_blocked_requests_total{block=\"rate_limit\",host=\"limited.test\"",
+            ""
+        )
+        .as_deref(),
+        Some("1"),
+        "{res}"
+    );
+    assert_eq!(
+        line(
+            "proksi_requests_total{host=\"limited.test\"",
+            "status=\"4xx\""
+        )
+        .as_deref(),
+        Some("1"),
+        "{res}"
+    );
+    // TCP: the connection closed once the upstream answered
+    assert_eq!(
+        line("proksi_tcp_connections_total{block=\"tcp \\\"web\\\"\"}", "").as_deref(),
+        Some("1"),
+        "{res}"
+    );
+    assert_eq!(
+        line("proksi_tcp_connections_active{block=\"tcp \\\"web\\\"\"}", "").as_deref(),
+        Some("0"),
+        "{res}"
+    );
+    let bytes = |direction: &str| {
+        line(
+            "proksi_tcp_bytes_total{block=\"tcp \\\"web\\\"\"",
+            &format!("direction=\"{direction}\""),
+        )
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or_default()
+    };
+    assert!(bytes("in") > 40 && bytes("out") > 100, "{res}");
+    // Hosts by source
+    assert!(line("proksi_routes{source=\"file\"}", "").is_some(), "{res}");
+
+    // Certificate expiry, refreshed 5 seconds after starting
+    let mut expiry = None;
+    for _ in 0..30 {
+        let res = proksi
+            .raw_http_on(admin_port, metrics(Some("e2e-token")).as_bytes())
+            .await
+            .unwrap();
+        expiry = res
+            .lines()
+            .find(|line| {
+                line.starts_with(
+                    "proksi_certificate_expiry_timestamp_seconds{domain=\"limited.test\"}",
+                )
+            })
+            .map(ToString::to_string);
+        if expiry.is_some() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    assert!(expiry.is_some(), "no certificate expiry for limited.test");
+
+    proksi.assert_healthy();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_admin_live_stats() {
+    let mut proksi = Harness::start_with(vec![Route::new("app.test", Upstream::Http)], ADMIN).await;
+    let admin_port = proksi.tcp_ports[2];
+    let get = |path: &str| {
+        format!(
+            "GET {path} HTTP/1.1\r\nHost: admin\r\nAuthorization: Bearer e2e-token\r\nConnection: close\r\n\r\n"
+        )
+    };
+    let body = |res: &str| res.split("\r\n\r\n").nth(1).unwrap_or_default().to_string();
+
+    proksi.resolve("app.test");
+    for _ in 0..5 {
+        assert_eq!(proksi.get("app.test", "/live").await.unwrap().status, 200);
+    }
+    // Sampled every second
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    let res = proksi
+        .raw_http_on(admin_port, get("/api/v1/stats?window=60").as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    let stats: serde_json::Value = serde_json::from_str(&body(&res)).unwrap();
+    let host = stats["hosts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|host| host["host"] == "app.test")
+        .unwrap_or_else(|| panic!("{stats}"));
+    let location = &host["locations"][0];
+    assert_eq!(location["responses"]["2xx"], 5, "{stats}");
+    assert!(location["requests_per_second"].as_f64().unwrap() > 0.0, "{stats}");
+    assert!(location["duration_ms"]["p50"].as_f64().is_some(), "{stats}");
+    assert_eq!(location["upstreams"][0]["healthy"], true, "{stats}");
+
+    let res = proksi
+        .raw_http_on(admin_port, get("/api/v1/stats?window=0").as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 400"), "{res}");
+
+    // The stream sends the stats every second
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", admin_port))
+        .await
+        .unwrap();
+    tokio::io::AsyncWriteExt::write_all(
+        &mut stream,
+        get("/api/v1/stats/stream?window=10").as_bytes(),
+    )
+    .await
+    .unwrap();
+    let mut received = String::new();
+    let mut buf = [0u8; 4096];
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    while received.matches("data: ").count() < 2 && tokio::time::Instant::now() < deadline {
+        let read = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            tokio::io::AsyncReadExt::read(&mut stream, &mut buf),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        received.push_str(&String::from_utf8_lossy(&buf[..read]));
+    }
+    assert!(received.starts_with("HTTP/1.1 200"), "{received}");
+    assert!(received.to_lowercase().contains("content-type: text/event-stream"), "{received}");
+    let event = received
+        .lines()
+        .find_map(|line| line.strip_prefix("data: "))
+        .unwrap();
+    let event: serde_json::Value = serde_json::from_str(event).unwrap();
+    assert!(event["hosts"].is_array(), "{event}");
+
+    proksi.assert_healthy();
+}

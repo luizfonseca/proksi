@@ -14,6 +14,7 @@ use hcl::Hcl;
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
+pub mod admin;
 pub mod blocks;
 pub mod deprecations;
 pub(crate) mod hcl;
@@ -700,6 +701,11 @@ pub(crate) struct Config {
     #[clap(skip)]
     #[serde(default)]
     pub tcp: BTreeMap<String, blocks::TcpBlock>,
+
+    /// The admin API and metrics (`admin { ... }`, ADR 0004), off without it
+    #[clap(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin: Option<admin::AdminConfig>,
     // Listeners -- a list of specific listeners and upstrems
     // that don't necessarily need to be HTTP/HTTPS related
     // pub listeners: Vec<ConfigListener>,
@@ -722,6 +728,7 @@ impl Default for Config {
             routes: vec![],
             host: BTreeMap::new(),
             tcp: BTreeMap::new(),
+            admin: None,
             auto_reload: AutoReload::default(),
             store: StoreConfig::default(),
             cache: CacheConfig::default(),

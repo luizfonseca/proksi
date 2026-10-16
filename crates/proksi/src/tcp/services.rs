@@ -11,6 +11,7 @@ use pingora::{
 use crate::{
     config::tcp::{TcpRoute, TcpTls},
     proxy_server::cert_store::CertStore,
+    metrics::TcpMetrics,
     routing::build::load_balancer,
 };
 
@@ -35,6 +36,7 @@ pub fn tcp_targets(routes: &[TcpRoute]) -> Result<Arc<Vec<TcpTarget>>, anyhow::E
             tls: route.tls,
             alpn: route.alpn.clone(),
             load_balancer: Arc::new(load_balancer),
+            metrics: TcpMetrics::new(&route.label()),
         });
     }
     register_load_balancers(&targets);

@@ -69,6 +69,9 @@ impl Reconciler {
         let merged = merge(&self.snapshots);
         let mut report = ApplyReport::default();
 
+        // Hosts are built (and their certificates loaded) first, then inserted together, so
+        // requests never see part of a change
+        let mut built = vec![];
         for (host, (source, definition)) in &merged.hosts {
             let is_new = match self.applied.get(host) {
                 // Same definition from another source: nothing to rebuild
@@ -90,9 +93,12 @@ impl Reconciler {
                 tracing::error!("failed to load the certificate for host {host}: {err}");
             }
 
+            built.push((host, *source, definition, container, is_new));
+        }
+        for (host, source, definition, container, is_new) in built {
             stores::insert_route(host.clone(), Arc::new(container));
             self.applied
-                .insert(host.clone(), (*source, definition.clone()));
+                .insert(host.clone(), (source, definition.clone()));
             if is_new {
                 report.added.push(host.clone());
             } else {
@@ -113,6 +119,15 @@ impl Reconciler {
         }
 
         self.log_changes(&merged, &report);
+        for source in [
+            RouteSourceKind::File,
+            RouteSourceKind::Docker,
+            RouteSourceKind::Kubernetes,
+            RouteSourceKind::Store,
+        ] {
+            let hosts = self.applied.values().filter(|(s, _)| *s == source).count();
+            crate::metrics::set_routes(&format!("{source:?}").to_lowercase(), hosts);
+        }
         self.conflicts = merged.conflicts;
         self.invalid = merged.invalid;
         ROUTING_STATUS.store(Arc::new(self.status()));
