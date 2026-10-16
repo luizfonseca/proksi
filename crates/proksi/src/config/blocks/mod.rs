@@ -264,6 +264,22 @@ host:
     }
 
     #[test]
+    fn test_rate_limit_block() {
+        let doc = HclFormat::from_str::<Doc>(
+            "host \"a.test\" {\n  location \"/\" {\n    rate_limit {\n      requests = 10\n      per = \"1m\"\n    }\n  }\n}\n",
+        )
+        .unwrap();
+
+        let host = doc.host.get("a.test").unwrap().to_host("a.test").unwrap();
+        let plugins = host.locations[0].plugins.clone().unwrap();
+
+        assert_eq!(plugins[0].name, "rate_limit");
+        let config = plugins[0].config.as_ref().unwrap();
+        assert_eq!(config["requests"], 10);
+        assert_eq!(config["per"], "1m");
+    }
+
+    #[test]
     fn test_host_listen_addresses() {
         let doc = HclFormat::from_str::<Doc>(
             "host \"a.test\" {\n  listen = [\"0.0.0.0:8080\", \"[::]:8080\"]\n}\n",

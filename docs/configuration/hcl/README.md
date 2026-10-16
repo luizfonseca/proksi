@@ -121,7 +121,7 @@ host "*" {
 | `upstream "<host:port>" { }` | Where requests are sent, load balanced (round-robin) with health checks. IPv6 addresses go in brackets (`[::1]:3000`). Optional settings: `weight` (1 by default), `network` (docker), `sni`, and `headers { add = { ... } }` added to the request sent to the upstream. |
 | `headers { response { add = { ... }, remove = [...] } }` | Headers changed in responses, after the host's. |
 | `cache { ... }` | Response caching, as in [caching](use-cases/cache.md). |
-| `request_id { }`, `basic_auth { ... }`, `oauth2 { ... }` | Plugins ([request id](plugins/request-id.md), [basic auth](plugins/basic-auth.md), [OAuth2](plugins/oauth2.md)), with the same settings as their `config` in `plugins = [...]`. |
+| `request_id { }`, `rate_limit { ... }`, `basic_auth { ... }`, `oauth2 { ... }` | Plugins ([request id](plugins/request-id.md), [rate limit](plugins/rate-limit.md), [basic auth](plugins/basic-auth.md), [OAuth2](plugins/oauth2.md)), with the same settings as their `config` in `plugins = [...]`. |
 
 **Order of blocks**
 
@@ -129,7 +129,7 @@ Everything in a location besides upstreams is a building block: plugins, `header
 
 | Block | Default priority |
 | --- | --- |
-| `request_id` | 0 |
+| `request_id`, `rate_limit` | 0 |
 | `basic_auth`, `oauth2` | 20 |
 | `headers` | 50 |
 | `cache` | 60 |
