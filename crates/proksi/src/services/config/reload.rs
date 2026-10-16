@@ -34,11 +34,12 @@ pub fn reload_action(current: &Config, new: Result<Config, String>) -> ReloadAct
     }
 }
 
-/// Everything in the configuration except the routes
+/// Everything in the configuration except the routes and hosts
 fn settings(config: &Config) -> Option<serde_json::Value> {
     let mut value = serde_json::to_value(config).ok()?;
     if let Some(settings) = value.as_object_mut() {
         settings.remove("routes");
+        settings.remove("host");
     }
     Some(value)
 }
@@ -160,5 +161,20 @@ mod tests {
         assert!(is_config_file(&PathBuf::from("routes.yaml")));
         assert!(!is_config_file(Path::new("proksi.hcl.swp")));
         assert!(!is_config_file(Path::new("README.md")));
+    }
+
+    #[test]
+    fn test_host_block_change_applies_routes() {
+        let current = Config::default();
+        let mut new = Config::default();
+        new.host.insert(
+            "a.test".to_string(),
+            crate::config::blocks::HostBlock::default(),
+        );
+
+        assert!(matches!(
+            reload_action(&current, Ok(new)),
+            ReloadAction::ApplyRoutes(_)
+        ));
     }
 }

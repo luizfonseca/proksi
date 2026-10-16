@@ -1,0 +1,242 @@
+//! `host "<name>" { location "<path>" { ... } }` blocks (ADR 0003), as written in HCL or YAML.
+//! Each block converts into the model in [`crate::config::host`].
+
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+
+use super::host::{Host, HostTls};
+
+mod headers;
+mod location;
+mod tls;
+mod upstream;
+
+pub use headers::HeadersBlock;
+pub use location::LocationBlock;
+pub use tls::TlsBlock;
+
+/// `host "<name>" { ... }`
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostBlock {
+    pub tls: Option<TlsBlock>,
+    /// Headers for every location of the host
+    pub headers: Option<HeadersBlock>,
+    #[serde(default)]
+    pub location: BTreeMap<String, LocationBlock>,
+}
+
+impl HostBlock {
+    /// Converts the block of host `name` into a host
+    pub fn to_host(&self, name: &str) -> Result<Host, String> {
+        let tls = self.tls.clone().unwrap_or_default();
+        let locations = self
+            .location
+            .iter()
+            .map(|(path, location)| {
+                location
+                    .to_location(path, self.headers.as_ref())
+                    .map_err(|err| format!("location \"{path}\": {err}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Host {
+            name: name.to_string(),
+            tls: HostTls {
+                certificate: tls.certificate,
+                self_signed_on_failure: tls.self_signed_on_failure,
+            },
+            locations,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{borrow::Cow, collections::BTreeMap};
+
+    use figment::providers::{Format, Yaml};
+    use serde::Deserialize;
+
+    use crate::config::{
+        hcl::HclFormat,
+        host::{Host, HostTls, Location},
+        RouteHeader, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin, RouteSslPath, RouteUpstream,
+    };
+
+    use super::HostBlock;
+
+    #[derive(Deserialize)]
+    struct Doc {
+        host: BTreeMap<String, HostBlock>,
+    }
+
+    const HCL: &str = r#"
+host "app.test" {
+  tls {
+    certificate {
+      pem = "/certs/app.pem"
+      key = "/certs/app.key"
+    }
+    self_signed_on_failure = true
+  }
+
+  headers {
+    response {
+      add    = { "x-host" = "app" }
+      remove = ["Server"]
+    }
+  }
+
+  location "/v1/session" {
+    upstream "directory:8080" {}
+  }
+
+  location "/*" {
+    headers {
+      response {
+        add = { "x-location" = "default" }
+      }
+    }
+    request_id {}
+    upstream "10.0.0.1:3000" {
+      weight = 2
+      sni    = "app.internal"
+      headers {
+        add = { "x-forwarded-by" = "proksi" }
+      }
+    }
+  }
+}
+"#;
+
+    const YAML: &str = r#"
+host:
+  app.test:
+    tls:
+      certificate: { pem: /certs/app.pem, key: /certs/app.key }
+      self_signed_on_failure: true
+    headers:
+      response: { add: { x-host: app }, remove: [Server] }
+    location:
+      /v1/session:
+        upstream: { "directory:8080": {} }
+      /*:
+        headers: { response: { add: { x-location: default } } }
+        request_id: {}
+        upstream:
+          "10.0.0.1:3000":
+            weight: 2
+            sni: app.internal
+            headers: { add: { x-forwarded-by: proksi } }
+"#;
+
+    fn header(name: &str, value: &str) -> RouteHeaderAdd {
+        RouteHeaderAdd {
+            name: Cow::Owned(name.to_string()),
+            value: Cow::Owned(value.to_string()),
+        }
+    }
+
+    fn host_headers(extra: &[RouteHeaderAdd]) -> Option<RouteHeader> {
+        let mut add = vec![header("x-host", "app")];
+        add.extend_from_slice(extra);
+        Some(RouteHeader {
+            add: Some(add),
+            remove: Some(vec![RouteHeaderRemove {
+                name: Cow::Owned("Server".to_string()),
+            }]),
+        })
+    }
+
+    fn expected() -> Host {
+        Host {
+            name: "app.test".to_string(),
+            tls: HostTls {
+                certificate: Some(RouteSslPath {
+                    pem: "/certs/app.pem".into(),
+                    key: "/certs/app.key".into(),
+                }),
+                self_signed_on_failure: true,
+            },
+            // Sorted by path
+            locations: vec![
+                Location {
+                    path: "/*".to_string(),
+                    exact: false,
+                    upstreams: vec![RouteUpstream {
+                        ip: Cow::Owned("10.0.0.1".to_string()),
+                        port: 3000,
+                        network: None,
+                        weight: Some(2),
+                        sni: Some("app.internal".to_string()),
+                        headers: Some(RouteHeader {
+                            add: Some(vec![header("x-forwarded-by", "proksi")]),
+                            remove: None,
+                        }),
+                    }],
+                    headers: host_headers(&[header("x-location", "default")]),
+                    plugins: Some(vec![RoutePlugin {
+                        name: Cow::Owned("request_id".to_string()),
+                        config: Some(std::collections::HashMap::new()),
+                    }]),
+                    cache: None,
+                },
+                Location {
+                    path: "/v1/session".to_string(),
+                    exact: false,
+                    upstreams: vec![RouteUpstream {
+                        ip: Cow::Owned("directory".to_string()),
+                        port: 8080,
+                        network: None,
+                        weight: None,
+                        sni: None,
+                        headers: None,
+                    }],
+                    headers: host_headers(&[]),
+                    plugins: Some(vec![]),
+                    cache: None,
+                },
+            ],
+        }
+    }
+
+    fn to_host(doc: &Doc) -> Result<Host, String> {
+        doc.host.get("app.test").unwrap().to_host("app.test")
+    }
+
+    #[test]
+    fn test_hcl_host_block() {
+        let doc = HclFormat::from_str::<Doc>(HCL).unwrap();
+        assert_eq!(to_host(&doc), Ok(expected()));
+    }
+
+    #[test]
+    fn test_yaml_host_block() {
+        let doc = Yaml::from_str::<Doc>(YAML).unwrap();
+        assert_eq!(to_host(&doc), Ok(expected()));
+    }
+
+    #[test]
+    fn test_unknown_attributes_are_rejected() {
+        let err = HclFormat::from_str::<Doc>("host \"app.test\" {\n  locaton \"/\" {\n  }\n}\n")
+            .err()
+            .unwrap();
+
+        assert!(err.to_string().contains("unknown field `locaton`"), "{err}");
+    }
+
+    #[test]
+    fn test_invalid_upstream_label() {
+        let doc = HclFormat::from_str::<Doc>(
+            "host \"app.test\" {\n  location \"/\" {\n    upstream \"10.0.0.1\" {}\n  }\n}\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            to_host(&doc),
+            Err("location \"/\": upstream \"10.0.0.1\" needs a port (host:port)".to_string())
+        );
+    }
+}

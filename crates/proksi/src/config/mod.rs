@@ -1,4 +1,8 @@
-use std::{borrow::Cow, collections::HashMap, path::PathBuf};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
+    path::PathBuf,
+};
 
 use clap::{Args, Parser, ValueEnum};
 use figment::{
@@ -10,7 +14,8 @@ use hcl::Hcl;
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
-mod hcl;
+pub(crate) mod hcl;
+pub mod blocks;
 pub mod host;
 pub mod validate;
 
@@ -671,9 +676,14 @@ pub(crate) struct Config {
     #[clap(skip)]
     pub paths: Path,
 
-    /// The routes to be proxied to.
+    /// The routes to be proxied to (deprecated: use `host` blocks).
     #[clap(skip)]
     pub routes: Vec<Route>,
+
+    /// Hosts defined with `host "<name>" { ... }` blocks (ADR 0003)
+    #[clap(skip)]
+    #[serde(default)]
+    pub host: BTreeMap<String, blocks::HostBlock>,
     // Listeners -- a list of specific listeners and upstrems
     // that don't necessarily need to be HTTP/HTTPS related
     // pub listeners: Vec<ConfigListener>,
@@ -694,6 +704,7 @@ impl Default for Config {
             docker: Docker::default(),
             lets_encrypt: LetsEncrypt::default(),
             routes: vec![],
+            host: BTreeMap::new(),
             auto_reload: AutoReload::default(),
             store: StoreConfig::default(),
             cache: CacheConfig::default(),
@@ -708,6 +719,22 @@ impl Default for Config {
             },
             paths: Path::default(),
         }
+    }
+}
+
+impl Config {
+    /// Every host of the configuration file: `host` blocks, then `routes` (deprecated).
+    /// Invalid host blocks are skipped (`check_config` rejects them when loading).
+    pub fn hosts(&self) -> Vec<host::Host> {
+        let blocks = self.host.iter().filter_map(|(name, block)| {
+            block
+                .to_host(name)
+                .map_err(|err| tracing::warn!("skipping host {name}: {err}"))
+                .ok()
+        });
+        blocks
+            .chain(self.routes.iter().map(host::Host::from_route))
+            .collect()
     }
 }
 
