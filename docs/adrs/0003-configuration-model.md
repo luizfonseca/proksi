@@ -172,10 +172,10 @@ Adding a building block is a new file with its tests and docs; routing doesn't c
 A `tcp` block forwards connections to its upstreams, with the same load balancing and health checks as HTTP.
 
 - On its own port, a `tcp` block inside a host terminates TLS with the host's certificate, and the upstream receives plain TCP. With `tls = "passthrough"`, TLS is forwarded untouched and the connection is chosen by SNI only.
-- On a port shared with HTTPS (443), SNI can't tell HTTP and TCP apart for the same host, so the `tcp` block must set `alpn`: connections asking for one of its protocols go to it, the rest to the host's locations. A shared-port `tcp` block without `alpn` is rejected when the host also has locations. Passthrough can't share a port with locations, since proksi would need to decrypt the connection to hand it to HTTP.
+- On a port shared with HTTPS (443), SNI can't tell HTTP and TCP apart for the same host, so the `tcp` block must set `alpn`: connections asking for one of its protocols go to it, the rest to the host's locations. A shared-port `tcp` block without `alpn` is rejected when the host also has locations. Passthrough is chosen by SNI only, so its host can't also have locations on that port.
 - A top-level `tcp` block has no TLS and no hostname, and is chosen by port only.
 
-Sharing 443 happens once TLS is terminated: during the handshake, proksi selects a block's `alpn` protocol when the client offers one for that host (HTTP/2 and HTTP/1.1 otherwise), and the HTTPS listener then forwards the connections of `tcp` blocks by SNI and protocol, handing the rest to the HTTP proxy. Passthrough needs SNI read from the ClientHello before the handshake, so it comes later.
+Sharing 443 happens once TLS is terminated: during the handshake, proksi selects a block's `alpn` protocol when the client offers one for that host (HTTP/2 and HTTP/1.1 otherwise), and the HTTPS listener then forwards the connections of `tcp` blocks by SNI and protocol, handing the rest to the HTTP proxy. On addresses with passthrough blocks, proksi reads SNI from the ClientHello before any handshake: connections for a passthrough host are forwarded untouched, the others are handshaken by proksi and served as above.
 
 ### Compatibility
 

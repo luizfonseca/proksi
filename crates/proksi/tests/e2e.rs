@@ -843,6 +843,109 @@ async fn test_https_and_tcp_on_one_host_chosen_by_alpn() {
     proksi.assert_healthy();
 }
 
+const PASSTHROUGH_ON_THE_HTTPS_PORT: &str = r#"
+# Only served on its own address
+host "backend.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+  listen = ["127.0.0.1:{tcp_port_1}"]
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+
+# Forwarded untouched to backend.test's address, which terminates TLS itself
+host "pass.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  tcp "raw" {
+    listen = "127.0.0.1:{https_port}"
+    tls    = "passthrough"
+    upstream "127.0.0.1:{tcp_port_1}" {}
+  }
+}
+
+# TLS terminated by proksi, on the same port
+host "game.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  tcp "game" {
+    listen = "127.0.0.1:{https_port}"
+    upstream "127.0.0.1:{http_port}" {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_tls_passthrough_on_the_https_port() {
+    let mut proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        PASSTHROUGH_ON_THE_HTTPS_PORT,
+    )
+    .await;
+    let get = |host: &str, path: &str| {
+        format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n")
+    };
+
+    // Asking for pass.test: the connection reaches backend.test's address untouched
+    let res = proksi
+        .tls_request(proksi.https_port, "pass.test", &get("backend.test", "/pass"))
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.contains("\"path\":\"/pass\""), "{res}");
+
+    // Other names are terminated by proksi: TCP...
+    let res = proksi
+        .tls_request(proksi.https_port, "game.test", &get("game.test", "/"))
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 308"), "{res}");
+    // ...and HTTPS, over HTTP/1.1 and HTTP/2
+    let res = proksi
+        .tls_request(proksi.https_port, "app.test", &get("app.test", "/app"))
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.contains("\"path\":\"/app\""), "{res}");
+    let frame = proksi
+        .h2_first_frame(proksi.https_port, "app.test")
+        .await
+        .unwrap();
+    assert_eq!(frame[3], 4, "{frame:?}");
+    // backend.test isn't served on the HTTPS port itself
+    let res = proksi
+        .tls_request(proksi.https_port, "app.test", &get("backend.test", "/"))
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 404"), "{res}");
+
+    // The passthrough connection's access log has the name it asked for
+    let logs = proksi.tcp_access_logs(2).await;
+    let passthrough = logs
+        .iter()
+        .find(|log| log["block"] == "tcp \"raw\" in host \"pass.test\"")
+        .unwrap_or_else(|| panic!("{logs:?}"));
+    assert_eq!(passthrough["server_name"], "pass.test");
+
+    proksi.assert_healthy();
+}
+
 const PLAIN_HTTP_HOSTS: &str = r#"
 host "plain.test" {
   tls = false

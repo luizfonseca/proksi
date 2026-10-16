@@ -5,6 +5,7 @@ use std::{collections::BTreeSet, net::SocketAddr, sync::Arc};
 use async_trait::async_trait;
 use pingora::{
     apps::ServerApp,
+    tls::ssl::{AlpnError, NameType, SslAcceptor, SslAcceptorBuilder, SslMethod},
     listeners::tls::TlsSettings,
     protocols::Stream,
     proxy::{http_proxy, http_proxy_service, HttpProxy},
@@ -39,7 +40,7 @@ impl ServerApp for HttpsApp {
     ) -> Option<Stream> {
         if let Some(tcp) = &self.tcp {
             if let Some(target) = tcp.target(&stream) {
-                tcp.forward(stream, target).await;
+                tcp.forward(stream, target, None).await;
                 return None;
             }
         }
@@ -78,20 +79,7 @@ pub fn https_service(
     tcp_targets: &Arc<Vec<TcpTarget>>,
     worker_threads: Option<usize>,
 ) -> Result<Service<HttpsApp>, anyhow::Error> {
-    // `tcp` blocks of hosts sharing these addresses (chosen by SNI, and ALPN)
-    let tcp = addresses
-        .iter()
-        .any(|address| on_address(tcp_targets, address).next().is_some())
-        .then(|| TcpProxy::new(tcp_targets.clone()));
-
-    let router = Router {
-        listener: Listener::Https,
-        default_address,
-    };
-    let app = HttpsApp {
-        http: Arc::new(http_proxy(configuration, router)),
-        tcp,
-    };
+    let app = https_app(configuration, addresses, default_address, tcp_targets);
     let mut service = Service::new("Pingora HTTP Proxy Service".to_string(), app);
     service.threads = worker_threads;
     for address in addresses {
@@ -103,17 +91,58 @@ pub fn https_service(
     Ok(service)
 }
 
+/// The HTTPS app (after TLS is terminated) for `addresses`, with their `tcp` blocks
+pub fn https_app(
+    configuration: &Arc<ServerConf>,
+    addresses: &BTreeSet<String>,
+    default_address: SocketAddr,
+    tcp_targets: &Arc<Vec<TcpTarget>>,
+) -> HttpsApp {
+    // `tcp` blocks of hosts sharing these addresses (chosen by SNI, and ALPN)
+    let tcp = addresses
+        .iter()
+        .any(|address| on_address(tcp_targets, address).next().is_some())
+        .then(|| TcpProxy::new(tcp_targets.clone()));
+
+    let router = Router {
+        listener: Listener::Https,
+        default_address,
+    };
+    HttpsApp {
+        http: Arc::new(http_proxy(configuration, router)),
+        tcp,
+    }
+}
+
 fn tls_settings() -> Result<TlsSettings, anyhow::Error> {
     let mut tls_settings = TlsSettings::with_callbacks(Box::new(CertStore::new()))?;
     tls_settings.enable_h2();
+    configure_tls(&mut tls_settings)?;
+    Ok(tls_settings)
+}
 
+/// TLS terminated by proksi itself (after reading the `ClientHello`, see `tcp::router`), set up
+/// like the HTTPS listener: certificates by SNI, then HTTP/2, HTTP/1.1 and the `tcp` blocks'
+/// protocols
+pub fn tls_acceptor(protocols: AlpnProtocols) -> Result<SslAcceptor, anyhow::Error> {
+    let mut builder = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls())?;
+    configure_tls(&mut builder)?;
+    builder.set_alpn_select_callback(move |ssl, offered| {
+        protocols
+            .select(ssl.servername(NameType::HOST_NAME), offered, true)
+            .ok_or(AlpnError::NOACK)
+    });
+    Ok(builder.build())
+}
+
+fn configure_tls(builder: &mut SslAcceptorBuilder) -> Result<(), anyhow::Error> {
     // tls_settings.set_session_cache_mode(SslSessionCacheMode::SERVER);
-    tls_settings.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
+    builder.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
 
     // For now this is a hardcoded recommendation based on
     // https://developers.cloudflare.com/ssl/reference/protocols/
     // but will be made configurable in the future
-    tls_settings.set_min_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_2))?;
-    tls_settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
-    Ok(tls_settings)
+    builder.set_min_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_2))?;
+    builder.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
+    Ok(())
 }

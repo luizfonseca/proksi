@@ -163,10 +163,16 @@ fn add_listeners(
             proxy_config.worker_threads,
         ));
     }
-    if !listeners.https.is_empty() {
+    // Addresses with TLS passthrough blocks are served by `tcp::router` (HTTPS included)
+    let https = listeners
+        .https
+        .difference(&tcp::services::passthrough_addresses(&listeners.tcp))
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    if !https.is_empty() {
         server.add_service(proxy_server::services::https_service(
             &server.configuration,
-            &listeners.https,
+            &https,
             default_https,
             &tcp_targets,
             proxy_config.worker_threads,
@@ -193,6 +199,7 @@ fn add_listeners(
         &listeners.tcp,
         &tcp_targets,
         &listeners.https,
+        (&server.configuration, default_https),
         proxy_config.worker_threads,
     )?);
 

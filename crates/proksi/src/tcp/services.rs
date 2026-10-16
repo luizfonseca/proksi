@@ -8,8 +8,11 @@ use pingora::{
     services::{listening::Service, ServiceWithDependents},
 };
 
+use pingora::server::configuration::ServerConf;
+
 use crate::{
     config::tcp::{TcpRoute, TcpTls},
+    proxy_server::services::{https_app, tls_acceptor},
     proxy_server::cert_store::CertStore,
     metrics::TcpMetrics,
     routing::build::load_balancer,
@@ -19,7 +22,9 @@ use super::{
     alpn::{select_protocols, AlpnProtocols},
     on_address,
     proxy::TcpProxy,
-    register_load_balancers, TcpTarget,
+    register_load_balancers,
+    router::SniRouter,
+    TcpTarget,
 };
 
 /// The `tcp` blocks, ready to accept connections (their upstreams are health checked with
@@ -43,25 +48,52 @@ pub fn tcp_targets(routes: &[TcpRoute]) -> Result<Arc<Vec<TcpTarget>>, anyhow::E
     Ok(Arc::new(targets))
 }
 
-/// Services for the `tcp` blocks: plain TCP (and TLS passthrough), and TLS terminated with the
-/// hosts' certificates. Addresses shared with HTTPS hosts are served by the HTTPS service.
+/// Addresses with TLS passthrough blocks, served by `tcp::router`
+pub fn passthrough_addresses(routes: &[TcpRoute]) -> BTreeSet<String> {
+    routes
+        .iter()
+        .filter(|route| route.tls == TcpTls::Passthrough)
+        .map(|route| route.listen.clone())
+        .collect()
+}
+
+/// Services for the `tcp` blocks: plain TCP, TLS terminated with the hosts' certificates, and
+/// addresses with TLS passthrough (with the HTTPS hosts sharing them). Other addresses shared
+/// with HTTPS hosts are served by the HTTPS service.
 pub fn tcp_services(
     routes: &[TcpRoute],
     targets: &Arc<Vec<TcpTarget>>,
     https: &BTreeSet<String>,
+    (configuration, default_https): (&Arc<ServerConf>, SocketAddr),
     worker_threads: Option<usize>,
 ) -> Result<Vec<Box<dyn ServiceWithDependents>>, anyhow::Error> {
     let mut services: Vec<Box<dyn ServiceWithDependents>> = vec![];
 
-    let addresses = |tls: bool| {
+    let passthrough = passthrough_addresses(routes);
+    let addresses = |tls: TcpTls| {
         routes
             .iter()
-            .filter(|route| (route.tls == TcpTls::Terminate) == tls)
-            .filter(|route| !https.contains(&route.listen))
+            .filter(|route| route.tls == tls)
+            .filter(|route| !https.contains(&route.listen) && !passthrough.contains(&route.listen))
             .map(|route| route.listen.clone())
             .collect::<BTreeSet<_>>()
     };
-    let (plain, with_tls) = (addresses(false), addresses(true));
+    let (plain, with_tls) = (addresses(TcpTls::None), addresses(TcpTls::Terminate));
+
+    // The server name is read before the handshake: forwarded untouched, or terminated
+    for address in &passthrough {
+        let shared = https.contains(address).then(|| {
+            let addresses = BTreeSet::from([address.clone()]);
+            let app = https_app(configuration, &addresses, default_https, targets);
+            let protocols = AlpnProtocols::new(on_address(targets, address));
+            tls_acceptor(protocols).map(|acceptor| (acceptor, Arc::new(app)))
+        });
+        let sni_router = SniRouter::new(TcpProxy::new(targets.clone()), shared.transpose()?);
+        let mut service = Service::new(format!("tls passthrough on {address}"), sni_router);
+        service.threads = worker_threads;
+        service.add_tcp(address);
+        services.push(Box::new(service));
+    }
 
     if !plain.is_empty() {
         let mut service = Service::new("tcp".to_string(), TcpProxy::new(targets.clone()));
