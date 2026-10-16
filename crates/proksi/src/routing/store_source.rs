@@ -76,7 +76,7 @@ impl StoreSource {
         if let Some(status) = self.replica_status() {
             if let Err(err) = self
                 .store
-                .report_replica(status, self.interval * HEARTBEAT_INTERVALS)
+                .report(status, self.interval * HEARTBEAT_INTERVALS)
                 .await
             {
                 tracing::warn!("failed to report the applied store revision: {err}");
@@ -206,13 +206,9 @@ mod tests {
         async fn delete_route(&self, host: &str) -> Result<u64, StoreError> {
             self.inner.delete_route(host).await
         }
-        async fn report_replica(
-            &self,
-            status: ReplicaStatus,
-            ttl: Duration,
-        ) -> Result<(), StoreError> {
+        async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
             self.check()?;
-            self.inner.report_replica(status, ttl).await
+            self.inner.report(status, ttl).await
         }
         async fn replicas(&self) -> Result<Vec<ReplicaStatus>, StoreError> {
             self.inner.replicas().await

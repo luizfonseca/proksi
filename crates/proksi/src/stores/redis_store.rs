@@ -169,7 +169,7 @@ impl Store for RedisStore {
             .map_err(unavailable)
     }
 
-    async fn report_replica(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
+    async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
         let json =
             serde_json::to_string(&status).map_err(|e| StoreError::Invalid(e.to_string()))?;
         self.connection()?

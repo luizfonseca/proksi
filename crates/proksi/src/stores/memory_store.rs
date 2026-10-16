@@ -81,7 +81,7 @@ impl Store for MemoryStore {
         Ok(routes.revision)
     }
 
-    async fn report_replica(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
+    async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
         let mut routes = self.routes();
         routes
             .replicas

@@ -25,8 +25,8 @@ pub trait Store: Send + Sync + 'static {
     #[allow(dead_code)] // used by the admin API (#49)
     async fn delete_route(&self, host: &str) -> Result<u64, StoreError>;
 
-    /// Records the revision applied by a replica, expiring after `ttl`
-    async fn report_replica(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError>;
+    /// Reports the status of this replica (e.g. the applied revision), expiring after `ttl`
+    async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError>;
 
     /// Replicas that reported recently
     #[allow(dead_code)] // used by the admin API (#49)

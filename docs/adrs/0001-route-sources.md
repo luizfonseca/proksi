@@ -68,7 +68,7 @@ async fn routes(&self) -> Result<RoutesSnapshot, StoreError>; // { revision, rou
 async fn revision(&self) -> Result<u64, StoreError>;
 async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError>; // new revision
 async fn delete_route(&self, host: &str) -> Result<u64, StoreError>;      // new revision
-async fn report_replica(&self, status: ReplicaStatus) -> Result<(), StoreError>;
+async fn report(&self, status: ReplicaStatus) -> Result<(), StoreError>;
 async fn replicas(&self) -> Result<Vec<ReplicaStatus>, StoreError>;
 ```
 

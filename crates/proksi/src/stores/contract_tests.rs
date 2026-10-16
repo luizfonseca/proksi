@@ -86,16 +86,16 @@ pub async fn replicas_contract(store: &dyn Store) {
     };
 
     store
-        .report_replica(status("replica-1", 1), Duration::from_secs(60))
+        .report(status("replica-1", 1), Duration::from_secs(60))
         .await
         .unwrap();
     store
-        .report_replica(status("replica-2", 1), Duration::from_secs(1))
+        .report(status("replica-2", 1), Duration::from_secs(1))
         .await
         .unwrap();
     // A new report replaces the previous one
     store
-        .report_replica(status("replica-1", 2), Duration::from_secs(60))
+        .report(status("replica-1", 2), Duration::from_secs(60))
         .await
         .unwrap();
 
