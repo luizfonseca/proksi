@@ -12,7 +12,14 @@ host "example.com" {
 }
 ```
 
-A location can have as many upstreams as you need. Requests are load balanced between them (round-robin).
+A location can have as many upstreams as you need. Requests are load balanced between them (round-robin), in proportion to their `weight`:
+
+```hcl
+location "/" {
+  upstream "10.0.0.1:3000" { weight = 3 } # 3 of every 4 requests
+  upstream "10.0.0.2:3000" {}             # weight = 1 by default
+}
+```
 
 ## Health checks
 
@@ -38,6 +45,7 @@ location "/" {
 
 | Setting | Description |
 | --- | --- |
+| `weight` | The share of requests the upstream receives, relative to the others (`1` by default, up to `127`). |
 | `sni` | The server name sent to an upstream using TLS (port `443`). |
 | `headers { add = { ... } }` | Headers added to the request sent to the upstream. |
 | `network` | The docker network to reach the upstream through (docker integration). |

@@ -147,6 +147,17 @@ mod tests {
     }
 
     #[test]
+    fn test_upstream_weight_must_be_positive() {
+        let mut host = host("a.test", "10.0.0.1");
+        host.locations[0].upstreams[0].weight = Some(0);
+
+        assert_eq!(
+            validate_host(&host),
+            Err("location \"/*\": upstreams[0].weight must be greater than 0".to_string())
+        );
+    }
+
+    #[test]
     fn test_catch_all_host_needs_tls_disabled() {
         let mut catch_all = host("*", "10.0.0.1");
         assert_eq!(

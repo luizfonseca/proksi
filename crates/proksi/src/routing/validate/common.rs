@@ -6,7 +6,8 @@ use http::{HeaderName, HeaderValue};
 
 use crate::config::{RouteHeader, RouteUpstream};
 
-/// Upstreams need an address and a port (no upstreams is valid: requests get a `503`)
+/// Upstreams need an address, a port and a positive weight (no upstreams is valid:
+/// requests get a `503`)
 pub(super) fn validate_upstreams(upstreams: &[RouteUpstream]) -> Result<(), String> {
     for (index, upstream) in upstreams.iter().enumerate() {
         if upstream.ip.is_empty() {
@@ -14,6 +15,9 @@ pub(super) fn validate_upstreams(upstreams: &[RouteUpstream]) -> Result<(), Stri
         }
         if upstream.port == 0 {
             return Err(format!("upstreams[{index}].port must be greater than 0"));
+        }
+        if upstream.weight.is_some_and(|weight| weight <= 0) {
+            return Err(format!("upstreams[{index}].weight must be greater than 0"));
         }
     }
     Ok(())

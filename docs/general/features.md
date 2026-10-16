@@ -8,7 +8,7 @@ Proksi is evolving day by day, and new features are being added all the time. Be
 - [x] **Catch-all host** (`host "*"`) for names without a host of their own
 - [x] **Listen addresses per host**: Proksi only opens the ports its hosts need
 - [x] **Docker**: Swarm/Compose Label Support
-- [x] **Load Balancing** (✅ Round Robin, ⛔︎ Weighted Round Robin, ⛔︎ Least Connections)
+- [x] **Load Balancing** (✅ Round Robin, ✅ Weighted Round Robin, ⛔︎ Least Connections)
 - [X] Health Checks
 - [x] **Shared store** (Redis, SQLite, Postgres) to run many Proksi servers with the same routes and certificates
 - [x] **Auto reload** of the configuration file, without restarting
