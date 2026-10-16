@@ -1,6 +1,6 @@
 //! The HTTP and HTTPS services, listening on the addresses the hosts need
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{collections::BTreeSet, net::SocketAddr, sync::Arc};
 
 use pingora::{
     listeners::tls::TlsSettings,
@@ -17,10 +17,12 @@ pub type ProxyService = Service<HttpProxy<Router>>;
 pub fn http_service(
     configuration: &Arc<ServerConf>,
     addresses: &BTreeSet<String>,
+    default_address: SocketAddr,
     worker_threads: Option<usize>,
 ) -> ProxyService {
     let router = Router {
         listener: Listener::Http,
+        default_address,
     };
     let mut service = http_proxy_service(configuration, router);
     service.threads = worker_threads;
@@ -34,10 +36,12 @@ pub fn http_service(
 pub fn https_service(
     configuration: &Arc<ServerConf>,
     addresses: &BTreeSet<String>,
+    default_address: SocketAddr,
     worker_threads: Option<usize>,
 ) -> Result<ProxyService, anyhow::Error> {
     let router = Router {
         listener: Listener::Https,
+        default_address,
     };
     let mut service = http_proxy_service(configuration, router);
     service.threads = worker_threads;

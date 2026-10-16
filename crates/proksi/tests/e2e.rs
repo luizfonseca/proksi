@@ -544,3 +544,31 @@ async fn test_runs_without_https() {
 
     proksi.assert_healthy();
 }
+
+const CATCH_ALL_ON_ANOTHER_PORT: &str = r#"
+host "*" {
+  tls = false
+  listen = ["127.0.0.1:{extra_port}"]
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_hosts_are_only_served_on_their_addresses() {
+    let mut proksi = Harness::start_without_https(CATCH_ALL_ON_ANOTHER_PORT).await;
+
+    let res = proksi
+        .get_http_on(proksi.extra_port, "other.test", "/")
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+
+    // `host "*"` doesn't listen on the default HTTP port
+    let res = proksi.get_http_port("other.test", "/").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 308"), "{res}");
+
+    proksi.assert_healthy();
+}

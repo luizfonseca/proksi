@@ -39,6 +39,8 @@ static CACHE_LOCK: Lazy<CacheLock> = Lazy::new(|| CacheLock::new(Duration::from_
 /// Proxies requests to the location of their host, on the HTTPS or the HTTP port
 pub struct Router {
     pub listener: Listener,
+    /// Where hosts without `listen` addresses are served for this protocol
+    pub default_address: std::net::SocketAddr,
 }
 
 // type Container = mapref::one::Ref<'static, String, RouteStoreContainer>;
@@ -98,12 +100,20 @@ impl ProxyHttp for Router {
         let host_without_port = req_host.split(':').next().unwrap_or_default();
         host_without_port.clone_into(&mut ctx.host);
 
-        // The host with that name (case-insensitive), or `*`
-        let host_container = stores::lookup::find_host(host_without_port);
-        let serves_host = |tls_enabled: bool| match self.listener {
-            Listener::Https => tls_enabled,
-            Listener::Http => !tls_enabled,
+        // The host with that name (case-insensitive), or `*`, among the hosts served
+        // on the address the request came in on
+        let local = session
+            .server_addr()
+            .and_then(|addr| addr.as_inet())
+            .copied();
+        let serves_host = |host: &std::sync::Arc<stores::host_container::HostContainer>| {
+            let protocol = match self.listener {
+                Listener::Https => host.tls_enabled,
+                Listener::Http => !host.tls_enabled,
+            };
+            protocol && host.listens_on(local.as_ref(), &self.default_address)
         };
+        let host_container = stores::lookup::find_host(host_without_port, serves_host);
 
         if self.listener == Listener::Http {
             if req_host.is_empty() {
@@ -115,20 +125,18 @@ impl ProxyHttp for Router {
             }
             // Hosts with TLS (and unknown hosts): ACME challenges, then redirect to HTTPS.
             // Hosts without TLS get no certificates, so all their paths are proxied.
-            if !host_container
-                .as_ref()
-                .is_some_and(|host| serves_host(host.tls_enabled))
-            {
+            if host_container.is_none() {
                 if http_proxy::serve_acme_challenge(session, &req_host).await? {
                     return Ok(true);
                 }
-                return http_proxy::redirect_to_https(session, &req_host).await;
+                let port = stores::get_route_by_key(&host_without_port.to_lowercase())
+                    .and_then(|host| host.https_redirect_port());
+                return http_proxy::redirect_to_https(session, &req_host, port).await;
             }
         }
 
         // If there's no host matching, returns a 404
-        let Some(host_container) = host_container.filter(|host| serves_host(host.tls_enabled))
-        else {
+        let Some(host_container) = host_container else {
             session.respond_error(404).await?;
             return Ok(true);
         };

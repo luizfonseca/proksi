@@ -43,8 +43,16 @@ pub async fn serve_acme_challenge(session: &mut Session, host: &str) -> pingora:
     Ok(true)
 }
 
-/// Redirects the request to the same URL over HTTPS
-pub async fn redirect_to_https(session: &mut Session, host: &str) -> pingora::Result<bool> {
+/// Redirects the request to the same URL over HTTPS (on `port`, when it isn't 443)
+pub async fn redirect_to_https(
+    session: &mut Session,
+    host: &str,
+    port: Option<u16>,
+) -> pingora::Result<bool> {
+    let authority = match port {
+        Some(port) => format!("{}:{port}", host.split(':').next().unwrap_or_default()),
+        None => host.to_string(),
+    };
     let path_and_query = session
         .req_header()
         .uri
@@ -53,7 +61,7 @@ pub async fn redirect_to_https(session: &mut Session, host: &str) -> pingora::Re
         .to_string();
     let Ok(new_uri) = Uri::builder()
         .scheme(Scheme::HTTPS)
-        .authority(host)
+        .authority(authority)
         .path_and_query(path_and_query)
         .build()
     else {

@@ -4,9 +4,13 @@ use std::sync::Arc;
 
 use super::{get_route_by_key, get_routes, host_container::HostContainer};
 
-/// Host serving requests for `name`: the host with that name, or `*` (any other name)
-pub fn find_host(name: &str) -> Option<Arc<HostContainer>> {
-    find_host_in(name, get_route_by_key)
+/// Host serving a request for `name`: the host with that name, or `*` if there's none.
+/// `None` if that host doesn't `serves` the request (e.g. on the port it came in on).
+pub fn find_host(
+    name: &str,
+    serves: impl Fn(&Arc<HostContainer>) -> bool,
+) -> Option<Arc<HostContainer>> {
+    find_host_in(name, get_route_by_key, serves)
 }
 
 /// Hosts served over HTTPS, with whether to fall back to a self-signed certificate
@@ -14,8 +18,14 @@ pub fn tls_hosts() -> Vec<(String, bool)> {
     tls_hosts_in(get_routes().iter())
 }
 
-fn find_host_in<T>(name: &str, get: impl Fn(&str) -> Option<T>) -> Option<T> {
-    get(&name.to_lowercase()).or_else(|| get("*"))
+fn find_host_in<T>(
+    name: &str,
+    get: impl Fn(&str) -> Option<T>,
+    serves: impl Fn(&T) -> bool,
+) -> Option<T> {
+    get(&name.to_lowercase())
+        .or_else(|| get("*"))
+        .filter(|host| serves(host))
 }
 
 fn tls_hosts_in<'a>(
@@ -55,7 +65,10 @@ mod tests {
         ]);
         let get = |name: &str| hosts.get(name).cloned();
 
-        assert!(Arc::ptr_eq(&find_host_in("A.Test", get).unwrap(), &named));
+        assert!(Arc::ptr_eq(
+            &find_host_in("A.Test", get, |_| true).unwrap(),
+            &named
+        ));
     }
 
     #[test]
@@ -65,7 +78,7 @@ mod tests {
         let get = |name: &str| hosts.get(name).cloned();
 
         assert!(Arc::ptr_eq(
-            &find_host_in("other.test", get).unwrap(),
+            &find_host_in("other.test", get, |_| true).unwrap(),
             &catch_all
         ));
     }
@@ -73,7 +86,12 @@ mod tests {
     #[test]
     fn test_unknown_host_without_catch_all() {
         let hosts: HashMap<String, Arc<HostContainer>> = HashMap::new();
-        assert!(find_host_in("other.test", |name: &str| hosts.get(name).cloned()).is_none());
+        assert!(find_host_in(
+            "other.test",
+            |name: &str| hosts.get(name).cloned(),
+            |_| true
+        )
+        .is_none());
     }
 
     #[test]
@@ -88,5 +106,20 @@ mod tests {
         names.sort();
 
         assert_eq!(names, vec![("a.test".to_string(), true)]);
+    }
+
+    #[test]
+    fn test_catch_all_only_serves_names_without_a_host() {
+        let hosts = HashMap::from([
+            ("a.test".to_string(), container(true, false)),
+            ("*".to_string(), container(false, false)),
+        ]);
+        let get = |name: &str| hosts.get(name).cloned();
+        let plain_http = |host: &Arc<HostContainer>| !host.tls_enabled;
+
+        // e.g. a request on the HTTP port for a host with TLS: not served (it's redirected),
+        // even though `*` would serve it
+        assert!(find_host_in("a.test", get, plain_http).is_none());
+        assert!(find_host_in("b.test", get, plain_http).is_some());
     }
 }

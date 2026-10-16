@@ -14,7 +14,14 @@ pub fn build_host_container(host: &Host) -> Option<HostContainer> {
         })
         .collect::<Option<Vec<_>>>()?;
 
-    Some(HostContainer::new(locations, &host.tls))
+    let mut container = HostContainer::new(locations, &host.tls);
+    // Validated as `ip:port` when the host is merged
+    container.listen = host
+        .listen
+        .iter()
+        .filter_map(|address| address.parse().ok())
+        .collect();
+    Some(container)
 }
 
 #[cfg(test)]

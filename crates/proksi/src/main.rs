@@ -45,6 +45,8 @@ fn main() -> Result<(), anyhow::Error> {
 
     // The addresses the hosts need (validated when loading the configuration)
     let listeners = config::listeners::listeners(&proxy_config).map_err(anyhow::Error::msg)?;
+    let (default_https, default_http) =
+        config::listeners::default_addresses(&proxy_config).map_err(anyhow::Error::msg)?;
 
     // Logging channel
     let (log_sender, log_receiver) = services::logger::log_queue();
@@ -126,6 +128,7 @@ fn main() -> Result<(), anyhow::Error> {
         pingora_server.add_service(proxy_server::services::http_service(
             &pingora_server.configuration,
             &listeners.http,
+            default_http,
             proxy_config.worker_threads,
         ));
     }
@@ -133,6 +136,7 @@ fn main() -> Result<(), anyhow::Error> {
         pingora_server.add_service(proxy_server::services::https_service(
             &pingora_server.configuration,
             &listeners.https,
+            default_https,
             proxy_config.worker_threads,
         )?);
     }

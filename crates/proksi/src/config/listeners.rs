@@ -1,6 +1,9 @@
 //! The addresses proksi listens on, worked out from its hosts
 
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    net::{SocketAddr, ToSocketAddrs},
+};
 
 use super::{Config, StoreType};
 
@@ -61,6 +64,31 @@ pub fn listeners(config: &Config) -> Result<Listeners, String> {
         ));
     }
     Ok(listeners)
+}
+
+/// The default HTTPS and HTTP addresses (`server.https_address`, `server.http_address`),
+/// where hosts without `listen` addresses are served
+pub fn default_addresses(config: &Config) -> Result<(SocketAddr, SocketAddr), String> {
+    let resolve = |name: &str, address: Option<&str>, default: &str| {
+        let address = address.unwrap_or(default);
+        address
+            .to_socket_addrs()
+            .ok()
+            .and_then(|mut addresses| addresses.next())
+            .ok_or_else(|| format!("{name} is not a valid address: {address:?}"))
+    };
+    Ok((
+        resolve(
+            "server.https_address",
+            config.server.https_address.as_deref(),
+            "0.0.0.0:443",
+        )?,
+        resolve(
+            "server.http_address",
+            config.server.http_address.as_deref(),
+            "0.0.0.0:80",
+        )?,
+    ))
 }
 
 #[cfg(test)]
@@ -162,5 +190,20 @@ mod tests {
             listeners(&config),
             Err("address 0.0.0.0:8080 is used both for HTTP and HTTPS hosts".to_string())
         );
+    }
+
+    #[test]
+    fn test_default_addresses() {
+        let (https, http) = super::default_addresses(&Config::default()).unwrap();
+        assert_eq!(https, "0.0.0.0:443".parse().unwrap());
+        assert_eq!(http, "0.0.0.0:80".parse().unwrap());
+
+        let mut config = Config::default();
+        config.server.https_address = Some("localhost:8443".into());
+        let (https, _) = super::default_addresses(&config).unwrap();
+        assert_eq!(https.port(), 8443);
+
+        config.server.http_address = Some("not an address".into());
+        assert!(super::default_addresses(&config).is_err());
     }
 }

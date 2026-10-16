@@ -111,6 +111,8 @@ pub struct Harness {
     without_https: bool,
     pub https_port: u16,
     pub http_port: u16,
+    /// A free port for hosts listening elsewhere (`{extra_port}` in `extra_config`)
+    pub extra_port: u16,
     pub http_upstream: HttpUpstream,
     pub websocket_upstream: WebSocketUpstream,
 }
@@ -143,6 +145,7 @@ impl Harness {
 
         let https_port = free_port();
         let http_port = free_port();
+        let extra_port = free_port();
 
         let stdout = std::fs::File::create(dir.path().join("stdout.log")).unwrap();
         let stderr = std::fs::File::create(dir.path().join("stderr.log")).unwrap();
@@ -157,6 +160,7 @@ impl Harness {
             without_https,
             https_port,
             http_port,
+            extra_port,
             http_upstream,
             websocket_upstream,
         };
@@ -303,6 +307,7 @@ paths {{
         let dir = self.dir.path();
         self.extra_config
             .replace("{http_upstream_port}", &self.http_upstream.port.to_string())
+            .replace("{extra_port}", &self.extra_port.to_string())
             .replace("{cert_pem}", &dir.join("cert.pem").to_string_lossy())
             .replace("{cert_key}", &dir.join("key.pem").to_string_lossy())
     }
@@ -379,7 +384,12 @@ paths {{
 
     /// Sends a request to the plain HTTP port with a raw `Host` header
     pub async fn get_http_port(&self, host: &str, path: &str) -> std::io::Result<String> {
-        let mut stream = TcpStream::connect(("127.0.0.1", self.http_port)).await?;
+        self.get_http_on(self.http_port, host, path).await
+    }
+
+    /// Plain HTTP request to proksi on `port`, returning the raw response
+    pub async fn get_http_on(&self, port: u16, host: &str, path: &str) -> std::io::Result<String> {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).await?;
         let request = format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
         stream.write_all(request.as_bytes()).await?;
 
