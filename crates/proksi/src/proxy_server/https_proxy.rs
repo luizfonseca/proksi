@@ -361,10 +361,24 @@ impl ProxyHttp for Router {
             .get("user-agent")
             .unwrap_or(&empty_header);
 
-        let client_ip = session
-            .client_addr()
-            .map(ToString::to_string)
-            .unwrap_or_default();
+        // The connection's address, or behind trusted proxies, the client they forwarded
+        let peer = session.client_addr();
+        let forwarded_for = session
+            .req_header()
+            .headers
+            .get("x-forwarded-for")
+            .and_then(|value| value.to_str().ok());
+        let client_ip = match peer.and_then(|addr| addr.as_inet()) {
+            Some(addr) => {
+                let client = crate::proxy_server::client::client_ip(addr.ip(), forwarded_for);
+                if client == addr.ip() {
+                    addr.to_string()
+                } else {
+                    client.to_string()
+                }
+            }
+            None => peer.map(ToString::to_string).unwrap_or_default(),
+        };
 
         let status_code = session
             .response_written()

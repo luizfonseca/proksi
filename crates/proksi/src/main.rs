@@ -59,6 +59,12 @@ fn main() -> Result<(), anyhow::Error> {
     let (default_https, default_http) =
         config::listeners::default_addresses(&proxy_config).map_err(anyhow::Error::msg)?;
 
+    // The clients of requests behind trusted proxies (validated when loading the configuration)
+    proxy_server::client::init(
+        proxy_server::client::TrustedProxies::parse(&proxy_config.server.trusted_proxies)
+            .map_err(anyhow::Error::msg)?,
+    );
+
     // Logging channel
     let (log_sender, log_receiver) = services::logger::log_queue();
     let dropped_logs = Arc::new(AtomicU64::new(0));

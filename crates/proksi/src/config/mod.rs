@@ -581,6 +581,12 @@ pub struct ServerCfg {
         default_value = "0.0.0.0:80"
     )]
     pub http_address: Option<Cow<'static, str>>,
+
+    /// Proxies (addresses or networks) in front of proksi, whose `X-Forwarded-For` is trusted
+    /// to find the client of a request (for `rate_limit` and access logs)
+    #[arg(skip)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trusted_proxies: Vec<String>,
 }
 
 /// The main configuration struct.
@@ -725,6 +731,7 @@ impl Default for Config {
             server: ServerCfg {
                 https_address: Some(Cow::Borrowed("0.0.0.0:443")),
                 http_address: Some(Cow::Borrowed("0.0.0.0:80")),
+                trusted_proxies: vec![],
             },
             worker_threads: Some(default_worker_threads()),
             upgrade: false,

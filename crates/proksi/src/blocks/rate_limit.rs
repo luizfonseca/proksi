@@ -52,13 +52,19 @@ impl RateLimit {
 #[async_trait]
 impl Middleware for RateLimit {
     async fn request(&self, session: &mut Session, _ctx: &mut RouterContext) -> Result<bool> {
-        let Some(client) = session
+        let Some(peer) = session
             .client_addr()
             .and_then(|addr| addr.as_inet())
             .map(std::net::SocketAddr::ip)
         else {
             return Ok(false);
         };
+        let forwarded_for = session
+            .req_header()
+            .headers
+            .get("x-forwarded-for")
+            .and_then(|value| value.to_str().ok());
+        let client = crate::proxy_server::client::client_ip(peer, forwarded_for);
         if !self.exceeded(&client) {
             return Ok(false);
         }

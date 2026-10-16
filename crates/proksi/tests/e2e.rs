@@ -563,6 +563,58 @@ async fn test_rate_limit() {
     proksi.assert_healthy();
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rate_limit_behind_a_trusted_proxy() {
+    // Requests come from 127.0.0.1, as if it were a load balancer in front of proksi
+    let mut proksi = Harness::start_with_server(
+        vec![],
+        "trusted_proxies = [\"127.0.0.1\"]",
+        HOST_WITH_RATE_LIMIT,
+    )
+    .await;
+    let login = |forwarded_for: &str| {
+        format!(
+            "GET /login HTTP/1.1\r\nHost: limited.test\r\nX-Forwarded-For: {forwarded_for}\r\nConnection: close\r\n\r\n"
+        )
+    };
+    let status = |res: std::io::Result<String>| {
+        res.unwrap()
+            .split(' ')
+            .nth(1)
+            .unwrap_or_default()
+            .to_string()
+    };
+
+    // Each client has its own limit (2 requests)
+    for client in ["203.0.113.1", "203.0.113.2"] {
+        for _ in 0..2 {
+            let res = proksi
+                .tls_request(proksi.https_port, "limited.test", &login(client))
+                .await;
+            assert_eq!(status(res), "200", "{client}");
+        }
+    }
+    let res = proksi
+        .tls_request(proksi.https_port, "limited.test", &login("203.0.113.1"))
+        .await;
+    assert_eq!(status(res), "429");
+    // A client can't pick another address in front of the proxy's
+    let res = proksi
+        .tls_request(
+            proksi.https_port,
+            "limited.test",
+            &login("198.51.100.7, 203.0.113.2"),
+        )
+        .await;
+    assert_eq!(status(res), "429");
+
+    // The client in the access log
+    let log = proksi.access_log("/login");
+    assert!(log.contains("\"client_ip\":\"203.0.113."), "{log}");
+
+    proksi.assert_healthy();
+}
+
 const HOST_WITH_BODY_LIMIT: &str = r#"
 host "upload.test" {
   tls = false
