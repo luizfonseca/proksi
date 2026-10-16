@@ -11,6 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use tracing::level_filters::LevelFilter;
 
 mod hcl;
+pub mod host;
 pub mod validate;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ValueEnum)]

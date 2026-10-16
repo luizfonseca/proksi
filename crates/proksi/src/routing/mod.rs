@@ -51,6 +51,11 @@ pub type SnapshotSender = tokio::sync::mpsc::Sender<RouteSnapshot>;
 pub(crate) mod test_utils {
     use crate::config::Route;
 
+    /// Host with a single `/*` location and upstream (as converted from a route)
+    pub fn host(name: &str, upstream_ip: &str) -> crate::config::host::Host {
+        crate::config::host::Host::from_route(&route(name, upstream_ip))
+    }
+
     /// Route for `host` with a single upstream
     pub fn route(host: &str, upstream_ip: &str) -> Route {
         serde_json::from_value(serde_json::json!({
