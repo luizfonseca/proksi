@@ -1,6 +1,6 @@
 # ADR 0003: Hosts, locations and TCP in the configuration
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-10-16
 - Related: [ADR 0001](adrs/0001-route-sources.md) (route sources), [#381](https://github.com/luizfonseca/proksi/issues/381) (Kubernetes ingress), [#383](https://github.com/luizfonseca/proksi/issues/383) (WASM plugins)
 
