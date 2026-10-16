@@ -74,29 +74,24 @@ lets_encrypt {
     email = "test@email.com"
 }
 
-routes = [{
-    host = "website.com"
-    
-    upstreams = [{ ip = "localhost", port = 3000 }]
-    
-    plugins = [
-        { name = "request_id" },
-        
-        { 
-            name = "oauth2", 
-            config = { 
-                provider = "github"
-                client_id = "lv1.98asd7h12h3"
-                client_secret = "lvl2.91823hl1238d"
-                # Generated using `openssl rand -hex 64`
-                jwt_secret = "d1a86503f928b387dcde695176e02c9c6fb0a96f91f4436d2f724b312c4a1e7fc16d5f86bd37f4fe6267e628dca8a55f621f8e4f2f41725ff00cdfbb971b0384"
-                validations = [
-                    { key = "email", values = ["me@proksi.info"] }
-                ]
-            } 
-        }
-    ]
-}]
+host "website.com" {
+  location "/" {
+    upstream "localhost:3000" {}
+
+    request_id {}
+
+    oauth2 {
+      provider = "github"
+      client_id = "lv1.98asd7h12h3"
+      client_secret = "lvl2.91823hl1238d"
+      # Generated using `openssl rand -hex 64`
+      jwt_secret = "d1a86503f928b387dcde695176e02c9c6fb0a96f91f4436d2f724b312c4a1e7fc16d5f86bd37f4fe6267e628dca8a55f621f8e4f2f41725ff00cdfbb971b0384"
+      validations = [
+        { key = "email", values = ["me@proksi.info"] }
+      ]
+    }
+  }
+}
 ```
 {% endcode %}
 

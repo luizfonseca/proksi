@@ -39,26 +39,16 @@ This is particularly useful if you have secrets or other type of data that you d
 ```hcl
 worker_threads = env("WORKERS_COUNT")
 
-routes = [
- {
-   upstreams = [
-     {
-       ip = "localhost"
-       port = "8009"
+host "my-site.com" {
+  location "/" {
+    upstream "localhost:8009" {}
 
-       plugins = [
-        {
-          name = "basic_auth"
-          config = {
-            user = env("BASIC_AUTH_USER")
-            pass = env("BASIC_AUTH_PASS")
-          }
-        }
-       ]
-     }
-   ]
- }
-]
+    basic_auth {
+      user = env("BASIC_AUTH_USER")
+      pass = env("BASIC_AUTH_PASS")
+    }
+  }
+}
 ```
 {% endcode %}
 
@@ -90,28 +80,27 @@ paths {
   lets_encrypt = "./"
 }
 
-routes = [
-  import("./sites/my-site.com")
-]
+host = {
+  "my-site.com" = import("./sites/my-site.com.hcl")
+}
 ```
 {% endcode %}
 
-And then, a `./sites/my-site.com` will look like this:
+And then, `./sites/my-site.com.hcl` holds the host's settings (what would go inside a `host "my-site.com" { ... }` block):
 
-{% code title="sites/my-site.com" lineNumbers="true" %}
+{% code title="sites/my-site.com.hcl" lineNumbers="true" %}
 ```hcl
-host = "my-site.com"
-
-# downstream headers
+# headers of every response
 headers {
-  add = [{
-      name = "server"
-      value = "cool-server"
-  }]
+  response {
+    add = { "server" = "cool-server" }
+  }
 }
 
-upstreams = [
-  { ip = "localhost", port = 2000 }
-]
+location "/" {
+  upstream "localhost:2000" {}
+}
 ```
 {% endcode %}
+
+Hosts can be defined either with `host = { ... }` (to import them) or with `host "<name>" { ... }` blocks, not both in the same file.

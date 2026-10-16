@@ -43,28 +43,23 @@ paths {
   lets_encrypt = "./"
 }
 
-# A list of routes Proksi should handle
-routes = [
-  {
-    # You might need to edit your /etc/hosts file here.
-    host = "mysite.localhost",
-
-    # Will create a certificate for mysite.localhost
-    ssl_certificate =  {
-      self_signed_on_failure = true
-    }
-
-    # Where to point mysite.localhost to
-    upstreams = [{
-      ip = "docs.proksi.info"
-      port = 443
-
-      headers = {
-        add = [{ name = "Host", value = "docs.proksi.info" }]
-      }
-    }]
+# The hosts Proksi should handle
+# You might need to edit your /etc/hosts file here.
+host "mysite.localhost" {
+  # Will create a self-signed certificate for mysite.localhost
+  tls {
+    self_signed_on_failure = true
   }
-]
+
+  # Where to point mysite.localhost to
+  location "/" {
+    upstream "docs.proksi.info:443" {
+      headers {
+        add = { "Host" = "docs.proksi.info" }
+      }
+    }
+  }
+}
 ```
 
 4. Run Proksi with your configuration:

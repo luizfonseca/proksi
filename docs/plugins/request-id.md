@@ -15,14 +15,11 @@ lets_encrypt {
   email = "test@email.com"
 }
 
-routes = [
-  {
-    host = "mywebsite.com"
-    
-    plugins = [{ 
-      name = "request_id" 
-    }]
+host "mywebsite.com" {
+  location "/" {
+    request_id {}
+    upstream "localhost:3000" {}
   }
-]
+}
 ```
 {% endcode %}

@@ -122,108 +122,77 @@ paths {
   lets_encrypt = "/etc/proksi/letsencrypt"
 }
 
-routes = [
-  {
-    # The host attribute specifies the hostname that the route will match.
-    # This is normally the domain, subdomain that you want to route to a particular server/ip.
-    # This can be a domain name or an IP address. For IP address, no certificate will be issued.
-    # The host attribute is required.
-    host = "example.com"
-
-
-    # The upstreams attribute specifies the list of upstream servers that
-    # the route will use.
-    # These are load balanced and the server will try to connect to
-    # the first one in the list.
-    # If the connection fails, it will try the next one.
-    # --
-    # Health checks run in the background to ensure you have a healthy connection always.
-    upstreams = [
-      {
-        # The IP address of the upstream server or HOSTNAME.
-        ip = "google.com"
-        # The network attribute specifies the network that the upstream server is part of.
-        # This is mostly important for Docker containers, but it can be used for other purposes.
-        # network = "public"
-        port = 443
-
-        # The SNI attribute specifies the server name that the proxy will use to connect to the upstream.
-        # This is used to verify the identity of the upstream server (that supports TLS).
-        sni = "google.com"
-
-        # The headers attribute specifies the headers that will
-        # be added or removed when making a request to your UPSTREAM (your server)
-        headers = {
-          add = [
-            { name = "Host", value = "google.com" }
-          ]
-        }
-      },
-
-
-      # New upstream record, meaning any request coming to `example.com`
-      # will be routed to the upstream server at `10.1.2.23/24` on port `3000`
-      # with the `Host: example.com` header added.
-      # Via loadbalancing (round-robin)
-      {
-        ip = "10.1.2.23/24"
-        network = "shared"
-        port = 3000
-      }
-    ]
-
-
-    # The headers attribute specifies the headers that will
-    # be added or removed at the end of the response to DOWNSTREAM (client)
-    headers = {
-      add = [
-        {  name = "X-Forwarded-For", value = "<value>" },
-        {  name = "X-Api-Version", value = "<value>" }
-      ]
-
-      remove = [{  name = "Server" }]
+# Hosts that the server will accept requests for.
+# The label is the hostname (or IP address) matched against the Host header of each request,
+# and used to issue certificates when Let's Encrypt is enabled.
+host "example.com" {
+  # TLS settings of the host (optional).
+  tls {
+    # Certificate files, used instead of Let's Encrypt.
+    certificate {
+      key = "/etc/proksi/certs/my-host.key"
+      pem = "/etc/proksi/certs/my-host.pem"
     }
 
-    # SSL configuration for the route.
-    # The ssl attribute is optional.
-    ssl = {
-      path = {
-        key = "/etc/proksi/certs/my-host.key"
-        pem = "/etc/proksi/certs/my-host.pem"
-      }
-
-      self_signed_fallback = true
-    }
-
-    // DEPRECATED
-    # ssl_certificate = {
-    #   self_signed_on_failure = true
-    # }
-
-    # Match a given request path with the route.
-    # You can have multiple matchers:
-    # Path related
-    # Header related
-    match_with = {
-      path = {
-        patterns = ["/api/*", "/*"]
-      }
-    }
-
-    # Plugins that will be applied to the route/host
-    # (ex: rate limiting, oauth2, etc.)
-    # Plugins can be used to extend the functionality of Proksi.
-    # For example, the oauth2 plugin can be used to authenticate users using OAuth2 providers.
-    plugins = [
-      { name:  "request_id" },
-      { name:  "basic_auth", config: { user: "<user>", pass: "<pass>" } },
-      { name:  "oauth2", config: {
-        provider: "github",
-        client_id: "<client_id>",
-        client_secret: "<client_secret>",
-        jwt_secret: "<jwt_secret>",
-        validations: [ { key: "team_id", value: [ "<team_id>" ] } ] }
-      }
-    ]
+    # Use a self-signed certificate if no certificate can be obtained.
+    self_signed_on_failure = true
   }
-]
+
+  # Headers added or removed from every response of the host (to the client).
+  headers {
+    response {
+      add    = { "X-Api-Version" = "<value>" }
+      remove = ["Server"]
+    }
+  }
+
+  # Locations choose how requests are handled based on their path.
+  # The most specific location wins: `/api` serves `/api`, `/api/` and everything
+  # below it (not `/apis`), and `/` serves whatever no other location matches.
+  location "/api" {
+    # Upstreams are labelled by their address (host:port or [ipv6]:port).
+    # Requests are load balanced between them (round-robin), with health checks
+    # running in the background.
+    upstream "10.1.2.23:3000" {
+      # The docker network to reach the upstream through (optional).
+      network = "shared"
+    }
+
+    upstream "10.1.2.24:3000" {}
+
+    # Plugins (optional)
+    request_id {}
+
+    oauth2 {
+      provider      = "github"
+      client_id     = "<client_id>"
+      client_secret = "<client_secret>"
+      jwt_secret    = "<jwt_secret>"
+      validations   = [{ key = "team_id", value = ["<team_id>"] }]
+    }
+  }
+
+  location "/" {
+    upstream "google.com:443" {
+      # The server name sent to an upstream using TLS.
+      sni = "google.com"
+
+      # Headers added to the request sent to the upstream.
+      headers {
+        add = { "Host" = "google.com" }
+      }
+    }
+
+    basic_auth {
+      user = "<user>"
+      pass = "<pass>"
+    }
+
+    # Headers of this location, added after the host's.
+    headers {
+      response {
+        add = { "X-Location" = "root" }
+      }
+    }
+  }
+}
