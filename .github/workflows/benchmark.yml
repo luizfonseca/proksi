@@ -1,22 +1,25 @@
 name: Benchmark
 
-# Compares the performance of the pull request with its base (latency, CPU, memory).
-# The report is posted as a comment by `benchmark-comment.yml`, which runs with
+# Compares the performance of every pull request with its base (requests/s, latency, CPU,
+# memory). The report is posted as a comment by `benchmark-comment.yml`, which runs with
 # permission to comment (this workflow doesn't, as it runs the pull request's code).
+#
+# Pushes to main only build main: pull requests then start from its binary and its compiled
+# dependencies (caches saved by a pull request aren't shared with other pull requests).
 
 on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "docs/**"
-      - "**.md"
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
 
 concurrency:
-  group: benchmark-${{ github.event.pull_request.number }}
+  group: benchmark-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -24,6 +27,10 @@ env:
   BUILD_FLAGS: --release -p proksi --config profile.release.lto="thin" --config profile.release.codegen-units=16
   OHA_VERSION: v1.16.0
   OHA_SHA256: 620bb9e16fb53eabc9a3fc45f88bdb41fefa3fee5c05e75892011ce320391716
+  # The base of the pull request (main itself, on pushes)
+  BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+  # Changes to these can change the binary
+  CODE_PATHS: crates vendor Cargo.toml Cargo.lock rust-toolchain.toml
 
 jobs:
   benchmark:
@@ -39,37 +46,58 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Check for code changes
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && git diff --quiet "$BASE_SHA" HEAD -- $CODE_PATHS; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Cache the base binary
         id: base-cache
         uses: actions/cache@v4
         with:
           path: bench-bin/base
-          key: proksi-benchmark-${{ github.event.pull_request.base.sha }}
+          key: proksi-benchmark-${{ env.BASE_SHA }}
+
+      # Only needed when something is built (it also caches the compiled dependencies)
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        if: steps.base-cache.outputs.cache-hit != 'true' || steps.changes.outputs.code == 'true'
 
       - name: Build the base
         if: steps.base-cache.outputs.cache-hit != 'true'
         run: |
-          git worktree add ../proksi-base ${{ github.event.pull_request.base.sha }}
+          git worktree add ../proksi-base "$BASE_SHA"
           (cd ../proksi-base && CARGO_TARGET_DIR=${{ github.workspace }}/target cargo build $BUILD_FLAGS)
           mkdir -p bench-bin
           cp target/release/proksi bench-bin/base
 
       - name: Build the pull request
+        if: github.event_name == 'pull_request' && steps.changes.outputs.code == 'true'
         run: |
           cargo build $BUILD_FLAGS
-          mkdir -p bench-bin
           cp target/release/proksi bench-bin/head
 
+      - name: Reuse the base binary
+        if: github.event_name == 'pull_request' && steps.changes.outputs.code == 'false'
+        run: cp bench-bin/base bench-bin/head
+
       - name: Install oha
+        if: github.event_name == 'pull_request'
         run: |
           curl -sSL -o oha https://github.com/hatoo/oha/releases/download/$OHA_VERSION/oha-linux-amd64
           echo "$OHA_SHA256  oha" | sha256sum --check
           chmod +x oha
 
       - name: Run the benchmark
+        if: github.event_name == 'pull_request'
         run: |
+          note=""
+          if [ "${{ steps.changes.outputs.code }}" = "false" ]; then
+            note="This pull request doesn't change proksi's code: both columns are the same binary, so the changes show the runner's noise."
+          fi
           mkdir -p results
           python3 .github/benchmark/compare.py \
             --base bench-bin/base \
@@ -77,11 +105,13 @@ jobs:
             --oha ./oha \
             --upstream 127.0.0.1:8080 \
             --out results/report.md \
-            --raw results/raw.json
+            --raw results/raw.json \
+            --note "$note"
           echo "${{ github.event.pull_request.number }}" > results/pr-number
           cat results/report.md >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request'
         with:
           name: benchmark-results
           path: results/

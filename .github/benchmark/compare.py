@@ -282,6 +282,8 @@ def report(base_rounds, head_rounds, args):
         if regressions
         else "No change above ±10%."
     )
+    if args.note:
+        summary += f"\n\n{args.note}"
     lines.insert(3, summary + "\n")
     lines += [
         "<details><summary>How this is measured</summary>",
@@ -310,6 +312,7 @@ def main():
     parser.add_argument("--connections", type=int, default=50)
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--raw", help="also write the measurements as JSON")
+    parser.add_argument("--note", default="", help="text added below the summary")
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory() as tmp:
