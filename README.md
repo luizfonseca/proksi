@@ -110,9 +110,11 @@ service_name = "proksi"
 # Defaults to 80% of the available CPUs (at least 2)
 worker_threads = 4
 
+# Where hosts are served when they don't set `listen` addresses
 server {
   https_address = "0.0.0.0:443"
-  # HTTP requests are redirected to HTTPS (and used for Let's Encrypt challenges)
+  # HTTP requests are redirected to HTTPS (and used for Let's Encrypt challenges),
+  # except for hosts with `tls = false`
   http_address = "0.0.0.0:80"
 }
 
@@ -148,6 +150,37 @@ host "api.example.com" {
 - The **most specific** location wins: `/login` beats `/`, a static path beats a parameter (`/users/:id`), which beats a wildcard (`/files/*`).
 - A location matches its path **and everything below it**: `/login` serves `/login`, `/login/` and `/login/callback`, but not `/logins`.
 - A request matching no location gets a `404`.
+
+### Ports, plain HTTP, and any host
+
+Each host decides where it's served with `listen`. Without it, a host is served on `server.https_address` (443), and HTTP requests are redirected to it. Proksi only opens the ports its hosts need.
+
+A host with `tls = false` is served over plain HTTP (on `server.http_address` without `listen`), and no certificate is issued for it. This is useful behind another proxy or load balancer that already handles TLS, or when running Proksi on an IP address.
+
+`host "*"` serves requests for any name that doesn't have a host of its own (it needs `tls = false`, as certificates are issued per name):
+
+```hcl
+# Plain HTTP on port 8080 for any name: Proksi doesn't open 443 at all
+host "*" {
+  tls = false
+  listen = ["0.0.0.0:8080"]
+
+  location "/" {
+    upstream "app:8080" {}
+  }
+}
+
+# HTTPS on 8443, only for this host
+host "internal.example.com" {
+  listen = ["10.0.0.1:8443"]
+
+  location "/" {
+    upstream "internal:3000" {}
+  }
+}
+```
+
+A port is either HTTP or HTTPS: a host with TLS and a host without it can't share an address. Hosts with TLS also need port 80 (`server.http_address`), for redirects and Let's Encrypt challenges.
 
 ## Upstreams
 

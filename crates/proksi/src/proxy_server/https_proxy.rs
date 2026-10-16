@@ -24,11 +24,11 @@ use crate::cache::disk::storage::DiskCache;
 use crate::config::{RouteCacheType, RouteUpstream};
 use crate::stores::{self, routes::RouteStoreContainer};
 
-use super::default_peer_opts;
 use super::middleware::{
     execute_request_plugins, execute_response_plugins, execute_upstream_request_plugins,
     execute_upstream_response_plugins,
 };
+use super::{default_peer_opts, http_proxy, listener::Listener};
 
 static STORAGE_MEM_CACHE: Lazy<pingora_cache::MemCache> = Lazy::new(pingora_cache::MemCache::new);
 static STORAGE_CACHE: Lazy<DiskCache> = Lazy::new(DiskCache::new);
@@ -36,8 +36,12 @@ static CACHEABLE_METHODS: Lazy<Vec<http::Method>> =
     Lazy::new(|| vec![http::Method::GET, http::Method::HEAD]);
 static CACHE_LOCK: Lazy<CacheLock> = Lazy::new(|| CacheLock::new(Duration::from_secs(1)));
 
-/// Load balancer proxy struct
-pub struct Router {}
+/// Proxies requests to the location of their host, on the HTTPS or the HTTP port
+pub struct Router {
+    pub listener: Listener,
+    /// Where hosts without `listen` addresses are served for this protocol
+    pub default_address: std::net::SocketAddr,
+}
 
 // type Container = mapref::one::Ref<'static, String, RouteStoreContainer>;
 
@@ -92,16 +96,47 @@ impl ProxyHttp for Router {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
-        let req_host = get_host(session);
+        let req_host = get_host(session).to_string();
         let host_without_port = req_host.split(':').next().unwrap_or_default();
         host_without_port.clone_into(&mut ctx.host);
 
-        ctx.host = host_without_port.to_string();
+        // The host with that name (case-insensitive), or `*`, among the hosts served
+        // on the address the request came in on
+        let local = session
+            .server_addr()
+            .and_then(|addr| addr.as_inet())
+            .copied();
+        let serves_host = |host: &std::sync::Arc<stores::host_container::HostContainer>| {
+            let protocol = match self.listener {
+                Listener::Https => host.tls_enabled,
+                Listener::Http => !host.tls_enabled,
+            };
+            protocol && host.listens_on(local.as_ref(), &self.default_address)
+        };
+        let host_container = stores::lookup::find_host(host_without_port, serves_host);
+
+        if self.listener == Listener::Http {
+            if req_host.is_empty() {
+                return Err(pingora::Error::new(HTTPStatus(400)));
+            }
+            // `/ping` is proksi's own health check, whatever the host
+            if http_proxy::serve_ping(session).await? {
+                return Ok(true);
+            }
+            // Hosts with TLS (and unknown hosts): ACME challenges, then redirect to HTTPS.
+            // Hosts without TLS get no certificates, so all their paths are proxied.
+            if host_container.is_none() {
+                if http_proxy::serve_acme_challenge(session, &req_host).await? {
+                    return Ok(true);
+                }
+                let port = stores::get_route_by_key(&host_without_port.to_lowercase())
+                    .and_then(|host| host.https_redirect_port());
+                return http_proxy::redirect_to_https(session, &req_host, port).await;
+            }
+        }
 
         // If there's no host matching, returns a 404
-        // Routes are stored with lowercase hosts (hosts are case-insensitive)
-        let Some(host_container) = stores::get_route_by_key(&host_without_port.to_lowercase())
-        else {
+        let Some(host_container) = host_container else {
             session.respond_error(404).await?;
             return Ok(true);
         };

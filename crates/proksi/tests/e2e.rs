@@ -442,3 +442,133 @@ async fn test_host_blocks_choose_the_location_by_path() {
 
     proksi.assert_healthy();
 }
+
+const PLAIN_HTTP_HOSTS: &str = r#"
+host "plain.test" {
+  tls = false
+
+  location "/" {
+    headers {
+      response {
+        add = { "x-host" = "plain" }
+      }
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+
+host "*" {
+  tls = false
+
+  location "/" {
+    headers {
+      response {
+        add = { "x-host" = "catch-all" }
+      }
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_hosts_without_tls_are_served_on_the_http_port() {
+    let mut proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        PLAIN_HTTP_HOSTS,
+    )
+    .await;
+
+    let res = proksi.get_http_port("plain.test", "/hello").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.to_lowercase().contains("x-host: plain"), "{res}");
+    assert!(res.contains("\"path\":\"/hello\""), "{res}");
+
+    // Hosts without TLS get no certificates, so ACME paths go to the upstream too
+    let res = proksi
+        .get_http_port("plain.test", "/.well-known/acme-challenge/token")
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.to_lowercase().contains("x-host: plain"), "{res}");
+
+    // Any other name is served by `host "*"`
+    let res = proksi.get_http_port("other.test", "/").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.to_lowercase().contains("x-host: catch-all"), "{res}");
+
+    // Hosts with TLS are still redirected, and ACME challenges answered as before
+    let res = proksi.get_http_port("app.test", "/path").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 308"), "{res}");
+    let res = proksi.get_http_port("other.test", "/ping").await.unwrap();
+    assert!(
+        res.starts_with("HTTP/1.1 200") && res.ends_with("pong"),
+        "{res}"
+    );
+
+    proksi.assert_healthy();
+}
+
+const CATCH_ALL_WITHOUT_TLS: &str = r#"
+host "*" {
+  tls = false
+
+  location "/" {
+    headers {
+      response {
+        add = { "x-host" = "catch-all" }
+      }
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_runs_without_https() {
+    let mut proksi = Harness::start_without_https(CATCH_ALL_WITHOUT_TLS).await;
+
+    let res = proksi
+        .get_http_port("anything.test", "/hello")
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.to_lowercase().contains("x-host: catch-all"), "{res}");
+
+    // Nothing listens on the HTTPS port
+    assert!(
+        tokio::net::TcpStream::connect(("127.0.0.1", proksi.https_port))
+            .await
+            .is_err()
+    );
+
+    proksi.assert_healthy();
+}
+
+const CATCH_ALL_ON_ANOTHER_PORT: &str = r#"
+host "*" {
+  tls = false
+  listen = ["127.0.0.1:{extra_port}"]
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_hosts_are_only_served_on_their_addresses() {
+    let mut proksi = Harness::start_without_https(CATCH_ALL_ON_ANOTHER_PORT).await;
+
+    let res = proksi
+        .get_http_on(proksi.extra_port, "other.test", "/")
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+
+    // `host "*"` doesn't listen on the default HTTP port
+    let res = proksi.get_http_port("other.test", "/").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 308"), "{res}");
+
+    proksi.assert_healthy();
+}

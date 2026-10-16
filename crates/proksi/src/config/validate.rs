@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use anyhow::anyhow;
 
-use super::Config;
+use super::{listeners::listeners, Config};
 use crate::routing::validate::{validate_host, validate_route};
 
 /// given a Config struct, validate the values to ensure
@@ -41,7 +41,9 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
         validate_route(route).map_err(|err| anyhow!("routes[{route_index}]: {err}"))?;
     }
 
-    check_hosts(config)
+    check_hosts(config)?;
+    // A port can't serve both HTTP and HTTPS hosts
+    listeners(config).map(|_| ()).map_err(|err| anyhow!(err))
 }
 
 /// `host` blocks must be valid, and not define a host also in `routes`
@@ -181,5 +183,17 @@ host "a.test" {
             .map(|h| h.name)
             .collect::<Vec<_>>();
         assert_eq!(names, vec!["a.test", "b.test"]);
+    }
+
+    #[test]
+    fn test_address_used_for_http_and_https() {
+        let config = config_with_host_block(
+            "host \"*\" {\n  tls = false\n  listen = [\"0.0.0.0:8080\"]\n}\nhost \"a.test\" {\n  listen = [\"0.0.0.0:8080\"]\n}\n",
+        );
+
+        assert_eq!(
+            check_config(&config).unwrap_err().to_string(),
+            "address 0.0.0.0:8080 is used both for HTTP and HTTPS hosts"
+        );
     }
 }

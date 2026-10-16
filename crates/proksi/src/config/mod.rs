@@ -18,6 +18,7 @@ pub mod blocks;
 pub mod deprecations;
 pub(crate) mod hcl;
 pub mod host;
+pub mod listeners;
 pub mod validate;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ValueEnum)]

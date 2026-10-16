@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    config::{validate::check_config, Config},
+    config::{listeners::listeners, validate::check_config, Config},
     routing::{file_source::file_snapshot, RouteSnapshot},
 };
 
@@ -27,7 +27,8 @@ pub fn reload_action(current: &Config, new: Result<Config, String>) -> ReloadAct
         return ReloadAction::Reject(err.to_string());
     }
 
-    if settings(current) == settings(&new) {
+    // Ports are opened at startup: hosts needing other ports restart proksi
+    if settings(current) == settings(&new) && listeners(current) == listeners(&new) {
         ReloadAction::ApplyRoutes(file_snapshot(&new))
     } else {
         ReloadAction::Restart
@@ -175,6 +176,20 @@ mod tests {
         assert!(matches!(
             reload_action(&current, Ok(new)),
             ReloadAction::ApplyRoutes(_)
+        ));
+    }
+
+    #[test]
+    fn test_host_change_needing_other_ports_restarts() {
+        let current = Config::default();
+        let mut new = Config::default();
+        let mut block = crate::config::blocks::HostBlock::default();
+        block.listen = vec!["0.0.0.0:8080".to_string()];
+        new.host.insert("a.test".to_string(), block);
+
+        assert!(matches!(
+            reload_action(&current, Ok(new)),
+            ReloadAction::Restart
         ));
     }
 }

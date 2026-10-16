@@ -10,9 +10,8 @@ use tracing_subscriber::EnvFilter;
 
 use std::sync::{atomic::AtomicU64, Arc};
 
-use pingora::{listeners::tls::TlsSettings, proxy::http_proxy_service, server::configuration::Opt};
+use pingora::server::configuration::Opt;
 
-use proxy_server::cert_store::CertStore;
 use services::{logger::ProxyLoggerReceiver, BackgroundFunctionService};
 
 mod cache;
@@ -44,12 +43,10 @@ fn main() -> Result<(), anyhow::Error> {
             .map_err(|err| anyhow::anyhow!("Failed to load configuration: {err}"))?,
     );
 
-    let https_address = proxy_config
-        .server
-        .https_address
-        .clone()
-        .unwrap_or_default();
-    let le_address = proxy_config.server.http_address.clone().unwrap_or_default();
+    // The addresses the hosts need (validated when loading the configuration)
+    let listeners = config::listeners::listeners(&proxy_config).map_err(anyhow::Error::msg)?;
+    let (default_https, default_http) =
+        config::listeners::default_addresses(&proxy_config).map_err(anyhow::Error::msg)?;
 
     // Logging channel
     let (log_sender, log_receiver) = services::logger::log_queue();
@@ -107,40 +104,6 @@ fn main() -> Result<(), anyhow::Error> {
     let mut pingora_server = Server::new(Some(pingora_opts))?;
     pingora_server.bootstrap();
 
-    // Service: HTTP Load Balancer (only used by acme-challenges)
-    // As we don't necessarily need an upstream to handle the acme-challenges,
-    // we can use a simple mock LoadBalancer
-    let mut http_public_service = http_proxy_service(
-        &pingora_server.configuration,
-        proxy_server::http_proxy::HttpLB {},
-    );
-
-    // Service: HTTPS Load Balancer (main service)
-    // The router will also handle health checks and failover in case of upstream failure
-    let router = proxy_server::https_proxy::Router {};
-    let mut https_secure_service = http_proxy_service(&pingora_server.configuration, router);
-    http_public_service.add_tcp(&le_address);
-
-    // Worker threads per configuration
-    https_secure_service.threads = proxy_config.worker_threads;
-
-    // Setup tls settings and Enable HTTP/2
-    let cert_store = CertStore::new();
-    let mut tls_settings = TlsSettings::with_callbacks(Box::new(cert_store))?;
-    tls_settings.enable_h2();
-
-    // tls_settings.set_session_cache_mode(SslSessionCacheMode::SERVER);
-    tls_settings.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
-
-    // For now this is a hardcoded recommendation based on
-    // https://developers.cloudflare.com/ssl/reference/protocols/
-    // but will be made configurable in the future
-    tls_settings.set_min_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_2))?;
-    tls_settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
-
-    // Add TLS settings to the HTTPS service
-    https_secure_service.add_tls_with_settings(&https_address, None, tls_settings);
-
     // Add Prometheus service
     // let mut prometheus_service_http = Service::prometheus_http_service();
     // prometheus_service_http.add_tcp("0.0.0.0:9090");
@@ -160,12 +123,27 @@ fn main() -> Result<(), anyhow::Error> {
         &proxy_config,
     ));
 
-    // Listen on HTTP and HTTPS ports
-    pingora_server.add_service(http_public_service);
-    pingora_server.add_service(https_secure_service);
-
-    let server_info =
-        format!("running HTTPS service on {https_address} and HTTP service on {le_address}");
+    // Listen on the HTTP and HTTPS addresses the hosts need
+    if !listeners.http.is_empty() {
+        pingora_server.add_service(proxy_server::services::http_service(
+            &pingora_server.configuration,
+            &listeners.http,
+            default_http,
+            proxy_config.worker_threads,
+        ));
+    }
+    if !listeners.https.is_empty() {
+        pingora_server.add_service(proxy_server::services::https_service(
+            &pingora_server.configuration,
+            &listeners.https,
+            default_https,
+            proxy_config.worker_threads,
+        )?);
+    }
+    let server_info = format!(
+        "listening for HTTPS on {:?} and HTTP on {:?}",
+        listeners.https, listeners.http
+    );
     tracing::info!(
         version = crate_version!(),
         workers = proxy_config.worker_threads,

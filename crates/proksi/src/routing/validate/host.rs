@@ -10,6 +10,8 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
     if host.name.trim().is_empty() {
         return Err("host cannot be empty".to_string());
     }
+    validate_wildcard(host)?;
+    validate_listen(&host.listen)?;
 
     // Pattern -> path of the location defining it
     let mut patterns: HashMap<String, &str> = HashMap::new();
@@ -29,6 +31,33 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// `*` serves requests for any other name, over plain HTTP (certificates are issued per name)
+fn validate_wildcard(host: &Host) -> Result<(), String> {
+    if host.name == "*" {
+        if host.tls.enabled {
+            return Err(
+                "host \"*\" needs tls = false (certificates are issued per name)".to_string(),
+            );
+        }
+    } else if host.name.contains('*') {
+        return Err("only \"*\" is supported as a wildcard host".to_string());
+    }
+    Ok(())
+}
+
+/// Listen addresses are bound when proksi starts, so they must be IP addresses
+fn validate_listen(addresses: &[String]) -> Result<(), String> {
+    match addresses
+        .iter()
+        .find(|address| address.parse::<std::net::SocketAddr>().is_err())
+    {
+        Some(address) => Err(format!(
+            "listen \"{address}\" is not a valid address (ip:port)"
+        )),
+        None => Ok(()),
+    }
 }
 
 /// Locations are paths: nginx modifiers are rejected rather than read as literal paths
@@ -114,6 +143,39 @@ mod tests {
         assert_eq!(
             validate_host(&host),
             Err("location \"/*\": upstreams[0].port must be greater than 0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_catch_all_host_needs_tls_disabled() {
+        let mut catch_all = host("*", "10.0.0.1");
+        assert_eq!(
+            validate_host(&catch_all),
+            Err("host \"*\" needs tls = false (certificates are issued per name)".to_string())
+        );
+
+        catch_all.tls.enabled = false;
+        assert!(validate_host(&catch_all).is_ok());
+    }
+
+    #[test]
+    fn test_only_catch_all_wildcard_is_supported() {
+        let mut wildcard = host("*.example.com", "10.0.0.1");
+        wildcard.tls.enabled = false;
+        assert_eq!(
+            validate_host(&wildcard),
+            Err("only \"*\" is supported as a wildcard host".to_string())
+        );
+    }
+
+    #[test]
+    fn test_listen_addresses_must_be_ip_and_port() {
+        let mut host = host("a.test", "10.0.0.1");
+        host.listen = vec!["0.0.0.0:8443".to_string(), "localhost:80".to_string()];
+
+        assert_eq!(
+            validate_host(&host),
+            Err("listen \"localhost:80\" is not a valid address (ip:port)".to_string())
         );
     }
 }

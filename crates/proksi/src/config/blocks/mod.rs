@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::host::{Host, HostTls};
+use super::host::Host;
 
 mod headers;
 mod location;
@@ -14,13 +14,17 @@ mod upstream;
 
 pub use headers::HeadersBlock;
 pub use location::LocationBlock;
-pub use tls::TlsBlock;
+pub use tls::TlsSetting;
 
 /// `host "<name>" { ... }`
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HostBlock {
-    pub tls: Option<TlsBlock>,
+    /// Addresses the host is served on (`ip:port`), instead of the default ones
+    #[serde(default)]
+    pub listen: Vec<String>,
+    /// `tls = false` (plain HTTP) or `tls { ... }`
+    pub tls: Option<TlsSetting>,
     /// Headers for every location of the host
     pub headers: Option<HeadersBlock>,
     #[serde(default)]
@@ -30,7 +34,6 @@ pub struct HostBlock {
 impl HostBlock {
     /// Converts the block of host `name` into a host
     pub fn to_host(&self, name: &str) -> Result<Host, String> {
-        let tls = self.tls.clone().unwrap_or_default();
         let locations = self
             .location
             .iter()
@@ -43,10 +46,12 @@ impl HostBlock {
 
         Ok(Host {
             name: name.to_string(),
-            tls: HostTls {
-                certificate: tls.certificate,
-                self_signed_on_failure: tls.self_signed_on_failure,
-            },
+            listen: self.listen.clone(),
+            tls: self
+                .tls
+                .as_ref()
+                .map(TlsSetting::to_host_tls)
+                .unwrap_or_default(),
             locations,
         })
     }
@@ -153,7 +158,9 @@ host:
     fn expected() -> Host {
         Host {
             name: "app.test".to_string(),
+            listen: vec![],
             tls: HostTls {
+                enabled: true,
                 certificate: Some(RouteSslPath {
                     pem: "/certs/app.pem".into(),
                     key: "/certs/app.key".into(),
@@ -238,5 +245,31 @@ host:
             to_host(&doc),
             Err("location \"/\": upstream \"10.0.0.1\" needs a port (host:port)".to_string())
         );
+    }
+
+    #[test]
+    fn test_catch_all_host_without_tls() {
+        let doc = HclFormat::from_str::<Doc>(
+            "host \"*\" {\n  tls = false\n  location \"/\" {\n    upstream \"app:8080\" {}\n  }\n}\n",
+        )
+        .unwrap();
+
+        let host = doc.host.get("*").unwrap().to_host("*").unwrap();
+
+        assert_eq!(host.name, "*");
+        assert!(!host.tls.enabled);
+        assert_eq!(crate::routing::validate::validate_host(&host), Ok(()));
+    }
+
+    #[test]
+    fn test_host_listen_addresses() {
+        let doc = HclFormat::from_str::<Doc>(
+            "host \"a.test\" {\n  listen = [\"0.0.0.0:8080\", \"[::]:8080\"]\n}\n",
+        )
+        .unwrap();
+
+        let host = doc.host.get("a.test").unwrap().to_host("a.test").unwrap();
+
+        assert_eq!(host.listen, vec!["0.0.0.0:8080", "[::]:8080"]);
     }
 }

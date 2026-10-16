@@ -107,8 +107,12 @@ pub struct Harness {
     hosts: Vec<String>,
     /// Extra configuration added to the generated one (e.g. `auto_reload`)
     extra_config: String,
+    /// Started with only the hosts of `extra_config` (see `start_without_https`)
+    without_https: bool,
     pub https_port: u16,
     pub http_port: u16,
+    /// A free port for hosts listening elsewhere (`{extra_port}` in `extra_config`)
+    pub extra_port: u16,
     pub http_upstream: HttpUpstream,
     pub websocket_upstream: WebSocketUpstream,
 }
@@ -120,6 +124,17 @@ impl Harness {
 
     /// Starts proksi with extra configuration (e.g. an `auto_reload` block)
     pub async fn start_with(routes: Vec<Route>, extra_config: &str) -> Self {
+        Self::start_inner(routes, extra_config, false).await
+    }
+
+    /// Starts proksi with only the hosts of `extra_config`, all with `tls = false`:
+    /// no host needs HTTPS, so proksi doesn't open the HTTPS port.
+    /// Readiness is checked on the HTTP port.
+    pub async fn start_without_https(extra_config: &str) -> Self {
+        Self::start_inner(vec![], extra_config, true).await
+    }
+
+    async fn start_inner(routes: Vec<Route>, extra_config: &str, without_https: bool) -> Self {
         raise_open_files_limit();
 
         let dir = tempfile::tempdir().unwrap();
@@ -130,6 +145,7 @@ impl Harness {
 
         let https_port = free_port();
         let http_port = free_port();
+        let extra_port = free_port();
 
         let stdout = std::fs::File::create(dir.path().join("stdout.log")).unwrap();
         let stderr = std::fs::File::create(dir.path().join("stderr.log")).unwrap();
@@ -141,8 +157,10 @@ impl Harness {
             dir,
             hosts: vec![],
             extra_config: extra_config.to_string(),
+            without_https,
             https_port,
             http_port,
+            extra_port,
             http_upstream,
             websocket_upstream,
         };
@@ -263,13 +281,24 @@ paths {{
 
 {extra_config}
 
-routes = [
-{routes_hcl}]
+{hosts}
 "#,
             https_port = self.https_port,
             http_port = self.http_port,
+            hosts = self.render_hosts(&routes_hcl),
             le = dir.join("le").to_string_lossy(),
             extra_config = self.render_extra_config(),
+        )
+    }
+
+    /// The routes, or without HTTPS, the readiness host over plain HTTP
+    fn render_hosts(&self, routes_hcl: &str) -> String {
+        if !self.without_https {
+            return format!("routes = [\n{routes_hcl}]");
+        }
+        format!(
+            "host \"{READY_HOST}\" {{\n  tls = false\n  location \"/\" {{\n    upstream \"127.0.0.1:{}\" {{}}\n  }}\n}}",
+            self.http_upstream.port
         )
     }
 
@@ -278,6 +307,7 @@ routes = [
         let dir = self.dir.path();
         self.extra_config
             .replace("{http_upstream_port}", &self.http_upstream.port.to_string())
+            .replace("{extra_port}", &self.extra_port.to_string())
             .replace("{cert_pem}", &dir.join("cert.pem").to_string_lossy())
             .replace("{cert_key}", &dir.join("key.pem").to_string_lossy())
     }
@@ -304,10 +334,17 @@ routes = [
         for _ in 0..100 {
             assert!(self.is_alive(), "proksi exited:\n{}", self.logs());
 
-            if let Ok(res) = self.get(READY_HOST, "/").await {
-                if res.status == 200 {
-                    return;
-                }
+            let ready = if self.without_https {
+                self.get_http_port(READY_HOST, "/")
+                    .await
+                    .is_ok_and(|res| res.starts_with("HTTP/1.1 200"))
+            } else {
+                self.get(READY_HOST, "/")
+                    .await
+                    .is_ok_and(|res| res.status == 200)
+            };
+            if ready {
+                return;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
@@ -347,7 +384,12 @@ routes = [
 
     /// Sends a request to the plain HTTP port with a raw `Host` header
     pub async fn get_http_port(&self, host: &str, path: &str) -> std::io::Result<String> {
-        let mut stream = TcpStream::connect(("127.0.0.1", self.http_port)).await?;
+        self.get_http_on(self.http_port, host, path).await
+    }
+
+    /// Plain HTTP request to proksi on `port`, returning the raw response
+    pub async fn get_http_on(&self, port: u16, host: &str, path: &str) -> std::io::Result<String> {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).await?;
         let request = format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
         stream.write_all(request.as_bytes()).await?;
 

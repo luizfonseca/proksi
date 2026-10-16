@@ -26,6 +26,8 @@ Below you can find a full list of the configuration keys and their corresponding
 | `service_name` | `PROKSI_SERVICE_NAME` | The name of the service |
 | `worker_threads` | `PROKSI_WORKER_THREADS` | The number of worker threads |
 | `daemon` | `PROKSI_DAEMON` | Whether the service should run as a daemon |
+| `server.https_address` | `PROKSI_SERVER__HTTPS_ADDRESS` | The default HTTPS address (hosts without `listen`) |
+| `server.http_address` | `PROKSI_SERVER__HTTP_ADDRESS` | The default HTTP address (redirects, ACME challenges, hosts without TLS) |
 | `logging.level` | `PROKSI_LOGGING__LEVEL` | The log level |
 | `logging.format` | `PROKSI_LOGGING__FORMAT` | The log format |
 | `logging.path` | `PROKSI_LOGGING__PATH` | The path where we should write logs files |
