@@ -230,17 +230,17 @@ impl LetsencryptService {
         loop {
             interval.tick().await;
             tracing::debug!("checking for new routes to create certificates for");
-            for (key, value) in &stores::get_routes() {
+            // Hosts without TLS (and `*`) don't get certificates
+            for (host, self_signed_on_failure) in stores::lookup::tls_hosts() {
                 if stores::global::get_store()
                     .get_certificates()
                     .await
-                    .contains_key(key)
+                    .contains_key(&host)
                 {
                     continue;
                 }
 
-                Self::handle_certificate_for_domain(key, account, value.self_signed_certificate)
-                    .await;
+                Self::handle_certificate_for_domain(&host, account, self_signed_on_failure).await;
             }
         }
     }
@@ -256,7 +256,8 @@ impl LetsencryptService {
 
         loop {
             tracing::debug!("checking for certificates to renew");
-            for (domain, _) in &stores::get_routes() {
+            for (domain, _) in stores::lookup::tls_hosts() {
+                let domain = domain.as_str();
                 let Ok(Some(cert)) = account.certificate(domain) else {
                     continue;
                 };

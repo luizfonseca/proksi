@@ -14,10 +14,7 @@ pub fn build_host_container(host: &Host) -> Option<HostContainer> {
         })
         .collect::<Option<Vec<_>>>()?;
 
-    Some(HostContainer::new(
-        locations,
-        host.tls.self_signed_on_failure,
-    ))
+    Some(HostContainer::new(locations, &host.tls))
 }
 
 #[cfg(test)]

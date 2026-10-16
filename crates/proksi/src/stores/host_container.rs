@@ -1,6 +1,6 @@
 //! What the proxy needs to serve a host
 
-use crate::routing::paths::LocationMatcher;
+use crate::{config::host::HostTls, routing::paths::LocationMatcher};
 
 use super::routes::RouteStoreContainer;
 
@@ -8,20 +8,20 @@ use super::routes::RouteStoreContainer;
 pub struct HostContainer {
     pub locations: Vec<RouteStoreContainer>,
     matcher: LocationMatcher,
+    /// Served over HTTPS (otherwise over plain HTTP, without certificates)
+    pub tls_enabled: bool,
     pub self_signed_certificate: bool,
 }
 
 impl HostContainer {
     /// `locations`: the path patterns of each location, with its container
-    pub fn new(
-        locations: Vec<(Vec<String>, RouteStoreContainer)>,
-        self_signed_certificate: bool,
-    ) -> Self {
+    pub fn new(locations: Vec<(Vec<String>, RouteStoreContainer)>, tls: &HostTls) -> Self {
         let (patterns, locations): (Vec<_>, Vec<_>) = locations.into_iter().unzip();
         Self {
             locations,
             matcher: LocationMatcher::new(patterns),
-            self_signed_certificate,
+            tls_enabled: tls.enabled,
+            self_signed_certificate: tls.self_signed_on_failure,
         }
     }
 
@@ -33,7 +33,10 @@ impl HostContainer {
 
 #[cfg(test)]
 mod tests {
-    use crate::{config::RouteUpstream, stores::routes::RouteStoreContainer};
+    use crate::{
+        config::{host::HostTls, RouteUpstream},
+        stores::routes::RouteStoreContainer,
+    };
 
     use super::HostContainer;
 
@@ -48,6 +51,20 @@ mod tests {
     }
 
     #[test]
+    fn test_tls_settings() {
+        let host = HostContainer::new(
+            vec![],
+            &HostTls {
+                enabled: false,
+                certificate: None,
+                self_signed_on_failure: true,
+            },
+        );
+        assert!(!host.tls_enabled);
+        assert!(host.self_signed_certificate);
+    }
+
+    #[test]
     fn test_location_for_path() {
         let host = HostContainer::new(
             vec![
@@ -57,7 +74,10 @@ mod tests {
                     location("10.0.0.2"),
                 ),
             ],
-            true,
+            &HostTls {
+                self_signed_on_failure: true,
+                ..HostTls::default()
+            },
         );
         let served_by = |path: &str| {
             host.location_for(path)
@@ -74,7 +94,7 @@ mod tests {
     fn test_no_location_for_path() {
         let host = HostContainer::new(
             vec![(vec!["/api".to_string()], location("10.0.0.1"))],
-            false,
+            &HostTls::default(),
         );
         assert!(host.location_for("/other").is_none());
     }
