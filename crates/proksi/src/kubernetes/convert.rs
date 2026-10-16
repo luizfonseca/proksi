@@ -3,7 +3,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use k8s_openapi::api::{
-    core::v1::Service,
+    core::v1::{Secret, Service},
     discovery::v1::EndpointSlice,
     networking::v1::{Ingress, IngressBackend, IngressClass, IngressServiceBackend},
 };
@@ -17,6 +17,8 @@ use crate::config::{
 const DEFAULT_CLASS: &str = "ingressclass.kubernetes.io/is-default-class";
 /// `"false"`: the hosts of the `Ingress` are plain HTTP
 const TLS: &str = "proksi.info/tls";
+/// `"service"`: upstreams are the services' cluster IPs, balanced by Kubernetes
+const UPSTREAM: &str = "proksi.info/upstream";
 /// Links an `EndpointSlice` to its `Service`
 const SERVICE_NAME: &str = "kubernetes.io/service-name";
 
@@ -27,6 +29,27 @@ pub struct Cluster {
     pub ingress_classes: Vec<Arc<IngressClass>>,
     pub services: Vec<Arc<Service>>,
     pub endpoint_slices: Vec<Arc<EndpointSlice>>,
+    pub secrets: Vec<Arc<Secret>>,
+}
+
+/// What the `Ingress`es of proksi's class turn into
+#[derive(Debug, Default)]
+pub struct Converted {
+    pub hosts: Vec<Host>,
+    /// The certificate of each host listed in an `Ingress`' `tls`
+    pub certificates: Vec<HostCertificate>,
+    pub invalid: Vec<Invalid>,
+}
+
+/// A certificate from a `Secret` (`tls.crt`, `tls.key`) for a host
+#[derive(Debug, Clone, PartialEq)]
+pub struct HostCertificate {
+    pub host: String,
+    /// `namespace/name` of the `Secret`, and its version (to tell when it changed)
+    pub secret: String,
+    pub version: Option<String>,
+    pub certificate: Vec<u8>,
+    pub key: Vec<u8>,
 }
 
 /// An `Ingress` (or part of it) that couldn't be served
@@ -41,39 +64,15 @@ pub struct Invalid {
 type Locations = BTreeMap<(String, bool), (Location, String)>;
 
 /// The hosts of the `Ingress`es of class `class`, and what couldn't be served
-pub fn hosts(cluster: &Cluster, class: &str) -> (Vec<Host>, Vec<Invalid>) {
-    let default_class = cluster.ingress_classes.iter().any(|ingress_class| {
-        ingress_class.metadata.name.as_deref() == Some(class)
-            && ingress_class
-                .metadata
-                .annotations
-                .as_ref()
-                .and_then(|annotations| annotations.get(DEFAULT_CLASS))
-                .is_some_and(|value| value == "true")
-    });
-    let mut ingresses = cluster
-        .ingresses
-        .iter()
-        .filter(|ingress| {
-            match ingress.spec.as_ref().and_then(|spec| spec.ingress_class_name.as_deref()) {
-                Some(name) => name == class,
-                None => default_class,
-            }
-        })
-        .collect::<Vec<_>>();
-    // The oldest `Ingress` keeps a path defined twice
-    ingresses.sort_by_key(|ingress| {
-        (
-            ingress.metadata.creation_timestamp.clone(),
-            ingress.metadata.namespace.clone(),
-            ingress.metadata.name.clone(),
-        )
-    });
+pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
+    let ingresses = of_class(cluster, class);
 
     // Locations by host, with the `Ingress` defining each path, and whether the host has TLS
     // (as set by the oldest `Ingress` of the host)
     let mut hosts: BTreeMap<String, Locations> = BTreeMap::new();
     let mut tls: BTreeMap<String, bool> = BTreeMap::new();
+    // The certificate of each host, from the oldest `Ingress` listing it
+    let mut certificates: BTreeMap<String, HostCertificate> = BTreeMap::new();
     let mut invalid = vec![];
 
     for ingress in ingresses {
@@ -82,12 +81,11 @@ pub fn hosts(cluster: &Cluster, class: &str) -> (Vec<Host>, Vec<Invalid>) {
             "{namespace}/{}",
             ingress.metadata.name.clone().unwrap_or_default()
         );
-        let plain = ingress
-            .metadata
-            .annotations
-            .as_ref()
-            .and_then(|annotations| annotations.get(TLS))
-            .is_some_and(|value| value == "false");
+        let plain = annotation(ingress, TLS) == Some("false");
+        let through_service = annotation(ingress, UPSTREAM) == Some("service");
+
+        tls_certificates(cluster, ingress, &id, &mut certificates, &mut invalid);
+
         for (host, path, exact, backend) in paths(ingress) {
             tls.entry(host.clone()).or_insert(!plain);
             let Some(service) = &backend.service else {
@@ -112,7 +110,7 @@ pub fn hosts(cluster: &Cluster, class: &str) -> (Vec<Host>, Vec<Invalid>) {
             let location = Location {
                 path: path.clone(),
                 exact,
-                upstreams: upstreams(cluster, &namespace, service),
+                upstreams: upstreams(cluster, &namespace, service, through_service),
                 headers: None,
                 plugins: None,
                 cache: None,
@@ -129,11 +127,126 @@ pub fn hosts(cluster: &Cluster, class: &str) -> (Vec<Host>, Vec<Invalid>) {
                 enabled: tls.get(&name).copied().unwrap_or(true),
                 ..HostTls::default()
             },
-            locations: locations.into_values().map(|(location, _)| location).collect(),
+            locations: locations
+                .into_values()
+                .map(|(location, _)| location)
+                .collect(),
             name,
         })
         .collect();
-    (hosts, invalid)
+    Converted {
+        hosts,
+        certificates: certificates.into_values().collect(),
+        invalid,
+    }
+}
+
+/// The `Ingress`es of class `class` (or without a class, when `class` is the default one),
+/// oldest first: the oldest keeps a path (or a certificate) defined twice
+fn of_class<'a>(cluster: &'a Cluster, class: &str) -> Vec<&'a Arc<Ingress>> {
+    let default_class = cluster.ingress_classes.iter().any(|ingress_class| {
+        ingress_class.metadata.name.as_deref() == Some(class)
+            && ingress_class
+                .metadata
+                .annotations
+                .as_ref()
+                .and_then(|annotations| annotations.get(DEFAULT_CLASS))
+                .is_some_and(|value| value == "true")
+    });
+    let mut ingresses = cluster
+        .ingresses
+        .iter()
+        .filter(|ingress| {
+            match ingress
+                .spec
+                .as_ref()
+                .and_then(|spec| spec.ingress_class_name.as_deref())
+            {
+                Some(name) => name == class,
+                None => default_class,
+            }
+        })
+        .collect::<Vec<_>>();
+    ingresses.sort_by_key(|ingress| {
+        (
+            ingress.metadata.creation_timestamp.clone(),
+            ingress.metadata.namespace.clone(),
+            ingress.metadata.name.clone(),
+        )
+    });
+
+    ingresses
+}
+
+/// The certificates of the hosts listed in an `Ingress`' `tls`, unless an older one listed them
+fn tls_certificates(
+    cluster: &Cluster,
+    ingress: &Ingress,
+    id: &str,
+    certificates: &mut BTreeMap<String, HostCertificate>,
+    invalid: &mut Vec<Invalid>,
+) {
+    let namespace = ingress.metadata.namespace.clone().unwrap_or_default();
+    for entry in ingress
+        .spec
+        .iter()
+        .flat_map(|spec| spec.tls.iter().flatten())
+    {
+        let Some(name) = &entry.secret_name else {
+            continue;
+        };
+        let secret = format!("{namespace}/{name}");
+        for host in entry.hosts.iter().flatten() {
+            if certificates.contains_key(host) {
+                continue;
+            }
+            match tls_secret(cluster, &namespace, name) {
+                Some((version, certificate, key)) => {
+                    certificates.insert(
+                        host.clone(),
+                        HostCertificate {
+                            host: host.clone(),
+                            secret: secret.clone(),
+                            version,
+                            certificate,
+                            key,
+                        },
+                    );
+                }
+                None => invalid.push(Invalid {
+                    ingress: id.to_string(),
+                    reason: format!("TLS secret {secret} (for {host}) not found"),
+                }),
+            }
+        }
+    }
+}
+
+fn annotation<'a>(ingress: &'a Ingress, name: &str) -> Option<&'a str> {
+    ingress
+        .metadata
+        .annotations
+        .as_ref()
+        .and_then(|annotations| annotations.get(name))
+        .map(String::as_str)
+}
+
+/// The version, certificate and key of a TLS `Secret`
+fn tls_secret(
+    cluster: &Cluster,
+    namespace: &str,
+    name: &str,
+) -> Option<(Option<String>, Vec<u8>, Vec<u8>)> {
+    let secret = cluster.secrets.iter().find(|secret| {
+        secret.metadata.namespace.as_deref() == Some(namespace)
+            && secret.metadata.name.as_deref() == Some(name)
+    })?;
+    let data = secret.data.as_ref()?;
+    Some((
+        secret.metadata.resource_version.clone(),
+        data.get("tls.crt")?.0.clone(),
+        data.get("tls.key")?.0.clone(),
+    ))
 }
 
 /// The paths of an `Ingress`: host, path, whether it's exact, and backend
@@ -169,6 +282,7 @@ fn upstreams(
     cluster: &Cluster,
     namespace: &str,
     backend: &IngressServiceBackend,
+    through_service: bool,
 ) -> Vec<RouteUpstream> {
     let Some(service) = cluster.services.iter().find(|service| {
         service.metadata.namespace.as_deref() == Some(namespace)
@@ -190,6 +304,24 @@ fn upstreams(
     }) else {
         return vec![];
     };
+    // The service's address, unless it has none (headless services)
+    let cluster_ip = service
+        .spec
+        .as_ref()
+        .and_then(|spec| spec.cluster_ip.as_deref())
+        .filter(|ip| !ip.is_empty() && *ip != "None");
+    if let (true, Some(ip), Ok(port)) = (through_service, cluster_ip, u16::try_from(port.port)) {
+        return vec![RouteUpstream {
+            ip: if ip.contains(':') {
+                format!("[{ip}]").into()
+            } else {
+                ip.to_string().into()
+            },
+            port,
+            ..RouteUpstream::default()
+        }];
+    }
+
     // Endpoint slices name their ports like the service's (unnamed for a single port)
     let port_name = port.name.clone().unwrap_or_default();
 
@@ -249,13 +381,17 @@ mod tests {
 
     use crate::config::host::Host;
 
-    use super::{hosts, Cluster, Invalid};
+    use super::{hosts, Cluster, Converted, HostCertificate, Invalid};
 
     fn object<T: serde::de::DeserializeOwned>(value: Value) -> T {
         serde_json::from_value(value).unwrap()
     }
 
-    fn ingress(name: &str, created: &str, spec: Value) -> k8s_openapi::api::networking::v1::Ingress {
+    fn ingress(
+        name: &str,
+        created: &str,
+        spec: Value,
+    ) -> k8s_openapi::api::networking::v1::Ingress {
         object(json!({
             "metadata": { "name": name, "namespace": "default", "creationTimestamp": created },
             "spec": spec,
@@ -304,6 +440,12 @@ mod tests {
                     { "addresses": ["10.1.0.3"] },
                 ],
             })))],
+            secrets: vec![Arc::new(object(json!({
+                "metadata": { "name": "web-tls", "namespace": "default", "resourceVersion": "7" },
+                "type": "kubernetes.io/tls",
+                // "certificate" and "key", base64
+                "data": { "tls.crt": "Y2VydGlmaWNhdGU=", "tls.key": "a2V5" },
+            })))],
         }
     }
 
@@ -334,7 +476,7 @@ mod tests {
             }),
         )];
 
-        let (hosts, invalid) = hosts(&cluster(ingresses), "proksi");
+        let Converted { hosts, invalid, .. } = hosts(&cluster(ingresses), "proksi");
 
         assert_eq!(invalid, vec![]);
         assert_eq!(hosts.len(), 1);
@@ -352,7 +494,10 @@ mod tests {
         );
         // The pods' port, from the service port, and only ready pods
         for index in 0..3 {
-            assert_eq!(upstreams(host, index), vec!["10.1.0.1:8080", "10.1.0.3:8080"]);
+            assert_eq!(
+                upstreams(host, index),
+                vec!["10.1.0.1:8080", "10.1.0.3:8080"]
+            );
         }
     }
 
@@ -371,7 +516,7 @@ mod tests {
             ingress("other", "2026-01-01T00:00:00Z", spec(Some("nginx"))),
             ingress("none", "2026-01-01T00:00:00Z", spec(None)),
         ]);
-        assert_eq!(hosts(&cluster, "proksi").0, vec![]);
+        assert_eq!(hosts(&cluster, "proksi").hosts, vec![]);
 
         // Without a class, when proksi's class is the default one
         cluster.ingress_classes = vec![Arc::new(object(json!({
@@ -381,7 +526,7 @@ mod tests {
             },
             "spec": { "controller": "proksi.info/ingress-controller" },
         })))];
-        let (hosts, _) = hosts(&cluster, "proksi");
+        let Converted { hosts, .. } = hosts(&cluster, "proksi");
         assert_eq!(hosts.len(), 1);
         assert_eq!(hosts[0].locations[0].path, "/");
     }
@@ -412,7 +557,7 @@ mod tests {
             ),
         ];
 
-        let (hosts, invalid) = hosts(&cluster(ingresses), "proksi");
+        let Converted { hosts, invalid, .. } = hosts(&cluster(ingresses), "proksi");
 
         let host = by_name(&hosts, "a.test");
         let paths = host
@@ -444,7 +589,7 @@ mod tests {
             }),
         )];
 
-        let (hosts, invalid) = hosts(&cluster(ingresses), "proksi");
+        let Converted { hosts, invalid, .. } = hosts(&cluster(ingresses), "proksi");
 
         assert_eq!(invalid, vec![]);
         let host = by_name(&hosts, "*");
@@ -484,13 +629,14 @@ mod tests {
             "endpoints": [{ "addresses": ["fd00::1"] }],
         }))));
 
-        let (hosts, invalid) = hosts(&cluster, "proksi");
+        let Converted { hosts, invalid, .. } = hosts(&cluster, "proksi");
 
         assert_eq!(
             invalid,
             vec![Invalid {
                 ingress: "default/mixed".to_string(),
-                reason: "path /bucket of host a.test: only service backends are supported".to_string(),
+                reason: "path /bucket of host a.test: only service backends are supported"
+                    .to_string(),
             }]
         );
         assert_eq!(
@@ -511,7 +657,7 @@ mod tests {
         )]);
         Arc::make_mut(&mut cluster.ingresses[0]).metadata.namespace = Some("other".to_string());
 
-        let (hosts, _) = hosts(&cluster, "proksi");
+        let Converted { hosts, .. } = hosts(&cluster, "proksi");
 
         assert_eq!(upstreams(&hosts[0], 0), Vec::<String>::new());
     }
@@ -526,14 +672,86 @@ mod tests {
                 "rules": [rule(Some("a.test"), json!([path(Some("/"), "Prefix", "web", json!({ "number": 80 }))]))],
             }),
         )]);
-        Arc::make_mut(&mut cluster.ingresses[0]).metadata.annotations = Some(
+        Arc::make_mut(&mut cluster.ingresses[0])
+            .metadata
+            .annotations = Some(
             [("proksi.info/tls".to_string(), "false".to_string())]
                 .into_iter()
                 .collect(),
         );
 
-        let (hosts, _) = hosts(&cluster, "proksi");
+        let Converted { hosts, .. } = hosts(&cluster, "proksi");
 
         assert!(!hosts[0].tls.enabled);
+    }
+
+    #[test]
+    fn test_certificates_from_secrets() {
+        let cluster = cluster(vec![ingress(
+            "web",
+            "2026-01-01T00:00:00Z",
+            json!({
+                "ingressClassName": "proksi",
+                "tls": [
+                    { "hosts": ["a.test", "b.test"], "secretName": "web-tls" },
+                    { "hosts": ["c.test"], "secretName": "missing" },
+                ],
+                "rules": [rule(Some("a.test"), json!([path(Some("/"), "Prefix", "web", json!({ "number": 80 }))]))],
+            }),
+        )]);
+
+        let Converted {
+            certificates,
+            invalid,
+            ..
+        } = hosts(&cluster, "proksi");
+
+        let certificate = |host: &str| HostCertificate {
+            host: host.to_string(),
+            secret: "default/web-tls".to_string(),
+            version: Some("7".to_string()),
+            certificate: b"certificate".to_vec(),
+            key: b"key".to_vec(),
+        };
+        assert_eq!(
+            certificates,
+            vec![certificate("a.test"), certificate("b.test")]
+        );
+        assert_eq!(
+            invalid,
+            vec![Invalid {
+                ingress: "default/web".to_string(),
+                reason: "TLS secret default/missing (for c.test) not found".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_upstream_through_the_service() {
+        let mut cluster = cluster(vec![ingress(
+            "web",
+            "2026-01-01T00:00:00Z",
+            json!({
+                "ingressClassName": "proksi",
+                "rules": [rule(Some("a.test"), json!([path(Some("/"), "Prefix", "web", json!({ "number": 80 }))]))],
+            }),
+        )]);
+        Arc::make_mut(&mut cluster.ingresses[0])
+            .metadata
+            .annotations = Some(
+            [("proksi.info/upstream".to_string(), "service".to_string())]
+                .into_iter()
+                .collect(),
+        );
+        Arc::make_mut(&mut cluster.services[0])
+            .spec
+            .as_mut()
+            .unwrap()
+            .cluster_ip = Some("10.96.0.10".to_string());
+
+        let Converted { hosts, .. } = hosts(&cluster, "proksi");
+
+        // The service's own address and port, balanced by Kubernetes
+        assert_eq!(upstreams(&hosts[0], 0), vec!["10.96.0.10:80"]);
     }
 }

@@ -146,12 +146,8 @@ pub fn certificate(domain: &str, days: u32) -> Certificate {
     }
 }
 
-fn days_left(certificate: &Certificate) -> i32 {
-    Asn1Time::days_from_now(0)
-        .unwrap()
-        .diff(certificate.leaf.not_after())
-        .unwrap()
-        .days
+fn pem(certificate: &Certificate) -> Vec<u8> {
+    certificate.leaf.to_pem().unwrap()
 }
 
 /// Leases: one holder at a time, released by their holder only, and expiring
@@ -195,8 +191,9 @@ pub async fn leases_contract(store: &dyn Store) {
 pub async fn certificates_contract(store: &dyn Store, other: &dyn Store) {
     let initial = store.certificates_revision().await.unwrap();
 
+    let first = certificate("renewed.test", 10);
     store
-        .set_certificate("renewed.test", certificate("renewed.test", 10))
+        .set_certificate("renewed.test", first.clone())
         .await
         .unwrap();
     assert_eq!(store.certificates_revision().await.unwrap(), initial + 1);
@@ -204,14 +201,15 @@ pub async fn certificates_contract(store: &dyn Store, other: &dyn Store) {
 
     // `other` caches the certificate, then `store` renews it
     let cached = other.get_certificate("renewed.test").await.unwrap();
-    assert_eq!(days_left(&cached), 10);
+    assert_eq!(pem(&cached), pem(&first));
+    let renewed = certificate("renewed.test", 90);
     store
-        .set_certificate("renewed.test", certificate("renewed.test", 90))
+        .set_certificate("renewed.test", renewed.clone())
         .await
         .unwrap();
     assert_eq!(other.certificates_revision().await.unwrap(), initial + 2);
 
     other.reload_certificates().await.unwrap();
     let reloaded = other.get_certificate("renewed.test").await.unwrap();
-    assert_eq!(days_left(&reloaded), 90);
+    assert_eq!(pem(&reloaded), pem(&renewed));
 }
