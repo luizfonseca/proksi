@@ -82,12 +82,6 @@ impl RouteStoreContainer {
         self.upstreams = upstreams;
     }
 
-    /// Finds the upstream configuration for a resolved (load balancer) address
-    pub fn upstream_for(&self, addr: &SocketAddr) -> Option<&RouteUpstream> {
-        self.upstream_index(addr)
-            .and_then(|index| self.upstreams.get(index))
-    }
-
     /// The index in `upstreams` of a resolved (load balancer) address
     pub fn upstream_index(&self, addr: &SocketAddr) -> Option<usize> {
         self.upstream_addrs.get(addr).copied()
@@ -127,15 +121,17 @@ mod tests {
             },
         ]);
 
-        let by_ip = route_store.upstream_for(&"127.0.0.1:8080".parse().unwrap());
-        assert_eq!(by_ip.unwrap().sni.as_deref(), Some("ip.test"));
-
-        let by_hostname = route_store.upstream_for(&"127.0.0.1:9090".parse().unwrap());
-        assert_eq!(by_hostname.unwrap().sni.as_deref(), Some("hostname.test"));
-
-        assert!(route_store
-            .upstream_for(&"127.0.0.1:1234".parse().unwrap())
-            .is_none());
+        let upstream = |addr: &str| {
+            route_store
+                .upstream_index(&addr.parse().unwrap())
+                .and_then(|index| route_store.upstreams.get(index))
+        };
+        assert_eq!(upstream("127.0.0.1:8080").unwrap().sni.as_deref(), Some("ip.test"));
+        assert_eq!(
+            upstream("127.0.0.1:9090").unwrap().sni.as_deref(),
+            Some("hostname.test")
+        );
+        assert!(upstream("127.0.0.1:1234").is_none());
         assert_eq!(route_store.upstreams.len(), 3);
     }
 }
