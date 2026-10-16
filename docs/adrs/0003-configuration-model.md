@@ -108,6 +108,21 @@ An `upstream` label is an address (`host:port`, `[ipv6]:port`). Its body holds t
 - nginx modifiers (`= /path`, `~ regex`, `^~ /path`) are rejected with an error saying so, instead of being read as literal paths.
 - Two locations with the same label in one host are rejected (the HCL parser keeps both, so this is detectable).
 
+### Any host, and hosts without TLS
+
+- `host "*"` serves requests whose `Host` header has no host of its own, for running proksi on an address without caring about names. A named host always wins over `*`. An IP is already a valid host name (`host "192.168.1.10"`), since hosts are matched on the `Host` header.
+- `tls = false` serves a host over plain HTTP on `server.http_address`, instead of redirecting to HTTPS, and gets no certificate (no Let's Encrypt, no self-signed). Hosts with TLS keep redirecting from HTTP to HTTPS.
+- Not opening the HTTPS port at all (for when no host uses TLS, [#293](https://github.com/luizfonseca/proksi/issues/293)) is a `server` setting.
+
+```hcl
+host "*" {
+  tls = false
+  location "/" {
+    upstream "app:3000" {}
+  }
+}
+```
+
 ### Building blocks
 
 Everything inside a location besides upstreams is a building block: `headers`, `rate_limit`, `body_limit`, `cache`, `basic_auth`, `jwt`, `oauth2`, `request_id` and `plugin "<name>"`. Each block is one Rust type that:
@@ -166,7 +181,7 @@ Sharing 443 needs proksi to accept the connection itself, read SNI and ALPN from
 ### Compatibility
 
 - `routes = [...]` keeps working and logs a deprecation warning. Each route becomes a host with one location: `/*`, or one location per `match_with` pattern, all with the same settings.
-- YAML uses the same nesting as maps (`hosts: { "a.com": { location: { "/*": { ... } } } }`).
+- YAML uses the same nesting as maps (`host: { "a.com": { location: { "/*": { ... } } } }`).
 - Docker labels keep their current names and become a host with a `location "/*"`. Labels for locations and TCP can be added later.
 - The store (ADR 0001) stores whole hosts as `schema_version: 2`. Version 1 routes are still read and converted like `routes = [...]`.
 - The unit merged between sources (ADR 0001) is still the host: the highest priority source defines all of a host's locations and TCP blocks.
@@ -184,12 +199,13 @@ Each step ships on its own:
 
 1. The model, `host` and `location` in HCL/YAML, with `routes = [...]`, docker labels and stored routes converted into it.
 2. Choosing a location by path within a host.
-3. The existing plugins, headers and cache as building blocks.
-4. `rate_limit`, then `body_limit`.
-5. `tcp` on its own port.
-6. `tcp` sharing 443 through SNI/ALPN.
+3. `host "*"`, `tls = false` (plain HTTP) and an optional HTTPS port.
+4. The existing plugins, headers and cache as building blocks.
+5. `rate_limit`, then `body_limit`.
+6. `tcp` on its own port.
+7. `tcp` sharing 443 through SNI/ALPN.
 
-Steps 1–2 cover more than one route per host, 4 rate and body limits, and 5–6 the game server.
+Steps 1–2 cover more than one route per host, 3 running proksi without names or TLS (#293), 5 rate and body limits, and 6–7 the game server.
 
 ### Not part of this decision
 
