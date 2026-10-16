@@ -1135,3 +1135,80 @@ async fn test_admin_metrics() {
 
     proksi.assert_healthy();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_admin_live_stats() {
+    let mut proksi = Harness::start_with(vec![Route::new("app.test", Upstream::Http)], ADMIN).await;
+    let admin_port = proksi.tcp_ports[2];
+    let get = |path: &str| {
+        format!(
+            "GET {path} HTTP/1.1\r\nHost: admin\r\nAuthorization: Bearer e2e-token\r\nConnection: close\r\n\r\n"
+        )
+    };
+    let body = |res: &str| res.split("\r\n\r\n").nth(1).unwrap_or_default().to_string();
+
+    proksi.resolve("app.test");
+    for _ in 0..5 {
+        assert_eq!(proksi.get("app.test", "/live").await.unwrap().status, 200);
+    }
+    // Sampled every second
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    let res = proksi
+        .raw_http_on(admin_port, get("/api/v1/stats?window=60").as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    let stats: serde_json::Value = serde_json::from_str(&body(&res)).unwrap();
+    let host = stats["hosts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|host| host["host"] == "app.test")
+        .unwrap_or_else(|| panic!("{stats}"));
+    let location = &host["locations"][0];
+    assert_eq!(location["responses"]["2xx"], 5, "{stats}");
+    assert!(location["requests_per_second"].as_f64().unwrap() > 0.0, "{stats}");
+    assert!(location["duration_ms"]["p50"].as_f64().is_some(), "{stats}");
+    assert_eq!(location["upstreams"][0]["healthy"], true, "{stats}");
+
+    let res = proksi
+        .raw_http_on(admin_port, get("/api/v1/stats?window=0").as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 400"), "{res}");
+
+    // The stream sends the stats every second
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", admin_port))
+        .await
+        .unwrap();
+    tokio::io::AsyncWriteExt::write_all(
+        &mut stream,
+        get("/api/v1/stats/stream?window=10").as_bytes(),
+    )
+    .await
+    .unwrap();
+    let mut received = String::new();
+    let mut buf = [0u8; 4096];
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    while received.matches("data: ").count() < 2 && tokio::time::Instant::now() < deadline {
+        let read = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            tokio::io::AsyncReadExt::read(&mut stream, &mut buf),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        received.push_str(&String::from_utf8_lossy(&buf[..read]));
+    }
+    assert!(received.starts_with("HTTP/1.1 200"), "{received}");
+    assert!(received.to_lowercase().contains("content-type: text/event-stream"), "{received}");
+    let event = received
+        .lines()
+        .find_map(|line| line.strip_prefix("data: "))
+        .unwrap();
+    let event: serde_json::Value = serde_json::from_str(event).unwrap();
+    assert!(event["hosts"].is_array(), "{event}");
+
+    proksi.assert_healthy();
+}
