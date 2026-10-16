@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use pingora::lb::health_check::TcpHealthCheck;
 
-use crate::{blocks::Blocks, config::host::Location, stores::routes::RouteStoreContainer};
+use crate::{
+    blocks::Blocks, config::host::Location, metrics::LocationMetrics,
+    stores::routes::RouteStoreContainer,
+};
 
 use super::load_balancer::load_balancer;
 
@@ -30,6 +33,12 @@ pub(super) fn build_location_container(
     let mut container = RouteStoreContainer::new(load_balancer);
     container.set_upstreams(location.upstreams.clone());
     container.cache.clone_from(&location.cache);
+    let upstreams = location
+        .upstreams
+        .iter()
+        .map(|upstream| format!("{}:{}", upstream.ip, upstream.port))
+        .collect::<Vec<_>>();
+    container.metrics = Some(LocationMetrics::new(host, &location.path, &upstreams));
 
     container.blocks = match Blocks::build(location) {
         Ok(blocks) => blocks,

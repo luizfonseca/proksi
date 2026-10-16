@@ -23,6 +23,7 @@
 * [Daemon](configuration/daemon.md)
 * [Redis](configuration/redis.md)
 * [SQLite / Postgres](configuration/sql.md)
+* [Admin API and metrics](configuration/admin.md)
 
 ## Routing
 

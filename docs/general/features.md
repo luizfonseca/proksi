@@ -22,6 +22,7 @@ Proksi is evolving day by day, and new features are being added all the time. Be
 - [x] **Body limits** per location
 - [x] **TCP** proxying: plain, TLS with the host's certificate (chosen by SNI) and TLS passthrough
 - [x] Sharing port `443` between HTTPS and TCP, chosen by name (SNI) or protocol (ALPN)
+- [x] **Metrics** in the Prometheus format, per host, location and upstream, on an admin listener with a token
 
 Planned next (see [ADR 0003](adrs/0003-configuration-model.md)):
 
