@@ -6,13 +6,11 @@
 
 ## Context
 
-A user comparing proksi with Traefik listed what their setup needs. Checked against the code, proksi is missing:
+Common reverse proxy setups need things proksi can't express today:
 
-- **TCP routing by SNI.** Their game server speaks a binary protocol over TLS on the same hostname as their HTTP services. proksi only has HTTP services.
-- **More than one route per host.** A host has a single route; its path patterns only filter requests (no match is a 404), they don't choose between routes. Their API needs a stricter rate limit on `/v1/session` than on the rest of the host.
-- **Rate limiting**, and **request body limits** (a 1 MiB cap, read before the upstream sees the request, so slow clients hold proksi rather than the application).
-
-Response headers and Let's Encrypt are already supported.
+- **TCP routing.** Services that speak protocols other than HTTP (over TLS or not), possibly on the same hostname and port as HTTP services. proksi only has HTTP services.
+- **More than one route per host.** A host has a single route; its path patterns only filter requests (no match is a 404), they don't choose between routes. Parts of a host often need different settings, such as a stricter rate limit on a login endpoint.
+- **Rate limiting**, and **request body limits** (read before the upstream sees the request, so slow clients hold proksi rather than the application).
 
 The configuration also doesn't use HCL the way HCL users expect. Routes are a list of nested objects, which reads like JSON:
 
@@ -42,8 +40,8 @@ tcp "<name>"           plain TCP without TLS or hostname, chosen by port only
 A host owns what's decided during the TLS handshake, before the path is known: its names and its certificate. Its traffic is handled by `location` blocks (HTTP) and `tcp` blocks, which share the host's certificate.
 
 ```hcl
-host "api.velorido.com" {
-  aliases = ["www.api.velorido.com"]   # served with the same certificate
+host "api.example.com" {
+  aliases = ["www.api.example.com"]   # served with the same certificate
 
   tls {
     lets_encrypt {                     # or: certificate { pem = "...", key = "..." }, or self_signed = true
@@ -58,12 +56,12 @@ host "api.velorido.com" {
     }
   }
 
-  location "/v1/session" {
+  location "/login" {
     rate_limit {
       requests = 30
       per      = "1m"
     }
-    upstream "directory:8080" {}
+    upstream "app:8080" {}
   }
 
   location "/*" {
@@ -75,8 +73,8 @@ host "api.velorido.com" {
       max    = "1MiB"
       buffer = true
     }
-    upstream "directory:8080" { weight = 2 }
-    upstream "directory-2:8080" {}
+    upstream "app:8080" { weight = 2 }
+    upstream "app-2:8080" {}
 
     plugin "custom" {
       source     = "../plugin.wasm"
@@ -84,10 +82,10 @@ host "api.velorido.com" {
     }
   }
 
-  tcp "game" {
+  tcp "realtime" {
     listen = "0.0.0.0:443"
-    alpn   = ["velorido-game"]
-    upstream "game:7878" {}
+    alpn   = ["example-realtime"]
+    upstream "realtime:7878" {}
   }
 }
 
@@ -107,6 +105,21 @@ An `upstream` label is an address (`host:port`, `[ipv6]:port`). Its body holds t
 - A request matching no location gets a 404, as today.
 - nginx modifiers (`= /path`, `~ regex`, `^~ /path`) are rejected with an error saying so, instead of being read as literal paths.
 - Two locations with the same label in one host are rejected (the HCL parser keeps both, so this is detectable).
+
+### Any host, and hosts without TLS
+
+- `host "*"` serves requests whose `Host` header has no host of its own, for running proksi on an address without caring about names. A named host always wins over `*`. An IP is already a valid host name (`host "192.168.1.10"`), since hosts are matched on the `Host` header.
+- `tls = false` serves a host over plain HTTP on `server.http_address`, instead of redirecting to HTTPS, and gets no certificate (no Let's Encrypt, no self-signed). Hosts with TLS keep redirecting from HTTP to HTTPS.
+- Not opening the HTTPS port at all (for when no host uses TLS, [#293](https://github.com/luizfonseca/proksi/issues/293)) is a `server` setting.
+
+```hcl
+host "*" {
+  tls = false
+  location "/" {
+    upstream "app:3000" {}
+  }
+}
+```
 
 ### Building blocks
 
@@ -166,7 +179,7 @@ Sharing 443 needs proksi to accept the connection itself, read SNI and ALPN from
 ### Compatibility
 
 - `routes = [...]` keeps working and logs a deprecation warning. Each route becomes a host with one location: `/*`, or one location per `match_with` pattern, all with the same settings.
-- YAML uses the same nesting as maps (`hosts: { "a.com": { location: { "/*": { ... } } } }`).
+- YAML uses the same nesting as maps (`host: { "a.com": { location: { "/*": { ... } } } }`).
 - Docker labels keep their current names and become a host with a `location "/*"`. Labels for locations and TCP can be added later.
 - The store (ADR 0001) stores whole hosts as `schema_version: 2`. Version 1 routes are still read and converted like `routes = [...]`.
 - The unit merged between sources (ADR 0001) is still the host: the highest priority source defines all of a host's locations and TCP blocks.
@@ -184,12 +197,13 @@ Each step ships on its own:
 
 1. The model, `host` and `location` in HCL/YAML, with `routes = [...]`, docker labels and stored routes converted into it.
 2. Choosing a location by path within a host.
-3. The existing plugins, headers and cache as building blocks.
-4. `rate_limit`, then `body_limit`.
-5. `tcp` on its own port.
-6. `tcp` sharing 443 through SNI/ALPN.
+3. `host "*"`, `tls = false` (plain HTTP) and an optional HTTPS port.
+4. The existing plugins, headers and cache as building blocks.
+5. `rate_limit`, then `body_limit`.
+6. `tcp` on its own port.
+7. `tcp` sharing 443 through SNI/ALPN.
 
-Steps 1–2 cover more than one route per host, 4 rate and body limits, and 5–6 the game server.
+Steps 1–2 cover more than one route per host, 3 running proksi without names or TLS (#293), 5 rate and body limits, and 6–7 TCP routing.
 
 ### Not part of this decision
 
