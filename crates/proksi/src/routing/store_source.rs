@@ -20,6 +20,8 @@ pub struct StoreSource {
     /// Revision of the routes last sent to the reconciler, and when
     applied_revision: Option<u64>,
     applied_at: u64,
+    /// Revision of the certificates last loaded from the store
+    certificates_revision: Option<u64>,
 }
 
 /// A replica is considered gone after missing this many syncs
@@ -27,16 +29,15 @@ const HEARTBEAT_INTERVALS: u32 = 3;
 
 impl StoreSource {
     pub fn new(store: Arc<dyn Store>, sender: SnapshotSender, interval: Duration) -> Self {
-        let hostname = hostname();
-        let suffix = uuid::Uuid::new_v4().simple().to_string();
         Self {
             store,
             sender,
             interval,
-            replica_id: format!("{hostname}-{}", suffix.get(..8).unwrap_or(&suffix)),
-            hostname,
+            replica_id: crate::stores::replica_id().to_string(),
+            hostname: crate::stores::hostname(),
             applied_revision: None,
             applied_at: 0,
+            certificates_revision: None,
         }
     }
 
@@ -73,6 +74,10 @@ impl StoreSource {
             sent = Some(stored.revision);
         }
 
+        if let Err(err) = self.sync_certificates().await {
+            tracing::warn!("failed to sync certificates from the store: {err}");
+        }
+
         if let Some(status) = self.replica_status() {
             if let Err(err) = self
                 .store
@@ -84,6 +89,16 @@ impl StoreSource {
         }
 
         Ok(sent)
+    }
+
+    /// Reloads the certificates when another replica wrote one (e.g. renewed it)
+    async fn sync_certificates(&mut self) -> Result<(), StoreError> {
+        let revision = self.store.certificates_revision().await?;
+        if self.certificates_revision != Some(revision) {
+            self.store.reload_certificates().await?;
+            self.certificates_revision = Some(revision);
+        }
+        Ok(())
     }
 
     /// Status reported to the store (once routes were applied)
@@ -134,18 +149,11 @@ fn unix_timestamp() -> u64 {
         .unwrap_or_default()
 }
 
-fn hostname() -> String {
-    nix::unistd::gethostname()
-        .ok()
-        .and_then(|name| name.into_string().ok())
-        .unwrap_or_else(|| "proksi".to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
         sync::{
-            atomic::{AtomicBool, Ordering},
+            atomic::{AtomicBool, AtomicUsize, Ordering},
             Arc,
         },
         time::Duration,
@@ -170,6 +178,8 @@ mod tests {
     struct FlakyStore {
         inner: MemoryStore,
         unavailable: AtomicBool,
+        /// How many times certificates were reloaded
+        reloads: AtomicUsize,
     }
 
     impl Default for FlakyStore {
@@ -177,6 +187,7 @@ mod tests {
             Self {
                 inner: MemoryStore::new(),
                 unavailable: AtomicBool::new(false),
+                reloads: AtomicUsize::new(0),
             }
         }
     }
@@ -212,6 +223,28 @@ mod tests {
         }
         async fn replicas(&self) -> Result<Vec<ReplicaStatus>, StoreError> {
             self.inner.replicas().await
+        }
+        async fn try_lock(
+            &self,
+            name: &str,
+            holder: &str,
+            ttl: Duration,
+        ) -> Result<bool, StoreError> {
+            self.check()?;
+            self.inner.try_lock(name, holder, ttl).await
+        }
+        async fn unlock(&self, name: &str, holder: &str) -> Result<(), StoreError> {
+            self.check()?;
+            self.inner.unlock(name, holder).await
+        }
+        async fn certificates_revision(&self) -> Result<u64, StoreError> {
+            self.check()?;
+            self.inner.certificates_revision().await
+        }
+        async fn reload_certificates(&self) -> Result<(), StoreError> {
+            self.check()?;
+            self.reloads.fetch_add(1, Ordering::SeqCst);
+            self.inner.reload_certificates().await
         }
         async fn get_certificate(&self, domain: &str) -> Option<Certificate> {
             self.inner.get_certificate(domain).await
@@ -275,6 +308,29 @@ mod tests {
             "{:?}",
             start.elapsed()
         );
+    }
+
+    #[tokio::test]
+    async fn test_store_source_reloads_certificates_when_they_change() {
+        let store = Arc::new(FlakyStore::default());
+        let (mut source, _receiver) = source(store.clone());
+
+        // Loaded once at startup
+        source.sync_once().await.unwrap();
+        assert_eq!(store.reloads.load(Ordering::SeqCst), 1);
+        source.sync_once().await.unwrap();
+        assert_eq!(store.reloads.load(Ordering::SeqCst), 1);
+
+        // Written by another replica
+        store
+            .set_certificate(
+                "a.test",
+                crate::stores::contract_tests::certificate("a.test", 10),
+            )
+            .await
+            .unwrap();
+        source.sync_once().await.unwrap();
+        assert_eq!(store.reloads.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]

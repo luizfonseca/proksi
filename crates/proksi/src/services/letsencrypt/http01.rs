@@ -17,10 +17,16 @@ use crate::{
     stores::{self, certificates::Certificate},
 };
 
-use super::storage::PersistType;
+use super::{
+    lease::{with_lease, Outcome, LEASE_TTL},
+    storage::PersistType,
+};
 
 /// Default interval in days to attempt renewal of certificates
 const DEFAULT_RENEW_INTERVAL_DAYS: i64 = 30;
+
+/// Lease taken while creating (or reading) the Let's Encrypt account
+const ACCOUNT_LEASE: &str = "acme:account";
 
 /// A service that handles the creation of certificates using the Let's Encrypt API
 pub struct LetsencryptService {
@@ -180,6 +186,27 @@ impl LetsencryptService {
             .map_err(|err| anyhow!("failed to create or retrieve existing account: {err}"))
     }
 
+    /// Creates or retrieves the account, holding a lease so replicas starting together don't
+    /// each create one. If another replica holds it, waits for it (up to a minute) and then
+    /// reads the account it created.
+    async fn get_account_with_lease(&self) -> Result<Account<PersistType>, anyhow::Error> {
+        let store = stores::global::get_store();
+        let holder = stores::replica_id();
+        for _ in 0..12 {
+            match store.try_lock(ACCOUNT_LEASE, holder, LEASE_TTL).await {
+                Ok(false) => time::sleep(Duration::from_secs(5)).await,
+                // Taken, or the store is unavailable (as without a lease)
+                Ok(true) | Err(_) => break,
+            }
+        }
+
+        let account = self.get_account();
+        if let Err(err) = store.unlock(ACCOUNT_LEASE, holder).await {
+            tracing::warn!("failed to release the lease {ACCOUNT_LEASE}: {err}");
+        }
+        account
+    }
+
     // Based on the letsencrypt configuration, return the appropriate URL
     fn get_lets_encrypt_url(&self) -> DirectoryUrl<'_> {
         match self.config.lets_encrypt.staging {
@@ -230,17 +257,31 @@ impl LetsencryptService {
         loop {
             interval.tick().await;
             tracing::debug!("checking for new routes to create certificates for");
+            let store = stores::global::get_store();
+            let existing = store
+                .get_certificates()
+                .await
+                .keys()
+                .cloned()
+                .collect::<std::collections::HashSet<_>>();
+
             // Hosts without TLS (and `*`) don't get certificates
             for (host, self_signed_on_failure) in stores::lookup::tls_hosts() {
-                if stores::global::get_store()
-                    .get_certificates()
-                    .await
-                    .contains_key(&host)
-                {
+                if existing.contains(&host) {
                     continue;
                 }
 
-                Self::handle_certificate_for_domain(&host, account, self_signed_on_failure).await;
+                // Another replica may have just created it
+                let outcome = with_lease(
+                    store.as_ref(),
+                    stores::replica_id(),
+                    &format!("acme:{host}"),
+                    LEASE_TTL,
+                    async { store.get_certificate(&host).await.is_none() },
+                    Self::handle_certificate_for_domain(&host, account, self_signed_on_failure),
+                )
+                .await;
+                log_outcome(&host, "creating", &outcome);
             }
         }
     }
@@ -270,52 +311,65 @@ impl LetsencryptService {
                     continue;
                 }
 
-                tracing::info!("trying to renew certificate for domain: {domain}");
-                if let Err(error) = Self::create_order_for_domain(domain, account)
-                    .await
-                    .map_err(|e| anyhow!("Failed to create order for {domain}: {e}"))
-                {
-                    tracing::error!("failed to renew certificate for domain {domain}: {error}");
-                }
+                // Another replica may have just renewed it
+                let still_expiring = async {
+                    account
+                        .certificate(domain)
+                        .ok()
+                        .flatten()
+                        .is_some_and(|cert| cert.valid_days_left() <= DEFAULT_RENEW_INTERVAL_DAYS)
+                };
+                let outcome = with_lease(
+                    stores::global::get_store().as_ref(),
+                    stores::replica_id(),
+                    &format!("acme:{domain}"),
+                    LEASE_TTL,
+                    still_expiring,
+                    Self::create_order_for_domain(domain, account),
+                )
+                .await;
+                log_outcome(domain, "renewing", &outcome);
             }
 
             interval.tick().await;
         }
     }
 
+    /// Saves the domain's certificate in the store: the one Let's Encrypt already issued, a
+    /// new one, or a self-signed one if ordering fails (and `self_signed_on_failure`)
     async fn handle_certificate_for_domain(
         domain: &str,
         account: &Account<PersistType>,
         self_signed_on_failure: bool,
-    ) {
-        match account.certificate(domain) {
-            Ok(Some(cert)) => {
-                // Certificate already exists
-                if stores::global::get_store()
-                    .get_certificates()
-                    .await
-                    .contains_key(domain)
-                {
-                    return;
-                }
-
-                if let Err(err) =
-                    Self::insert_certificate(domain, cert.certificate(), cert.private_key()).await
-                {
-                    tracing::error!("failed to insert certificate for domain {domain}: {err}");
-                };
-            }
-            Ok(None)
-                if Self::create_order_for_domain(domain, account)
-                    .await
-                    .is_err() =>
-            {
-                Self::create_self_signed_certificate(domain, self_signed_on_failure)
-                    .await
-                    .ok();
-            }
-            _ => {}
+    ) -> Result<(), anyhow::Error> {
+        if let Some(cert) = account.certificate(domain)? {
+            return Self::insert_certificate(domain, cert.certificate(), cert.private_key()).await;
         }
+
+        let ordered = Self::create_order_for_domain(domain, account).await;
+        if ordered.is_err() {
+            Self::create_self_signed_certificate(domain, self_signed_on_failure).await?;
+        }
+        ordered
+    }
+}
+
+/// Logs what happened to a domain's certificate
+fn log_outcome(domain: &str, action: &str, outcome: &Outcome) {
+    match outcome {
+        Outcome::Done => info!("{action} certificate for {domain}: done"),
+        Outcome::Held => tracing::debug!(
+            "{action} certificate for {domain}: skipped, another replica is ordering it"
+        ),
+        Outcome::NotNeeded => {
+            tracing::debug!("{action} certificate for {domain}: another replica just did it");
+        }
+        Outcome::Failed(err) => {
+            tracing::error!("{action} certificate for {domain} failed: {err}");
+        }
+        Outcome::Unavailable(err) => tracing::warn!(
+            "{action} certificate for {domain}: the store is unavailable, retrying later: {err}"
+        ),
     }
 }
 
@@ -335,7 +389,7 @@ impl Service for LetsencryptService {
 
         // Retry until the account is available (e.g. network not ready yet)
         let account = loop {
-            match self.get_account() {
+            match self.get_account_with_lease().await {
                 Ok(account) => break account,
                 Err(err) => {
                     tracing::error!("failed to setup LetsEncrypt, retrying in 60s: {err}");

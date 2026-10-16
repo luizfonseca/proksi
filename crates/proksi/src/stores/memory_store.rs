@@ -4,7 +4,10 @@ use std::{
     collections::{BTreeMap, HashMap},
     error::Error,
     hash::RandomState,
-    sync::{Mutex, MutexGuard, PoisonError},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex, MutexGuard, PoisonError,
+    },
     time::{Duration, Instant},
 };
 
@@ -21,6 +24,9 @@ pub struct MemoryStore {
     inner_challenges: papaya::HashMap<String, (String, String)>,
     /// Routes, their revision and replicas (changed together)
     route_data: Mutex<MemoryRoutes>,
+    /// Leases, by name: their holder and when they expire
+    leases: Mutex<HashMap<String, (String, Instant)>>,
+    certificates_revision: AtomicU64,
 }
 
 #[derive(Default)]
@@ -36,6 +42,8 @@ impl MemoryStore {
             inner_certs: papaya::HashMap::new(),
             inner_challenges: papaya::HashMap::new(),
             route_data: Mutex::new(MemoryRoutes::default()),
+            leases: Mutex::new(HashMap::new()),
+            certificates_revision: AtomicU64::new(0),
         }
     }
 
@@ -102,12 +110,45 @@ impl Store for MemoryStore {
             .collect())
     }
 
+    async fn try_lock(&self, name: &str, holder: &str, ttl: Duration) -> Result<bool, StoreError> {
+        let mut leases = self.leases.lock().unwrap_or_else(PoisonError::into_inner);
+        let now = Instant::now();
+        let free = leases
+            .get(name)
+            .is_none_or(|(current, expires_at)| current == holder || *expires_at <= now);
+        if free {
+            leases.insert(name.to_string(), (holder.to_string(), now + ttl));
+        }
+        Ok(free)
+    }
+
+    async fn unlock(&self, name: &str, holder: &str) -> Result<(), StoreError> {
+        let mut leases = self.leases.lock().unwrap_or_else(PoisonError::into_inner);
+        if leases
+            .get(name)
+            .is_some_and(|(current, _)| current == holder)
+        {
+            leases.remove(name);
+        }
+        Ok(())
+    }
+
+    async fn certificates_revision(&self) -> Result<u64, StoreError> {
+        Ok(self.certificates_revision.load(Ordering::SeqCst))
+    }
+
+    async fn reload_certificates(&self) -> Result<(), StoreError> {
+        // Not shared: the certificates are already the store's
+        Ok(())
+    }
+
     async fn get_certificate(&self, host: &str) -> Option<Certificate> {
         self.inner_certs.pin().get(host).cloned()
     }
 
     async fn set_certificate(&self, host: &str, cert: Certificate) -> Result<(), Box<dyn Error>> {
         self.inner_certs.pin().insert(host.to_string(), cert);
+        self.certificates_revision.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
@@ -189,6 +230,24 @@ mod tests {
     #[tokio::test]
     async fn test_replicas_contract() {
         crate::stores::contract_tests::replicas_contract(&MemoryStore::new()).await;
+    }
+
+    #[tokio::test]
+    async fn test_leases_contract() {
+        crate::stores::contract_tests::leases_contract(&MemoryStore::new()).await;
+    }
+
+    #[tokio::test]
+    async fn test_certificates_revision() {
+        let store = MemoryStore::new();
+        let certificate = crate::stores::contract_tests::certificate("a.test", 10);
+
+        assert_eq!(store.certificates_revision().await.unwrap(), 0);
+        store.set_certificate("a.test", certificate).await.unwrap();
+        assert_eq!(store.certificates_revision().await.unwrap(), 1);
+        // Nothing to reload: the memory store isn't shared
+        store.reload_certificates().await.unwrap();
+        assert!(store.get_certificate("a.test").await.is_some());
     }
 
     #[tokio::test]

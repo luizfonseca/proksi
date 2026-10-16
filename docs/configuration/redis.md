@@ -43,3 +43,9 @@ store {
 - If Redis can't be reached, the routes from the last sync are kept.
 
 See [the specification](../general/specifications.md#store-keys) for the keys and format.
+
+## Certificates with several instances
+
+Instances sharing a store order each certificate once: before ordering or renewing a domain's certificate, an instance takes a lease on it in the store, and the others skip that domain while it's held. This keeps a deployment with several replicas well under Let's Encrypt's rate limits.
+
+A certificate written by one instance (for example, renewed) reaches the others within `sync_interval_secs`, without restarting them.

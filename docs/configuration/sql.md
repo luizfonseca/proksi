@@ -51,3 +51,5 @@ COMMIT;
 Each instance reports the revision it applied in `proksi_replicas`. As with Redis, routes from the store win over docker labels and the configuration file, and the routes from the last sync are kept if the database can't be reached.
 
 Let's Encrypt data (account, certificates and challenges) is stored in the database too, so all instances share the same account.
+
+As with [Redis](redis.md#certificates-with-several-instances), instances order each certificate once (through a lease in `proksi_locks`), and a certificate written by one instance reaches the others within `sync_interval_secs`.
