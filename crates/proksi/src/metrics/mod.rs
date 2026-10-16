@@ -4,6 +4,8 @@
 //! requests. A location's metrics are created when it is built, so recording a request only
 //! increments atomics.
 
+pub mod live;
+
 use std::time::Duration;
 
 use once_cell::sync::Lazy;
@@ -304,6 +306,11 @@ pub fn set_routes(source: &str, hosts: usize) {
         .routes
         .with_label_values(&[source])
         .set(i64::try_from(hosts).unwrap_or(i64::MAX));
+}
+
+/// Every metric, as gathered by the registry
+fn families() -> Vec<prometheus::proto::MetricFamily> {
+    METRICS.registry.gather()
 }
 
 /// Every metric, in the Prometheus text format

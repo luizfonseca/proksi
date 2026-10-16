@@ -388,7 +388,7 @@ admin {
 }
 ```
 
-Without a `token`, `listen` must be a loopback address. See the [admin documentation](https://docs.proksi.info/#/configuration/admin) for the metrics and a Prometheus configuration.
+Without a `token`, `listen` must be a loopback address. Live numbers (requests per second, p50/p90/p99 latency, errors and upstream health over the last minutes) are at `/api/v1/stats`, or streamed every second from `/api/v1/stats/stream`. See the [admin documentation](https://docs.proksi.info/#/configuration/admin) for the metrics and a Prometheus configuration.
 
 ## Auto reload
 

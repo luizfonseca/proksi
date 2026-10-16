@@ -73,4 +73,54 @@ scrape_configs:
 
 Recording metrics doesn't add lookups to the request path: a location's metrics are created when it's built, and each request only increments counters it already holds.
 
-See [ADR 0004](adrs/0004-admin-api-and-metrics.md) for what comes next: live stats, status, certificates and routes.
+## Live stats
+
+Without running Prometheus, `GET /api/v1/stats?window=60` returns what happened in the last `window` seconds (1 to 300, default 60), per host, location, upstream and `tcp` block:
+
+```json
+{
+  "window_seconds": 60.0,
+  "hosts": [
+    {
+      "host": "example.com",
+      "locations": [
+        {
+          "location": "/api",
+          "requests_per_second": 120.5,
+          "responses": { "2xx": 7180, "4xx": 42 },
+          "duration_ms": { "p50": 3.1, "p90": 8.4, "p99": 31.2 },
+          "blocked": { "rate_limit": 40 },
+          "upstreams": [
+            {
+              "upstream": "10.0.0.1:3000",
+              "healthy": true,
+              "errors": 0,
+              "duration_ms": { "p50": 2.8, "p90": 7.9, "p99": 30.1 }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "tcp": [
+    {
+      "block": "tcp \"db\" in host \"db.example.com\"",
+      "connections_per_second": 2.0,
+      "active": 14,
+      "bytes_in_per_second": 5120.0,
+      "bytes_out_per_second": 81920.0,
+      "duration_ms": { "p50": 1200.0, "p90": 9800.0, "p99": 10000.0 }
+    }
+  ]
+}
+```
+
+`GET /api/v1/stats/stream?window=10` sends the same data every second as [server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events), for dashboards:
+
+```bash
+curl -N -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" "http://127.0.0.1:7555/api/v1/stats/stream?window=10"
+```
+
+The stats come from the same metrics, sampled every second and kept for 5 minutes, so they cost nothing more per request. Percentiles are interpolated within the histogram buckets (as Prometheus' `histogram_quantile` does), and `null` when there were no requests. Each Proksi instance has its own stats; to combine several, use Prometheus.
+
+See [ADR 0004](adrs/0004-admin-api-and-metrics.md) for what comes next: status, certificates and routes.

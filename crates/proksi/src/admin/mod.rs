@@ -1,14 +1,22 @@
-//! The admin API (ADR 0004): metrics, and later live stats, status and routes
+//! The admin API (ADR 0004): metrics, live stats, and later status and routes
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use http::{header, Method, Response, StatusCode};
+use bytes::Bytes;
+use http::{header, Method, StatusCode};
 use pingora::{
-    apps::http_app::{HttpServer, ServeHttp},
+    apps::{HttpPersistentSettings, HttpServerApp, ReusedHttpStream},
+    http::ResponseHeader,
     protocols::http::ServerSession,
+    server::ShutdownWatch,
     services::listening::Service,
 };
+
+use crate::metrics::live;
+
+/// Stats windows, in seconds
+const WINDOWS: std::ops::RangeInclusive<u64> = 1..=300;
 
 /// A response of the admin API
 #[derive(Debug, PartialEq)]
@@ -32,6 +40,14 @@ impl Reply {
     }
 }
 
+/// What the admin API answers
+#[derive(Debug, PartialEq)]
+pub enum Answer {
+    Reply(Reply),
+    /// Server-sent events with the stats over this window, every second
+    Stream(Duration),
+}
+
 pub struct AdminApi {
     token: Option<String>,
 }
@@ -42,19 +58,45 @@ impl AdminApi {
     }
 
     /// Answers a request, given its `Authorization` header
-    pub fn handle(&self, method: &Method, path: &str, authorization: Option<&str>) -> Reply {
+    pub fn handle(
+        &self,
+        method: &Method,
+        path: &str,
+        query: Option<&str>,
+        authorization: Option<&str>,
+    ) -> Answer {
         if !self.authorized(authorization) {
-            return Reply::error(StatusCode::UNAUTHORIZED, "missing or invalid token");
+            return Answer::Reply(Reply::error(
+                StatusCode::UNAUTHORIZED,
+                "missing or invalid token",
+            ));
+        }
+
+        let known = ["/metrics", "/api/v1/stats", "/api/v1/stats/stream"];
+        if !known.contains(&path) {
+            return Answer::Reply(Reply::error(StatusCode::NOT_FOUND, "not found"));
+        }
+        if method != Method::GET {
+            return Answer::Reply(Reply::error(
+                StatusCode::METHOD_NOT_ALLOWED,
+                "method not allowed",
+            ));
         }
 
         match path {
-            "/metrics" if method == Method::GET => Reply {
+            "/api/v1/stats" => match window(query, 60) {
+                Ok(window) => Answer::Reply(Reply::json(StatusCode::OK, &stats(window))),
+                Err(reply) => Answer::Reply(reply),
+            },
+            "/api/v1/stats/stream" => match window(query, 10) {
+                Ok(window) => Answer::Stream(window),
+                Err(reply) => Answer::Reply(reply),
+            },
+            _ => Answer::Reply(Reply {
                 status: StatusCode::OK,
                 content_type: "text/plain; version=0.0.4",
                 body: crate::metrics::gather(),
-            },
-            "/metrics" => Reply::error(StatusCode::METHOD_NOT_ALLOWED, "method not allowed"),
-            _ => Reply::error(StatusCode::NOT_FOUND, "not found"),
+            }),
         }
     }
 
@@ -72,36 +114,123 @@ impl AdminApi {
     }
 }
 
+/// `?window=<seconds>` (1 to 300), or `default`
+fn window(query: Option<&str>, default: u64) -> Result<Duration, Reply> {
+    let value = query
+        .unwrap_or_default()
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("window="));
+    let Some(value) = value else {
+        return Ok(Duration::from_secs(default));
+    };
+    match value.parse::<u64>() {
+        Ok(seconds) if WINDOWS.contains(&seconds) => Ok(Duration::from_secs(seconds)),
+        _ => Err(Reply::error(
+            StatusCode::BAD_REQUEST,
+            "window must be a number of seconds, from 1 to 300",
+        )),
+    }
+}
+
+/// The stats over `window` (since the oldest sample if proksi started more recently)
+fn stats(window: Duration) -> serde_json::Value {
+    if let Some((earlier, latest)) = live::window(window) {
+        return live::stats(&earlier, &latest);
+    }
+    let now = live::sample();
+    live::stats(&now, &now)
+}
+
 #[async_trait]
-impl ServeHttp for AdminApi {
-    async fn response(&self, session: &mut ServerSession) -> Response<Vec<u8>> {
+impl HttpServerApp for AdminApi {
+    async fn process_new_http(
+        self: &Arc<Self>,
+        mut session: ServerSession,
+        shutdown: &ShutdownWatch,
+    ) -> Option<ReusedHttpStream> {
+        if !matches!(session.read_request().await, Ok(true)) {
+            return None;
+        }
         let request = session.req_header();
         let authorization = request
             .headers
             .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok());
-        let reply = self.handle(&request.method, request.uri.path(), authorization);
+        let answer = self.handle(
+            &request.method,
+            request.uri.path(),
+            request.uri.query(),
+            authorization,
+        );
 
-        let mut response = Response::builder()
-            .status(reply.status)
-            .header(header::CONTENT_TYPE, reply.content_type)
-            .header(header::CONTENT_LENGTH, reply.body.len())
-            .header(header::CACHE_CONTROL, "no-store");
-        if reply.status == StatusCode::UNAUTHORIZED {
-            response = response.header(header::WWW_AUTHENTICATE, "Bearer");
+        match answer {
+            Answer::Reply(reply) => {
+                let mut header = response_header(reply.status, reply.content_type)?;
+                header
+                    .insert_header(header::CONTENT_LENGTH, reply.body.len())
+                    .ok()?;
+                if reply.status == StatusCode::UNAUTHORIZED {
+                    header.insert_header(header::WWW_AUTHENTICATE, "Bearer").ok()?;
+                }
+                session.write_response_header(Box::new(header)).await.ok()?;
+                session
+                    .write_response_body(Bytes::from(reply.body), true)
+                    .await
+                    .ok()?;
+                let persistent_settings = HttpPersistentSettings::for_session(&session);
+                session
+                    .finish()
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|stream| ReusedHttpStream::from_reusable_stream(stream, persistent_settings))
+            }
+            Answer::Stream(window) => {
+                stream_stats(session, window, shutdown.clone()).await;
+                None
+            }
         }
-        response
-            .body(reply.body.into_bytes())
-            .unwrap_or_else(|_| Response::new(vec![]))
     }
 }
 
+fn response_header(status: StatusCode, content_type: &str) -> Option<ResponseHeader> {
+    let mut header = ResponseHeader::build(status, None).ok()?;
+    header.insert_header(header::CONTENT_TYPE, content_type).ok()?;
+    header.insert_header(header::CACHE_CONTROL, "no-store").ok()?;
+    Some(header)
+}
+
+/// Sends the stats every second, until the client leaves or proksi shuts down
+async fn stream_stats(mut session: ServerSession, window: Duration, mut shutdown: ShutdownWatch) {
+    let Some(mut header) = response_header(StatusCode::OK, "text/event-stream") else {
+        return;
+    };
+    if header
+        .insert_header(header::TRANSFER_ENCODING, "chunked")
+        .is_err()
+        || session.write_response_header(Box::new(header)).await.is_err()
+    {
+        return;
+    }
+
+    let mut interval = tokio::time::interval(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            _ = interval.tick() => {
+                let event = format!("data: {}\n\n", stats(window));
+                if session.write_response_body(Bytes::from(event), false).await.is_err() {
+                    return;
+                }
+            }
+            _ = shutdown.changed() => break,
+        }
+    }
+    let _ = session.write_response_body(Bytes::new(), true).await;
+}
+
 /// The admin API's service, on `address`
-pub fn admin_service(address: SocketAddr, token: Option<String>) -> Service<HttpServer<AdminApi>> {
-    let mut service = Service::new(
-        "admin api".to_string(),
-        HttpServer::new_app(AdminApi::new(token)),
-    );
+pub fn admin_service(address: SocketAddr, token: Option<String>) -> Service<AdminApi> {
+    let mut service = Service::new("admin api".to_string(), AdminApi::new(token));
     service.add_tcp(&address.to_string());
     service.threads = Some(1);
     service
@@ -109,17 +238,25 @@ pub fn admin_service(address: SocketAddr, token: Option<String>) -> Service<Http
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use http::{Method, StatusCode};
 
-    use super::AdminApi;
+    use super::{AdminApi, Answer, Reply};
+
+    fn reply(answer: Answer) -> Reply {
+        match answer {
+            Answer::Reply(reply) => reply,
+            Answer::Stream(_) => panic!("a stream"),
+        }
+    }
 
     #[test]
     fn test_metrics() {
         let api = AdminApi::new(Some("secret".to_string()));
-        crate::metrics::LocationMetrics::unknown()
-            .record(404, std::time::Duration::from_millis(1));
+        crate::metrics::LocationMetrics::unknown().record(404, Duration::from_millis(1));
 
-        let reply = api.handle(&Method::GET, "/metrics", Some("Bearer secret"));
+        let reply = reply(api.handle(&Method::GET, "/metrics", None, Some("Bearer secret")));
 
         assert_eq!(reply.status, StatusCode::OK);
         assert_eq!(reply.content_type, "text/plain; version=0.0.4");
@@ -131,9 +268,11 @@ mod tests {
         let api = AdminApi::new(Some("secret".to_string()));
 
         for authorization in [None, Some("Bearer wrong"), Some("secret"), Some("Basic secret")] {
-            let reply = api.handle(&Method::GET, "/metrics", authorization);
-            assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{authorization:?}");
-            assert_eq!(reply.body, r#"{"error":"missing or invalid token"}"#);
+            for path in ["/metrics", "/api/v1/stats", "/api/v1/stats/stream", "/nope"] {
+                let reply = reply(api.handle(&Method::GET, path, None, authorization));
+                assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{authorization:?}");
+                assert_eq!(reply.body, r#"{"error":"missing or invalid token"}"#);
+            }
         }
     }
 
@@ -142,19 +281,48 @@ mod tests {
         // Only on a loopback address (checked when the configuration loads)
         let api = AdminApi::new(None);
 
-        assert_eq!(api.handle(&Method::GET, "/metrics", None).status, StatusCode::OK);
+        assert_eq!(
+            reply(api.handle(&Method::GET, "/metrics", None, None)).status,
+            StatusCode::OK
+        );
     }
 
     #[test]
     fn test_unknown_paths_and_methods() {
         let api = AdminApi::new(None);
 
-        let reply = api.handle(&Method::GET, "/nope", None);
-        assert_eq!(reply.status, StatusCode::NOT_FOUND);
-        assert_eq!(reply.body, r#"{"error":"not found"}"#);
+        let not_found = reply(api.handle(&Method::GET, "/nope", None, None));
+        assert_eq!(not_found.status, StatusCode::NOT_FOUND);
+        assert_eq!(not_found.body, r#"{"error":"not found"}"#);
+        for path in ["/metrics", "/api/v1/stats"] {
+            assert_eq!(
+                reply(api.handle(&Method::POST, path, None, None)).status,
+                StatusCode::METHOD_NOT_ALLOWED
+            );
+        }
+    }
+
+    #[test]
+    fn test_stats_windows() {
+        let api = AdminApi::new(None);
+        let stats = |query| api.handle(&Method::GET, "/api/v1/stats", query, None);
+
+        let ok = reply(stats(Some("window=30")));
+        assert_eq!(ok.status, StatusCode::OK);
+        assert_eq!(ok.content_type, "application/json");
+        assert!(ok.body.contains("\"hosts\""), "{}", ok.body);
+        assert_eq!(reply(stats(None)).status, StatusCode::OK);
+        for invalid in ["window=0", "window=301", "window=abc"] {
+            assert_eq!(reply(stats(Some(invalid))).status, StatusCode::BAD_REQUEST);
+        }
+
         assert_eq!(
-            api.handle(&Method::POST, "/metrics", None).status,
-            StatusCode::METHOD_NOT_ALLOWED
+            api.handle(&Method::GET, "/api/v1/stats/stream", Some("window=5"), None),
+            Answer::Stream(Duration::from_secs(5))
+        );
+        assert_eq!(
+            api.handle(&Method::GET, "/api/v1/stats/stream", None, None),
+            Answer::Stream(Duration::from_secs(10))
         );
     }
 }

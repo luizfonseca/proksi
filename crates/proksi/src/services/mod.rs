@@ -99,9 +99,17 @@ impl pingora::services::Service for BackgroundFunctionService {
             }
         };
 
+        // Live stats for the admin API: the metrics, sampled every second
+        let live_stats = async {
+            if self.config.admin.is_some() {
+                crate::metrics::live::run().await;
+            }
+        };
+
         let _ = tokio::join!(
             store_sync,
             certificate_metrics,
+            live_stats,
             routing_service.start_service(None, shutdown.clone(), _listeners_per_fd),
             health_service.start_service(None, shutdown.clone(), _listeners_per_fd),
             config_server.start_service(None, shutdown.clone(), _listeners_per_fd),
