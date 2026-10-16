@@ -186,11 +186,11 @@ A port is either HTTP or HTTPS: a host with TLS and a host without it can't shar
 
 ## Upstreams
 
-Upstreams are where requests are sent. They are labelled by their address (`host:port`, or `[ipv6]:port`) and requests are load balanced between them (round-robin), with health checks running in the background:
+Upstreams are where requests are sent. They are labelled by their address (`host:port`, or `[ipv6]:port`) and requests are load balanced between them (round-robin, in proportion to their `weight`), with health checks running in the background:
 
 ```hcl
 location "/" {
-  upstream "10.0.0.1:3000" {}
+  upstream "10.0.0.1:3000" { weight = 2 } # twice the requests of the others
   upstream "10.0.0.2:3000" {}
 
   # An external service using TLS
