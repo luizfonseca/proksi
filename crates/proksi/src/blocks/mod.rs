@@ -267,7 +267,6 @@ impl Blocks {
     }
 
     /// The blocks, in the order they run on requests
-    #[cfg(test)]
     pub fn iter(&self) -> impl Iterator<Item = &Block> {
         self.0.iter()
     }

@@ -240,6 +240,13 @@ impl Store for RedisStore {
         Ok(())
     }
 
+    async fn lock_holder(&self, name: &str) -> Result<Option<String>, StoreError> {
+        // Expired keys are gone (PX)
+        self.connection()?
+            .get(format!("{LOCK_KEY_PREFIX}{name}"))
+            .map_err(unavailable)
+    }
+
     async fn certificates_revision(&self) -> Result<u64, StoreError> {
         let revision: Option<u64> = self
             .connection()?

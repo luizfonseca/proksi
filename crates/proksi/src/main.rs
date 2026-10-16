@@ -175,7 +175,17 @@ fn add_listeners(
             .admin
             .as_ref()
             .and_then(|admin| admin.token().map(ToString::to_string));
-        server.add_service(admin::admin_service(address, token));
+        let instance = admin::status::Instance {
+            started: std::time::Instant::now(),
+            store_type: format!("{:?}", proxy_config.store.store_type).to_lowercase(),
+            listeners: serde_json::json!({
+                "https": listeners.https,
+                "http": listeners.http,
+                "tcp": listeners.tcp.iter().map(|route| route.listen.clone()).collect::<std::collections::BTreeSet<_>>(),
+                "admin": address.to_string(),
+            }),
+        };
+        server.add_service(admin::admin_service(address, token, instance));
     }
     server.add_services(tcp::services::tcp_services(
         &listeners.tcp,

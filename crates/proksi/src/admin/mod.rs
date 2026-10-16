@@ -15,6 +15,8 @@ use pingora::{
 
 use crate::metrics::live;
 
+pub mod status;
+
 /// Stats windows, in seconds
 const WINDOWS: std::ops::RangeInclusive<u64> = 1..=300;
 
@@ -50,15 +52,16 @@ pub enum Answer {
 
 pub struct AdminApi {
     token: Option<String>,
+    instance: status::Instance,
 }
 
 impl AdminApi {
-    pub fn new(token: Option<String>) -> Self {
-        Self { token }
+    pub fn new(token: Option<String>, instance: status::Instance) -> Self {
+        Self { token, instance }
     }
 
     /// Answers a request, given its `Authorization` header
-    pub fn handle(
+    pub async fn handle(
         &self,
         method: &Method,
         path: &str,
@@ -72,7 +75,14 @@ impl AdminApi {
             ));
         }
 
-        let known = ["/metrics", "/api/v1/stats", "/api/v1/stats/stream"];
+        let known = [
+            "/metrics",
+            "/api/v1/stats",
+            "/api/v1/stats/stream",
+            "/api/v1/status",
+            "/api/v1/hosts",
+            "/api/v1/certificates",
+        ];
         if !known.contains(&path) {
             return Answer::Reply(Reply::error(StatusCode::NOT_FOUND, "not found"));
         }
@@ -92,6 +102,17 @@ impl AdminApi {
                 Ok(window) => Answer::Stream(window),
                 Err(reply) => Answer::Reply(reply),
             },
+            "/api/v1/status" => {
+                let store = crate::stores::global::get_store();
+                let status = status::status(store.as_ref(), &self.instance).await;
+                Answer::Reply(Reply::json(StatusCode::OK, &status))
+            }
+            "/api/v1/hosts" => Answer::Reply(Reply::json(StatusCode::OK, &status::hosts())),
+            "/api/v1/certificates" => {
+                let store = crate::stores::global::get_store();
+                let certificates = status::certificates(store.as_ref()).await;
+                Answer::Reply(Reply::json(StatusCode::OK, &certificates))
+            }
             _ => Answer::Reply(Reply {
                 status: StatusCode::OK,
                 content_type: "text/plain; version=0.0.4",
@@ -156,12 +177,11 @@ impl HttpServerApp for AdminApi {
             .headers
             .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok());
-        let answer = self.handle(
-            &request.method,
-            request.uri.path(),
-            request.uri.query(),
-            authorization,
-        );
+        let (method, uri) = (request.method.clone(), request.uri.clone());
+        let authorization = authorization.map(ToString::to_string);
+        let answer = self
+            .handle(&method, uri.path(), uri.query(), authorization.as_deref())
+            .await;
 
         match answer {
             Answer::Reply(reply) => {
@@ -229,8 +249,12 @@ async fn stream_stats(mut session: ServerSession, window: Duration, mut shutdown
 }
 
 /// The admin API's service, on `address`
-pub fn admin_service(address: SocketAddr, token: Option<String>) -> Service<AdminApi> {
-    let mut service = Service::new("admin api".to_string(), AdminApi::new(token));
+pub fn admin_service(
+    address: SocketAddr,
+    token: Option<String>,
+    instance: status::Instance,
+) -> Service<AdminApi> {
+    let mut service = Service::new("admin api".to_string(), AdminApi::new(token, instance));
     service.add_tcp(&address.to_string());
     service.threads = Some(1);
     service
@@ -244,6 +268,14 @@ mod tests {
 
     use super::{AdminApi, Answer, Reply};
 
+    fn instance() -> super::status::Instance {
+        super::status::Instance {
+            started: std::time::Instant::now(),
+            store_type: "memory".to_string(),
+            listeners: serde_json::json!({}),
+        }
+    }
+
     fn reply(answer: Answer) -> Reply {
         match answer {
             Answer::Reply(reply) => reply,
@@ -251,77 +283,88 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_metrics() {
-        let api = AdminApi::new(Some("secret".to_string()));
+    #[tokio::test]
+    async fn test_metrics() {
+        let api = AdminApi::new(Some("secret".to_string()), instance());
         crate::metrics::LocationMetrics::unknown().record(404, Duration::from_millis(1));
 
-        let reply = reply(api.handle(&Method::GET, "/metrics", None, Some("Bearer secret")));
+        let reply = reply(api.handle(&Method::GET, "/metrics", None, Some("Bearer secret")).await);
 
         assert_eq!(reply.status, StatusCode::OK);
         assert_eq!(reply.content_type, "text/plain; version=0.0.4");
         assert!(reply.body.contains("proksi_requests_total"), "{}", reply.body);
     }
 
-    #[test]
-    fn test_token() {
-        let api = AdminApi::new(Some("secret".to_string()));
+    #[tokio::test]
+    async fn test_token() {
+        let api = AdminApi::new(Some("secret".to_string()), instance());
 
         for authorization in [None, Some("Bearer wrong"), Some("secret"), Some("Basic secret")] {
-            for path in ["/metrics", "/api/v1/stats", "/api/v1/stats/stream", "/nope"] {
-                let reply = reply(api.handle(&Method::GET, path, None, authorization));
+            for path in [
+                "/metrics",
+                "/api/v1/stats",
+                "/api/v1/stats/stream",
+                "/api/v1/status",
+                "/api/v1/hosts",
+                "/api/v1/certificates",
+                "/nope",
+            ] {
+                let reply = reply(api.handle(&Method::GET, path, None, authorization).await);
                 assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{authorization:?}");
                 assert_eq!(reply.body, r#"{"error":"missing or invalid token"}"#);
             }
         }
     }
 
-    #[test]
-    fn test_without_a_token() {
+    #[tokio::test]
+    async fn test_without_a_token() {
         // Only on a loopback address (checked when the configuration loads)
-        let api = AdminApi::new(None);
+        let api = AdminApi::new(None, instance());
 
         assert_eq!(
-            reply(api.handle(&Method::GET, "/metrics", None, None)).status,
+            reply(api.handle(&Method::GET, "/metrics", None, None).await).status,
             StatusCode::OK
         );
     }
 
-    #[test]
-    fn test_unknown_paths_and_methods() {
-        let api = AdminApi::new(None);
+    #[tokio::test]
+    async fn test_unknown_paths_and_methods() {
+        let api = AdminApi::new(None, instance());
 
-        let not_found = reply(api.handle(&Method::GET, "/nope", None, None));
+        let not_found = reply(api.handle(&Method::GET, "/nope", None, None).await);
         assert_eq!(not_found.status, StatusCode::NOT_FOUND);
         assert_eq!(not_found.body, r#"{"error":"not found"}"#);
         for path in ["/metrics", "/api/v1/stats"] {
             assert_eq!(
-                reply(api.handle(&Method::POST, path, None, None)).status,
+                reply(api.handle(&Method::POST, path, None, None).await).status,
                 StatusCode::METHOD_NOT_ALLOWED
             );
         }
     }
 
-    #[test]
-    fn test_stats_windows() {
-        let api = AdminApi::new(None);
+    #[tokio::test]
+    async fn test_stats_windows() {
+        let api = AdminApi::new(None, instance());
         let stats = |query| api.handle(&Method::GET, "/api/v1/stats", query, None);
 
-        let ok = reply(stats(Some("window=30")));
+        let ok = reply(stats(Some("window=30")).await);
         assert_eq!(ok.status, StatusCode::OK);
         assert_eq!(ok.content_type, "application/json");
         assert!(ok.body.contains("\"hosts\""), "{}", ok.body);
-        assert_eq!(reply(stats(None)).status, StatusCode::OK);
+        assert_eq!(reply(stats(None).await).status, StatusCode::OK);
         for invalid in ["window=0", "window=301", "window=abc"] {
-            assert_eq!(reply(stats(Some(invalid))).status, StatusCode::BAD_REQUEST);
+            assert_eq!(
+                reply(stats(Some(invalid)).await).status,
+                StatusCode::BAD_REQUEST
+            );
         }
 
         assert_eq!(
-            api.handle(&Method::GET, "/api/v1/stats/stream", Some("window=5"), None),
+            api.handle(&Method::GET, "/api/v1/stats/stream", Some("window=5"), None).await,
             Answer::Stream(Duration::from_secs(5))
         );
         assert_eq!(
-            api.handle(&Method::GET, "/api/v1/stats/stream", None, None),
+            api.handle(&Method::GET, "/api/v1/stats/stream", None, None).await,
             Answer::Stream(Duration::from_secs(10))
         );
     }

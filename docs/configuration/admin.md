@@ -123,4 +123,14 @@ curl -N -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" "http://127.0.0.1:7555/ap
 
 The stats come from the same metrics, sampled every second and kept for 5 minutes, so they cost nothing more per request. Percentiles are interpolated within the histogram buckets (as Prometheus' `histogram_quantile` does), and `null` when there were no requests. Each Proksi instance has its own stats; to combine several, use Prometheus.
 
-See [ADR 0004](adrs/0004-admin-api-and-metrics.md) for what comes next: status, certificates and routes.
+## Status, hosts and certificates
+
+| Endpoint | |
+| --- | --- |
+| `GET /api/v1/status` | Version, replica id, uptime, the addresses Proksi listens on, the store (its revision, the revision this instance applied, and the instances reporting to it), and hosts by source, with conflicts and invalid routes |
+| `GET /api/v1/hosts` | Every host being served: its source (`file`, `docker`, `kubernetes`, `store`), TLS, locations, the plugins of each location (by name, without their settings, which can hold secrets), and upstreams with their weight and health |
+| `GET /api/v1/certificates` | Every certificate: domain, issuer, whether it's self-signed, when it expires (`expires_at`, `days_left`), and which instance holds its lease while it's being ordered or renewed |
+
+With several instances sharing a store, `status` shows each instance and the routes revision it applied, so a change can be confirmed as applied everywhere.
+
+See [ADR 0004](adrs/0004-admin-api-and-metrics.md) for what comes next: writing routes through the API.

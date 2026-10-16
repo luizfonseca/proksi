@@ -237,6 +237,10 @@ mod tests {
             self.check()?;
             self.inner.unlock(name, holder).await
         }
+        async fn lock_holder(&self, name: &str) -> Result<Option<String>, StoreError> {
+            self.check()?;
+            self.inner.lock_holder(name).await
+        }
         async fn certificates_revision(&self) -> Result<u64, StoreError> {
             self.check()?;
             self.inner.certificates_revision().await

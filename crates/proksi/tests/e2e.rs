@@ -1212,3 +1212,66 @@ async fn test_admin_live_stats() {
 
     proksi.assert_healthy();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_admin_status_hosts_and_certificates() {
+    let mut proksi = Harness::start_with(vec![Route::new("app.test", Upstream::Http)], ADMIN).await;
+    let admin_port = proksi.tcp_ports[2];
+    let get = |path: &str| {
+        format!(
+            "GET {path} HTTP/1.1\r\nHost: admin\r\nAuthorization: Bearer e2e-token\r\nConnection: close\r\n\r\n"
+        )
+    };
+    let json = |res: String| -> serde_json::Value {
+        assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+        serde_json::from_str(res.split("\r\n\r\n").nth(1).unwrap_or_default()).unwrap()
+    };
+
+    let status = json(
+        proksi
+            .raw_http_on(admin_port, get("/api/v1/status").as_bytes())
+            .await
+            .unwrap(),
+    );
+    assert_eq!(status["store"]["type"], "memory", "{status}");
+    assert_eq!(
+        status["listeners"]["tcp"][0],
+        format!("127.0.0.1:{}", proksi.tcp_ports[0]),
+        "{status}"
+    );
+    assert!(status["routes"]["by_source"]["file"].as_u64().unwrap() >= 2, "{status}");
+
+    let hosts = json(
+        proksi
+            .raw_http_on(admin_port, get("/api/v1/hosts").as_bytes())
+            .await
+            .unwrap(),
+    );
+    let limited = hosts
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|host| host["host"] == "limited.test")
+        .unwrap_or_else(|| panic!("{hosts}"));
+    assert_eq!(limited["source"], "file");
+    assert_eq!(limited["locations"][0]["location"], "/");
+    assert_eq!(limited["locations"][0]["blocks"], serde_json::json!(["rate_limit"]));
+    assert_eq!(limited["locations"][0]["upstreams"][0]["healthy"], true);
+
+    let certificates = json(
+        proksi
+            .raw_http_on(admin_port, get("/api/v1/certificates").as_bytes())
+            .await
+            .unwrap(),
+    );
+    let certificate = certificates
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|certificate| certificate["domain"] == "limited.test")
+        .unwrap_or_else(|| panic!("{certificates}"));
+    assert!(certificate["days_left"].as_i64().unwrap() > 0, "{certificate}");
+    assert!(certificate["expires_at"].as_i64().is_some(), "{certificate}");
+
+    proksi.assert_healthy();
+}

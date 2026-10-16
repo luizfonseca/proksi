@@ -16,6 +16,8 @@ use super::host_container::HostContainer;
 
 #[derive(Clone)]
 pub struct RouteStoreContainer {
+    /// The location's path pattern
+    pub path: String,
     pub load_balancer: Arc<LoadBalancer<RoundRobin>>,
 
     pub upstreams: Vec<RouteUpstream>,
@@ -34,6 +36,7 @@ pub struct RouteStoreContainer {
 impl Default for RouteStoreContainer {
     fn default() -> Self {
         RouteStoreContainer {
+            path: String::new(),
             load_balancer: Arc::new(LoadBalancer::<RoundRobin>::from_backends(Backends::new(
                 Static::new(BTreeSet::new()),
             ))),
@@ -49,6 +52,7 @@ impl Default for RouteStoreContainer {
 impl RouteStoreContainer {
     pub fn new(load_balancer: LoadBalancer<RoundRobin>) -> Self {
         RouteStoreContainer {
+            path: String::new(),
             load_balancer: Arc::new(load_balancer),
             blocks: Blocks::default(),
             upstreams: Vec::with_capacity(5),
@@ -80,6 +84,22 @@ impl RouteStoreContainer {
 
         self.upstream_addrs = upstream_addrs;
         self.upstreams = upstreams;
+    }
+
+    /// Whether each upstream is healthy, by the health checks: when one of its addresses is
+    pub fn upstream_health(&self) -> Vec<bool> {
+        let backends = self.load_balancer.backends();
+        let mut healthy = vec![false; self.upstreams.len()];
+        for backend in backends.get_backend().iter() {
+            let index = backend
+                .addr
+                .as_inet()
+                .and_then(|addr| self.upstream_index(addr));
+            if let Some(slot) = index.and_then(|index| healthy.get_mut(index)) {
+                *slot |= backends.ready(backend);
+            }
+        }
+        healthy
     }
 
     /// The index in `upstreams` of a resolved (load balancer) address

@@ -58,18 +58,7 @@ fn record_health() {
             let Some(metrics) = &location.metrics else {
                 continue;
             };
-            let backends = location.load_balancer.backends();
-            let mut healthy = vec![false; location.upstreams.len()];
-            for backend in backends.get_backend().iter() {
-                let index = backend
-                    .addr
-                    .as_inet()
-                    .and_then(|addr| location.upstream_index(addr));
-                if let Some(slot) = index.and_then(|index| healthy.get_mut(index)) {
-                    *slot |= backends.ready(backend);
-                }
-            }
-            for (index, healthy) in healthy.into_iter().enumerate() {
+            for (index, healthy) in location.upstream_health().into_iter().enumerate() {
                 if let Some(upstream) = metrics.upstream(index) {
                     upstream.set_healthy(healthy);
                 }
