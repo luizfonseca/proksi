@@ -48,3 +48,18 @@ location "/" {
 ```
 
 The `Host` header of the original request is forwarded unchanged unless an upstream sets it.
+
+## Forwarded headers
+
+Upstreams receive who the client is and how it connected:
+
+| Header | |
+| --- | --- |
+| `X-Forwarded-For` | The client's address |
+| `X-Forwarded-Proto` | `https` or `http` |
+| `X-Forwarded-Host` | The `Host` the client asked for |
+| `X-Real-IP` | The client's address |
+
+A client's own `X-Forwarded-*` headers are replaced, so it can't pass for another address. Behind proxies listed in `server.trusted_proxies`, their headers are kept and the proxy's address is appended to `X-Forwarded-For` (`X-Real-IP` is then the client they forwarded, as for [rate limits](plugins/rate-limit.md)).
+
+They're set before a location's `headers`, which can still change or remove them.

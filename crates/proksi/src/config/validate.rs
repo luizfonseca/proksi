@@ -105,6 +105,14 @@ mod tests {
 
     #[test]
     fn test_example_files_are_valid() {
+        // In a jail: other tests set `PROKSI_*` variables, which loading reads
+        figment::Jail::expect_with(|_| {
+            example_files_are_valid();
+            Ok(())
+        });
+    }
+
+    fn example_files_are_valid() {
         for file in ["example.hcl", "example.yaml"] {
             let path = format!("{}/../../examples/{file}", env!("CARGO_MANIFEST_DIR"));
             let config = crate::config::load_for_test(&path)

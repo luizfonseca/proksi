@@ -1538,3 +1538,49 @@ async fn test_admin_routes() {
 
     proksi.assert_healthy();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_forwarded_headers() {
+    let get = |forwarded: &str| {
+        format!(
+            "GET /forwarded HTTP/1.1\r\nHost: app.test\r\n{forwarded}Connection: close\r\n\r\n"
+        )
+    };
+    let forged = "X-Forwarded-For: 1.2.3.4\r\nX-Forwarded-Proto: http\r\nX-Forwarded-Host: forged.test\r\n";
+    let headers = |res: &str| -> serde_json::Value {
+        let body: serde_json::Value =
+            serde_json::from_str(res.split("\r\n\r\n").nth(1).unwrap_or_default()).unwrap();
+        body["headers"].clone()
+    };
+
+    // A client's own headers are replaced
+    let mut proksi = Harness::start(vec![Route::new("app.test", Upstream::Http)]).await;
+    let res = proksi
+        .tls_request(proksi.https_port, "app.test", &get(forged))
+        .await
+        .unwrap();
+    let sent = headers(&res);
+    assert_eq!(sent["x-forwarded-for"], "127.0.0.1", "{sent}");
+    assert_eq!(sent["x-forwarded-proto"], "https", "{sent}");
+    assert_eq!(sent["x-forwarded-host"], "app.test", "{sent}");
+    assert_eq!(sent["x-real-ip"], "127.0.0.1", "{sent}");
+    proksi.assert_healthy();
+
+    // A trusted proxy's are kept, with its address appended
+    let mut proksi = Harness::start_with_server(
+        vec![Route::new("app.test", Upstream::Http)],
+        "trusted_proxies = [\"127.0.0.1\"]",
+        "",
+    )
+    .await;
+    let res = proksi
+        .tls_request(proksi.https_port, "app.test", &get(forged))
+        .await
+        .unwrap();
+    let sent = headers(&res);
+    assert_eq!(sent["x-forwarded-for"], "1.2.3.4, 127.0.0.1", "{sent}");
+    assert_eq!(sent["x-forwarded-proto"], "http", "{sent}");
+    assert_eq!(sent["x-forwarded-host"], "forged.test", "{sent}");
+    assert_eq!(sent["x-real-ip"], "1.2.3.4", "{sent}");
+    proksi.assert_healthy();
+}
