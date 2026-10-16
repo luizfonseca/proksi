@@ -269,6 +269,11 @@ location "/" {
     per      = "1m"
   }
 
+  # Request bodies over 1MiB get a 413
+  body_limit {
+    max = "1MiB"
+  }
+
   basic_auth {
     user = env("BASIC_AUTH_USER")
     pass = env("BASIC_AUTH_PASS")
@@ -408,7 +413,7 @@ host:
 
 ## What's next
 
-**TCP** proxying (chosen by port and SNI, sharing the host's certificate) and **body limits** are the next steps. See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
+**TCP** proxying (chosen by port and SNI, sharing the host's certificate) is the next step. See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
 
 
 # Documentation

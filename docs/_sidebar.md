@@ -35,6 +35,7 @@
 * [Basic Auth](plugins/basic-auth.md)
 * [OAuth2](plugins/oauth2.md)
 * [Rate Limit](plugins/rate-limit.md)
+* [Body Limit](plugins/body-limit.md)
 
 ## Use cases
 

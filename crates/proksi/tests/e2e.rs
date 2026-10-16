@@ -563,6 +563,57 @@ async fn test_rate_limit() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_BODY_LIMIT: &str = r#"
+host "upload.test" {
+  tls = false
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    body_limit {
+      max = "1KiB"
+    }
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_body_limit() {
+    let mut proksi = Harness::start_without_https(HOST_WITH_BODY_LIMIT).await;
+    let port = proksi.http_port;
+    let post = |path: &str, length: usize| {
+        format!(
+            "POST {path} HTTP/1.1\r\nHost: upload.test\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n{}",
+            "a".repeat(length)
+        )
+    };
+
+    let res = proksi
+        .raw_http_on(port, post("/small", 100).as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.contains("\"body_length\":100"), "{res}");
+
+    // Content-Length over the limit: answered without reaching the upstream
+    let res = proksi
+        .raw_http_on(port, post("/large", 2000).as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 413"), "{res}");
+    assert_eq!(proksi.http_upstream.hits("/large"), 0);
+
+    // A chunked body is counted as it's proxied
+    let chunk = format!("258\r\n{}\r\n", "a".repeat(600));
+    let request = format!(
+        "POST /chunked HTTP/1.1\r\nHost: upload.test\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{chunk}{chunk}{chunk}0\r\n\r\n"
+    );
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 413"), "{res}");
+
+    proksi.assert_healthy();
+}
+
 const PLAIN_HTTP_HOSTS: &str = r#"
 host "plain.test" {
   tls = false

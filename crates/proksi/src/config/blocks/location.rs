@@ -27,6 +27,7 @@ pub struct LocationBlock {
     pub oauth2: Option<PluginConfig>,
     pub request_id: Option<PluginConfig>,
     pub rate_limit: Option<PluginConfig>,
+    pub body_limit: Option<PluginConfig>,
 }
 
 impl LocationBlock {
@@ -59,6 +60,7 @@ impl LocationBlock {
             ("oauth2", &self.oauth2),
             ("request_id", &self.request_id),
             ("rate_limit", &self.rate_limit),
+            ("body_limit", &self.body_limit),
         ]
         .into_iter()
         .filter_map(|(name, config)| {
