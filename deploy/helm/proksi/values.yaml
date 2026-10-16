@@ -1,0 +1,40 @@
+replicaCount: 1
+
+image:
+  repository: luizfonseca/proksi
+  tag: ""  # defaults to the chart's appVersion
+  pullPolicy: IfNotPresent
+
+ingressClass:
+  name: proksi
+  # Also serve Ingresses without a class
+  default: false
+
+service:
+  type: LoadBalancer
+  annotations: {}
+
+# Watched namespaces (all of them when empty)
+namespaces: []
+
+# Proksi's configuration (proksi.hcl), after the `kubernetes` block the chart writes
+config: |
+  # Certificates for the hosts of Ingresses without a TLS secret
+  lets_encrypt {
+    enabled = false
+    # enabled = true
+    # email   = "you@your-domain.com"
+    # staging = false
+  }
+
+  # With more than one replica, share certificates through redis or postgres:
+  # store {
+  #   store_type = "redis"
+  #   redis_url  = "redis://redis:6379"
+  # }
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}

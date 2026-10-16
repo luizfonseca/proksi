@@ -8,15 +8,22 @@ here="$(cd "$(dirname "$0")" && pwd)"
 on_failure() {
   echo "--- proksi logs"
   kubectl -n proksi logs deployment/proksi --tail=200 || true
+  kubectl -n proksi describe pods || true
   echo "--- objects"
   kubectl get ingress,svc,endpointslices,pods -A || true
 }
 trap on_failure ERR
 
-kubectl apply -f "$here/../../deploy/kubernetes/proksi.yaml"
-kubectl -n proksi set image deployment/proksi proksi=proksi:ci
-# kind has no load balancers: the service's cluster IP is published instead
-kubectl -n proksi patch service proksi -p '{"spec":{"type":"ClusterIP"}}'
+# The plain manifest is valid (checked by the API server, not applied)
+kubectl create namespace proksi
+kubectl apply --dry-run=server -f "$here/../../deploy/kubernetes/proksi.yaml" >/dev/null
+echo "ok: the manifest is valid"
+
+# Installed with the Helm chart. kind has no load balancers: with a ClusterIP service, its
+# cluster IP is published instead
+helm lint "$here/../../deploy/helm/proksi"
+helm install proksi "$here/../../deploy/helm/proksi" --namespace proksi \
+  --set image.repository=proksi --set image.tag=ci --set service.type=ClusterIP
 kubectl -n proksi rollout status deployment/proksi --timeout=120s
 
 # The certificate of secure.test, in a TLS secret

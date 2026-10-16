@@ -1,0 +1,9 @@
+apiVersion: v2
+name: proksi
+description: Proksi as a Kubernetes ingress controller
+type: application
+version: 0.1.0
+appVersion: "0.7.0"
+home: https://docs.proksi.info
+sources:
+  - https://github.com/luizfonseca/proksi

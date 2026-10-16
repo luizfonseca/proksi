@@ -4,6 +4,16 @@ Proksi can run as an ingress controller: it serves the `Ingress` resources of it
 
 ## Installing
 
+With Helm, from a clone of the repository:
+
+```bash
+helm install proksi deploy/helm/proksi --namespace proksi --create-namespace
+```
+
+The chart's [values](https://github.com/luizfonseca/proksi/blob/main/deploy/helm/proksi/values.yaml) set the image, replicas, the `Service` type, the `IngressClass` (and whether it's the default one), the watched namespaces, and the rest of Proksi's configuration (`config`).
+
+Or with a single manifest:
+
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/luizfonseca/proksi/main/deploy/kubernetes/proksi.yaml
 ```
@@ -113,7 +123,3 @@ Hosts can still come from Proksi's configuration file, docker labels or the stor
 ## More than one replica
 
 With more than one replica, use a shared store (Redis or Postgres) so certificates are ordered once and every replica serves them. With the memory store, Proksi logs a warning. The status of `Ingress`es is written by one replica at a time (through a lease in the store).
-
-## Coming next
-
-A Helm chart.
