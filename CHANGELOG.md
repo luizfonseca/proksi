@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.6.2...proksi-v0.7.0) (2026-10-16)
+
+
+### Features
+
+* limit request body sizes per location ([#401](https://github.com/luizfonseca/proksi/issues/401)) ([cb4ca96](https://github.com/luizfonseca/proksi/commit/cb4ca965c842b5c47013fde944ea8b5f4a5b0782))
+* load balance upstreams by their weight ([#398](https://github.com/luizfonseca/proksi/issues/398)) ([2c167b1](https://github.com/luizfonseca/proksi/commit/2c167b146474febcbd403e7d32ae93340daf57dd))
+* proxy tcp connections with tcp blocks ([#402](https://github.com/luizfonseca/proksi/issues/402)) ([e1ef474](https://github.com/luizfonseca/proksi/commit/e1ef4741e91f1fa83c2a9ba8510f432f91768b88))
+* rate limit requests per location and client ([#400](https://github.com/luizfonseca/proksi/issues/400)) ([fdc1f1e](https://github.com/luizfonseca/proksi/commit/fdc1f1e22fa7f1c99d8fd25865d822a9c03ec2ac))
+* run plugins, headers and cache as building blocks with a priority ([#399](https://github.com/luizfonseca/proksi/issues/399)) ([34b50ce](https://github.com/luizfonseca/proksi/commit/34b50ce0520dd06bbd31fe7c52b8bed2af610398))
+* share the https port with tcp blocks, chosen by sni and alpn ([#403](https://github.com/luizfonseca/proksi/issues/403)) ([75c5e80](https://github.com/luizfonseca/proksi/commit/75c5e80d4d112f3cbf0f230546fadac7b31ee1b1))
+
+
+### Performance Improvements
+
+* share locations with requests and use mimalloc ([#395](https://github.com/luizfonseca/proksi/issues/395)) ([a305149](https://github.com/luizfonseca/proksi/commit/a3051491338e1be079063d88775107a4e0d15ec2))
+
 ## [0.6.2](https://github.com/luizfonseca/proksi/compare/proksi-v0.6.1...proksi-v0.6.2) (2026-10-14)
 
 
