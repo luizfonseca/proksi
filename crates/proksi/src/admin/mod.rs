@@ -15,10 +15,14 @@ use pingora::{
 
 use crate::metrics::live;
 
+pub mod routes;
 pub mod status;
 
 /// Stats windows, in seconds
 const WINDOWS: std::ops::RangeInclusive<u64> = 1..=300;
+
+/// Largest request body accepted (a host)
+const MAX_BODY: usize = 1024 * 1024;
 
 /// A response of the admin API
 #[derive(Debug, PartialEq)]
@@ -61,18 +65,23 @@ impl AdminApi {
     }
 
     /// Answers a request, given its `Authorization` header
-    pub async fn handle(
-        &self,
-        method: &Method,
-        path: &str,
-        query: Option<&str>,
-        authorization: Option<&str>,
-    ) -> Answer {
+    pub async fn handle(&self, request: Request<'_>) -> Answer {
+        let Request {
+            method,
+            path,
+            query,
+            authorization,
+            ..
+        } = request;
         if !self.authorized(authorization) {
             return Answer::Reply(Reply::error(
                 StatusCode::UNAUTHORIZED,
                 "missing or invalid token",
             ));
+        }
+
+        if path == "/api/v1/routes" || path.starts_with("/api/v1/routes/") {
+            return Answer::Reply(routes_reply(request).await);
         }
 
         let known = [
@@ -179,24 +188,40 @@ impl HttpServerApp for AdminApi {
             .and_then(|value| value.to_str().ok());
         let (method, uri) = (request.method.clone(), request.uri.clone());
         let authorization = authorization.map(ToString::to_string);
+        let content_type = request
+            .headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(ToString::to_string);
+
+        let body = if method == Method::PUT {
+            match read_body(&mut session).await {
+                Ok(body) => body,
+                Err(reply) => {
+                    write_reply(&mut session, reply).await;
+                    return None;
+                }
+            }
+        } else {
+            vec![]
+        };
+
         let answer = self
-            .handle(&method, uri.path(), uri.query(), authorization.as_deref())
+            .handle(Request {
+                method: &method,
+                path: uri.path(),
+                query: uri.query(),
+                authorization: authorization.as_deref(),
+                content_type: content_type.as_deref(),
+                body: &body,
+            })
             .await;
 
         match answer {
             Answer::Reply(reply) => {
-                let mut header = response_header(reply.status, reply.content_type)?;
-                header
-                    .insert_header(header::CONTENT_LENGTH, reply.body.len())
-                    .ok()?;
-                if reply.status == StatusCode::UNAUTHORIZED {
-                    header.insert_header(header::WWW_AUTHENTICATE, "Bearer").ok()?;
+                if !write_reply(&mut session, reply).await {
+                    return None;
                 }
-                session.write_response_header(Box::new(header)).await.ok()?;
-                session
-                    .write_response_body(Bytes::from(reply.body), true)
-                    .await
-                    .ok()?;
                 let persistent_settings = HttpPersistentSettings::for_session(&session);
                 session
                     .finish()
@@ -211,6 +236,95 @@ impl HttpServerApp for AdminApi {
             }
         }
     }
+}
+
+/// A request to the admin API
+#[derive(Clone, Copy)]
+pub struct Request<'a> {
+    pub method: &'a Method,
+    pub path: &'a str,
+    pub query: Option<&'a str>,
+    pub authorization: Option<&'a str>,
+    pub content_type: Option<&'a str>,
+    pub body: &'a [u8],
+}
+
+/// `GET /api/v1/routes`, `PUT` and `DELETE /api/v1/routes/<host>`
+async fn routes_reply(request: Request<'_>) -> Reply {
+    let store = crate::stores::global::get_store();
+    let host = request
+        .path
+        .strip_prefix("/api/v1/routes/")
+        .filter(|host| !host.is_empty() && !host.contains('/'));
+    let result = match (request.method, host) {
+        (&Method::GET, None) => routes::list(store.as_ref()).await,
+        (&Method::PUT, Some(host)) => {
+            routes::put(store.as_ref(), host, request.content_type, request.body).await
+        }
+        (&Method::DELETE, Some(host)) => routes::delete(store.as_ref(), host).await,
+        (_, None) if request.path == "/api/v1/routes" => {
+            return Reply::error(StatusCode::METHOD_NOT_ALLOWED, "method not allowed")
+        }
+        (_, Some(_)) => return Reply::error(StatusCode::METHOD_NOT_ALLOWED, "method not allowed"),
+        _ => return Reply::error(StatusCode::NOT_FOUND, "not found"),
+    };
+    match result {
+        Ok(body) => Reply::json(StatusCode::OK, &body),
+        Err(routes::Refused::Invalid(reason)) => Reply::error(StatusCode::BAD_REQUEST, &reason),
+        Err(routes::Refused::Unavailable(reason)) => {
+            Reply::error(StatusCode::SERVICE_UNAVAILABLE, &reason)
+        }
+    }
+}
+
+/// The request body, up to `MAX_BODY`
+async fn read_body(session: &mut ServerSession) -> Result<Vec<u8>, Reply> {
+    let mut body = vec![];
+    loop {
+        match session.read_request_body().await {
+            Ok(Some(chunk)) => {
+                if body.len() + chunk.len() > MAX_BODY {
+                    return Err(Reply::error(
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        "the body is larger than 1 MiB",
+                    ));
+                }
+                body.extend_from_slice(&chunk);
+            }
+            Ok(None) => return Ok(body),
+            Err(err) => {
+                return Err(Reply::error(
+                    StatusCode::BAD_REQUEST,
+                    &format!("failed to read the body: {err}"),
+                ))
+            }
+        }
+    }
+}
+
+/// Writes a whole reply; returns whether it was written
+async fn write_reply(session: &mut ServerSession, reply: Reply) -> bool {
+    let Some(mut header) = response_header(reply.status, reply.content_type) else {
+        return false;
+    };
+    if header
+        .insert_header(header::CONTENT_LENGTH, reply.body.len())
+        .is_err()
+    {
+        return false;
+    }
+    if reply.status == StatusCode::UNAUTHORIZED
+        && header.insert_header(header::WWW_AUTHENTICATE, "Bearer").is_err()
+    {
+        return false;
+    }
+    if session.write_response_header(Box::new(header)).await.is_err() {
+        return false;
+    }
+    session
+        .write_response_body(Bytes::from(reply.body), true)
+        .await
+        .is_ok()
 }
 
 fn response_header(status: StatusCode, content_type: &str) -> Option<ResponseHeader> {
@@ -276,6 +390,22 @@ mod tests {
         }
     }
 
+    fn request<'a>(
+        method: &'a Method,
+        path: &'a str,
+        query: Option<&'a str>,
+        authorization: Option<&'a str>,
+    ) -> super::Request<'a> {
+        super::Request {
+            method,
+            path,
+            query,
+            authorization,
+            content_type: None,
+            body: &[],
+        }
+    }
+
     fn reply(answer: Answer) -> Reply {
         match answer {
             Answer::Reply(reply) => reply,
@@ -288,7 +418,7 @@ mod tests {
         let api = AdminApi::new(Some("secret".to_string()), instance());
         crate::metrics::LocationMetrics::unknown().record(404, Duration::from_millis(1));
 
-        let reply = reply(api.handle(&Method::GET, "/metrics", None, Some("Bearer secret")).await);
+        let reply = reply(api.handle(request(&Method::GET, "/metrics", None, Some("Bearer secret"))).await);
 
         assert_eq!(reply.status, StatusCode::OK);
         assert_eq!(reply.content_type, "text/plain; version=0.0.4");
@@ -307,9 +437,11 @@ mod tests {
                 "/api/v1/status",
                 "/api/v1/hosts",
                 "/api/v1/certificates",
+                "/api/v1/routes",
+                "/api/v1/routes/a.test",
                 "/nope",
             ] {
-                let reply = reply(api.handle(&Method::GET, path, None, authorization).await);
+                let reply = reply(api.handle(request(&Method::GET, path, None, authorization)).await);
                 assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{authorization:?}");
                 assert_eq!(reply.body, r#"{"error":"missing or invalid token"}"#);
             }
@@ -322,7 +454,7 @@ mod tests {
         let api = AdminApi::new(None, instance());
 
         assert_eq!(
-            reply(api.handle(&Method::GET, "/metrics", None, None).await).status,
+            reply(api.handle(request(&Method::GET, "/metrics", None, None)).await).status,
             StatusCode::OK
         );
     }
@@ -331,12 +463,12 @@ mod tests {
     async fn test_unknown_paths_and_methods() {
         let api = AdminApi::new(None, instance());
 
-        let not_found = reply(api.handle(&Method::GET, "/nope", None, None).await);
+        let not_found = reply(api.handle(request(&Method::GET, "/nope", None, None)).await);
         assert_eq!(not_found.status, StatusCode::NOT_FOUND);
         assert_eq!(not_found.body, r#"{"error":"not found"}"#);
         for path in ["/metrics", "/api/v1/stats"] {
             assert_eq!(
-                reply(api.handle(&Method::POST, path, None, None).await).status,
+                reply(api.handle(request(&Method::POST, path, None, None)).await).status,
                 StatusCode::METHOD_NOT_ALLOWED
             );
         }
@@ -345,7 +477,7 @@ mod tests {
     #[tokio::test]
     async fn test_stats_windows() {
         let api = AdminApi::new(None, instance());
-        let stats = |query| api.handle(&Method::GET, "/api/v1/stats", query, None);
+        let stats = |query| api.handle(request(&Method::GET, "/api/v1/stats", query, None));
 
         let ok = reply(stats(Some("window=30")).await);
         assert_eq!(ok.status, StatusCode::OK);
@@ -360,11 +492,11 @@ mod tests {
         }
 
         assert_eq!(
-            api.handle(&Method::GET, "/api/v1/stats/stream", Some("window=5"), None).await,
+            api.handle(request(&Method::GET, "/api/v1/stats/stream", Some("window=5"), None)).await,
             Answer::Stream(Duration::from_secs(5))
         );
         assert_eq!(
-            api.handle(&Method::GET, "/api/v1/stats/stream", None, None).await,
+            api.handle(request(&Method::GET, "/api/v1/stats/stream", None, None)).await,
             Answer::Stream(Duration::from_secs(10))
         );
     }

@@ -133,4 +133,38 @@ The stats come from the same metrics, sampled every second and kept for 5 minute
 
 With several instances sharing a store, `status` shows each instance and the routes revision it applied, so a change can be confirmed as applied everywhere.
 
-See [ADR 0004](adrs/0004-admin-api-and-metrics.md) for what comes next: writing routes through the API.
+## Routes
+
+Hosts can be added, changed and removed through the API. They're written to the [store](configuration/redis.md), so every Proksi instance sharing it applies them, and the instance that received the request applies them right away:
+
+| Endpoint | |
+| --- | --- |
+| `GET /api/v1/routes` | The hosts in the store, with the store's revision |
+| `PUT /api/v1/routes/<host>` | Adds or replaces a host. Returns the new revision |
+| `DELETE /api/v1/routes/<host>` | Removes a host. Returns the revision |
+
+The body of a `PUT` is either the body of a `host` block, as in the configuration file (with `Content-Type: text/hcl`):
+
+```bash
+curl -X PUT -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" -H "Content-Type: text/hcl" \
+  --data-binary @- http://127.0.0.1:7555/api/v1/routes/api.example.com <<'HCL'
+location "/" {
+  rate_limit {
+    requests = 100
+    per      = "1m"
+  }
+  upstream "10.0.0.1:3000" {}
+}
+HCL
+```
+
+or JSON, in the format hosts are stored in (`GET /api/v1/routes` returns it):
+
+```json
+{ "locations": [{ "path": "/", "upstreams": [{ "ip": "10.0.0.1", "port": 3000 }] }] }
+```
+
+- Hosts are validated like hosts from any other source; an invalid one is refused (`400`) with the reason.
+- `listen` can't be set: Proksi opens its ports when it starts, so hosts from the store are served on the default addresses.
+- A host in the store takes priority over the same host in the configuration file or docker labels. Removing it from the store brings the other one back.
+- With the memory store (the default), routes written through the API live as long as the Proksi process.

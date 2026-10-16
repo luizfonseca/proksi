@@ -1275,3 +1275,93 @@ async fn test_admin_status_hosts_and_certificates() {
 
     proksi.assert_healthy();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_admin_routes() {
+    let mut proksi = Harness::start_with(vec![], ADMIN).await;
+    let admin_port = proksi.tcp_ports[2];
+    let request = |method: &str, path: &str, content_type: &str, body: &str| {
+        format!(
+            "{method} {path} HTTP/1.1\r\nHost: admin\r\nAuthorization: Bearer e2e-token\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    };
+    let served = |status: &'static str| {
+        let proksi = &proksi;
+        async move {
+            for _ in 0..50 {
+                let res = proksi.get_http_port("api.test", "/hello").await.unwrap();
+                if res.starts_with(status) {
+                    return res;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+            panic!("api.test never answered {status}");
+        }
+    };
+
+    // JSON, in the stored format
+    let json = format!(
+        r#"{{ "tls": {{ "enabled": false }}, "locations": [{{ "path": "/", "upstreams": [{{ "ip": "127.0.0.1", "port": {} }}] }}] }}"#,
+        proksi.http_upstream.port
+    );
+    let res = proksi
+        .raw_http_on(
+            admin_port,
+            request("PUT", "/api/v1/routes/api.test", "application/json", &json).as_bytes(),
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.contains(r#""host":"api.test""#), "{res}");
+    let res = served("HTTP/1.1 200").await;
+    assert!(res.contains("\"path\":\"/hello\""), "{res}");
+
+    // HCL, like a host block of the configuration file
+    let hcl = format!(
+        "tls = false\nlocation \"/\" {{\n  rate_limit {{\n    requests = 1\n    per = \"1m\"\n  }}\n  upstream \"127.0.0.1:{}\" {{}}\n}}\n",
+        proksi.http_upstream.port
+    );
+    let res = proksi
+        .raw_http_on(
+            admin_port,
+            request("PUT", "/api/v1/routes/api.test", "text/hcl", &hcl).as_bytes(),
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    served("HTTP/1.1 429").await;
+
+    // Invalid hosts are refused with the reason
+    let res = proksi
+        .raw_http_on(
+            admin_port,
+            request("PUT", "/api/v1/routes/api.test", "application/json", "{").as_bytes(),
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 400"), "{res}");
+    assert!(res.contains("invalid JSON"), "{res}");
+
+    let res = proksi
+        .raw_http_on(
+            admin_port,
+            request("GET", "/api/v1/routes", "application/json", "").as_bytes(),
+        )
+        .await
+        .unwrap();
+    assert!(res.contains(r#""name":"api.test""#), "{res}");
+
+    let res = proksi
+        .raw_http_on(
+            admin_port,
+            request("DELETE", "/api/v1/routes/api.test", "application/json", "").as_bytes(),
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    // Unknown again: redirected to HTTPS
+    served("HTTP/1.1 308").await;
+
+    proksi.assert_healthy();
+}
