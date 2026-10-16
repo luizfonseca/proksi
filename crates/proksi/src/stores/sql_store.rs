@@ -223,7 +223,7 @@ impl Store for SqlStore {
 
     async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError> {
         let pool = self.pool.clone();
-        let host = route.host();
+        let host = route.key();
         let data = serde_json::to_string(&route).map_err(invalid)?;
         let schema_version = i64::from(route.schema_version);
         self.run(async move {

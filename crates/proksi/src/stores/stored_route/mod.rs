@@ -4,30 +4,33 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::Route;
+use crate::config::host::Host;
+
+mod v1;
 
 /// Version of the stored route format written by this version of proksi
-pub const ROUTE_SCHEMA_VERSION: u32 = 1;
+/// (1: a route, 2: a host with locations)
+pub const ROUTE_SCHEMA_VERSION: u32 = 2;
 
-/// A route as kept in the store
+/// A host as kept in the store
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StoredRoute {
     pub schema_version: u32,
-    pub route: Route,
+    pub host: Host,
 }
 
 impl StoredRoute {
     #[allow(dead_code)] // used by the admin API (#49)
-    pub fn new(route: Route) -> Self {
+    pub fn new(host: Host) -> Self {
         Self {
             schema_version: ROUTE_SCHEMA_VERSION,
-            route,
+            host,
         }
     }
 
-    /// Host the route is stored under
-    pub fn host(&self) -> String {
-        self.route.host.to_lowercase()
+    /// Key the host is stored under (its lowercase name)
+    pub fn key(&self) -> String {
+        self.host.name.to_lowercase()
     }
 }
 
@@ -85,18 +88,22 @@ pub fn decode_stored_route(host: &str, json: &str) -> Result<StoredRoute, Stored
     // The version is read first: newer versions may not be readable as a route at all
     let version: SchemaVersion =
         serde_json::from_str(json).map_err(|err| error(format!("invalid route: {err}")))?;
-    if version.schema_version > ROUTE_SCHEMA_VERSION {
-        return Err(error(unsupported_version(version.schema_version)));
+    match version.schema_version {
+        1 => v1::decode_v1(json)
+            .map(StoredRoute::new)
+            .map_err(|err| error(format!("invalid route: {err}"))),
+        ROUTE_SCHEMA_VERSION => {
+            serde_json::from_str(json).map_err(|err| error(format!("invalid route: {err}")))
+        }
+        version => Err(error(unsupported_version(version))),
     }
-
-    serde_json::from_str(json).map_err(|err| error(format!("invalid route: {err}")))
 }
 
 /// Checks that this version of proksi can read a stored route
 pub fn check_schema_version(stored: StoredRoute) -> Result<StoredRoute, StoredRouteError> {
     if stored.schema_version > ROUTE_SCHEMA_VERSION {
         return Err(StoredRouteError {
-            host: stored.host(),
+            host: stored.key(),
             error: unsupported_version(stored.schema_version),
         });
     }
@@ -116,13 +123,13 @@ fn unsupported_version(version: u32) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::routing::test_utils::route;
+    use crate::routing::test_utils::host;
 
     use super::{check_schema_version, decode_stored_route, StoredRoute};
 
     #[test]
     fn test_decode_stored_route() {
-        let stored = StoredRoute::new(route("a.test", "10.0.0.1"));
+        let stored = StoredRoute::new(host("a.test", "10.0.0.1"));
         let json = serde_json::to_string(&stored).unwrap();
 
         assert_eq!(decode_stored_route("a.test", &json), Ok(stored));
@@ -137,10 +144,25 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_schema_version_1_route_as_host() {
+        let json = serde_json::json!({
+            "schema_version": 1,
+            "route": { "host": "a.test", "upstreams": [{ "ip": "10.0.0.1", "port": 3000 }] },
+        })
+        .to_string();
+
+        let stored = decode_stored_route("a.test", &json).unwrap();
+
+        assert_eq!(stored.schema_version, 2);
+        assert_eq!(stored.host.name, "a.test");
+        assert_eq!(stored.host.locations[0].path, "/*");
+    }
+
+    #[test]
     fn test_decode_newer_schema_version() {
         let json = serde_json::json!({
-            "schema_version": 2,
-            "route": { "host": "a.test", "upstreams": [], "something_new": true },
+            "schema_version": 3,
+            "host": { "name": "a.test", "something_new": true },
         })
         .to_string();
 
@@ -148,24 +170,21 @@ mod tests {
 
         assert_eq!(
             err.error,
-            "unsupported schema version 2 (this version of proksi supports up to 1)"
+            "unsupported schema version 3 (this version of proksi supports up to 2)"
         );
     }
 
     #[test]
     fn test_check_schema_version() {
-        let mut stored = StoredRoute::new(route("a.test", "10.0.0.1"));
+        let mut stored = StoredRoute::new(host("a.test", "10.0.0.1"));
         assert!(check_schema_version(stored.clone()).is_ok());
 
-        stored.schema_version = 2;
+        stored.schema_version = 3;
         assert!(check_schema_version(stored).is_err());
     }
 
     #[test]
-    fn test_stored_route_host_is_lowercase() {
-        assert_eq!(
-            StoredRoute::new(route("A.Test", "10.0.0.1")).host(),
-            "a.test"
-        );
+    fn test_stored_route_key_is_lowercase() {
+        assert_eq!(StoredRoute::new(host("A.Test", "10.0.0.1")).key(), "a.test");
     }
 }

@@ -2,12 +2,9 @@
 
 use std::{sync::Arc, time::Duration};
 
-use crate::{
-    config::host::Host,
-    stores::{
-        store_trait::Store,
-        stored_route::{ReplicaStatus, StoreError},
-    },
+use crate::stores::{
+    store_trait::Store,
+    stored_route::{ReplicaStatus, StoreError},
 };
 
 use super::{RouteSnapshot, RouteSourceKind, SnapshotSender};
@@ -55,7 +52,7 @@ impl StoreSource {
             let mut routes = Vec::with_capacity(stored.routes.len());
             for route in stored.routes {
                 match route {
-                    Ok(route) => routes.push(Host::from_route(&route.route)),
+                    Ok(stored) => routes.push(stored.host),
                     Err(err) => tracing::warn!(
                         "skipping route for host {} from the store: {}",
                         err.host,
@@ -158,7 +155,7 @@ mod tests {
     use papaya::HashMapRef;
 
     use crate::{
-        routing::{test_utils::route, RouteSnapshot, RouteSourceKind},
+        routing::{test_utils::host, RouteSnapshot, RouteSourceKind},
         stores::{
             certificates::Certificate,
             store_trait::Store,
@@ -284,7 +281,7 @@ mod tests {
     async fn test_store_source_sends_routes() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_route(StoredRoute::new(route("a.test", "10.0.0.1")))
+            .put_route(StoredRoute::new(host("a.test", "10.0.0.1")))
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -316,7 +313,7 @@ mod tests {
         receiver.try_recv().unwrap();
 
         store
-            .put_route(StoredRoute::new(route("b.test", "10.0.0.1")))
+            .put_route(StoredRoute::new(host("b.test", "10.0.0.1")))
             .await
             .unwrap();
 
@@ -327,11 +324,11 @@ mod tests {
     #[tokio::test]
     async fn test_store_source_skips_unreadable_routes() {
         let store = Arc::new(FlakyStore::default());
-        let mut newer = StoredRoute::new(route("newer.test", "10.0.0.1"));
-        newer.schema_version = 2;
+        let mut newer = StoredRoute::new(host("newer.test", "10.0.0.1"));
+        newer.schema_version = crate::stores::stored_route::ROUTE_SCHEMA_VERSION + 1;
         store.put_route(newer).await.unwrap();
         store
-            .put_route(StoredRoute::new(route("a.test", "10.0.0.1")))
+            .put_route(StoredRoute::new(host("a.test", "10.0.0.1")))
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -345,7 +342,7 @@ mod tests {
     async fn test_store_source_keeps_routes_when_store_fails() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_route(StoredRoute::new(route("a.test", "10.0.0.1")))
+            .put_route(StoredRoute::new(host("a.test", "10.0.0.1")))
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -363,7 +360,7 @@ mod tests {
     async fn test_store_source_reports_the_applied_revision() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_route(StoredRoute::new(route("a.test", "10.0.0.1")))
+            .put_route(StoredRoute::new(host("a.test", "10.0.0.1")))
             .await
             .unwrap();
         let (mut source, _receiver) = source(store.clone());

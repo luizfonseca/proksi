@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::routing::test_utils::route;
+use crate::routing::test_utils::host;
 
 use super::{
     store_trait::Store,
@@ -10,7 +10,7 @@ use super::{
 };
 
 fn upstream_ip(stored: &StoredRoute) -> String {
-    stored.route.upstreams[0].ip.to_string()
+    stored.host.locations[0].upstreams[0].ip.to_string()
 }
 
 /// Routes and revisions
@@ -20,7 +20,7 @@ pub async fn routes_contract(store: &dyn Store) {
 
     // Adding a route increments the revision
     let revision = store
-        .put_route(StoredRoute::new(route("A.Contract.Test", "10.0.0.1")))
+        .put_route(StoredRoute::new(host("A.Contract.Test", "10.0.0.1")))
         .await
         .unwrap();
     assert_eq!(revision, initial + 1);
@@ -30,12 +30,12 @@ pub async fn routes_contract(store: &dyn Store) {
     assert_eq!(snapshot.revision, revision);
     assert_eq!(snapshot.routes.len(), 1);
     let stored = snapshot.routes[0].as_ref().unwrap();
-    assert_eq!(stored.route.host, "A.Contract.Test");
+    assert_eq!(stored.host.name, "A.Contract.Test");
     assert_eq!(upstream_ip(stored), "10.0.0.1");
 
     // Replacing the route of a host (hosts are case-insensitive)
     let revision = store
-        .put_route(StoredRoute::new(route("a.contract.test", "10.0.0.2")))
+        .put_route(StoredRoute::new(host("a.contract.test", "10.0.0.2")))
         .await
         .unwrap();
     assert_eq!(revision, initial + 2);
@@ -47,8 +47,8 @@ pub async fn routes_contract(store: &dyn Store) {
     );
 
     // Routes this version can't read are reported, without affecting the others
-    let mut newer = StoredRoute::new(route("b.contract.test", "10.0.0.3"));
-    newer.schema_version = 2;
+    let mut newer = StoredRoute::new(host("b.contract.test", "10.0.0.3"));
+    newer.schema_version = crate::stores::stored_route::ROUTE_SCHEMA_VERSION + 1;
     let revision = store.put_route(newer).await.unwrap();
     let snapshot = store.routes().await.unwrap();
     assert_eq!(snapshot.revision, revision);
