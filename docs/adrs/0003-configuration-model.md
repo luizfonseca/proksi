@@ -118,7 +118,36 @@ Everything inside a location besides upstreams is a building block: `headers`, `
 
 Blocks are built once per location when routes are applied, so their state (rate limit counters) belongs to the location. A block that answers the request (401, 413, 429…) ends it.
 
-Blocks run in a **fixed order**: `request_id`, authentication (`basic_auth`, `jwt`, `oauth2`), `rate_limit`, `body_limit`, `headers`, `cache`, then `plugin` blocks in the order they're written. Host-wide blocks run before a location's own. The order is fixed because HCL doesn't keep the order between blocks of different types, and a fixed pipeline is easier to predict than one that depends on how the file is written.
+Blocks run by **priority**, from 0 (first) to 100 (last). Every block has a default, and any block can override it with `priority = <0-100>`:
+
+| Block | Default priority |
+| --- | --- |
+| `request_id` | 0 |
+| `rate_limit` | 0 |
+| `body_limit` | 10 |
+| `basic_auth`, `jwt`, `oauth2` | 20 |
+| `headers` | 50 |
+| `cache` | 60 |
+| `plugin "<name>"` | 100 |
+
+```hcl
+location "/*" {
+  rate_limit {
+    requests = 120
+    per      = "1m"
+  }
+
+  plugin "geo-block" {
+    source   = "../geo.wasm"
+    priority = 5                     # before body limits and authentication
+  }
+}
+```
+
+- `rate_limit` runs before authentication by default, so it also protects login endpoints from brute force. `request_id` also runs at 0, so rejected requests still get an id.
+- Blocks with the same priority run in the order of the table, then `plugin` blocks in the order they're written. Host-wide blocks run before a location's own blocks with the same priority.
+- Response stages run in reverse order, so the first block to see a request is the last to see its response.
+- Priorities are needed because HCL doesn't keep the order between blocks of different types, so the order they're written in can't be used.
 
 Middleware applies to HTTP only. HTTP blocks inside `tcp` are rejected.
 
@@ -148,7 +177,6 @@ Sharing 443 needs proksi to accept the connection itself, read SNI and ALPN from
 - The configuration reads like other HCL, and maps onto Kubernetes Ingress rules (host and path) for #381.
 - Built-in features are added as building blocks without touching routing.
 - Two configuration formats are supported until `routes = [...]` is removed in a future major version.
-- The fixed middleware order can't be changed per location. If that's ever needed, it can be added as an explicit setting.
 
 ### Order of work
 
@@ -168,4 +196,3 @@ Steps 1–2 cover more than one route per host, 4 rate and body limits, and 5–
 - Sharing rate limit counters between instances (a `rate_limit` option using the store, later).
 - UDP. Pingora doesn't support it; `udp` stays free as a block name.
 - Matching by headers, methods or query strings in locations.
-- Per-location middleware order.
