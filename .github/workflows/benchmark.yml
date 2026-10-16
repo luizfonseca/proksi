@@ -36,11 +36,6 @@ jobs:
   benchmark:
     name: Benchmark
     runs-on: ubuntu-latest
-    services:
-      upstream:
-        image: nginx:alpine
-        ports:
-          - 8080:80
     steps:
       - uses: actions/checkout@v4
         with:
@@ -84,6 +79,13 @@ jobs:
         if: github.event_name == 'pull_request' && steps.changes.outputs.code == 'false'
         run: cp bench-bin/base bench-bin/head
 
+      # On the host network: a service container's port mapping slows every request down
+      - name: Start the upstream
+        if: github.event_name == 'pull_request'
+        run: |
+          docker run -d --name upstream --network host nginx:alpine
+          until curl -sf http://127.0.0.1:80/ >/dev/null; do sleep 0.5; done
+
       - name: Install oha
         if: github.event_name == 'pull_request'
         run: |
@@ -103,7 +105,8 @@ jobs:
             --base bench-bin/base \
             --head bench-bin/head \
             --oha ./oha \
-            --upstream 127.0.0.1:8080 \
+            --upstream 127.0.0.1:80 \
+            --workers "$(nproc)" \
             --out results/report.md \
             --raw results/raw.json \
             --note "$note"
