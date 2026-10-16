@@ -1582,6 +1582,9 @@ async fn test_forwarded_headers() {
     assert_eq!(sent["x-forwarded-proto"], "http", "{sent}");
     assert_eq!(sent["x-forwarded-host"], "forged.test", "{sent}");
     assert_eq!(sent["x-real-ip"], "1.2.3.4", "{sent}");
+    proksi.assert_healthy();
+}
+
 const ADMIN_WITHOUT_METRICS: &str = r#"
 admin {
   listen  = "127.0.0.1:{tcp_port_2}"
