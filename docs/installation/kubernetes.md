@@ -70,6 +70,43 @@ Other hosts get certificates from Let's Encrypt (enable `lets_encrypt` in the `C
 
 With a shared store, a certificate from a `Secret` reaches every replica through the store.
 
+## Plugins
+
+The annotation `proksi.info/blocks` adds plugins, headers and cache to every path of an `Ingress`, written like the inside of a `location` block of the [configuration](configuration/hcl/README.md):
+
+```yaml
+metadata:
+  annotations:
+    proksi.info/blocks: |
+      rate_limit {
+        requests = 100
+        per      = "1m"
+      }
+      request_id {}
+      headers {
+        response {
+          add = { "x-served-by" = "proksi" }
+        }
+      }
+```
+
+The settings of `basic_auth` (`user`, `pass`) and `oauth2` (`client_id`, `client_secret`, `jwt_secret`) are better kept out of annotations: put them in a `Secret` of the same namespace, labelled `proksi.info/auth`, and name it in `proksi.info/auth-secret`. Its keys fill the settings the block leaves out:
+
+```bash
+kubectl create secret generic web-auth --from-literal=user=admin --from-literal=pass=...
+kubectl label secret web-auth proksi.info/auth=true
+```
+
+```yaml
+metadata:
+  annotations:
+    proksi.info/blocks: |
+      basic_auth {}
+    proksi.info/auth-secret: web-auth
+```
+
+Only labelled `Secret`s (and TLS ones) are watched. An `Ingress` with invalid blocks, or whose auth secret is missing, isn't served, and the reason is logged.
+
 Hosts can still come from Proksi's configuration file, docker labels or the store. When the same host comes from several places, the store wins over Kubernetes, which wins over docker labels and the configuration file.
 
 ## More than one replica
@@ -78,4 +115,4 @@ With more than one replica, use a shared store (Redis or Postgres) so certificat
 
 ## Coming next
 
-Plugins through annotations, the `Ingress` status, and a Helm chart.
+The `Ingress` status, and a Helm chart.

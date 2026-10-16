@@ -26,7 +26,7 @@ use crate::{
 
 use super::{
     certificates::parse,
-    convert::{hosts, Cluster, Converted, HostCertificate, Invalid},
+    convert::{hosts, Cluster, Converted, HostCertificate, Invalid, AUTH_LABEL},
 };
 
 /// Changes often come together (a deployment rolling out): they're applied once settled
@@ -66,6 +66,9 @@ async fn watch(config: &KubernetesConfig, sender: &SnapshotSender) -> Result<(),
     // Only TLS secrets (`tls.crt` and `tls.key`)
     let tls = watcher::Config::default().fields("type=kubernetes.io/tls");
     let secrets = Watched::<Secret>::namespaced(&client, &config.namespaces, &tls, &changed);
+    // And the ones labelled for `basic_auth` and `oauth2` settings
+    let auth = watcher::Config::default().labels(AUTH_LABEL);
+    let auth_secrets = Watched::<Secret>::namespaced(&client, &config.namespaces, &auth, &changed);
     let ingress_classes = Watched::<IngressClass>::cluster(&client, &changed);
 
     // Hosts are only sent once everything was listed, so none is removed by a partial view
@@ -73,6 +76,7 @@ async fn watch(config: &KubernetesConfig, sender: &SnapshotSender) -> Result<(),
     services.ready().await?;
     endpoint_slices.ready().await?;
     secrets.ready().await?;
+    auth_secrets.ready().await?;
     ingress_classes.ready().await?;
 
     let mut reported: Vec<Invalid> = vec![];
@@ -83,7 +87,7 @@ async fn watch(config: &KubernetesConfig, sender: &SnapshotSender) -> Result<(),
             ingress_classes: ingress_classes.state(),
             services: services.state(),
             endpoint_slices: endpoint_slices.state(),
-            secrets: secrets.state(),
+            secrets: [secrets.state(), auth_secrets.state()].concat(),
         };
         let Converted {
             hosts,

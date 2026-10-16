@@ -22,6 +22,10 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=secure.test" \
   -keyout /tmp/secure.key -out /tmp/secure.crt 2>/dev/null
 kubectl create secret tls web-tls --cert /tmp/secure.crt --key /tmp/secure.key
 
+# The settings of basic_auth for auth.test
+kubectl create secret generic web-auth --from-literal=user=admin --from-literal=pass=secret
+kubectl label secret web-auth proksi.info/auth=true
+
 kubectl apply -f "$here/web.yaml"
 kubectl rollout status deployment/web --timeout=120s
 
@@ -58,6 +62,19 @@ echo "ok: the certificate from the TLS secret"
 body="$(curl -sk --resolve secure.test:8443:127.0.0.1 https://secure.test:8443/)"
 [[ "$body" == *"hello from web"* ]] || { echo "failed: HTTPS through the service ($body)"; false; }
 echo "ok: HTTPS through the service"
+
+# Plugins from the annotation
+for _ in $(seq 1 60); do
+  status="$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: auth.test' http://127.0.0.1:8080/ || true)"
+  [[ "$status" == "401" ]] && break
+  sleep 1
+done
+[[ "$status" == "401" ]] || { echo "failed: basic_auth without credentials ($status)"; false; }
+echo "ok: basic_auth from the annotation"
+response="$(curl -si -u admin:secret -H 'Host: auth.test' http://127.0.0.1:8080/)"
+[[ "$response" == *"hello from web"* && "${response,,}" == *"x-from: ingress"* ]] \
+  || { echo "failed: with the secret's credentials ($response)"; false; }
+echo "ok: credentials from the secret, and headers"
 
 kubectl scale deployment/web --replicas=0
 expect "no ready pods: 503" '[[ "$body" == *" 503" ]]'
