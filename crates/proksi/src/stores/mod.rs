@@ -7,6 +7,7 @@ use routes::{RouteStore, RouteStoreContainer};
 pub mod cache;
 pub mod certificates;
 pub mod global;
+pub mod host_container;
 pub mod memory_store;
 pub mod redis_store;
 pub mod routes;
