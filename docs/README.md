@@ -50,19 +50,13 @@ paths {
   # lets_encrypt = env("HOME")
 }
 
-# A list of routes Proksi should handle
-routes = [
-  {
-    # You might need to edit your /etc/hosts file here.
-    host = "mysite.localhost",
-    upstreams = [
-     {
-       ip = "docs.proksi.info"
-       port = 443
-     }
-    ]
+# The hosts Proksi should handle
+# You might need to edit your /etc/hosts file here.
+host "mysite.localhost" {
+  location "/" {
+    upstream "docs.proksi.info:443" {}
   }
-]
+}
 ```
 
 Then run Proksi with your configuration:

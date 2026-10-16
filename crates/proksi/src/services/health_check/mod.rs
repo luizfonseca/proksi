@@ -30,7 +30,13 @@ async fn run_health_check_loop() {
         // update the routes being served
         let load_balancers = stores::get_routes()
             .iter()
-            .map(|(host, route)| (host.clone(), route.load_balancer.clone()))
+            .flat_map(|(host, container)| {
+                container
+                    .locations
+                    .iter()
+                    .map(|location| (host.clone(), location.load_balancer.clone()))
+                    .collect::<Vec<_>>()
+            })
             .collect::<Vec<_>>();
 
         for (host, load_balancer) in load_balancers {

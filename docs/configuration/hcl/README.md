@@ -29,31 +29,111 @@ paths {
   lets_encrypt = env("LETS_ENCRYPT_PATH")
 }
 
-// You can split your websites into separate files
-routes = [
-  import("./sites/mywebsite.com.hcl"),
-  import("./sites/myotherwebsite.co.uk.hcl")
-]
+host "cdn.example.com" {
+  tls {
+    // Useful for development
+    self_signed_on_failure = true
+  }
 
-// Or you can define them here
+  location "/" {
+    upstream "example.com:443" {
+      sni = "example.com"
+
+      headers {
+        add = {
+          "Host"        = "example.com"
+          "X-Proxy-For" = "cdn.example.com"
+        }
+      }
+    }
+  }
+}
+```
+
+## Hosts and locations
+
+Each `host` block defines a host proksi accepts requests for. Its label is matched against the `Host` header of requests (case-insensitive) and is the name certificates are issued for. Inside it, `location` blocks choose how a request is handled based on its path:
+
+```hcl
+host "api.example.com" {
+  tls {
+    certificate {                 // certificate files, instead of Let's Encrypt
+      pem = "/etc/proksi/certs/api.pem"
+      key = "/etc/proksi/certs/api.key"
+    }
+    self_signed_on_failure = true // fall back to a self-signed certificate
+  }
+
+  headers {                       // every location of the host
+    response {
+      add    = { "X-Api-Version" = "2" }
+      remove = ["Server"]
+    }
+  }
+
+  location "/login" {
+    upstream "auth:8080" {}
+  }
+
+  location "/" {
+    upstream "app:8080" { weight = 2 }
+    upstream "app-2:8080" {}
+
+    request_id {}
+    basic_auth {
+      user = env("BASIC_AUTH_USER")
+      pass = env("BASIC_AUTH_PASS")
+    }
+  }
+}
+```
+
+**Matching paths**
+
+- A request goes to the **most specific** location of its host: a static path beats a parameter (`/users/:id`), which beats a wildcard (`/files/*`).
+- A location matches its path **and everything below it**: `location "/login"` serves `/login`, `/login/` and `/login/callback`, but not `/logins`. `location "/"` serves whatever no other location matches.
+- Paths are compared after collapsing repeated slashes and resolving `.` and `..`, so `//login` is served by `location "/login"`. The request is forwarded unchanged.
+- A request matching no location gets a `404`.
+- nginx modifiers (`=`, `~`, `~*`, `^~`) and regular expressions aren't supported.
+
+**Inside a location**
+
+| Block | Description |
+| --- | --- |
+| `upstream "<host:port>" { }` | Where requests are sent, load balanced (round-robin) with health checks. IPv6 addresses go in brackets (`[::1]:3000`). Optional settings: `weight`, `network` (docker), `sni`, and `headers { add = { ... } }` added to the request sent to the upstream. |
+| `headers { response { add = { ... }, remove = [...] } }` | Headers changed in responses, after the host's. |
+| `cache { ... }` | Response caching, as in [caching](use-cases/cache.md). |
+| `request_id { }`, `basic_auth { ... }`, `oauth2 { ... }` | Plugins ([request id](plugins/request-id.md), [basic auth](plugins/basic-auth.md), [OAuth2](plugins/oauth2.md)), with the same settings as their `config` in `plugins = [...]`. |
+
+Unknown attributes are rejected, so a typo fails when the configuration is loaded instead of being ignored. So are two locations matching the same paths (e.g. `/api` and `/api/*`).
+
+To keep hosts in separate files, see [`import`](configuration/hcl/functions.md#import).
+
+## Migrating from `routes = [...]`
+
+`routes = [...]` still works, but is deprecated and logs a warning. Each route corresponds to a host:
+
+```hcl
+// Before
 routes = [
   {
-    host = "cdn.example.com"
-    ssl_certificate = {
-      // Useful for development
-      self_signed_on_failure = true
-    }
-    upstreams = [{
-      ip = "example.com"
-      port = 443
-
-      headers = {
-        add = [
-          { name = "Host", value = "example.com" },
-          { name = "X-Proxy-For", value = "cdn.example.com" }
-        ]
-      }
-    }]
+    host = "example.com"
+    ssl_certificate = { self_signed_on_failure = true }
+    upstreams = [{ ip = "10.0.0.1", port = 3000 }]
+    match_with = { path = { patterns = ["/api/*"] } }
   }
 ]
+
+// After
+host "example.com" {
+  tls {
+    self_signed_on_failure = true
+  }
+
+  location "/api" {
+    upstream "10.0.0.1:3000" {}
+  }
+}
 ```
+
+Route patterns matched paths exactly (`/api` didn't match `/api/users`), while a location matches its path and everything below it. A host can't be defined both in `routes` and with a `host` block.

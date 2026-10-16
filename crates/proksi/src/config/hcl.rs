@@ -1,4 +1,4 @@
-use std::{io::Read, path::Path};
+use std::{fmt::Write, io::Read, path::Path};
 
 use hcl::{
     eval::{Context, FuncArgs},
@@ -13,8 +13,49 @@ impl figment::providers::Format for HclFormat {
     const NAME: &'static str = "HCL";
 
     fn from_str<T: serde::de::DeserializeOwned>(string: &str) -> Result<T, Self::Error> {
+        check_duplicate_blocks(&hcl::parse(string)?, "")?;
         hcl::eval::from_str(string, &get_hcl_context())
     }
+}
+
+/// Rejects what HCL would silently merge or drop:
+/// - blocks repeated with the same labels (e.g. two `location "/api"` in a host),
+///   which would be read as a list
+/// - an attribute and blocks with the same name (e.g. `host = {...}` and `host "a" {}`),
+///   where the blocks would replace the attribute
+fn check_duplicate_blocks(body: &hcl::Body, parent: &str) -> Result<(), hcl::Error> {
+    let attributes = body
+        .attributes()
+        .map(hcl::Attribute::key)
+        .collect::<std::collections::HashSet<_>>();
+    let mut seen = std::collections::HashSet::new();
+    for block in body.blocks() {
+        if attributes.contains(block.identifier()) {
+            return Err(hcl::Error::Message(format!(
+                "`{}` is used both as an attribute and as a block, use one or the other",
+                block.identifier()
+            )));
+        }
+
+        let mut name = block.identifier().to_string();
+        for label in block.labels() {
+            let _ = write!(name, " \"{}\"", label.as_str());
+        }
+
+        if !block.labels().is_empty() && !seen.insert(name.clone()) {
+            let parent = if parent.is_empty() {
+                String::new()
+            } else {
+                format!(" in `{parent}`")
+            };
+            return Err(hcl::Error::Message(format!(
+                "duplicate block `{name}`{parent}"
+            )));
+        }
+
+        check_duplicate_blocks(block.body(), &name)?;
+    }
+    Ok(())
 }
 
 /// Function to retrieve the number of CPUs available on the system.
@@ -125,3 +166,71 @@ fn get_hcl_context<'a>() -> Context<'a> {
 
 /// hashicorp Configuration Language (HCL) provider for figment
 pub type Hcl = figment::providers::Data<HclFormat>;
+
+#[cfg(test)]
+mod tests {
+    use figment::providers::Format;
+
+    use super::HclFormat;
+
+    #[test]
+    fn test_duplicate_labelled_blocks_are_rejected() {
+        let err = HclFormat::from_str::<hcl::Value>(
+            r#"
+host "a.test" {
+  location "/api" {
+  }
+  location "/api" {
+  }
+}
+"#,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "duplicate block `location \"/api\"` in `host \"a.test\"`"
+        );
+    }
+
+    #[test]
+    fn test_duplicate_top_level_blocks_are_rejected() {
+        let err = HclFormat::from_str::<hcl::Value>("host \"a.test\" {}\nhost \"a.test\" {}\n")
+            .unwrap_err();
+
+        assert_eq!(err.to_string(), "duplicate block `host \"a.test\"`");
+    }
+
+    #[test]
+    fn test_attribute_and_blocks_with_the_same_name_are_rejected() {
+        let err = HclFormat::from_str::<hcl::Value>(
+            "host = {\n  \"a.test\" = {}\n}\nhost \"b.test\" {}\n",
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "`host` is used both as an attribute and as a block, use one or the other"
+        );
+    }
+
+    #[test]
+    fn test_blocks_with_different_labels_are_accepted() {
+        let value = HclFormat::from_str::<hcl::Value>(
+            r#"
+host "a.test" {
+  location "/api" {
+  }
+  location "/*" {
+  }
+}
+host "b.test" {
+  location "/api" {
+  }
+}
+"#,
+        );
+
+        assert!(value.is_ok(), "{value:?}");
+    }
+}

@@ -2,9 +2,9 @@ use crate::config::Config;
 
 use super::{RouteSnapshot, RouteSourceKind};
 
-/// Routes defined in the configuration file
+/// Hosts defined in the configuration file (`host` blocks and `routes`)
 pub fn file_snapshot(config: &Config) -> RouteSnapshot {
-    RouteSnapshot::new(RouteSourceKind::File, config.routes.clone())
+    RouteSnapshot::new(RouteSourceKind::File, config.hosts())
 }
 
 #[cfg(test)]
@@ -24,7 +24,8 @@ mod tests {
         let snapshot = file_snapshot(&config);
 
         assert_eq!(snapshot.source, RouteSourceKind::File);
-        assert_eq!(snapshot.routes, config.routes);
+        assert_eq!(snapshot.hosts, config.hosts());
+        assert_eq!(snapshot.hosts.len(), 2);
         assert_eq!(snapshot.revision, None);
     }
 }

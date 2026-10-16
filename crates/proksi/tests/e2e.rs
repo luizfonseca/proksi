@@ -388,3 +388,57 @@ async fn test_sqlite_store_routes() {
     assert_eq!(proksi.wait_for("app.test", "/other", 200).await, Some(200));
     proksi.assert_healthy();
 }
+
+const HOST_WITH_LOCATIONS: &str = r#"
+host "app.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  location "/v1/session" {
+    headers {
+      response {
+        add = { "x-location" = "session" }
+      }
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+
+  location "/" {
+    headers {
+      response {
+        add = { "x-location" = "default" }
+      }
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_host_blocks_choose_the_location_by_path() {
+    // The harness also writes its readiness route with `routes = [...]`: both formats together
+    let mut proksi = Harness::start_with(vec![], HOST_WITH_LOCATIONS).await;
+    proksi.resolve("app.test");
+
+    for (path, location) in [
+        ("/", "default"),
+        ("/other", "default"),
+        ("/v1/session", "session"),
+        ("/v1/session/", "session"),
+        ("/v1/session/refresh", "session"),
+        ("//v1/session", "session"),
+        ("/v1/sessions", "default"),
+    ] {
+        let res = proksi.get("app.test", path).await.unwrap();
+        assert_eq!(res.status, 200, "{path}");
+        assert_eq!(res.header("x-location"), Some(location), "{path}");
+        // Matching uses the normalized path, but the request is forwarded unchanged
+        assert_eq!(res.upstream_request()["path"], path, "{path}");
+    }
+
+    proksi.assert_healthy();
+}

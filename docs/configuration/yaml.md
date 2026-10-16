@@ -13,13 +13,13 @@ Proksi supports flexible configuration file loading via the `-c` flag:
 When no configuration is found, Proksi will emit a warning and start with minimal defaults that include:
 - Let's Encrypt disabled (to prevent email validation failures)
 - Basic HTTP/HTTPS proxy functionality
-- No predefined routes
+- No predefined hosts
 
 ## Configuration Properties
 
 
 
-<table><thead><tr><th width="311.3333333333333">Property</th><th width="268">Description</th><th>Default</th></tr></thead><tbody><tr><td><code>service_name</code></td><td>Name of the service. It's used for logging.</td><td>"proksi"</td></tr><tr><td><code>worker_threads</code></td><td>Number of (real) threads the HTTPs service will use.</td><td>80% of the available CPUs (at least 2)</td></tr><tr><td><code>lets_encrypt</code></td><td>--</td><td>--</td></tr><tr><td><code>lets_encrypt.enabled</code></td><td>Enables issuing certificates from Let's Encrypt</td><td>false</td></tr><tr><td><code>lets_encrypt.email</code></td><td>The email to be used when asking for certificates</td><td>""</td></tr><tr><td><code>lets_encrypt.staging</code></td><td>Use the <code>staging</code> endpoint to generate certificates. Mostly useful for local testing. Change it to <code>true</code> to enable the production certificates.</td><td>true</td></tr><tr><td><code>logging</code></td><td>--</td><td>--</td></tr><tr><td><code>logging.level</code></td><td>The level of logs saved or printed to STDOUT.</td><td>INFO</td></tr><tr><td><code>logging.access_logs_enabled</code></td><td>Enables response/request logging (includes user-agent, host, duration etc)</td><td>true</td></tr><tr><td><code>logging.error_logs_enabled</code></td><td>If the logs should include errors from Pingora</td><td>false</td></tr><tr><td><code>paths</code></td><td>--</td><td>--</td></tr><tr><td><code>paths.lets_encrypt</code></td><td>Path to store certificates, challenges etc</td><td>"/etc/proksi/lets_encrypt"</td></tr><tr><td><code>routes</code></td><td>--</td><td>--</td></tr><tr><td><code>routes[*].host</code></td><td>The host name that a list of upstreams will receive requests for</td><td></td></tr><tr><td><code>routes[*].path_prefix</code></td><td>Will match host+path on every request ensuring that only requests where the <code>path</code> starts with the value defined here are matched.</td><td></td></tr><tr><td><code>routes</code></td><td>--</td><td>--</td></tr><tr><td><code>routes[*].upstreams</code></td><td>--</td><td>--</td></tr><tr><td><code>routes[*].upstreams[*].ip</code></td><td>The IP of your server, container, or <strong>even an external IP</strong> you want to point requests to.</td><td></td></tr><tr><td><code>routes[*].upstreams[*].port</code></td><td>The <code>PORT</code> of your server, container or external service where we should connect to.</td><td></td></tr><tr><td><code>routes[*].upstreams[*].network</code></td><td>The network name for Proksi to use when connecting with internal services or containers</td><td></td></tr><tr><td></td><td></td><td></td></tr></tbody></table>
+<table><thead><tr><th width="311.3333333333333">Property</th><th width="268">Description</th><th>Default</th></tr></thead><tbody><tr><td><code>service_name</code></td><td>Name of the service. It's used for logging.</td><td>"proksi"</td></tr><tr><td><code>worker_threads</code></td><td>Number of (real) threads the HTTPs service will use.</td><td>80% of the available CPUs (at least 2)</td></tr><tr><td><code>lets_encrypt</code></td><td>--</td><td>--</td></tr><tr><td><code>lets_encrypt.enabled</code></td><td>Enables issuing certificates from Let's Encrypt</td><td>false</td></tr><tr><td><code>lets_encrypt.email</code></td><td>The email to be used when asking for certificates</td><td>""</td></tr><tr><td><code>lets_encrypt.staging</code></td><td>Use the <code>staging</code> endpoint to generate certificates. Mostly useful for local testing. Change it to <code>true</code> to enable the production certificates.</td><td>true</td></tr><tr><td><code>logging</code></td><td>--</td><td>--</td></tr><tr><td><code>logging.level</code></td><td>The level of logs saved or printed to STDOUT.</td><td>INFO</td></tr><tr><td><code>logging.access_logs_enabled</code></td><td>Enables response/request logging (includes user-agent, host, duration etc)</td><td>true</td></tr><tr><td><code>logging.error_logs_enabled</code></td><td>If the logs should include errors from Pingora</td><td>false</td></tr><tr><td><code>paths</code></td><td>--</td><td>--</td></tr><tr><td><code>paths.lets_encrypt</code></td><td>Path to store certificates, challenges etc</td><td>"/etc/proksi/lets_encrypt"</td></tr><tr><td><code>host</code></td><td>The hosts proksi accepts requests for, by name (matched against the <code>Host</code> header)</td><td></td></tr><tr><td><code>host.&lt;name&gt;.tls</code></td><td>Certificate files (<code>certificate.pem</code>, <code>certificate.key</code>) and <code>self_signed_on_failure</code></td><td></td></tr><tr><td><code>host.&lt;name&gt;.headers.response</code></td><td>Headers added (<code>add</code>) or removed (<code>remove</code>) in every response of the host</td><td></td></tr><tr><td><code>host.&lt;name&gt;.location.&lt;path&gt;</code></td><td>Requests whose path is <code>&lt;path&gt;</code> or below it; the most specific location wins</td><td></td></tr><tr><td><code>host.&lt;name&gt;.location.&lt;path&gt;.upstream.&lt;host:port&gt;</code></td><td>Where requests are sent (load balanced), with optional <code>weight</code>, <code>network</code>, <code>sni</code> and request <code>headers.add</code></td><td></td></tr><tr><td></td><td></td><td></td></tr></tbody></table>
 
 
 
@@ -108,52 +108,30 @@ paths:
   lets_encrypt: "/etc/proksi/certificates"
 
 
-# The list of routes that the server will use to route incoming requests
-# to different upstream servers.
-# Each route is an item in the list and it has the following attributes:
-routes:
-
-  # The host attribute specifies the hostname that the route will match.
-  # This is normally the domain, subdomain that you want to route to a particular server/ip.
-  # This can be a domain name or an IP address. For IP address, no certificate will be issued.
-  # The host attribute is required.
-  - host: "example.com"
-
-    # The path_prefix attribute specifies the path prefix that the route will match.
-    path_prefix: "/api"
-
-    # The headers attribute specifies the headers that will
-    # be added or removed at the end of the response
-    # --
-    # In the near future you will be able to modify the headers
-    # of the request send to the upstream server
+# Hosts that the server will accept requests for, by name.
+# See the HCL page for how locations are matched.
+host:
+  example.com:
+    # Headers added or removed in every response of the host
     headers:
-      # Adds the given headers to the dowstream (client) response
-      add:
-        - name: "X-Forwarded-For"
-          value: "<value>"
-        - name: "X-Api-Version"
-          value: "1.0"
-      # Removes the given headers from the dowstream (client) response
-      remove:
-        - name: "Server"
-    # The upstreams attribute specifies the list of upstream servers that the route will use.
-    # These are load balanced and the server will try to connect to the first one in the list.
-    # If the connection fails, it will try the next one.
-    # --
-    # Health checks run in the background to ensure you have a healthy connection always.
-    upstreams:
-      # The IP address of the upstream server
-      # (can be any IP address, as long as Proksi can access it).
-      - ip: "10.1.2.24/24"
-        # The port of the upstream server (can be any port).
-        port: 3000
+      response:
+        add:
+          X-Api-Version: "1.0"
+        remove:
+          - "Server"
 
-        # The network attribute specifies the network that the upstream server is part of.
-        # This is mostly important for Docker containers, but it can be used for other purposes.
-        network: "public"
-      - ip: "10.1.2.23/24"
-        port: 3000
-        network: "shared"
+    location:
+      # Requests to /api and below
+      /api:
+        upstream:
+          "10.1.2.24:3000":
+            # The docker network to reach the upstream through (optional)
+            network: "public"
+          "10.1.2.23:3000":
+            network: "shared"
 
+      # Everything else
+      /:
+        upstream:
+          "10.1.2.25:3000": {}
 ```

@@ -133,7 +133,7 @@ impl Store for RedisStore {
     }
 
     async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError> {
-        let host = route.host();
+        let host = route.key();
         let json = serde_json::to_string(&route).map_err(|e| StoreError::Invalid(e.to_string()))?;
 
         let (revision,): (u64,) = redis::pipe()

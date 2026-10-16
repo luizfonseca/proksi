@@ -1,7 +1,9 @@
+use std::collections::HashSet;
+
 use anyhow::anyhow;
 
 use super::Config;
-use crate::routing::validate::validate_route;
+use crate::routing::validate::{validate_host, validate_route};
 
 /// given a Config struct, validate the values to ensure
 /// That we program won't panic when we try to use them
@@ -37,6 +39,35 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
     // Validate the routes
     for (route_index, route) in config.routes.iter().enumerate() {
         validate_route(route).map_err(|err| anyhow!("routes[{route_index}]: {err}"))?;
+    }
+
+    check_hosts(config)
+}
+
+/// `host` blocks must be valid, and not define a host also in `routes`
+fn check_hosts(config: &Config) -> Result<(), anyhow::Error> {
+    for (name, block) in &config.host {
+        let host = block
+            .to_host(name)
+            .map_err(|err| anyhow!("host \"{name}\": {err}"))?;
+        validate_host(&host).map_err(|err| anyhow!("host \"{name}\": {err}"))?;
+    }
+
+    // Duplicates within `routes` keep being reported (and skipped) when merging
+    let route_hosts = config
+        .routes
+        .iter()
+        .map(|route| route.host.to_lowercase())
+        .collect::<HashSet<_>>();
+    if let Some(name) = config
+        .host
+        .keys()
+        .map(|name| name.to_lowercase())
+        .find(|name| route_hosts.contains(name))
+    {
+        return Err(anyhow!(
+            "host \"{name}\" is defined both in a host block and in routes"
+        ));
     }
 
     Ok(())
@@ -75,5 +106,80 @@ mod tests {
             err.to_string(),
             "routes[1]: upstreams[0].port must be greater than 0"
         );
+    }
+
+    fn config_with_host_block(hcl: &str) -> Config {
+        #[derive(serde::Deserialize)]
+        struct Doc {
+            host: std::collections::BTreeMap<String, crate::config::blocks::HostBlock>,
+        }
+        let doc =
+            <crate::config::hcl::HclFormat as figment::providers::Format>::from_str::<Doc>(hcl)
+                .unwrap();
+        let mut config = Config::default();
+        config.host = doc.host;
+        config
+    }
+
+    #[test]
+    fn test_invalid_host_block() {
+        let config = config_with_host_block(
+            r#"
+host "a.test" {
+  location "/v1" {
+    upstream "10.0.0.1:3000" {}
+  }
+  location "/v1/*" {
+    upstream "10.0.0.1:3000" {}
+  }
+}
+"#,
+        );
+
+        assert_eq!(
+            check_config(&config).unwrap_err().to_string(),
+            "host \"a.test\": location \"/v1/*\": matches the same paths as location \"/v1\""
+        );
+    }
+
+    #[test]
+    fn test_host_block_with_invalid_upstream() {
+        let config = config_with_host_block(
+            "host \"a.test\" {\n  location \"/\" {\n    upstream \"10.0.0.1\" {}\n  }\n}\n",
+        );
+
+        assert_eq!(
+            check_config(&config).unwrap_err().to_string(),
+            "host \"a.test\": location \"/\": upstream \"10.0.0.1\" needs a port (host:port)"
+        );
+    }
+
+    #[test]
+    fn test_host_in_host_block_and_routes() {
+        let mut config = config_with_host_block(
+            "host \"A.test\" {\n  location \"/\" {\n    upstream \"10.0.0.1:3000\" {}\n  }\n}\n",
+        );
+        config.routes = vec![route("a.test", "10.0.0.2")];
+
+        assert_eq!(
+            check_config(&config).unwrap_err().to_string(),
+            "host \"a.test\" is defined both in a host block and in routes"
+        );
+    }
+
+    #[test]
+    fn test_config_hosts_include_host_blocks_and_routes() {
+        let mut config = config_with_host_block(
+            "host \"a.test\" {\n  location \"/\" {\n    upstream \"10.0.0.1:3000\" {}\n  }\n}\n",
+        );
+        config.routes = vec![route("b.test", "10.0.0.2")];
+
+        assert!(check_config(&config).is_ok());
+        let names = config
+            .hosts()
+            .into_iter()
+            .map(|h| h.name)
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["a.test", "b.test"]);
     }
 }

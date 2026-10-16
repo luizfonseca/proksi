@@ -100,22 +100,18 @@ impl ProxyHttp for Router {
 
         // If there's no host matching, returns a 404
         // Routes are stored with lowercase hosts (hosts are case-insensitive)
-        let Some(route_container) = stores::get_route_by_key(&host_without_port.to_lowercase())
+        let Some(host_container) = stores::get_route_by_key(&host_without_port.to_lowercase())
         else {
             session.respond_error(404).await?;
             return Ok(true);
         };
 
-        // Match request pattern based on the URI
+        // The most specific location of the host for the path, or a 404
         let uri = get_uri(session);
-
-        match &route_container.path_matcher.pattern {
-            Some(pattern) if pattern.find(uri.path()).is_none() => {
-                session.respond_error(404).await?;
-                return Ok(true);
-            }
-            _ => {}
-        }
+        let Some(route_container) = host_container.location_for(uri.path()) else {
+            session.respond_error(404).await?;
+            return Ok(true);
+        };
 
         // Middleware phase: request_filterx
         // We are checking to see if the request has already been handled

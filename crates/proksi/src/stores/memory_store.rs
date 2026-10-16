@@ -68,7 +68,7 @@ impl Store for MemoryStore {
 
     async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError> {
         let mut routes = self.routes();
-        routes.routes.insert(route.host(), route);
+        routes.routes.insert(route.key(), route);
         routes.revision += 1;
         Ok(routes.revision)
     }

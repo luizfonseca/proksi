@@ -31,20 +31,15 @@ lets_encrypt {
   email = "test@email.com"
 }
 
-routes = [
- {
-   host = "mywebsite.com"
-   upstreams = [{ ip = "localhost", port = 3000 }]
-   
-   plugins = [{
-     name = "basic_auth"
-     config = {
-       user = "91hdjashd1y2u"
-       pass = "$17238a81hhasbzh1230%"
-     }
-   }]
- }
+host "mywebsite.com" {
+  location "/" {
+    upstream "localhost:3000" {}
 
-]
+    basic_auth {
+      user = "91hdjashd1y2u"
+      pass = "$17238a81hhasbzh1230%"
+    }
+  }
+}
 ```
 {% endcode %}

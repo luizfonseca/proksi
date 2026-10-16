@@ -65,21 +65,9 @@ fn main() -> Result<(), anyhow::Error> {
         proxy_config.logging.error_logs_enabled,
     );
 
-    // Creates a tracing/logging subscriber based on the configuration provided
-    if proxy_config.logging.format == LogFormat::Json {
-        tracing_subscriber::fmt()
-            .json()
-            .with_env_filter(EnvFilter::from_default_env())
-            .with_max_level(&proxy_config.logging.level)
-            .with_writer(appender)
-            .init();
-    } else {
-        tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .with_max_level(&proxy_config.logging.level)
-            .with_ansi(proxy_config.logging.path.is_none())
-            .with_writer(appender)
-            .init();
+    init_tracing(&proxy_config, appender);
+    for warning in config::deprecations::deprecation_warnings(&proxy_config) {
+        tracing::warn!("{warning}");
     }
 
     // In-memory copy of the disk cache
@@ -185,6 +173,25 @@ fn main() -> Result<(), anyhow::Error> {
     );
 
     pingora_server.run_forever();
+}
+
+/// Creates the tracing/logging subscriber based on the configuration provided
+fn init_tracing(proxy_config: &config::Config, appender: services::logger::ProxyLog) {
+    if proxy_config.logging.format == LogFormat::Json {
+        tracing_subscriber::fmt()
+            .json()
+            .with_env_filter(EnvFilter::from_default_env())
+            .with_max_level(&proxy_config.logging.level)
+            .with_writer(appender)
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .with_max_level(&proxy_config.logging.level)
+            .with_ansi(proxy_config.logging.path.is_none())
+            .with_writer(appender)
+            .init();
+    }
 }
 
 /// Connects to the SQL store (sqlite or postgres), if proksi was built with support for it

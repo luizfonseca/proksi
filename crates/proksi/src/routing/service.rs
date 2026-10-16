@@ -61,7 +61,7 @@ impl Service for RoutingService {
 #[cfg(test)]
 mod tests {
     use crate::{
-        routing::{test_utils::route, RouteSnapshot, RouteSourceKind},
+        routing::{test_utils::host, RouteSnapshot, RouteSourceKind},
         stores,
     };
 
@@ -73,14 +73,14 @@ mod tests {
         sender
             .send(RouteSnapshot::new(
                 RouteSourceKind::File,
-                vec![route("service-a.test", "10.0.0.1")],
+                vec![host("service-a.test", "10.0.0.1")],
             ))
             .await
             .unwrap();
         sender
             .send(RouteSnapshot::new(
                 RouteSourceKind::Docker,
-                vec![route("service-b.test", "10.0.0.2")],
+                vec![host("service-b.test", "10.0.0.2")],
             ))
             .await
             .unwrap();

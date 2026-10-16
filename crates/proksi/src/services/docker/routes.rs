@@ -3,7 +3,8 @@
 use std::{borrow::Cow, collections::HashMap, net::ToSocketAddrs};
 
 use crate::config::{
-    Route, RouteHeader, RouteMatcher, RoutePathMatcher, RouteSslCertificate, RouteUpstream,
+    host::Host, Route, RouteHeader, RouteMatcher, RoutePathMatcher, RouteSslCertificate,
+    RouteUpstream,
 };
 
 use super::ProksiDockerRoute;
@@ -58,8 +59,8 @@ pub struct DockerRoutes {
 }
 
 impl DockerRoutes {
-    /// Updates the routes with what was found in docker and returns all known routes
-    pub fn update(&mut self, found: HashMap<String, ProksiDockerRoute>) -> Vec<Route> {
+    /// Updates the routes with what was found in docker and returns all known hosts
+    pub fn update(&mut self, found: HashMap<String, ProksiDockerRoute>) -> Vec<Host> {
         for (host, found_route) in found {
             // Without upstreams (e.g. no reachable network), keep the previous route
             if found_route.upstreams.is_empty() {
@@ -69,7 +70,7 @@ impl DockerRoutes {
                 .insert(host.clone(), docker_route(&host, found_route));
         }
 
-        self.routes.values().cloned().collect()
+        self.routes.values().map(Host::from_route).collect()
     }
 }
 
@@ -77,7 +78,7 @@ impl DockerRoutes {
 mod tests {
     use std::{borrow::Cow, collections::HashMap};
 
-    use crate::config::{RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
+    use crate::config::{host::Host, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin};
 
     use super::{docker_route, DockerRoutes, ProksiDockerRoute};
 
@@ -85,13 +86,14 @@ mod tests {
         ProksiDockerRoute::new(upstreams.iter().map(ToString::to_string).collect(), vec![])
     }
 
-    fn hosts_and_upstreams(routes: &[crate::config::Route]) -> Vec<(String, Vec<String>)> {
-        let mut result = routes
+    fn hosts_and_upstreams(hosts: &[crate::config::host::Host]) -> Vec<(String, Vec<String>)> {
+        let mut result = hosts
             .iter()
-            .map(|r| {
+            .map(|h| {
                 (
-                    r.host.to_string(),
-                    r.upstreams
+                    h.name.clone(),
+                    h.locations[0]
+                        .upstreams
                         .iter()
                         .map(|u| format!("{}:{}", u.ip, u.port))
                         .collect(),
@@ -123,7 +125,7 @@ mod tests {
 
         assert_eq!(route.host, "app.test");
         assert_eq!(
-            hosts_and_upstreams(&[route.clone()]),
+            hosts_and_upstreams(&[Host::from_route(&route)]),
             vec![(
                 "app.test".to_string(),
                 vec!["10.0.0.1:3000".to_string(), "10.0.0.2:3000".to_string()]

@@ -21,24 +21,21 @@ Here's an example of a route with a cache configuration:
 
 ```hcl
 # proksi.hcl file
-routes = [
-  {
-    host = "example.com",
+# You might need to edit your /etc/hosts file here.
+host "example.com" {
+  location "/" {
     cache {
       enabled = true
       cache_type = "memcache"
       expires_in_secs = 360
       stale_if_error_secs = 60
       stale_while_revalidate_secs = 60
-      path = "/tmp
+      path = "/tmp"
     }
 
-    upstreams = [{
-      ip =  "10.0.1.3" 
-      port =  "3000,
-    }]
+    upstream "10.0.1.3:3000" {}
   }
-]
+}
 ```
 
 ## Memory limit (disk cache)
