@@ -45,6 +45,8 @@ pub struct RouterContext {
     pub route_container: Option<Arc<RouteStoreContainer>>,
     pub upstream: RouteUpstream,
     pub extensions: HashMap<Cow<'static, str>, String>,
+    /// Bytes of the request body proxied so far
+    pub request_body_bytes: u64,
 
     pub timings: RouterTimings,
 }
@@ -65,6 +67,7 @@ impl ProxyHttp for Router {
             route_container: None,
             upstream: RouteUpstream::default(),
             extensions: HashMap::with_capacity(2),
+            request_body_bytes: 0,
 
             timings: RouterTimings {
                 request_filter_start: std::time::Instant::now(),
@@ -140,6 +143,20 @@ impl ProxyHttp for Router {
         ctx.route_container = Some(route_container.clone());
 
         Ok(false)
+    }
+
+    /// Each part of the request body, as it's proxied to the upstream
+    async fn request_body_filter(
+        &self,
+        _session: &mut Session,
+        body: &mut Option<bytes::Bytes>,
+        _end_of_stream: bool,
+        ctx: &mut Self::CTX,
+    ) -> pingora::Result<()> {
+        match ctx.route_container.clone() {
+            Some(location) => location.blocks.request_body(body.as_ref(), ctx),
+            None => Ok(()),
+        }
     }
 
     /// Define where the proxy should send the request to.

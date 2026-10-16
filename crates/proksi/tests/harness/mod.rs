@@ -389,9 +389,14 @@ paths {{
 
     /// Plain HTTP request to proksi on `port`, returning the raw response
     pub async fn get_http_on(&self, port: u16, host: &str, path: &str) -> std::io::Result<String> {
-        let mut stream = TcpStream::connect(("127.0.0.1", port)).await?;
         let request = format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
-        stream.write_all(request.as_bytes()).await?;
+        self.raw_http_on(port, request.as_bytes()).await
+    }
+
+    /// Sends `request` as is to proksi on `port` (plain HTTP), returning the raw response
+    pub async fn raw_http_on(&self, port: u16, request: &[u8]) -> std::io::Result<String> {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).await?;
+        stream.write_all(request).await?;
 
         let mut response = String::new();
         tokio::time::timeout(
@@ -543,6 +548,25 @@ impl HttpUpstream {
     }
 }
 
+/// Reads a chunked request body, returning its length (`None` if the connection closed)
+async fn read_chunked_body(reader: &mut BufReader<TcpStream>) -> Option<usize> {
+    let mut length = 0;
+    loop {
+        let mut size = String::new();
+        if reader.read_line(&mut size).await.ok()? == 0 {
+            return None;
+        }
+        let size = usize::from_str_radix(size.trim(), 16).ok()?;
+        // The chunk and its trailing CRLF (the last chunk is only a CRLF)
+        let mut chunk = vec![0; size + 2];
+        reader.read_exact(&mut chunk).await.ok()?;
+        if size == 0 {
+            return Some(length);
+        }
+        length += size;
+    }
+}
+
 async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<String, u32>>>) {
     let mut reader = BufReader::new(stream);
 
@@ -558,6 +582,7 @@ async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<Strin
 
         let mut headers = serde_json::Map::new();
         let mut content_length = 0;
+        let mut chunked = false;
         loop {
             let mut line = String::new();
             if reader.read_line(&mut line).await.unwrap_or(0) == 0 {
@@ -573,16 +598,13 @@ async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<Strin
                 if name == "content-length" {
                     content_length = value.parse().unwrap_or(0);
                 }
+                if name == "transfer-encoding" && value.contains("chunked") {
+                    chunked = true;
+                }
                 headers.insert(name, value.into());
             }
         }
-        if content_length > 0 {
-            let mut body = vec![0; content_length];
-            if reader.read_exact(&mut body).await.is_err() {
-                return;
-            }
-        }
-
+        // Counted once the headers arrive, so requests ended while sending their body count too
         let hit_count = {
             let mut hits = hits.lock().unwrap();
             let count = hits.entry(path.clone()).or_default();
@@ -590,11 +612,25 @@ async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<Strin
             *count
         };
 
+        let body_length = if chunked {
+            let Some(length) = read_chunked_body(&mut reader).await else {
+                return;
+            };
+            length
+        } else {
+            let mut body = vec![0; content_length];
+            if reader.read_exact(&mut body).await.is_err() {
+                return;
+            }
+            content_length
+        };
+
         let body = serde_json::json!({
             "method": method,
             "path": path,
             "hits": hit_count,
             "headers": headers,
+            "body_length": body_length,
         })
         .to_string();
 

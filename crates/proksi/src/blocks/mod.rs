@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use bytes::Bytes;
 use pingora::{
     http::{RequestHeader, ResponseHeader},
     proxy::Session,
@@ -16,6 +17,7 @@ use pingora::{
 use crate::{config::host::Location, proxy_server::https_proxy::RouterContext};
 
 use basic_auth::BasicAuth;
+use body_limit::BodyLimit;
 use cache::Cache;
 use headers::Headers;
 use oauth2::Oauth2;
@@ -24,6 +26,7 @@ use rate_limit::RateLimit;
 use request_id::RequestId;
 
 mod basic_auth;
+mod body_limit;
 mod cache;
 mod headers;
 mod oauth2;
@@ -39,6 +42,11 @@ pub trait Middleware: Send + Sync {
     /// Before the request is proxied. `true` when the block answered the request, which ends it.
     async fn request(&self, _session: &mut Session, _ctx: &mut RouterContext) -> Result<bool> {
         Ok(false)
+    }
+
+    /// Each part of the request body, as it's proxied. An error ends the request.
+    fn request_body(&self, _body: Option<&Bytes>, _ctx: &mut RouterContext) -> pingora::Result<()> {
+        Ok(())
     }
 
     /// Changes the request sent to the upstream
@@ -77,6 +85,7 @@ pub trait Middleware: Send + Sync {
 pub enum Kind {
     RequestId,
     RateLimit,
+    BodyLimit,
     BasicAuth,
     Oauth2,
     Headers,
@@ -88,6 +97,7 @@ impl Kind {
         match self {
             Kind::RequestId => "request_id",
             Kind::RateLimit => "rate_limit",
+            Kind::BodyLimit => "body_limit",
             Kind::BasicAuth => "basic_auth",
             Kind::Oauth2 => "oauth2",
             Kind::Headers => "headers",
@@ -99,6 +109,7 @@ impl Kind {
     pub fn default_priority(self) -> u8 {
         match self {
             Kind::RequestId | Kind::RateLimit => 0,
+            Kind::BodyLimit => 10,
             Kind::BasicAuth | Kind::Oauth2 => 20,
             Kind::Headers => 50,
             Kind::Cache => 60,
@@ -132,6 +143,7 @@ impl Blocks {
                     }),
                 ),
                 "rate_limit" => (Kind::RateLimit, Arc::new(RateLimit::new(plugin)?)),
+                "body_limit" => (Kind::BodyLimit, Arc::new(BodyLimit::new(plugin)?)),
                 "basic_auth" => (Kind::BasicAuth, Arc::new(BasicAuth::new(plugin)?)),
                 "oauth2" => (Kind::Oauth2, Arc::new(Oauth2::new(plugin)?)),
                 // Other plugins of `routes = [...]` and docker labels are ignored, as before
@@ -178,6 +190,17 @@ impl Blocks {
             }
         }
         false
+    }
+
+    /// Runs the request body stage, until a block ends the request
+    pub fn request_body(
+        &self,
+        body: Option<&Bytes>,
+        ctx: &mut RouterContext,
+    ) -> pingora::Result<()> {
+        self.0
+            .iter()
+            .try_for_each(|block| block.middleware.request_body(body, ctx))
     }
 
     pub async fn upstream_request(
@@ -292,6 +315,23 @@ mod tests {
         assert_eq!(
             order(&blocks),
             vec![("request_id", 0), ("rate_limit", 0), ("basic_auth", 20)]
+        );
+    }
+
+    #[test]
+    fn test_body_limit_runs_before_authentication() {
+        let blocks = Blocks::build(&location(serde_json::json!({
+            "plugins": [
+                basic_auth(),
+                { "name": "body_limit", "config": { "max": "1MiB" } },
+                { "name": "rate_limit", "config": { "requests": 10, "per": "1m" } },
+            ],
+        })))
+        .unwrap();
+
+        assert_eq!(
+            order(&blocks),
+            vec![("rate_limit", 0), ("body_limit", 10), ("basic_auth", 20)]
         );
     }
 
