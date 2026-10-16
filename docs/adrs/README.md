@@ -7,3 +7,4 @@ Larger changes to how proksi works are recorded here, with the context and reaso
 | [0001](adrs/0001-route-sources.md) | Route sources and store-backed routes | accepted |
 | [0002](adrs/0002-certificate-issuance.md) | Coordinated certificate issuance | accepted |
 | [0003](adrs/0003-configuration-model.md) | Hosts, locations and TCP in the configuration | accepted |
+| [0005](adrs/0005-kubernetes-ingress.md) | Kubernetes ingress controller | accepted |

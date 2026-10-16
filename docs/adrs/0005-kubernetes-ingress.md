@@ -1,0 +1,99 @@
+# ADR 0005: Kubernetes ingress controller
+
+- Status: accepted
+- Date: 2026-10-16
+- Related: [#381](https://github.com/luizfonseca/proksi/issues/381) (Kubernetes ingress controller), [ADR 0001](adrs/0001-route-sources.md) (route sources), [ADR 0002](adrs/0002-certificate-issuance.md) (certificates across replicas), [ADR 0003](adrs/0003-configuration-model.md) (hosts, locations and building blocks)
+
+## Context
+
+In Kubernetes, routing to services is declared with `Ingress` resources, and an ingress controller turns them into a running proxy. Proksi can only run there today as a plain container with its own configuration, which duplicates what the `Ingress` resources already say and doesn't follow pods as they come and go.
+
+ADR 0001 planned for this: Kubernetes is one more route source, with a priority between the store and docker. ADR 0003's model (hosts, locations, building blocks, upstreams) is what each `Ingress` turns into.
+
+## Decision
+
+### `Ingress` v1, with an `IngressClass`
+
+Proksi watches `networking.k8s.io/v1` `Ingress` resources of its class, and the `Service`s, `EndpointSlice`s and `Secret`s they reference. Everything it builds from them is one route snapshot from the **kubernetes source**, sent whenever any of them changes.
+
+```hcl
+kubernetes {
+  enabled         = true
+  ingress_class   = "proksi"         # default
+  namespaces      = []               # all namespaces (default)
+  publish_service = "proksi/proksi"  # whose address is written to each Ingress' status
+}
+```
+
+- An `Ingress` is proksi's when `spec.ingressClassName` is `ingress_class`, or when it has no class and the `IngressClass` named `ingress_class` is marked as the cluster's default.
+- The `IngressClass` uses the controller name `proksi.info/ingress-controller`.
+- Proksi connects with its pod's service account (in-cluster), or with a kubeconfig outside the cluster (for development).
+- Gateway API resources (`HTTPRoute`, `TLSRoute`, `TCPRoute`) are not part of this decision; they map to the same model and can be added as another source.
+
+### From `Ingress` to hosts
+
+| `Ingress` | Proksi |
+| --- | --- |
+| `rules[].host` | A host. Rules of several `Ingress`es for the same host are merged into one host, as long as their paths don't collide |
+| `rules[].http.paths[]` | A location of that host. `pathType: Exact` is an exact location, `Prefix` matches the path and everything under it (`/api` matches `/api` and `/api/...`), `ImplementationSpecific` uses proksi's own patterns (`/users/:id`, `/static/*`) |
+| `backend.service` (`name`, `port`) | The location's upstreams: the ready endpoints of the service's port, from its `EndpointSlice`s |
+| `defaultBackend` | A location `/` of host `*`, for requests no rule matches |
+| `tls[].hosts`, `tls[].secretName` | These hosts use the certificate in the `Secret` (`tls.crt`, `tls.key`) |
+| A rule without a `host` | Host `*` |
+
+- **Upstreams are pods, not the service's cluster IP.** Load balancing, weights and health checks then work per pod, and a pod that stops being ready is removed without waiting for a health check. With the annotation `proksi.info/upstream: service`, the service's cluster IP is used instead (one upstream, balanced by Kubernetes).
+- **Certificates:** hosts listed in `tls` use their `Secret`, reloaded when it changes. Other hosts get Let's Encrypt certificates as configured (`lets_encrypt`), or `tls = false` with the annotation `proksi.info/tls: "false"`.
+- **Building blocks** come from the annotation `proksi.info/blocks`, written like the inside of a `location` block, and apply to every path of the `Ingress`:
+
+  ```yaml
+  metadata:
+    annotations:
+      proksi.info/blocks: |
+        rate_limit { requests = 100  per = "1m" }
+        body_limit { max = "10MiB" }
+        request_id {}
+  ```
+
+  `basic_auth` and `oauth2` read their secrets from a `Secret` in the same namespace (`proksi.info/auth-secret: <name>`), never from the annotation itself.
+- **Invalid `Ingress`es are skipped**, with the reason logged and recorded as a Kubernetes `Event` on the `Ingress` (and in the admin API's status, ADR 0004). The other `Ingress`es are still applied.
+
+### Status
+
+Proksi writes the addresses of `publish_service` (its load balancer IPs or hostnames, or its cluster IP) to the `status.loadBalancer` of each `Ingress` it serves, so tools waiting for an address (`kubectl wait`, external-dns, Argo CD health checks) work. With several replicas, the replica holding the lease `kubernetes:status` writes it (ADR 0002's leases).
+
+### Running it
+
+`deploy/kubernetes/` has manifests (and a Helm chart) for:
+
+- A `Deployment` (or `DaemonSet`), its `ServiceAccount`, and a `ClusterRole` that can read `Ingress`es, `IngressClass`es, `Service`s, `EndpointSlice`s and `Secret`s, write `Ingress` status, and create `Event`s.
+- A `Service` of type `LoadBalancer` for ports 80 and 443, and the `IngressClass`.
+
+With more than one replica, the store must be shared (redis or postgres): certificates are then ordered once (ADR 0002), and every replica serves them. The memory store with several replicas is rejected when the kubernetes source is enabled.
+
+`tcp` blocks, the admin API and other process settings keep coming from proksi's configuration file (a `ConfigMap`).
+
+## Consequences
+
+- An `Ingress` with class `proksi` is served without writing proksi configuration, and follows its pods as they scale.
+- Hosts can still come from the configuration file, docker labels or the store; ADR 0001's priorities decide when the same host is defined twice.
+- Proksi gains a Kubernetes client dependency (`kube`), behind a cargo feature that's enabled in the release builds and the Docker image.
+- Watching every `Secret` of a namespace needs `list`/`watch` on secrets. Proksi only reads the ones `Ingress`es reference, but the role allows all of them in the namespaces it watches; `namespaces` limits that.
+
+### Testing
+
+- Building hosts from `Ingress`es, `Service`s, `EndpointSlice`s and `Secret`s is a pure function, tested with Kubernetes objects written in the tests: paths and path types, merging rules of several `Ingress`es, default backends, ready and not-ready endpoints, named and numbered ports, TLS secrets, annotations, invalid objects.
+- An end-to-end test runs proksi against a [kind](https://kind.sigs.k8s.io/) cluster in CI: an `Ingress` is created, served, changed (a deployment scaled, a path added) and deleted.
+
+### Implementation
+
+1. The kubernetes source: watching `Ingress`es, `Service`s and `EndpointSlice`s, and hosts with locations and pod upstreams.
+2. TLS secrets, `proksi.info/tls`, `proksi.info/upstream`.
+3. `proksi.info/blocks` and auth secrets.
+4. `status.loadBalancer` and `Event`s.
+5. Manifests, Helm chart, and the kind end-to-end test.
+
+### Not part of this decision
+
+- Gateway API.
+- Custom resources for proksi's own configuration (`tcp` blocks, process settings).
+- Running proksi as a sidecar or service mesh.
