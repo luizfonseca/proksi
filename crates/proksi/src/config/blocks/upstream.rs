@@ -45,6 +45,7 @@ impl UpstreamBlock {
                         .collect(),
                 ),
                 remove: None,
+                priority: None,
             }),
         })
     }

@@ -41,6 +41,7 @@ pub fn docker_route(host: &str, docker_route: ProksiDockerRoute) -> Route {
         headers: Some(RouteHeader {
             add: Some(docker_route.host_header_add.unwrap_or_default()),
             remove: Some(docker_route.host_header_remove.unwrap_or_default()),
+            priority: None,
         }),
         plugins: Some(docker_route.plugins.unwrap_or_default()),
         ssl_certificate: Some(RouteSslCertificate {

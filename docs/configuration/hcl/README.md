@@ -123,6 +123,40 @@ host "*" {
 | `cache { ... }` | Response caching, as in [caching](use-cases/cache.md). |
 | `request_id { }`, `basic_auth { ... }`, `oauth2 { ... }` | Plugins ([request id](plugins/request-id.md), [basic auth](plugins/basic-auth.md), [OAuth2](plugins/oauth2.md)), with the same settings as their `config` in `plugins = [...]`. |
 
+**Order of blocks**
+
+Everything in a location besides upstreams is a building block: plugins, `headers` and `cache`. Blocks run by **priority**, from `0` (first) to `100` (last), and a block that answers the request (e.g. a `401`) ends it. Every block has a default, and any block can change it with `priority = <0-100>`:
+
+| Block | Default priority |
+| --- | --- |
+| `request_id` | 0 |
+| `basic_auth`, `oauth2` | 20 |
+| `headers` | 50 |
+| `cache` | 60 |
+
+```hcl
+location "/" {
+  upstream "app:8080" {}
+
+  basic_auth {
+    user = env("BASIC_AUTH_USER")
+    pass = env("BASIC_AUTH_PASS")
+  }
+
+  oauth2 {
+    provider      = "github"
+    client_id     = env("OAUTH_CLIENT_ID")
+    client_secret = env("OAUTH_CLIENT_SECRET")
+    jwt_secret    = env("OAUTH_JWT_SECRET")
+    priority      = 10 # before basic_auth
+  }
+}
+```
+
+- Blocks with the same priority run in the order of the table.
+- Responses go through the blocks in reverse order: the first block to see a request is the last to see its response.
+- Invalid settings (e.g. `basic_auth` without `pass`) are rejected when the configuration is loaded.
+
 Unknown attributes are rejected, so a typo fails when the configuration is loaded instead of being ignored. So are two locations matching the same paths (e.g. `/api` and `/api/*`).
 
 To keep hosts in separate files, see [`import`](configuration/hcl/functions.md#import).

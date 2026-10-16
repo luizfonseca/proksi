@@ -9,6 +9,8 @@ use crate::config::{RouteHeader, RouteHeaderAdd, RouteHeaderRemove};
 #[serde(deny_unknown_fields)]
 pub struct HeadersBlock {
     pub response: Option<ResponseHeadersBlock>,
+    /// When the headers are changed, among the blocks of a location (0-100)
+    pub priority: Option<u8>,
 }
 
 /// `response { ... }`: headers changed in responses
@@ -21,8 +23,14 @@ pub struct ResponseHeadersBlock {
     pub remove: Vec<String>,
 }
 
-/// Response headers of the host, then of the location (so a location can override them)
+/// Response headers of the host, then of the location (so a location can override them).
+/// The priority is the location's, otherwise the host's.
 pub(super) fn response_headers(blocks: [Option<&HeadersBlock>; 2]) -> RouteHeader {
+    let priority = blocks
+        .iter()
+        .rev()
+        .flatten()
+        .find_map(|headers| headers.priority);
     let mut add = vec![];
     let mut remove = vec![];
     for response in blocks
@@ -38,6 +46,7 @@ pub(super) fn response_headers(blocks: [Option<&HeadersBlock>; 2]) -> RouteHeade
     RouteHeader {
         add: Some(add),
         remove: Some(remove),
+        priority,
     }
 }
 
@@ -63,7 +72,27 @@ mod tests {
                     .collect::<BTreeMap<_, _>>(),
                 remove: remove.iter().map(ToString::to_string).collect(),
             }),
+            priority: None,
         }
+    }
+
+    #[test]
+    fn test_priority_is_the_locations_then_the_hosts() {
+        let host = HeadersBlock {
+            priority: Some(40),
+            ..block(&[], &[])
+        };
+        let location = HeadersBlock {
+            priority: Some(10),
+            ..block(&[], &[])
+        };
+
+        assert_eq!(
+            response_headers([Some(&host), Some(&location)]).priority,
+            Some(10)
+        );
+        assert_eq!(response_headers([Some(&host), None]).priority, Some(40));
+        assert_eq!(response_headers([None, None]).priority, None);
     }
 
     #[test]

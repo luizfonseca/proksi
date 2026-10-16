@@ -2,12 +2,11 @@ use std::{
     collections::BTreeSet,
     future::Future,
     net::ToSocketAddrs,
-    str::FromStr,
     task::{Context, Waker},
     time::Duration,
 };
 
-use http::{Extensions, HeaderName, HeaderValue};
+use http::Extensions;
 use pingora::{
     lb::{
         discovery::Static, health_check::TcpHealthCheck, selection::RoundRobin, Backend, Backends,
@@ -17,14 +16,12 @@ use pingora::{
 };
 
 use crate::{
+    blocks::Blocks,
     config::{host::Location, RouteUpstream},
     stores::routes::RouteStoreContainer,
 };
 
-/// Plugins that can be enabled for a location
-pub(super) const SUPPORTED_PLUGINS: [&str; 3] = ["oauth2", "request_id", "basic_auth"];
-
-/// Builds a location's container: load balancer (with health checks), headers, plugins, cache
+/// Builds a location's container: load balancer (with health checks) and building blocks
 pub(super) fn build_location_container(
     host: &str,
     location: &Location,
@@ -49,32 +46,13 @@ pub(super) fn build_location_container(
     container.set_upstreams(location.upstreams.clone());
     container.cache.clone_from(&location.cache);
 
-    if let Some(headers) = &location.headers {
-        container.host_header_add = headers
-            .add
-            .iter()
-            .flatten()
-            .filter_map(|header| {
-                let name = HeaderName::from_str(&header.name).ok()?;
-                let value = HeaderValue::from_str(&header.value).ok()?;
-                Some((name, value))
-            })
-            .collect();
-        container.host_header_remove = headers
-            .remove
-            .iter()
-            .flatten()
-            .map(|header| header.name.to_string())
-            .collect();
-    }
-
-    for plugin in location.plugins.iter().flatten() {
-        if SUPPORTED_PLUGINS.contains(&plugin.name.as_ref()) {
-            container
-                .plugins
-                .insert(plugin.name.to_string(), plugin.clone());
+    container.blocks = match Blocks::build(location) {
+        Ok(blocks) => blocks,
+        Err(err) => {
+            tracing::warn!("invalid location {} of host {host}: {err}", location.path);
+            return None;
         }
-    }
+    };
 
     Some(container)
 }
@@ -107,7 +85,7 @@ fn load_balancer(upstreams: &[RouteUpstream]) -> std::io::Result<LoadBalancer<Ro
 
 #[cfg(test)]
 mod tests {
-    use crate::config::host::Location;
+    use crate::{blocks::Kind, config::host::Location};
 
     use super::build_location_container;
 
@@ -130,12 +108,10 @@ mod tests {
 
         assert_eq!(container.load_balancer.backends().get_backend().len(), 2);
         assert_eq!(container.upstreams.len(), 2);
-        assert_eq!(container.host_header_add.len(), 1);
-        assert_eq!(container.host_header_add[0].0.as_str(), "x-added");
-        assert_eq!(container.host_header_remove, vec!["server".to_string()]);
+        // The unknown plugin is ignored
         assert_eq!(
-            container.plugins.keys().collect::<Vec<_>>(),
-            vec!["request_id"]
+            container.blocks.iter().map(|b| b.kind).collect::<Vec<_>>(),
+            vec![Kind::RequestId, Kind::Headers]
         );
     }
 

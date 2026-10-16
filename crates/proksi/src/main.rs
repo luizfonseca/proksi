@@ -14,6 +14,7 @@ use pingora::server::configuration::Opt;
 
 use services::{logger::ProxyLoggerReceiver, BackgroundFunctionService};
 
+mod blocks;
 mod cache;
 mod channel;
 mod config;

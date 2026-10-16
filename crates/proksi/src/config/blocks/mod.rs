@@ -152,6 +152,7 @@ host:
             remove: Some(vec![RouteHeaderRemove {
                 name: Cow::Owned("Server".to_string()),
             }]),
+            priority: None,
         })
     }
 
@@ -181,6 +182,7 @@ host:
                         headers: Some(RouteHeader {
                             add: Some(vec![header("x-forwarded-by", "proksi")]),
                             remove: None,
+                            priority: None,
                         }),
                     }],
                     headers: host_headers(&[header("x-location", "default")]),

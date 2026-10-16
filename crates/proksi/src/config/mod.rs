@@ -235,6 +235,10 @@ pub struct RouteHeader {
 
     /// The value of the header
     pub remove: Option<Vec<RouteHeaderRemove>>,
+
+    /// When response headers are changed, among the blocks of a location (0-100)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<u8>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -387,6 +391,10 @@ pub struct RouteCache {
 
     #[serde(default = "default_cache_path")]
     pub path: PathBuf,
+
+    /// When the cache is enabled for a request, among the blocks of a location (0-100)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<u8>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
