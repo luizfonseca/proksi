@@ -171,6 +171,13 @@ pub async fn leases_contract(store: &dyn Store) {
     store.unlock("acme:a.test", "r1").await.unwrap();
     assert!(store.try_lock("acme:a.test", "r2", minute).await.unwrap());
 
+    // Who holds a lease
+    assert_eq!(
+        store.lock_holder("acme:a.test").await.unwrap().as_deref(),
+        Some("r2")
+    );
+    assert_eq!(store.lock_holder("acme:missing.test").await.unwrap(), None);
+
     // An expired lease can be taken by someone else
     assert!(store
         .try_lock("acme:c.test", "r1", Duration::from_secs(1))
@@ -178,6 +185,8 @@ pub async fn leases_contract(store: &dyn Store) {
         .unwrap());
     assert!(!store.try_lock("acme:c.test", "r2", minute).await.unwrap());
     tokio::time::sleep(Duration::from_millis(2100)).await;
+    // Expired leases have no holder
+    assert_eq!(store.lock_holder("acme:c.test").await.unwrap(), None);
     assert!(store.try_lock("acme:c.test", "r2", minute).await.unwrap());
 }
 

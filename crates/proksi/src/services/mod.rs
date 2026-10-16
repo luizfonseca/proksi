@@ -75,9 +75,10 @@ impl pingora::services::Service for BackgroundFunctionService {
         let mut config_server =
             FileWatcherService::new(self.config.clone(), self.route_sender.clone());
 
-        // Routes from the store, shared by every replica
-        let store_source =
-            (!matches!(self.config.store.store_type, StoreType::Memory)).then(|| {
+        // Routes from the store, shared by every replica (and written by the admin API, which
+        // works with the memory store too)
+        let shared = !matches!(self.config.store.store_type, StoreType::Memory);
+        let store_source = (shared || self.config.admin.is_some()).then(|| {
                 StoreSource::new(
                     stores::global::get_store().clone(),
                     self.route_sender.clone(),

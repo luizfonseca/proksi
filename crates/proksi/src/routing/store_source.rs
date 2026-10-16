@@ -24,6 +24,14 @@ pub struct StoreSource {
     certificates_revision: Option<u64>,
 }
 
+/// Wakes the store sync up, e.g. after the admin API wrote a route, so this instance applies it
+/// without waiting for the next interval
+static SYNC_NOW: tokio::sync::Notify = tokio::sync::Notify::const_new();
+
+pub fn sync_now() {
+    SYNC_NOW.notify_one();
+}
+
 /// A replica is considered gone after missing this many syncs
 const HEARTBEAT_INTERVALS: u32 = 3;
 
@@ -113,12 +121,15 @@ impl StoreSource {
         })
     }
 
-    /// Syncs every interval, forever
+    /// Syncs every interval (or right away, see `sync_now`), forever
     pub async fn run(mut self) {
         tracing::info!("syncing routes from the store every {:?}", self.interval);
         let mut interval = tokio::time::interval(self.interval);
         loop {
-            interval.tick().await;
+            tokio::select! {
+                _ = interval.tick() => {}
+                () = SYNC_NOW.notified() => {}
+            }
             match self.sync_once().await {
                 Ok(Some(revision)) => {
                     tracing::info!("applied routes from the store (revision {revision})");
@@ -236,6 +247,10 @@ mod tests {
         async fn unlock(&self, name: &str, holder: &str) -> Result<(), StoreError> {
             self.check()?;
             self.inner.unlock(name, holder).await
+        }
+        async fn lock_holder(&self, name: &str) -> Result<Option<String>, StoreError> {
+            self.check()?;
+            self.inner.lock_holder(name).await
         }
         async fn certificates_revision(&self) -> Result<u64, StoreError> {
             self.check()?;

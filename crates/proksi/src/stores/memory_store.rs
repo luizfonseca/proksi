@@ -133,6 +133,14 @@ impl Store for MemoryStore {
         Ok(())
     }
 
+    async fn lock_holder(&self, name: &str) -> Result<Option<String>, StoreError> {
+        let leases = self.leases.lock().unwrap_or_else(PoisonError::into_inner);
+        Ok(leases
+            .get(name)
+            .filter(|(_, expires_at)| *expires_at > Instant::now())
+            .map(|(holder, _)| holder.clone()))
+    }
+
     async fn certificates_revision(&self) -> Result<u64, StoreError> {
         Ok(self.certificates_revision.load(Ordering::SeqCst))
     }

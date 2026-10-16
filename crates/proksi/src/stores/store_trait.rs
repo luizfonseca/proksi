@@ -39,6 +39,9 @@ pub trait Store: Send + Sync + 'static {
     /// Releases the lease `name`, if `holder` still holds it
     async fn unlock(&self, name: &str, holder: &str) -> Result<(), StoreError>;
 
+    /// Who holds the lease `name`, if it's held
+    async fn lock_holder(&self, name: &str) -> Result<Option<String>, StoreError>;
+
     /// Revision of the certificates, incremented by every certificate written
     async fn certificates_revision(&self) -> Result<u64, StoreError>;
 

@@ -123,4 +123,48 @@ curl -N -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" "http://127.0.0.1:7555/ap
 
 The stats come from the same metrics, sampled every second and kept for 5 minutes, so they cost nothing more per request. Percentiles are interpolated within the histogram buckets (as Prometheus' `histogram_quantile` does), and `null` when there were no requests. Each Proksi instance has its own stats; to combine several, use Prometheus.
 
-See [ADR 0004](adrs/0004-admin-api-and-metrics.md) for what comes next: status, certificates and routes.
+## Status, hosts and certificates
+
+| Endpoint | |
+| --- | --- |
+| `GET /api/v1/status` | Version, replica id, uptime, the addresses Proksi listens on, the store (its revision, the revision this instance applied, and the instances reporting to it), and hosts by source, with conflicts and invalid routes |
+| `GET /api/v1/hosts` | Every host being served: its source (`file`, `docker`, `kubernetes`, `store`), TLS, locations, the plugins of each location (by name, without their settings, which can hold secrets), and upstreams with their weight and health |
+| `GET /api/v1/certificates` | Every certificate: domain, issuer, whether it's self-signed, when it expires (`expires_at`, `days_left`), and which instance holds its lease while it's being ordered or renewed |
+
+With several instances sharing a store, `status` shows each instance and the routes revision it applied, so a change can be confirmed as applied everywhere.
+
+## Routes
+
+Hosts can be added, changed and removed through the API. They're written to the [store](configuration/redis.md), so every Proksi instance sharing it applies them, and the instance that received the request applies them right away:
+
+| Endpoint | |
+| --- | --- |
+| `GET /api/v1/routes` | The hosts in the store, with the store's revision |
+| `PUT /api/v1/routes/<host>` | Adds or replaces a host. Returns the new revision |
+| `DELETE /api/v1/routes/<host>` | Removes a host. Returns the revision |
+
+The body of a `PUT` is either the body of a `host` block, as in the configuration file (with `Content-Type: text/hcl`):
+
+```bash
+curl -X PUT -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" -H "Content-Type: text/hcl" \
+  --data-binary @- http://127.0.0.1:7555/api/v1/routes/api.example.com <<'HCL'
+location "/" {
+  rate_limit {
+    requests = 100
+    per      = "1m"
+  }
+  upstream "10.0.0.1:3000" {}
+}
+HCL
+```
+
+or JSON, in the format hosts are stored in (`GET /api/v1/routes` returns it):
+
+```json
+{ "locations": [{ "path": "/", "upstreams": [{ "ip": "10.0.0.1", "port": 3000 }] }] }
+```
+
+- Hosts are validated like hosts from any other source; an invalid one is refused (`400`) with the reason.
+- `listen` can't be set: Proksi opens its ports when it starts, so hosts from the store are served on the default addresses.
+- A host in the store takes priority over the same host in the configuration file or docker labels. Removing it from the store brings the other one back.
+- With the memory store (the default), routes written through the API live as long as the Proksi process.

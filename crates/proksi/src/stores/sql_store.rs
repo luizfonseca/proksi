@@ -364,6 +364,25 @@ impl Store for SqlStore {
         .await
     }
 
+    async fn lock_holder(&self, name: &str) -> Result<Option<String>, StoreError> {
+        let pool = self.pool.clone();
+        let name = name.to_string();
+        let query = format!(
+            "SELECT holder FROM proksi_locks WHERE name = $1 AND expires_at > {now}",
+            now = self.now_ms
+        );
+        self.run(async move {
+            let row = sqlx::query(sqlx::AssertSqlSafe(query))
+                .bind(name)
+                .fetch_optional(&pool)
+                .await
+                .map_err(unavailable)?;
+            row.map(|row| row.try_get::<String, _>("holder").map_err(invalid))
+                .transpose()
+        })
+        .await
+    }
+
     async fn certificates_revision(&self) -> Result<u64, StoreError> {
         let pool = self.pool.clone();
         self.run(async move {

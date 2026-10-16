@@ -31,6 +31,7 @@ pub(super) fn build_location_container(
     load_balancer.health_check_frequency = Some(Duration::from_secs(15));
 
     let mut container = RouteStoreContainer::new(load_balancer);
+    container.path.clone_from(&location.path);
     container.set_upstreams(location.upstreams.clone());
     container.cache.clone_from(&location.cache);
     let upstreams = location
