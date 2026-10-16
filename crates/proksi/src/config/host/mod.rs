@@ -15,6 +15,10 @@ pub use upstream_address::parse_upstream_address;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Host {
     pub name: String,
+    /// Addresses the host is served on (`ip:port`). Empty: the default HTTPS address
+    /// (`server.https_address`), or the default HTTP address with TLS disabled.
+    #[serde(default)]
+    pub listen: Vec<String>,
     #[serde(default)]
     pub tls: HostTls,
     #[serde(default)]
@@ -62,5 +66,7 @@ mod tests {
 
         let host: Host = serde_json::from_value(serde_json::json!({ "name": "a.test" })).unwrap();
         assert!(host.tls.enabled);
+        // Without addresses, the host is served on the default ones
+        assert!(host.listen.is_empty());
     }
 }

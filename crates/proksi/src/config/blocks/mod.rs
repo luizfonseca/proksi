@@ -20,6 +20,9 @@ pub use tls::TlsSetting;
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HostBlock {
+    /// Addresses the host is served on (`ip:port`), instead of the default ones
+    #[serde(default)]
+    pub listen: Vec<String>,
     /// `tls = false` (plain HTTP) or `tls { ... }`
     pub tls: Option<TlsSetting>,
     /// Headers for every location of the host
@@ -43,6 +46,7 @@ impl HostBlock {
 
         Ok(Host {
             name: name.to_string(),
+            listen: self.listen.clone(),
             tls: self
                 .tls
                 .as_ref()
@@ -154,6 +158,7 @@ host:
     fn expected() -> Host {
         Host {
             name: "app.test".to_string(),
+            listen: vec![],
             tls: HostTls {
                 enabled: true,
                 certificate: Some(RouteSslPath {
@@ -254,5 +259,17 @@ host:
         assert_eq!(host.name, "*");
         assert!(!host.tls.enabled);
         assert_eq!(crate::routing::validate::validate_host(&host), Ok(()));
+    }
+
+    #[test]
+    fn test_host_listen_addresses() {
+        let doc = HclFormat::from_str::<Doc>(
+            "host \"a.test\" {\n  listen = [\"0.0.0.0:8080\", \"[::]:8080\"]\n}\n",
+        )
+        .unwrap();
+
+        let host = doc.host.get("a.test").unwrap().to_host("a.test").unwrap();
+
+        assert_eq!(host.listen, vec!["0.0.0.0:8080", "[::]:8080"]);
     }
 }

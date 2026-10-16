@@ -11,6 +11,7 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
         return Err("host cannot be empty".to_string());
     }
     validate_wildcard(host)?;
+    validate_listen(&host.listen)?;
 
     // Pattern -> path of the location defining it
     let mut patterns: HashMap<String, &str> = HashMap::new();
@@ -44,6 +45,19 @@ fn validate_wildcard(host: &Host) -> Result<(), String> {
         return Err("only \"*\" is supported as a wildcard host".to_string());
     }
     Ok(())
+}
+
+/// Listen addresses are bound when proksi starts, so they must be IP addresses
+fn validate_listen(addresses: &[String]) -> Result<(), String> {
+    match addresses
+        .iter()
+        .find(|address| address.parse::<std::net::SocketAddr>().is_err())
+    {
+        Some(address) => Err(format!(
+            "listen \"{address}\" is not a valid address (ip:port)"
+        )),
+        None => Ok(()),
+    }
 }
 
 /// Locations are paths: nginx modifiers are rejected rather than read as literal paths
@@ -151,6 +165,17 @@ mod tests {
         assert_eq!(
             validate_host(&wildcard),
             Err("only \"*\" is supported as a wildcard host".to_string())
+        );
+    }
+
+    #[test]
+    fn test_listen_addresses_must_be_ip_and_port() {
+        let mut host = host("a.test", "10.0.0.1");
+        host.listen = vec!["0.0.0.0:8443".to_string(), "localhost:80".to_string()];
+
+        assert_eq!(
+            validate_host(&host),
+            Err("listen \"localhost:80\" is not a valid address (ip:port)".to_string())
         );
     }
 }

@@ -29,6 +29,7 @@ impl Host {
 
         Self {
             name: route.host.to_string(),
+            listen: vec![],
             tls: HostTls {
                 enabled: true,
                 certificate: route.ssl.as_ref().and_then(|ssl| ssl.path.clone()),
