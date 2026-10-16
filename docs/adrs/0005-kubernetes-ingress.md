@@ -54,7 +54,7 @@ kubernetes {
         request_id {}
   ```
 
-  `basic_auth` and `oauth2` read their secrets from a `Secret` in the same namespace (`proksi.info/auth-secret: <name>`), never from the annotation itself.
+  `basic_auth` and `oauth2` read their secrets from a `Secret` in the same namespace (`proksi.info/auth-secret: <name>`), never from the annotation itself. Only `Secret`s labelled `proksi.info/auth` (and TLS ones) are watched, so proksi doesn't keep every `Secret` of the cluster in memory.
 - **Invalid `Ingress`es are skipped**, with the reason logged and recorded as a Kubernetes `Event` on the `Ingress` (and in the admin API's status, ADR 0004). The other `Ingress`es are still applied.
 
 ### Status

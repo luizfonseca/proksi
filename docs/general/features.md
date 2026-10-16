@@ -22,12 +22,12 @@ Proksi is evolving day by day, and new features are being added all the time. Be
 - [x] **Body limits** per location
 - [x] **TCP** proxying: plain, TLS with the host's certificate (chosen by SNI) and TLS passthrough
 - [x] Sharing port `443` between HTTPS and TCP, chosen by name (SNI) or protocol (ALPN), with TLS terminated or passed through
-- [x] **Kubernetes** ingress controller: `Ingress` resources served with their ready pods as upstreams
+- [x] **Kubernetes** ingress controller: `Ingress` resources served with their ready pods as upstreams, TLS secrets, plugins through annotations, status and events, with a Helm chart
 - [x] **Metrics** in the Prometheus format, per host, location and upstream, on an admin listener with a token
 
 Planned next (see [ADR 0003](adrs/0003-configuration-model.md)):
 
-- [ ] TLS secrets, plugins and status for Kubernetes `Ingress`es (see [ADR 0005](adrs/0005-kubernetes-ingress.md))
+- [ ] Gateway API resources for Kubernetes
 
 
 We are constantly adding new features, and we welcome your feedback and contributions. If you have any suggestions or ideas, please feel free to open an issue or a pull request on the GitHub repository.

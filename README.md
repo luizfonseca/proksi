@@ -371,7 +371,8 @@ Routes from labels are kept when a container stops (requests get a `503`) and ar
 Proksi can run as a Kubernetes ingress controller, serving the `Ingress` resources of class `proksi` and sending requests straight to the ready pods of each service:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/luizfonseca/proksi/main/deploy/kubernetes/proksi.yaml
+helm install proksi deploy/helm/proksi --namespace proksi --create-namespace
+# or: kubectl apply -f https://raw.githubusercontent.com/luizfonseca/proksi/main/deploy/kubernetes/proksi.yaml
 ```
 
 See the [Kubernetes documentation](https://docs.proksi.info/#/installation/kubernetes) for paths, TLS and running more than one replica.
@@ -463,7 +464,7 @@ host:
 
 ## What's next
 
-Kubernetes TLS secrets, plugins through annotations and `Ingress` status are next ([ADR 0005](https://docs.proksi.info/#/adrs/0005-kubernetes-ingress)). See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
+See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
 
 
 # Documentation

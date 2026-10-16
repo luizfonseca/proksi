@@ -13,7 +13,11 @@ use k8s_openapi::{
     NamespaceResourceScope,
 };
 use kube::{
-    runtime::{reflector, watcher, WatchStreamExt},
+    api::{Patch, PatchParams},
+    runtime::{
+        events::{Event, EventType, Recorder, Reporter},
+        reflector, watcher, WatchStreamExt,
+    },
     Api, Client, Resource,
 };
 use serde::de::DeserializeOwned;
@@ -26,11 +30,16 @@ use crate::{
 
 use super::{
     certificates::parse,
-    convert::{hosts, Cluster, Converted, HostCertificate, Invalid},
+    convert::{hosts, of_class, Cluster, Converted, HostCertificate, Invalid, AUTH_LABEL},
+    status,
 };
 
 /// Changes often come together (a deployment rolling out): they're applied once settled
 const SETTLE: Duration = Duration::from_millis(500);
+/// How often the status of `Ingress`es is checked, besides changes
+const STATUS_INTERVAL: Duration = Duration::from_secs(30);
+/// Held by the replica writing the status of `Ingress`es (ADR 0002)
+const STATUS_LEASE: &str = "kubernetes:status";
 
 /// Watches the cluster, forever (reconnecting after errors)
 pub async fn run(config: KubernetesConfig, sender: SnapshotSender) {
@@ -66,6 +75,9 @@ async fn watch(config: &KubernetesConfig, sender: &SnapshotSender) -> Result<(),
     // Only TLS secrets (`tls.crt` and `tls.key`)
     let tls = watcher::Config::default().fields("type=kubernetes.io/tls");
     let secrets = Watched::<Secret>::namespaced(&client, &config.namespaces, &tls, &changed);
+    // And the ones labelled for `basic_auth` and `oauth2` settings
+    let auth = watcher::Config::default().labels(AUTH_LABEL);
+    let auth_secrets = Watched::<Secret>::namespaced(&client, &config.namespaces, &auth, &changed);
     let ingress_classes = Watched::<IngressClass>::cluster(&client, &changed);
 
     // Hosts are only sent once everything was listed, so none is removed by a partial view
@@ -73,8 +85,16 @@ async fn watch(config: &KubernetesConfig, sender: &SnapshotSender) -> Result<(),
     services.ready().await?;
     endpoint_slices.ready().await?;
     secrets.ready().await?;
+    auth_secrets.ready().await?;
     ingress_classes.ready().await?;
 
+    let recorder = Recorder::new(
+        client.clone(),
+        Reporter {
+            controller: "proksi".to_string(),
+            instance: Some(crate::stores::hostname()),
+        },
+    );
     let mut reported: Vec<Invalid> = vec![];
     let mut certificates = HashMap::new();
     loop {
@@ -83,7 +103,7 @@ async fn watch(config: &KubernetesConfig, sender: &SnapshotSender) -> Result<(),
             ingress_classes: ingress_classes.state(),
             services: services.state(),
             endpoint_slices: endpoint_slices.state(),
-            secrets: secrets.state(),
+            secrets: [secrets.state(), auth_secrets.state()].concat(),
         };
         let Converted {
             hosts,
@@ -91,8 +111,9 @@ async fn watch(config: &KubernetesConfig, sender: &SnapshotSender) -> Result<(),
             invalid,
         } = hosts(&cluster, &config.ingress_class);
         if invalid != reported {
-            for invalid in &invalid {
-                tracing::warn!("ingress {}: {}", invalid.ingress, invalid.reason);
+            for new in invalid.iter().filter(|invalid| !reported.contains(invalid)) {
+                tracing::warn!("ingress {}: {}", new.ingress, new.reason);
+                record(&recorder, &cluster, new).await;
             }
             reported = invalid;
         }
@@ -105,8 +126,79 @@ async fn watch(config: &KubernetesConfig, sender: &SnapshotSender) -> Result<(),
             .await
             .map_err(|_| "the routing service stopped".to_string())?;
 
-        changed.notified().await;
+        if let Some(publish) = &config.publish_service {
+            let served = of_class(&cluster, &config.ingress_class);
+            if let Err(err) = publish_status(&client, publish, &served).await {
+                tracing::warn!("kubernetes: failed to update the status of Ingresses: {err}");
+            }
+        }
+
+        // Also now and then, for a load balancer's address assigned later
+        tokio::select! {
+            () = changed.notified() => {}
+            () = tokio::time::sleep(STATUS_INTERVAL) => {}
+        }
         tokio::time::sleep(SETTLE).await;
+    }
+}
+
+/// Writes the addresses of proksi's `Service` (`namespace/name`) to the status of the
+/// `Ingress`es that don't have them, from one replica only (the one holding the lease)
+async fn publish_status(
+    client: &Client,
+    publish: &str,
+    ingresses: &[&Arc<Ingress>],
+) -> Result<(), String> {
+    let store = crate::stores::global::get_store();
+    let leader = store
+        .try_lock(STATUS_LEASE, crate::stores::replica_id(), STATUS_INTERVAL * 3)
+        .await
+        .unwrap_or(true);
+    if !leader {
+        return Ok(());
+    }
+
+    let (namespace, name) = publish
+        .split_once('/')
+        .ok_or_else(|| format!("publish_service must be namespace/name, not {publish:?}"))?;
+    let service = Api::<Service>::namespaced(client.clone(), namespace)
+        .get(name)
+        .await
+        .map_err(|err| format!("failed to read service {publish}: {err}"))?;
+    let addresses = status::addresses(&service);
+
+    let ingresses = ingresses.iter().map(|ingress| &***ingress).collect::<Vec<&Ingress>>();
+    for (namespace, name) in status::outdated(&ingresses, &addresses) {
+        let patch = serde_json::json!({ "status": { "loadBalancer": { "ingress": addresses } } });
+        Api::<Ingress>::namespaced(client.clone(), &namespace)
+            .patch_status(&name, &PatchParams::default(), &Patch::Merge(&patch))
+            .await
+            .map_err(|err| format!("{namespace}/{name}: {err}"))?;
+    }
+    Ok(())
+}
+
+/// A warning `Event` on an `Ingress` that couldn't be served (`kubectl describe ingress`)
+async fn record(recorder: &Recorder, cluster: &Cluster, invalid: &Invalid) {
+    let Some(ingress) = cluster.ingresses.iter().find(|ingress| {
+        let id = format!(
+            "{}/{}",
+            ingress.metadata.namespace.as_deref().unwrap_or_default(),
+            ingress.metadata.name.as_deref().unwrap_or_default()
+        );
+        id == invalid.ingress
+    }) else {
+        return;
+    };
+    let event = Event {
+        type_: EventType::Warning,
+        reason: "Invalid".to_string(),
+        note: Some(invalid.reason.clone()),
+        action: "Serving".to_string(),
+        secondary: None,
+    };
+    if let Err(err) = recorder.publish(&event, &ingress.object_ref(&())).await {
+        tracing::debug!("kubernetes: failed to record an event: {err}");
     }
 }
 

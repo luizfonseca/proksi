@@ -32,7 +32,7 @@ pub struct LocationBlock {
 
 impl LocationBlock {
     /// Converts the block of location `path`, adding the host's headers
-    pub(super) fn to_location(
+    pub(crate) fn to_location(
         &self,
         path: &str,
         host_headers: Option<&HeadersBlock>,

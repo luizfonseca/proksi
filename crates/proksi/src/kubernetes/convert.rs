@@ -9,6 +9,8 @@ use k8s_openapi::api::{
 };
 
 use crate::config::{
+    blocks::LocationBlock,
+    hcl::HclFormat,
     host::{Host, HostTls, Location},
     RouteUpstream,
 };
@@ -17,6 +19,12 @@ use crate::config::{
 const DEFAULT_CLASS: &str = "ingressclass.kubernetes.io/is-default-class";
 /// `"false"`: the hosts of the `Ingress` are plain HTTP
 const TLS: &str = "proksi.info/tls";
+/// Plugins, headers and cache, written like the inside of a `location` block
+const BLOCKS: &str = "proksi.info/blocks";
+/// A `Secret` (labelled `proksi.info/auth`) with the settings of `basic_auth` and `oauth2`
+const AUTH_SECRET: &str = "proksi.info/auth-secret";
+/// The label auth secrets need, so only those are watched
+pub const AUTH_LABEL: &str = "proksi.info/auth";
 /// `"service"`: upstreams are the services' cluster IPs, balanced by Kubernetes
 const UPSTREAM: &str = "proksi.info/upstream";
 /// Links an `EndpointSlice` to its `Service`
@@ -83,6 +91,14 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
         );
         let plain = annotation(ingress, TLS) == Some("false");
         let through_service = annotation(ingress, UPSTREAM) == Some("service");
+        // Plugins, headers and cache for every path of the `Ingress`
+        let blocks = match blocks(cluster, ingress, &namespace) {
+            Ok(blocks) => blocks,
+            Err(reason) => {
+                invalid.push(Invalid { ingress: id, reason });
+                continue;
+            }
+        };
 
         tls_certificates(cluster, ingress, &id, &mut certificates, &mut invalid);
 
@@ -111,9 +127,9 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
                 path: path.clone(),
                 exact,
                 upstreams: upstreams(cluster, &namespace, service, through_service),
-                headers: None,
-                plugins: None,
-                cache: None,
+                headers: blocks.as_ref().and_then(|blocks| blocks.headers.clone()),
+                plugins: blocks.as_ref().and_then(|blocks| blocks.plugins.clone()),
+                cache: blocks.as_ref().and_then(|blocks| blocks.cache.clone()),
             };
             locations.insert((path, exact), (location, id.clone()));
         }
@@ -143,7 +159,7 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
 
 /// The `Ingress`es of class `class` (or without a class, when `class` is the default one),
 /// oldest first: the oldest keeps a path (or a certificate) defined twice
-fn of_class<'a>(cluster: &'a Cluster, class: &str) -> Vec<&'a Arc<Ingress>> {
+pub fn of_class<'a>(cluster: &'a Cluster, class: &str) -> Vec<&'a Arc<Ingress>> {
     let default_class = cluster.ingress_classes.iter().any(|ingress_class| {
         ingress_class.metadata.name.as_deref() == Some(class)
             && ingress_class
@@ -220,6 +236,53 @@ fn tls_certificates(
             }
         }
     }
+}
+
+/// The blocks of an `Ingress` (`proksi.info/blocks`), as a location without upstreams, with the
+/// settings of its auth secret
+fn blocks(cluster: &Cluster, ingress: &Ingress, namespace: &str) -> Result<Option<Location>, String> {
+    let Some(text) = annotation(ingress, BLOCKS) else {
+        return Ok(None);
+    };
+    let block = <HclFormat as figment::providers::Format>::from_str::<LocationBlock>(text)
+        .map_err(|err| format!("invalid {BLOCKS}: {err}"))?;
+    if !block.upstream.is_empty() {
+        return Err(format!(
+            "{BLOCKS} can't have upstreams: they come from the Ingress' backends"
+        ));
+    }
+    let mut location = block
+        .to_location("/", None)
+        .map_err(|err| format!("invalid {BLOCKS}: {err}"))?;
+
+    if let Some(name) = annotation(ingress, AUTH_SECRET) {
+        let data = cluster
+            .secrets
+            .iter()
+            .find(|secret| {
+                secret.metadata.namespace.as_deref() == Some(namespace)
+                    && secret.metadata.name.as_deref() == Some(name)
+            })
+            .and_then(|secret| secret.data.as_ref())
+            .ok_or_else(|| {
+                format!("auth secret {namespace}/{name} not found (it needs the label {AUTH_LABEL})")
+            })?;
+        let auth = location
+            .plugins
+            .iter_mut()
+            .flatten()
+            .filter(|plugin| plugin.name == "basic_auth" || plugin.name == "oauth2");
+        for plugin in auth {
+            let config = plugin.config.get_or_insert_with(Default::default);
+            for (key, value) in data {
+                let value = String::from_utf8_lossy(&value.0).into_owned();
+                config
+                    .entry(key.clone().into())
+                    .or_insert(serde_json::Value::String(value));
+            }
+        }
+    }
+    Ok(Some(location))
 }
 
 fn annotation<'a>(ingress: &'a Ingress, name: &str) -> Option<&'a str> {
@@ -753,5 +816,114 @@ mod tests {
 
         // The service's own address and port, balanced by Kubernetes
         assert_eq!(upstreams(&hosts[0], 0), vec!["10.96.0.10:80"]);
+    }
+
+    fn with_annotations(
+        mut cluster: Cluster,
+        annotations: &[(&str, &str)],
+    ) -> Cluster {
+        Arc::make_mut(&mut cluster.ingresses[0]).metadata.annotations = Some(
+            annotations
+                .iter()
+                .map(|(name, value)| (name.to_string(), value.to_string()))
+                .collect(),
+        );
+        cluster
+    }
+
+    fn two_paths() -> Cluster {
+        cluster(vec![ingress(
+            "web",
+            "2026-01-01T00:00:00Z",
+            json!({
+                "ingressClassName": "proksi",
+                "rules": [rule(Some("a.test"), json!([
+                    path(Some("/"), "Prefix", "web", json!({ "number": 80 })),
+                    path(Some("/api"), "Prefix", "web", json!({ "number": 80 })),
+                ]))],
+            }),
+        )])
+    }
+
+    #[test]
+    fn test_blocks_for_every_path() {
+        let cluster = with_annotations(
+            two_paths(),
+            &[(
+                "proksi.info/blocks",
+                "rate_limit {\n  requests = 10\n  per = \"1m\"\n}\nheaders {\n  response {\n    add = { \"x-from\" = \"ingress\" }\n  }\n}\n",
+            )],
+        );
+
+        let Converted { hosts, invalid, .. } = hosts(&cluster, "proksi");
+
+        assert_eq!(invalid, vec![]);
+        for location in &hosts[0].locations {
+            let plugins = location.plugins.as_ref().unwrap();
+            assert_eq!(plugins[0].name, "rate_limit", "{}", location.path);
+            assert_eq!(plugins[0].config.as_ref().unwrap()["requests"], 10);
+            let headers = location.headers.as_ref().unwrap().add.as_ref().unwrap();
+            assert_eq!(headers[0].name, "x-from");
+        }
+    }
+
+    #[test]
+    fn test_auth_settings_from_a_secret() {
+        let mut cluster = with_annotations(
+            two_paths(),
+            &[
+                ("proksi.info/blocks", "basic_auth {}"),
+                ("proksi.info/auth-secret", "web-auth"),
+            ],
+        );
+        cluster.secrets.push(Arc::new(object(json!({
+            "metadata": {
+                "name": "web-auth",
+                "namespace": "default",
+                "labels": { "proksi.info/auth": "true" },
+            },
+            // "admin" and "secret"
+            "data": { "user": "YWRtaW4=", "pass": "c2VjcmV0" },
+        }))));
+
+        let Converted { hosts, invalid, .. } = hosts(&cluster, "proksi");
+
+        assert_eq!(invalid, vec![]);
+        let config = hosts[0].locations[0].plugins.as_ref().unwrap()[0]
+            .config
+            .clone()
+            .unwrap();
+        assert_eq!(config["user"], "admin");
+        assert_eq!(config["pass"], "secret");
+    }
+
+    #[test]
+    fn test_invalid_blocks() {
+        for (annotations, reason) in [
+            (
+                vec![("proksi.info/blocks", "rate_limit {")],
+                "invalid proksi.info/blocks: ",
+            ),
+            (
+                vec![("proksi.info/blocks", "upstream \"10.0.0.1:80\" {}")],
+                "proksi.info/blocks can't have upstreams: they come from the Ingress' backends",
+            ),
+            (
+                vec![
+                    ("proksi.info/blocks", "basic_auth {}"),
+                    ("proksi.info/auth-secret", "missing"),
+                ],
+                "auth secret default/missing not found (it needs the label proksi.info/auth)",
+            ),
+        ] {
+            let cluster = with_annotations(two_paths(), &annotations);
+
+            let Converted { hosts, invalid, .. } = hosts(&cluster, "proksi");
+
+            // The Ingress isn't served
+            assert_eq!(hosts, vec![], "{annotations:?}");
+            assert_eq!(invalid.len(), 1);
+            assert!(invalid[0].reason.starts_with(reason), "{}", invalid[0].reason);
+        }
     }
 }

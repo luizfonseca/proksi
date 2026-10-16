@@ -22,6 +22,14 @@ rules:
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses", "ingressclasses"]
     verbs: ["get", "list", "watch"]
+  # The address Ingresses are served on
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses/status"]
+    verbs: ["get", "patch", "update"]
+  # Ingresses that can't be served
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create", "patch"]
   - apiGroups: [""]
     # Secrets: only the TLS secrets of Ingresses are used
     resources: ["services", "secrets"]
@@ -62,6 +70,8 @@ data:
   proksi.hcl: |
     kubernetes {
       enabled = true
+      # Its address is written to the status of Ingresses
+      publish_service = "proksi/proksi"
     }
 
     # Certificates for the hosts of Ingresses (hosts with the annotation

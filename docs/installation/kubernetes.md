@@ -4,6 +4,16 @@ Proksi can run as an ingress controller: it serves the `Ingress` resources of it
 
 ## Installing
 
+With Helm, from a clone of the repository:
+
+```bash
+helm install proksi deploy/helm/proksi --namespace proksi --create-namespace
+```
+
+The chart's [values](https://github.com/luizfonseca/proksi/blob/main/deploy/helm/proksi/values.yaml) set the image, replicas, the `Service` type, the `IngressClass` (and whether it's the default one), the watched namespaces, and the rest of Proksi's configuration (`config`).
+
+Or with a single manifest:
+
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/luizfonseca/proksi/main/deploy/kubernetes/proksi.yaml
 ```
@@ -23,6 +33,7 @@ The `kubernetes` block takes:
 | `enabled` | `false` | Watch the cluster |
 | `ingress_class` | `"proksi"` | The class of the `Ingress`es to serve |
 | `namespaces` | `[]` | Namespaces to watch (all of them by default) |
+| `publish_service` | | `namespace/name` of Proksi's `Service`: its address (load balancer, external IPs, or cluster IP) is written to the status of each `Ingress`, for tools waiting for one (`kubectl wait`, external-dns, Argo CD). The manifest sets `proksi/proksi` |
 
 Outside a cluster (for development), Proksi uses your kubeconfig.
 
@@ -70,12 +81,45 @@ Other hosts get certificates from Let's Encrypt (enable `lets_encrypt` in the `C
 
 With a shared store, a certificate from a `Secret` reaches every replica through the store.
 
+## Plugins
+
+The annotation `proksi.info/blocks` adds plugins, headers and cache to every path of an `Ingress`, written like the inside of a `location` block of the [configuration](configuration/hcl/README.md):
+
+```yaml
+metadata:
+  annotations:
+    proksi.info/blocks: |
+      rate_limit {
+        requests = 100
+        per      = "1m"
+      }
+      request_id {}
+      headers {
+        response {
+          add = { "x-served-by" = "proksi" }
+        }
+      }
+```
+
+The settings of `basic_auth` (`user`, `pass`) and `oauth2` (`client_id`, `client_secret`, `jwt_secret`) are better kept out of annotations: put them in a `Secret` of the same namespace, labelled `proksi.info/auth`, and name it in `proksi.info/auth-secret`. Its keys fill the settings the block leaves out:
+
+```bash
+kubectl create secret generic web-auth --from-literal=user=admin --from-literal=pass=...
+kubectl label secret web-auth proksi.info/auth=true
+```
+
+```yaml
+metadata:
+  annotations:
+    proksi.info/blocks: |
+      basic_auth {}
+    proksi.info/auth-secret: web-auth
+```
+
+Only labelled `Secret`s (and TLS ones) are watched. An `Ingress` with invalid blocks, or whose auth secret is missing, isn't served, and the reason is logged and recorded as a warning `Event` on it (`kubectl describe ingress`).
+
 Hosts can still come from Proksi's configuration file, docker labels or the store. When the same host comes from several places, the store wins over Kubernetes, which wins over docker labels and the configuration file.
 
 ## More than one replica
 
-With more than one replica, use a shared store (Redis or Postgres) so certificates are ordered once and every replica serves them. With the memory store, Proksi logs a warning.
-
-## Coming next
-
-Plugins through annotations, the `Ingress` status, and a Helm chart.
+With more than one replica, use a shared store (Redis or Postgres) so certificates are ordered once and every replica serves them. With the memory store, Proksi logs a warning. The status of `Ingress`es is written by one replica at a time (through a lease in the store).

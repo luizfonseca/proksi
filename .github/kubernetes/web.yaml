@@ -80,3 +80,54 @@ spec:
                 name: web
                 port:
                   number: 80
+---
+# Plugins through the annotation, with basic_auth's settings from a labelled secret (test.sh)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-auth
+  annotations:
+    proksi.info/tls: "false"
+    proksi.info/blocks: |
+      basic_auth {}
+      headers {
+        response {
+          add = { "x-from" = "ingress" }
+        }
+      }
+    proksi.info/auth-secret: web-auth
+spec:
+  ingressClassName: proksi
+  rules:
+    - host: auth.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80
+---
+# Can't be served (upstreams come from backends): reported with an Event
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-invalid
+  annotations:
+    proksi.info/blocks: |
+      upstream "10.0.0.1:80" {}
+spec:
+  ingressClassName: proksi
+  rules:
+    - host: invalid.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80
