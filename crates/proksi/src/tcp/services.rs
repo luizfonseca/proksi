@@ -41,7 +41,7 @@ pub fn tcp_targets(routes: &[TcpRoute]) -> Result<Arc<Vec<TcpTarget>>, anyhow::E
             tls: route.tls,
             alpn: route.alpn.clone(),
             load_balancer: Arc::new(load_balancer),
-            metrics: TcpMetrics::new(&route.label()),
+            metrics: crate::metrics::enabled().then(|| TcpMetrics::new(&route.label())),
         });
     }
     register_load_balancers(&targets);

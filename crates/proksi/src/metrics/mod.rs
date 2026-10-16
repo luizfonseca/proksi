@@ -13,6 +13,18 @@ use prometheus::{
     Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, Registry,
 };
 
+static ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Records metrics from now on (with the `admin` block, unless `metrics = false`). Otherwise
+/// nothing is recorded: locations and `tcp` blocks get no metrics.
+pub fn enable() {
+    ENABLED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn enabled() -> bool {
+    ENABLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Host label of requests that match no host
 pub const UNKNOWN: &str = "_unknown";
 
@@ -293,6 +305,9 @@ impl Drop for TcpConnection {
 
 /// When each domain's certificate expires (Unix timestamp), replacing the previous ones
 pub fn set_certificates(expiry: &[(String, i64)]) {
+    if !enabled() {
+        return;
+    }
     let gauge = &METRICS.certificate_expiry;
     gauge.reset();
     for (domain, timestamp) in expiry {
@@ -302,6 +317,9 @@ pub fn set_certificates(expiry: &[(String, i64)]) {
 
 /// Hosts applied from each source
 pub fn set_routes(source: &str, hosts: usize) {
+    if !enabled() {
+        return;
+    }
     METRICS
         .routes
         .with_label_values(&[source])
@@ -456,6 +474,7 @@ mod tests {
 
     #[test]
     fn test_certificates_and_routes() {
+        crate::metrics::enable();
         super::set_certificates(&[
             ("metrics-g.test".to_string(), 1_800_000_000),
             ("metrics-h.test".to_string(), 1_900_000_000),
@@ -494,5 +513,93 @@ mod expiry_tests {
         let expiry = super::expiry_timestamp(&certificate).unwrap();
 
         assert!((expiry - expected).abs() < 5, "{expiry} != {expected}");
+    }
+}
+
+#[cfg(test)]
+mod overhead {
+    use std::time::{Duration, Instant};
+
+    use super::LocationMetrics;
+
+    /// What recording costs per request: `cargo test --release -- --ignored metrics_overhead`
+    #[test]
+    #[ignore]
+    fn metrics_overhead() {
+        let metrics = LocationMetrics::new("overhead.test", "/", &["10.0.0.1:80".to_string()]);
+        let per_request = |metrics: &LocationMetrics, requests: u32| {
+            let start = Instant::now();
+            for i in 0..requests {
+                let upstream = metrics.upstream(0).unwrap();
+                upstream.record(Duration::from_micros(u64::from(i % 5000)));
+                metrics.record(200, Duration::from_micros(u64::from(i % 9000)));
+            }
+            start.elapsed() / requests
+        };
+
+        println!("1 thread: {:?} per request", per_request(&metrics, 10_000_000));
+        let threads = (0..8)
+            .map(|_| {
+                let metrics = metrics.clone();
+                std::thread::spawn(move || per_request(&metrics, 2_000_000))
+            })
+            .collect::<Vec<_>>();
+        let times = threads.into_iter().map(|t| t.join().unwrap()).collect::<Vec<_>>();
+        println!("8 threads, same location: {times:?} per request");
+    }
+}
+
+#[cfg(test)]
+mod overhead_parts {
+    use std::time::Instant;
+
+    /// `cargo test --release -- --ignored metrics_overhead_parts`
+    #[test]
+    #[ignore]
+    fn metrics_overhead_parts() {
+        let counter = prometheus::IntCounter::new("c", "c").unwrap();
+        let histogram = prometheus::Histogram::with_opts(
+            prometheus::HistogramOpts::new("h", "h").buckets(super::BUCKETS.to_vec()),
+        )
+        .unwrap();
+        let contended = |work: std::sync::Arc<dyn Fn(u32) + Send + Sync>| {
+            let threads = (0..8)
+                .map(|_| {
+                    let work = work.clone();
+                    std::thread::spawn(move || {
+                        let start = Instant::now();
+                        for i in 0..2_000_000 {
+                            work(i);
+                        }
+                        start.elapsed() / 2_000_000
+                    })
+                })
+                .collect::<Vec<_>>();
+            threads.into_iter().map(|t| t.join().unwrap()).max().unwrap()
+        };
+        let c = counter.clone();
+        println!("counter, 8 threads: {:?}", contended(std::sync::Arc::new(move |_| c.inc())));
+        let h = histogram.clone();
+        println!(
+            "histogram, 8 threads: {:?}",
+            contended(std::sync::Arc::new(move |i| h.observe(f64::from(i % 9000) / 1e6)))
+        );
+        let local = std::sync::Arc::new(histogram.clone());
+        println!(
+            "thread-local histogram, 8 threads: {:?}",
+            contended(std::sync::Arc::new(move |i| {
+                thread_local! {
+                    static LOCAL: std::cell::RefCell<Option<prometheus::local::LocalHistogram>> = const { std::cell::RefCell::new(None) };
+                }
+                LOCAL.with(|local_histogram| {
+                    let mut local_histogram = local_histogram.borrow_mut();
+                    let h = local_histogram.get_or_insert_with(|| local.local());
+                    h.observe(f64::from(i % 9000) / 1e6);
+                    if i % 1024 == 0 {
+                        h.flush();
+                    }
+                });
+            }))
+        );
     }
 }

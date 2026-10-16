@@ -100,6 +100,7 @@ mod tests {
 
     #[test]
     fn test_upstream_health_metrics() {
+        crate::metrics::enable();
         let container = build_host_container(&host("health-metrics.test", "10.0.0.9")).unwrap();
         let location = container.locations[0].clone();
         stores::insert_route("health-metrics.test".to_string(), Arc::new(container));

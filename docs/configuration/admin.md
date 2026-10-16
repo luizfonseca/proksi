@@ -71,7 +71,18 @@ scrape_configs:
       - targets: ["127.0.0.1:7555"]
 ```
 
-Recording metrics doesn't add lookups to the request path: a location's metrics are created when it's built, and each request only increments counters it already holds.
+Metrics are only recorded with an `admin` block. To use the rest of the admin API without them, turn them off:
+
+```hcl
+admin {
+  listen  = "127.0.0.1:7555"
+  metrics = false
+}
+```
+
+Requests then record nothing, and `/metrics` and the live stats answer `404`.
+
+Recording doesn't add lookups to the request path: a location's metrics are created when it's built, and each request only updates counters and histograms it already holds, about 10 ns on its own. Histograms are shared between worker threads, so with many cores busy on the same location they wait on each other: a few microseconds per request when every core does nothing else.
 
 ## Live stats
 

@@ -95,6 +95,9 @@ impl pingora::services::Service for BackgroundFunctionService {
 
         // Certificate expiry metrics, from the store
         let certificate_metrics = async {
+            if !crate::metrics::enabled() {
+                return;
+            }
             if let Err(err) = spawn_isolated(certificate_metrics()).await {
                 tracing::error!("certificate metrics stopped: {err}");
             }
@@ -102,7 +105,7 @@ impl pingora::services::Service for BackgroundFunctionService {
 
         // Live stats for the admin API: the metrics, sampled every second
         let live_stats = async {
-            if self.config.admin.is_some() {
+            if crate::metrics::enabled() {
                 crate::metrics::live::run().await;
             }
         };

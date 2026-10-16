@@ -418,11 +418,13 @@ impl ProxyHttp for Router {
             .unwrap_or_default();
 
         // Requests no location served (unknown hosts, redirects to HTTPS...) are `_unknown`
-        ctx.route_container
-            .as_ref()
-            .and_then(|location| location.metrics.as_ref())
-            .unwrap_or_else(|| LocationMetrics::unknown())
-            .record(status_code, duration);
+        if crate::metrics::enabled() {
+            ctx.route_container
+                .as_ref()
+                .and_then(|location| location.metrics.as_ref())
+                .unwrap_or_else(|| LocationMetrics::unknown())
+                .record(status_code, duration);
+        }
 
         tracing::info!(
             method,

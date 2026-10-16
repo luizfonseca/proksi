@@ -18,7 +18,7 @@ use tokio::{
     net::TcpStream,
 };
 
-use crate::proxy_server::cert_store::ServerName;
+use crate::{metrics::TcpMetrics, proxy_server::cert_store::ServerName};
 
 use super::{choose, TcpTarget};
 
@@ -75,7 +75,7 @@ impl TcpProxy {
         target: &TcpTarget,
         server_name: Option<String>,
     ) {
-        let _connection = target.metrics.connection();
+        let _connection = target.metrics.as_ref().map(TcpMetrics::connection);
         let start = std::time::Instant::now();
         let client_ip = downstream
             .get_socket_digest()
@@ -130,12 +130,12 @@ impl TcpProxy {
         // Bytes are counted as they're read, so long connections show up while they're open
         let mut downstream = Counted {
             inner: downstream,
-            bytes: &target.metrics.bytes_in,
+            bytes: target.metrics.as_ref().map(|metrics| &metrics.bytes_in),
             read: &mut forwarded.bytes_in,
         };
         let mut upstream = Counted {
             inner: &mut upstream,
-            bytes: &target.metrics.bytes_out,
+            bytes: target.metrics.as_ref().map(|metrics| &metrics.bytes_out),
             read: &mut forwarded.bytes_out,
         };
         tokio::io::copy_bidirectional(&mut downstream, &mut upstream)
@@ -172,7 +172,7 @@ impl ServerApp for TcpProxy {
 /// A stream counting the bytes read from it (in its metric, and for its connection)
 struct Counted<'a, S> {
     inner: &'a mut S,
-    bytes: &'a IntCounter,
+    bytes: Option<&'a IntCounter>,
     read: &'a mut u64,
 }
 
@@ -186,7 +186,9 @@ impl<S: AsyncRead + Unpin> AsyncRead for Counted<'_, S> {
         let poll = Pin::new(&mut *self.inner).poll_read(cx, buf);
         if let Poll::Ready(Ok(())) = poll {
             let read = u64::try_from(buf.filled().len() - before).unwrap_or_default();
-            self.bytes.inc_by(read);
+            if let Some(bytes) = self.bytes {
+                bytes.inc_by(read);
+            }
             *self.read += read;
         }
         poll

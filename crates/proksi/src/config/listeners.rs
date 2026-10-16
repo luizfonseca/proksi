@@ -374,6 +374,7 @@ host "b.test" {
         with_admin.admin = Some(crate::config::admin::AdminConfig {
             listen: "127.0.0.1:7555".to_string(),
             token: None,
+            metrics: true,
         });
         assert_eq!(
             listeners(&with_admin).unwrap().admin,
@@ -387,6 +388,7 @@ host "b.test" {
             config.admin = Some(crate::config::admin::AdminConfig {
                 listen: address.to_string(),
                 token: Some("secret".to_string()),
+                metrics: true,
             });
             assert_eq!(
                 listeners(&config),

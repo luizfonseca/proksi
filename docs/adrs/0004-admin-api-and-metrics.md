@@ -26,7 +26,7 @@ admin {
 }
 ```
 
-- Without an `admin` block, nothing is opened.
+- Without an `admin` block, nothing is opened and no metrics are recorded. `metrics = false` keeps the API without recording metrics.
 - Every endpoint needs `Authorization: Bearer <token>`. Without a `token`, `listen` must be a loopback address, so an admin API without a token is never reachable from another machine.
 - The listener is plain HTTP. To expose it publicly, route a host to it, with `basic_auth`, `oauth2` or any other building block in front.
 - Like other listeners, it's set up at startup: changing the `admin` block restarts proksi.
