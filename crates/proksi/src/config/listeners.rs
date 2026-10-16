@@ -6,6 +6,7 @@ use std::{
 };
 
 use super::{
+    host::Host,
     tcp::{TcpRoute, TcpTls},
     Config, StoreType,
 };
@@ -68,13 +69,17 @@ pub fn listeners(config: &Config) -> Result<Listeners, String> {
             "address {address} is used both for HTTP and HTTPS hosts"
         ));
     }
-    listeners.tcp = tcp_routes(config, &listeners)?;
+    listeners.tcp = tcp_routes(config, &hosts, &listeners)?;
     Ok(listeners)
 }
 
 /// The `tcp` blocks, each on an address of its own: blocks of different hosts with TLS can
-/// share one (the host is chosen by SNI), but not with HTTP or HTTPS hosts
-fn tcp_routes(config: &Config, http_and_https: &Listeners) -> Result<Vec<TcpRoute>, String> {
+/// share one, also with HTTPS hosts (the host is chosen by SNI), but not with HTTP hosts
+fn tcp_routes(
+    config: &Config,
+    hosts: &[Host],
+    http_and_https: &Listeners,
+) -> Result<Vec<TcpRoute>, String> {
     let routes = config.tcp_routes()?;
 
     let mut by_address: BTreeMap<&str, Vec<&TcpRoute>> = BTreeMap::new();
@@ -89,10 +94,26 @@ fn tcp_routes(config: &Config, http_and_https: &Listeners) -> Result<Vec<TcpRout
         if route.upstreams.is_empty() {
             return Err(format!("{label}: needs at least one upstream"));
         }
-        if http_and_https.https.contains(address) || http_and_https.http.contains(address) {
+        if http_and_https.http.contains(address) {
             return Err(format!(
-                "{label}: address {address} is also used by HTTP or HTTPS hosts"
+                "{label}: address {address} is also used by HTTP hosts"
             ));
+        }
+        if http_and_https.https.contains(address) {
+            if route.tls != TcpTls::Terminate {
+                return Err(format!(
+                    "{label}: address {address} is also used by HTTPS hosts (only tcp blocks in a host with TLS can share it, chosen by SNI)"
+                ));
+            }
+            // The host's connections go to the block, unless it is chosen by its protocols
+            let has_locations = hosts
+                .iter()
+                .any(|host| Some(&host.name) == route.host.as_ref() && !host.locations.is_empty());
+            if has_locations && route.alpn.is_empty() {
+                return Err(format!(
+                    "{label}: the host also has locations on {address}, so the block needs `alpn` to tell them apart"
+                ));
+            }
         }
 
         let sharing = by_address.entry(address).or_default();
@@ -277,6 +298,28 @@ host "b.test" {
     }
 
     #[test]
+    fn test_tcp_on_the_https_address() {
+        let config = config(
+            "host \"app.test\" {\n  location \"/\" {\n    upstream \"app:80\" {}\n  }\n}\nhost \"game.test\" {\n  tcp \"game\" {\n    listen = \"0.0.0.0:443\"\n    upstream \"game:7777\" {}\n  }\n}\n",
+        );
+        let listeners = listeners(&config).unwrap();
+
+        // HTTPS and TCP on one address, chosen by SNI
+        assert_eq!(listeners.https, set(&["0.0.0.0:443"]));
+        assert_eq!(listeners.tcp.len(), 1);
+        assert_eq!(listeners.tcp[0].listen, "0.0.0.0:443");
+    }
+
+    #[test]
+    fn test_tcp_and_locations_of_a_host_chosen_by_alpn() {
+        let config = config(
+            "host \"a.test\" {\n  location \"/\" {\n    upstream \"app:80\" {}\n  }\n  tcp \"game\" {\n    listen = \"0.0.0.0:443\"\n    alpn = [\"game/1\"]\n    upstream \"game:7777\" {}\n  }\n}\n",
+        );
+
+        assert_eq!(listeners(&config).unwrap().tcp.len(), 1);
+    }
+
+    #[test]
     fn test_invalid_tcp_addresses() {
         for (hcl, expected) in [
             (
@@ -289,7 +332,19 @@ host "b.test" {
             ),
             (
                 "tcp \"a\" {\n  listen = \"0.0.0.0:443\"\n  upstream \"b:1\" {}\n}\nhost \"h\" {}\n",
-                "tcp \"a\": address 0.0.0.0:443 is also used by HTTP or HTTPS hosts",
+                "tcp \"a\": address 0.0.0.0:443 is also used by HTTPS hosts (only tcp blocks in a host with TLS can share it, chosen by SNI)",
+            ),
+            (
+                "tcp \"a\" {\n  listen = \"0.0.0.0:80\"\n  upstream \"b:1\" {}\n}\nhost \"h\" {}\n",
+                "tcp \"a\": address 0.0.0.0:80 is also used by HTTP hosts",
+            ),
+            (
+                "host \"h\" {\n  tcp \"a\" {\n    listen = \"0.0.0.0:443\"\n    tls = \"passthrough\"\n    upstream \"b:1\" {}\n  }\n}\n",
+                "tcp \"a\" in host \"h\": address 0.0.0.0:443 is also used by HTTPS hosts (only tcp blocks in a host with TLS can share it, chosen by SNI)",
+            ),
+            (
+                "host \"h\" {\n  location \"/\" {\n    upstream \"b:1\" {}\n  }\n  tcp \"a\" {\n    listen = \"0.0.0.0:443\"\n    upstream \"b:1\" {}\n  }\n}\n",
+                "tcp \"a\" in host \"h\": the host also has locations on 0.0.0.0:443, so the block needs `alpn` to tell them apart",
             ),
             (
                 "tcp \"a\" {\n  listen = \"0.0.0.0:7\"\n  upstream \"b:1\" {}\n}\ntcp \"b\" {\n  listen = \"0.0.0.0:7\"\n  upstream \"b:1\" {}\n}\n",

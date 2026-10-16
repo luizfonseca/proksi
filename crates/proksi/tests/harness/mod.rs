@@ -426,11 +426,26 @@ paths {{
         server_name: &str,
         request: &str,
     ) -> std::io::Result<String> {
+        self.tls_request_with_alpn(port, server_name, &[], request)
+            .await
+    }
+
+    /// Like `tls_request`, offering the protocols `alpn`
+    pub async fn tls_request_with_alpn(
+        &self,
+        port: u16,
+        server_name: &str,
+        alpn: &[&str],
+        request: &str,
+    ) -> std::io::Result<String> {
         let (server_name, request) = (server_name.to_string(), request.to_string());
+        let alpn = alpn.iter().map(ToString::to_string).collect::<Vec<_>>();
         tokio::task::spawn_blocking(move || {
+            let alpn = alpn.iter().map(String::as_str).collect::<Vec<_>>();
             let connector = native_tls::TlsConnector::builder()
                 .danger_accept_invalid_certs(true)
                 .danger_accept_invalid_hostnames(true)
+                .request_alpns(&alpn)
                 .build()
                 .map_err(std::io::Error::other)?;
             let stream = std::net::TcpStream::connect(("127.0.0.1", port))?;
@@ -442,6 +457,33 @@ paths {{
             let mut response = String::new();
             std::io::Read::read_to_string(&mut stream, &mut response)?;
             Ok(response)
+        })
+        .await
+        .unwrap()
+    }
+
+    /// Starts HTTP/2 over TLS (ALPN `h2`) with proksi on `port`, asking for `server_name`,
+    /// returning the header of the first frame proksi sends back
+    pub async fn h2_first_frame(&self, port: u16, server_name: &str) -> std::io::Result<[u8; 9]> {
+        let server_name = server_name.to_string();
+        tokio::task::spawn_blocking(move || {
+            let connector = native_tls::TlsConnector::builder()
+                .danger_accept_invalid_certs(true)
+                .danger_accept_invalid_hostnames(true)
+                .request_alpns(&["h2"])
+                .build()
+                .map_err(std::io::Error::other)?;
+            let stream = std::net::TcpStream::connect(("127.0.0.1", port))?;
+            stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+            let mut stream = connector
+                .connect(&server_name, stream)
+                .map_err(|err| std::io::Error::other(err.to_string()))?;
+            // The connection preface, then an empty SETTINGS frame
+            std::io::Write::write_all(&mut stream, b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")?;
+            std::io::Write::write_all(&mut stream, &[0, 0, 0, 4, 0, 0, 0, 0, 0])?;
+            let mut frame = [0; 9];
+            std::io::Read::read_exact(&mut stream, &mut frame)?;
+            Ok(frame)
         })
         .await
         .unwrap()

@@ -2,16 +2,54 @@
 
 use std::{collections::BTreeSet, net::SocketAddr, sync::Arc};
 
+use async_trait::async_trait;
 use pingora::{
+    apps::ServerApp,
     listeners::tls::TlsSettings,
-    proxy::{http_proxy_service, HttpProxy},
-    server::configuration::ServerConf,
+    protocols::Stream,
+    proxy::{http_proxy, http_proxy_service, HttpProxy},
+    server::{configuration::ServerConf, ShutdownWatch},
     services::listening::Service,
+};
+
+use crate::tcp::{
+    alpn::{select_protocols, AlpnProtocols},
+    on_address,
+    proxy::TcpProxy,
+    TcpTarget,
 };
 
 use super::{cert_store::CertStore, https_proxy::Router, listener::Listener};
 
 pub type ProxyService = Service<HttpProxy<Router>>;
+
+/// HTTPS, and the `tcp` blocks of hosts sharing its addresses: once TLS is terminated, the
+/// connections of those hosts (by SNI) are forwarded, the rest are HTTPS
+pub struct HttpsApp {
+    http: Arc<HttpProxy<Router>>,
+    tcp: Option<TcpProxy>,
+}
+
+#[async_trait]
+impl ServerApp for HttpsApp {
+    async fn process_new(
+        self: &Arc<Self>,
+        stream: Stream,
+        shutdown: &ShutdownWatch,
+    ) -> Option<Stream> {
+        if let Some(tcp) = &self.tcp {
+            if let Some(target) = tcp.target(&stream) {
+                tcp.forward(stream, target).await;
+                return None;
+            }
+        }
+        self.http.process_new(stream, shutdown).await
+    }
+
+    async fn cleanup(&self) {
+        self.http.cleanup().await;
+    }
+}
 
 /// Plain HTTP: hosts without TLS, ACME challenges and redirects to HTTPS
 pub fn http_service(
@@ -32,21 +70,35 @@ pub fn http_service(
     service
 }
 
-/// HTTPS: certificates by SNI, HTTP/2, and hosts with TLS
+/// HTTPS: certificates by SNI, HTTP/2, hosts with TLS, and the `tcp` blocks on its addresses
 pub fn https_service(
     configuration: &Arc<ServerConf>,
     addresses: &BTreeSet<String>,
     default_address: SocketAddr,
+    tcp_targets: &Arc<Vec<TcpTarget>>,
     worker_threads: Option<usize>,
-) -> Result<ProxyService, anyhow::Error> {
+) -> Result<Service<HttpsApp>, anyhow::Error> {
+    // `tcp` blocks of hosts sharing these addresses (chosen by SNI, and ALPN)
+    let tcp = addresses
+        .iter()
+        .any(|address| on_address(tcp_targets, address).next().is_some())
+        .then(|| TcpProxy::new(tcp_targets.clone()));
+
     let router = Router {
         listener: Listener::Https,
         default_address,
     };
-    let mut service = http_proxy_service(configuration, router);
+    let app = HttpsApp {
+        http: Arc::new(http_proxy(configuration, router)),
+        tcp,
+    };
+    let mut service = Service::new("Pingora HTTP Proxy Service".to_string(), app);
     service.threads = worker_threads;
     for address in addresses {
-        service.add_tls_with_settings(address, None, tls_settings()?);
+        let mut settings = tls_settings()?;
+        let protocols = AlpnProtocols::new(on_address(tcp_targets, address));
+        select_protocols(&mut settings, protocols, true);
+        service.add_tls_with_settings(address, None, settings);
     }
     Ok(service)
 }

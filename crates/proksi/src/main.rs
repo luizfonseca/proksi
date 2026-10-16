@@ -130,26 +130,48 @@ fn main() -> Result<(), anyhow::Error> {
         &proxy_config,
     ));
 
+    add_listeners(
+        &mut pingora_server,
+        &proxy_config,
+        &listeners,
+        (default_https, default_http),
+    )?;
+
+    pingora_server.run_forever();
+}
+
+/// Listens on the HTTP, HTTPS and TCP addresses the hosts and `tcp` blocks need
+fn add_listeners(
+    server: &mut Server,
+    proxy_config: &config::Config,
+    listeners: &config::listeners::Listeners,
+    (default_https, default_http): (std::net::SocketAddr, std::net::SocketAddr),
+) -> Result<(), anyhow::Error> {
+    // TCP: `tcp` blocks (validated when loading the configuration)
+    let tcp_targets = tcp::services::tcp_targets(&listeners.tcp)?;
+
     // Listen on the HTTP and HTTPS addresses the hosts need
     if !listeners.http.is_empty() {
-        pingora_server.add_service(proxy_server::services::http_service(
-            &pingora_server.configuration,
+        server.add_service(proxy_server::services::http_service(
+            &server.configuration,
             &listeners.http,
             default_http,
             proxy_config.worker_threads,
         ));
     }
     if !listeners.https.is_empty() {
-        pingora_server.add_service(proxy_server::services::https_service(
-            &pingora_server.configuration,
+        server.add_service(proxy_server::services::https_service(
+            &server.configuration,
             &listeners.https,
             default_https,
+            &tcp_targets,
             proxy_config.worker_threads,
         )?);
     }
-    // TCP: `tcp` blocks (validated when loading the configuration)
-    pingora_server.add_services(tcp::services::tcp_services(
+    server.add_services(tcp::services::tcp_services(
         &listeners.tcp,
+        &tcp_targets,
+        &listeners.https,
         proxy_config.worker_threads,
     )?);
 
@@ -168,7 +190,7 @@ fn main() -> Result<(), anyhow::Error> {
         server_info,
     );
 
-    pingora_server.run_forever();
+    Ok(())
 }
 
 /// Creates the tracing/logging subscriber based on the configuration provided

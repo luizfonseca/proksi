@@ -141,6 +141,18 @@ tcp:
       "10.1.2.40:7777": { weight: 2 }
       "10.1.2.41:7777": {}
 
+# A `tcp` block can share the HTTPS port with its host's locations, chosen by the protocol
+# the client asks for (ALPN):
+#
+# host:
+#   ride.example.com:
+#     location: { "/": { upstream: { "10.0.0.8:3000": {} } } }
+#     tcp:
+#       game:
+#         listen: "0.0.0.0:443"
+#         alpn: ["game/1"]
+#         upstream: { "10.0.0.7:7777": {} }
+
 # Hosts that the server will accept requests for.
 # The key is the hostname (or IP address) matched against the Host header of each request,
 # and used to issue certificates when Let's Encrypt is enabled.

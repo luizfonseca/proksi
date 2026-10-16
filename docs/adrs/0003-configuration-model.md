@@ -175,7 +175,7 @@ A `tcp` block forwards connections to its upstreams, with the same load balancin
 - On a port shared with HTTPS (443), SNI can't tell HTTP and TCP apart for the same host, so the `tcp` block must set `alpn`: connections asking for one of its protocols go to it, the rest to the host's locations. A shared-port `tcp` block without `alpn` is rejected when the host also has locations. Passthrough can't share a port with locations, since proksi would need to decrypt the connection to hand it to HTTP.
 - A top-level `tcp` block has no TLS and no hostname, and is chosen by port only.
 
-Sharing 443 needs proksi to accept the connection itself, read SNI and ALPN from the TLS ClientHello, and then either finish the handshake and hand the connection to the HTTP proxy or forward it. Pingora doesn't do this out of the box, so `tcp` on its own port comes first.
+Sharing 443 happens once TLS is terminated: during the handshake, proksi selects a block's `alpn` protocol when the client offers one for that host (HTTP/2 and HTTP/1.1 otherwise), and the HTTPS listener then forwards the connections of `tcp` blocks by SNI and protocol, handing the rest to the HTTP proxy. Passthrough needs SNI read from the ClientHello before the handshake, so it comes later.
 
 ### Compatibility
 
@@ -202,7 +202,7 @@ Each step ships on its own:
 4. The existing plugins, headers and cache as building blocks.
 5. `rate_limit`, then `body_limit`.
 6. `tcp` on its own port.
-7. `tcp` sharing 443 through SNI/ALPN.
+7. `tcp` sharing 443 through SNI and ALPN.
 
 Steps 1–2 cover more than one route per host, 3 running proksi without names or TLS (#293), 5 rate and body limits, and 6–7 TCP routing.
 

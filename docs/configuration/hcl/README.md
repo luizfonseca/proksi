@@ -162,7 +162,7 @@ Unknown attributes are rejected, so a typo fails when the configuration is loade
 
 **TCP**
 
-`tcp "<name>" { listen = "ip:port", upstream "<host:port>" {} }` forwards TCP connections, at the top level (plain TCP) or inside a host (TLS with the host's certificate, or `tls = "passthrough"`). See [TCP](routing/tcp.md).
+`tcp "<name>" { listen = "ip:port", upstream "<host:port>" {} }` forwards TCP connections, at the top level (plain TCP) or inside a host (TLS with the host's certificate, or `tls = "passthrough"`). With `alpn = ["..."]`, a host can be HTTPS and TCP on the same port, chosen by the protocol the client asks for. See [TCP](routing/tcp.md).
 
 To keep hosts in separate files, see [`import`](configuration/hcl/functions.md#import).
 
