@@ -1,6 +1,6 @@
 //! What the proxy needs to serve a host
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use crate::{config::host::HostTls, routing::paths::LocationMatcher};
 
@@ -8,7 +8,8 @@ use super::routes::RouteStoreContainer;
 
 /// A host being served: its locations, chosen by path
 pub struct HostContainer {
-    pub locations: Vec<RouteStoreContainer>,
+    /// Shared with the requests they serve
+    pub locations: Vec<Arc<RouteStoreContainer>>,
     matcher: LocationMatcher,
     /// Served over HTTPS (otherwise over plain HTTP, without certificates)
     pub tls_enabled: bool,
@@ -22,7 +23,7 @@ impl HostContainer {
     pub fn new(locations: Vec<(Vec<String>, RouteStoreContainer)>, tls: &HostTls) -> Self {
         let (patterns, locations): (Vec<_>, Vec<_>) = locations.into_iter().unzip();
         Self {
-            locations,
+            locations: locations.into_iter().map(Arc::new).collect(),
             matcher: LocationMatcher::new(patterns),
             tls_enabled: tls.enabled,
             listen: vec![],
@@ -53,7 +54,7 @@ impl HostContainer {
     }
 
     /// The location serving `path`: its most specific match
-    pub fn location_for(&self, path: &str) -> Option<&RouteStoreContainer> {
+    pub fn location_for(&self, path: &str) -> Option<&Arc<RouteStoreContainer>> {
         self.locations.get(self.matcher.find(path)?)
     }
 }
@@ -130,6 +131,19 @@ mod tests {
             &HostTls::default(),
         );
         assert!(host.location_for("/other").is_none());
+    }
+
+    #[test]
+    fn test_location_is_shared_between_requests() {
+        let host = HostContainer::new(
+            vec![(vec!["/*".to_string()], location("10.0.0.1"))],
+            &HostTls::default(),
+        );
+
+        assert!(std::sync::Arc::ptr_eq(
+            host.location_for("/a").unwrap(),
+            host.location_for("/b").unwrap()
+        ));
     }
 
     fn listening_on(listen: &[&str]) -> HostContainer {

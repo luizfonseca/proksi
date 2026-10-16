@@ -26,6 +26,11 @@ mod stores;
 mod tools;
 mod wasm;
 
+// Faster than the system allocators (notably musl's) for the many small allocations
+// of each request
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[deny(
     clippy::all,
     clippy::pedantic,

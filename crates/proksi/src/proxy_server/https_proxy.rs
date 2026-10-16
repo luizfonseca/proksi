@@ -1,5 +1,5 @@
 use std::time::{Duration, SystemTime};
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 
@@ -58,7 +58,8 @@ fn get_cache_storage(cache_type: &RouteCacheType) -> &'static (dyn pingora_cache
 
 pub struct RouterContext {
     pub host: String,
-    pub route_container: RouteStoreContainer,
+    /// The location serving the request, once found
+    pub route_container: Option<Arc<RouteStoreContainer>>,
     pub upstream: RouteUpstream,
     pub extensions: HashMap<Cow<'static, str>, String>,
 
@@ -78,7 +79,7 @@ impl ProxyHttp for Router {
     fn new_ctx(&self) -> Self::CTX {
         RouterContext {
             host: String::new(),
-            route_container: RouteStoreContainer::default(),
+            route_container: None,
             upstream: RouteUpstream::default(),
             extensions: HashMap::with_capacity(2),
 
@@ -170,7 +171,7 @@ impl ProxyHttp for Router {
             }
         }
 
-        ctx.route_container = route_container.clone();
+        ctx.route_container = Some(route_container.clone());
 
         Ok(false)
     }
@@ -185,7 +186,9 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
         // If there's no host matching, returns a 404
-        let route_container = &ctx.route_container;
+        let Some(route_container) = ctx.route_container.clone() else {
+            return Err(pingora::Error::new(HTTPStatus(404)));
+        };
 
         if session.cache.enabled() {
             session.cache.set_max_file_size_bytes(100 * 1024 * 1024);
@@ -226,16 +229,15 @@ impl ProxyHttp for Router {
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
-        // If there's no host matching, returns a 404
-        let route_container = &ctx.route_container;
+        if let Some(route_container) = &ctx.route_container {
+            for (name, value) in &route_container.host_header_add {
+                upstream_response.insert_header(name, value)?;
+            }
 
-        for (name, value) in &route_container.host_header_add {
-            upstream_response.insert_header(name, value)?;
-        }
-
-        // Remove headers from the upstream response
-        for name in &route_container.host_header_remove {
-            upstream_response.remove_header(name);
+            // Remove headers from the upstream response
+            for name in &route_container.host_header_remove {
+                upstream_response.remove_header(name);
+            }
         }
 
         let cache_state = ctx.extensions.get("cache_state").cloned();
@@ -438,8 +440,7 @@ impl ProxyHttp for Router {
         resp: &ResponseHeader,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<RespCacheable> {
-        let container = &ctx.route_container;
-        let Some(cache) = container.cache.as_ref() else {
+        let Some(cache) = ctx.route_container.as_ref().and_then(|c| c.cache.as_ref()) else {
             return Ok(RespCacheable::Uncacheable(NoCacheReason::NeverEnabled));
         };
 
@@ -520,9 +521,10 @@ fn get_host(session: &mut Session) -> &str {
 
 #[cfg(test)]
 mod tests {
+    use pingora::proxy::ProxyHttp;
     use pingora_cache::key::CacheHashKey;
 
-    use super::cache_key_for;
+    use super::{cache_key_for, Listener, Router};
 
     #[test]
     fn test_cache_key_matches_pre_pingora_0_9_hash() {
@@ -532,5 +534,16 @@ mod tests {
 
         assert_eq!(key.primary(), "6d8d9b6395c298da5763bb93958a01c0");
         assert_eq!(key.user_tag, "example.com");
+    }
+
+    #[test]
+    fn test_new_context_has_no_location() {
+        let router = Router {
+            listener: Listener::Http,
+            default_address: "0.0.0.0:80".parse().unwrap(),
+        };
+
+        // Created for every request: the location is only shared once it's found
+        assert!(router.new_ctx().route_container.is_none());
     }
 }
