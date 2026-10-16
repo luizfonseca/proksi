@@ -464,7 +464,7 @@ host:
 
 ## What's next
 
-Kubernetes TLS secrets, plugins through annotations and `Ingress` status are next ([ADR 0005](https://docs.proksi.info/#/adrs/0005-kubernetes-ingress)). See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
+See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
 
 
 # Documentation
