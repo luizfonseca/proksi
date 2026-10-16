@@ -87,6 +87,20 @@ host "secure.example.com" {
 }
 ```
 
+Proksi reads the name the client asks for from its first TLS message (the `ClientHello`), before any handshake. So passthrough blocks of different hosts can share an address, and they can share the HTTPS port: connections asking for a passthrough host are forwarded untouched, and every other name is handshaken by Proksi and served as usual (HTTPS, or `tcp` blocks with TLS terminated):
+
+```hcl
+host "secure.example.com" {
+  tcp "app" {
+    listen = "0.0.0.0:443"
+    tls    = "passthrough"
+    upstream "10.0.0.6:443" {}
+  }
+}
+```
+
+A passthrough block alone on its address takes every connection, whatever name it asks for. On a shared address, only connections asking for its host. Passthrough is chosen by name only, so on the HTTPS port its host can't also have locations.
+
 In a host with `tls = false`, a `tcp` block is plain TCP.
 
 ## Good to know
@@ -95,5 +109,4 @@ In a host with `tls = false`, a `tcp` block is plain TCP.
 - `tcp` blocks come from the configuration file (not from docker labels or the store), and are set up when Proksi starts: changing them restarts Proksi.
 - Upstreams of a `tcp` block only take `weight`.
 - Each connection gets an [access log](configuration/logging.md#access-logs) line when it closes, with its bytes in each direction.
-- TLS passthrough can't share the HTTPS port yet.
 - A host with a `tcp` block on the HTTPS port takes every connection asking for its name, including names added later through docker labels or the store.

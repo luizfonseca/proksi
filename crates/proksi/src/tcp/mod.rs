@@ -11,7 +11,9 @@ use pingora::lb::{selection::RoundRobin, LoadBalancer};
 use crate::{config::tcp::TcpTls, metrics::TcpMetrics, stores::host_container::binds};
 
 pub mod alpn;
+pub mod client_hello;
 pub mod proxy;
+pub mod router;
 pub mod services;
 
 /// A `tcp` block, ready to accept connections
@@ -41,6 +43,32 @@ fn register_load_balancers(targets: &[TcpTarget]) {
 /// The load balancers of the `tcp` blocks, by block, for health checks
 pub fn load_balancers() -> &'static [(String, Arc<LoadBalancer<RoundRobin>>)] {
     LOAD_BALANCERS.get().map_or(&[], Vec::as_slice)
+}
+
+/// The TLS passthrough block for a connection accepted on `local`, asking for `server_name`
+/// (read from its `ClientHello`). On an address of its own, a block takes every connection;
+/// shared with other blocks or HTTPS hosts (`shared_with_https`), only those asking for its
+/// host.
+pub fn passthrough_for<'a>(
+    targets: &'a [TcpTarget],
+    local: &SocketAddr,
+    server_name: Option<&str>,
+    shared_with_https: bool,
+) -> Option<&'a TcpTarget> {
+    let on_address = targets
+        .iter()
+        .filter(|target| binds(&target.listen, local))
+        .collect::<Vec<_>>();
+    let alone = on_address.len() == 1 && !shared_with_https;
+    on_address.into_iter().find(|target| {
+        target.tls == TcpTls::Passthrough
+            && (alone
+                || target
+                    .host
+                    .as_deref()
+                    .zip(server_name)
+                    .is_some_and(|(host, name)| host.eq_ignore_ascii_case(name)))
+    })
 }
 
 /// The blocks listening on `address`
@@ -77,7 +105,9 @@ pub fn choose<'a>(
                 host && protocol
             }
             // Only one block per address (checked when the configuration loads)
-            TcpTls::None | TcpTls::Passthrough => true,
+            TcpTls::None => true,
+            // Chosen before any handshake, by `tcp::router` (`passthrough_for`)
+            TcpTls::Passthrough => false,
         })
 }
 
@@ -133,10 +163,8 @@ mod tests {
             chosen(&targets, "10.0.0.1:7777", None).as_deref(),
             Some("game")
         );
-        assert_eq!(
-            chosen(&targets, "127.0.0.1:6000", None).as_deref(),
-            Some("raw")
-        );
+        // TLS passthrough is chosen before any handshake (`passthrough_for`), never here
+        assert_eq!(chosen(&targets, "127.0.0.1:6000", None), None);
         assert_eq!(chosen(&targets, "10.0.0.1:6000", None), None);
         assert_eq!(chosen(&targets, "10.0.0.1:8000", None), None);
     }
@@ -185,5 +213,29 @@ mod tests {
             chosen_with(&targets, "10.0.0.1:443", Some("b.test"), Some("game/1")),
             None
         );
+    }
+
+    #[test]
+    fn test_passthrough_by_server_name() {
+        let targets = [
+            target("a", Some("a.test"), "0.0.0.0:443", TcpTls::Passthrough),
+            target("b", Some("b.test"), "0.0.0.0:443", TcpTls::Passthrough),
+            target("c", Some("c.test"), "0.0.0.0:8443", TcpTls::Passthrough),
+        ];
+        let chosen = |local: &str, name: Option<&str>, https: bool| {
+            super::passthrough_for(&targets, &local.parse().unwrap(), name, https)
+                .map(|target| target.label.clone())
+        };
+
+        assert_eq!(chosen("10.0.0.1:443", Some("a.test"), true).as_deref(), Some("a"));
+        assert_eq!(chosen("10.0.0.1:443", Some("b.test"), false).as_deref(), Some("b"));
+        assert_eq!(chosen("10.0.0.1:443", Some("other.test"), true), None);
+        assert_eq!(chosen("10.0.0.1:443", None, false), None);
+        // Alone on its address: every connection
+        assert_eq!(chosen("10.0.0.1:8443", Some("other.test"), false).as_deref(), Some("c"));
+        assert_eq!(chosen("10.0.0.1:8443", None, false).as_deref(), Some("c"));
+        // Unless the address is shared with HTTPS hosts
+        assert_eq!(chosen("10.0.0.1:8443", Some("other.test"), true), None);
+        assert_eq!(chosen("10.0.0.1:8443", Some("C.Test"), true).as_deref(), Some("c"));
     }
 }

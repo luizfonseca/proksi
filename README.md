@@ -459,7 +459,7 @@ host:
 
 ## What's next
 
-TLS passthrough on port `443` is the next step. See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
+Kubernetes TLS secrets, plugins through annotations and `Ingress` status are next ([ADR 0005](https://docs.proksi.info/#/adrs/0005-kubernetes-ingress)). See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
 
 
 # Documentation

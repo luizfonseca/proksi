@@ -31,6 +31,10 @@ impl TcpProxy {
         Self { targets }
     }
 
+    pub fn targets(&self) -> &[TcpTarget] {
+        &self.targets
+    }
+
     /// The block of a connection, by the address it was accepted on and, with TLS terminated,
     /// the name the client asked for
     pub fn target(&self, downstream: &Stream) -> Option<&TcpTarget> {
@@ -63,18 +67,26 @@ impl TcpProxy {
     }
 
     /// Forwards the connection to an upstream of `target`, until either side closes it, then
-    /// writes its access log
-    pub async fn forward(&self, mut downstream: Stream, target: &TcpTarget) {
+    /// writes its access log. `server_name`: the name the client asked for, when TLS isn't
+    /// terminated (passthrough)
+    pub async fn forward(
+        &self,
+        mut downstream: Stream,
+        target: &TcpTarget,
+        server_name: Option<String>,
+    ) {
         let _connection = target.metrics.connection();
         let start = std::time::Instant::now();
         let client_ip = downstream
             .get_socket_digest()
             .and_then(|digest| digest.peer_addr().map(ToString::to_string));
-        let server_name = downstream.get_ssl_digest().and_then(|digest| {
-            digest
-                .extension
-                .get::<ServerName>()
-                .map(|name| name.0.clone())
+        let server_name = server_name.or_else(|| {
+            downstream.get_ssl_digest().and_then(|digest| {
+                digest
+                    .extension
+                    .get::<ServerName>()
+                    .map(|name| name.0.clone())
+            })
         });
 
         let mut forwarded = Forwarded::default();
@@ -152,7 +164,7 @@ impl ServerApp for TcpProxy {
         _shutdown: &ShutdownWatch,
     ) -> Option<Stream> {
         let target = self.target(&downstream)?;
-        self.forward(downstream, target).await;
+        self.forward(downstream, target, None).await;
         None
     }
 }
