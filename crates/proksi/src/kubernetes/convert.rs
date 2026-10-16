@@ -159,7 +159,7 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
 
 /// The `Ingress`es of class `class` (or without a class, when `class` is the default one),
 /// oldest first: the oldest keeps a path (or a certificate) defined twice
-fn of_class<'a>(cluster: &'a Cluster, class: &str) -> Vec<&'a Arc<Ingress>> {
+pub fn of_class<'a>(cluster: &'a Cluster, class: &str) -> Vec<&'a Arc<Ingress>> {
     let default_class = cluster.ingress_classes.iter().any(|ingress_class| {
         ingress_class.metadata.name.as_deref() == Some(class)
             && ingress_class

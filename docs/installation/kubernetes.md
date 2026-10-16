@@ -23,6 +23,7 @@ The `kubernetes` block takes:
 | `enabled` | `false` | Watch the cluster |
 | `ingress_class` | `"proksi"` | The class of the `Ingress`es to serve |
 | `namespaces` | `[]` | Namespaces to watch (all of them by default) |
+| `publish_service` | | `namespace/name` of Proksi's `Service`: its address (load balancer, external IPs, or cluster IP) is written to the status of each `Ingress`, for tools waiting for one (`kubectl wait`, external-dns, Argo CD). The manifest sets `proksi/proksi` |
 
 Outside a cluster (for development), Proksi uses your kubeconfig.
 
@@ -105,14 +106,14 @@ metadata:
     proksi.info/auth-secret: web-auth
 ```
 
-Only labelled `Secret`s (and TLS ones) are watched. An `Ingress` with invalid blocks, or whose auth secret is missing, isn't served, and the reason is logged.
+Only labelled `Secret`s (and TLS ones) are watched. An `Ingress` with invalid blocks, or whose auth secret is missing, isn't served, and the reason is logged and recorded as a warning `Event` on it (`kubectl describe ingress`).
 
 Hosts can still come from Proksi's configuration file, docker labels or the store. When the same host comes from several places, the store wins over Kubernetes, which wins over docker labels and the configuration file.
 
 ## More than one replica
 
-With more than one replica, use a shared store (Redis or Postgres) so certificates are ordered once and every replica serves them. With the memory store, Proksi logs a warning.
+With more than one replica, use a shared store (Redis or Postgres) so certificates are ordered once and every replica serves them. With the memory store, Proksi logs a warning. The status of `Ingress`es is written by one replica at a time (through a lease in the store).
 
 ## Coming next
 
-The `Ingress` status, and a Helm chart.
+A Helm chart.

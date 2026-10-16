@@ -109,3 +109,25 @@ spec:
                 name: web
                 port:
                   number: 80
+---
+# Can't be served (upstreams come from backends): reported with an Event
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-invalid
+  annotations:
+    proksi.info/blocks: |
+      upstream "10.0.0.1:80" {}
+spec:
+  ingressClassName: proksi
+  rules:
+    - host: invalid.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80

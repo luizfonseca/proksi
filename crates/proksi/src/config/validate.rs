@@ -22,6 +22,18 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
     crate::proxy_server::client::TrustedProxies::parse(&config.server.trusted_proxies)
         .map_err(|err| anyhow!("server.{err}"))?;
 
+    let publish = config.kubernetes.publish_service.as_deref();
+    if publish.is_some_and(|service| {
+        service
+            .split_once('/')
+            .is_none_or(|(namespace, name)| namespace.is_empty() || name.is_empty())
+    }) {
+        return Err(anyhow!(
+            "kubernetes.publish_service must be namespace/name, not {:?}",
+            publish.unwrap_or_default()
+        ));
+    }
+
     if config.store.sync_interval_secs == 0 {
         return Err(anyhow!("store.sync_interval_secs must be greater than 0"));
     }
@@ -106,6 +118,19 @@ mod tests {
                 "{file}"
             );
         }
+    }
+
+    #[test]
+    fn test_check_config_publish_service() {
+        let mut config = Config::default();
+        config.kubernetes.publish_service = Some("proksi".to_string());
+
+        let err = check_config(&config).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "kubernetes.publish_service must be namespace/name, not \"proksi\""
+        );
     }
 
     #[test]
