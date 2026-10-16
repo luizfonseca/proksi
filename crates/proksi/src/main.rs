@@ -115,34 +115,9 @@ fn main() -> Result<(), anyhow::Error> {
         },
     );
 
-    // Service: HTTPS Load Balancer (main service)
-    // The router will also handle health checks and failover in case of upstream failure
-    let router = proxy_server::https_proxy::Router {
-        listener: proxy_server::listener::Listener::Https,
-    };
-    let mut https_secure_service = http_proxy_service(&pingora_server.configuration, router);
     http_public_service.add_tcp(&le_address);
-
     // Worker threads per configuration (the HTTP port also serves hosts without TLS)
-    https_secure_service.threads = proxy_config.worker_threads;
     http_public_service.threads = proxy_config.worker_threads;
-
-    // Setup tls settings and Enable HTTP/2
-    let cert_store = CertStore::new();
-    let mut tls_settings = TlsSettings::with_callbacks(Box::new(cert_store))?;
-    tls_settings.enable_h2();
-
-    // tls_settings.set_session_cache_mode(SslSessionCacheMode::SERVER);
-    tls_settings.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
-
-    // For now this is a hardcoded recommendation based on
-    // https://developers.cloudflare.com/ssl/reference/protocols/
-    // but will be made configurable in the future
-    tls_settings.set_min_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_2))?;
-    tls_settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
-
-    // Add TLS settings to the HTTPS service
-    https_secure_service.add_tls_with_settings(&https_address, None, tls_settings);
 
     // Add Prometheus service
     // let mut prometheus_service_http = Service::prometheus_http_service();
@@ -165,10 +140,16 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Listen on HTTP and HTTPS ports
     pingora_server.add_service(http_public_service);
-    pingora_server.add_service(https_secure_service);
-
-    let server_info =
-        format!("running HTTPS service on {https_address} and HTTP service on {le_address}");
+    let server_info = if proxy_config.server.serves_https() {
+        pingora_server.add_service(https_service(
+            &pingora_server.configuration,
+            &https_address,
+            proxy_config.worker_threads,
+        )?);
+        format!("running HTTPS service on {https_address} and HTTP service on {le_address}")
+    } else {
+        format!("running HTTP service on {le_address} (HTTPS is disabled)")
+    };
     tracing::info!(
         version = crate_version!(),
         workers = proxy_config.worker_threads,
@@ -176,6 +157,40 @@ fn main() -> Result<(), anyhow::Error> {
     );
 
     pingora_server.run_forever();
+}
+
+/// The HTTPS port (main service): certificates by SNI, HTTP/2, and the router for hosts with TLS
+fn https_service(
+    configuration: &Arc<pingora::server::configuration::ServerConf>,
+    https_address: &str,
+    worker_threads: Option<usize>,
+) -> Result<
+    pingora::services::listening::Service<
+        pingora::proxy::HttpProxy<proxy_server::https_proxy::Router>,
+    >,
+    anyhow::Error,
+> {
+    let router = proxy_server::https_proxy::Router {
+        listener: proxy_server::listener::Listener::Https,
+    };
+    let mut service = http_proxy_service(configuration, router);
+    service.threads = worker_threads;
+
+    // Setup tls settings and Enable HTTP/2
+    let mut tls_settings = TlsSettings::with_callbacks(Box::new(CertStore::new()))?;
+    tls_settings.enable_h2();
+
+    // tls_settings.set_session_cache_mode(SslSessionCacheMode::SERVER);
+    tls_settings.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
+
+    // For now this is a hardcoded recommendation based on
+    // https://developers.cloudflare.com/ssl/reference/protocols/
+    // but will be made configurable in the future
+    tls_settings.set_min_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_2))?;
+    tls_settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
+
+    service.add_tls_with_settings(https_address, None, tls_settings);
+    Ok(service)
 }
 
 /// Creates the tracing/logging subscriber based on the configuration provided

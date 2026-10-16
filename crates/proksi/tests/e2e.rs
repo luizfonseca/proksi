@@ -500,3 +500,39 @@ async fn test_hosts_without_tls_are_served_on_the_http_port() {
 
     proksi.assert_healthy();
 }
+
+const CATCH_ALL_WITHOUT_TLS: &str = r#"
+host "*" {
+  tls = false
+
+  location "/" {
+    headers {
+      response {
+        add = { "x-host" = "catch-all" }
+      }
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_runs_without_https() {
+    let mut proksi = Harness::start_without_https(CATCH_ALL_WITHOUT_TLS).await;
+
+    let res = proksi
+        .get_http_port("anything.test", "/hello")
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.to_lowercase().contains("x-host: catch-all"), "{res}");
+
+    // Nothing listens on the HTTPS port
+    assert!(
+        tokio::net::TcpStream::connect(("127.0.0.1", proksi.https_port))
+            .await
+            .is_err()
+    );
+
+    proksi.assert_healthy();
+}

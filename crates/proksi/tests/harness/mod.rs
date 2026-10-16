@@ -107,6 +107,8 @@ pub struct Harness {
     hosts: Vec<String>,
     /// Extra configuration added to the generated one (e.g. `auto_reload`)
     extra_config: String,
+    /// Started with `server.https_enabled = false` (see `start_without_https`)
+    without_https: bool,
     pub https_port: u16,
     pub http_port: u16,
     pub http_upstream: HttpUpstream,
@@ -120,6 +122,16 @@ impl Harness {
 
     /// Starts proksi with extra configuration (e.g. an `auto_reload` block)
     pub async fn start_with(routes: Vec<Route>, extra_config: &str) -> Self {
+        Self::start_inner(routes, extra_config, false).await
+    }
+
+    /// Starts proksi without the HTTPS port: hosts must be defined in `extra_config`
+    /// with `tls = false`, and readiness is checked on the HTTP port
+    pub async fn start_without_https(extra_config: &str) -> Self {
+        Self::start_inner(vec![], extra_config, true).await
+    }
+
+    async fn start_inner(routes: Vec<Route>, extra_config: &str, without_https: bool) -> Self {
         raise_open_files_limit();
 
         let dir = tempfile::tempdir().unwrap();
@@ -141,6 +153,7 @@ impl Harness {
             dir,
             hosts: vec![],
             extra_config: extra_config.to_string(),
+            without_https,
             https_port,
             http_port,
             http_upstream,
@@ -244,6 +257,7 @@ worker_threads = 2
 server {{
   https_address = "127.0.0.1:{https_port}"
   http_address = "127.0.0.1:{http_port}"
+  https_enabled = {https_enabled}
 }}
 
 logging {{
@@ -263,13 +277,25 @@ paths {{
 
 {extra_config}
 
-routes = [
-{routes_hcl}]
+{hosts}
 "#,
             https_port = self.https_port,
             http_port = self.http_port,
+            https_enabled = !self.without_https,
+            hosts = self.render_hosts(&routes_hcl),
             le = dir.join("le").to_string_lossy(),
             extra_config = self.render_extra_config(),
+        )
+    }
+
+    /// The routes, or without HTTPS, the readiness host over plain HTTP
+    fn render_hosts(&self, routes_hcl: &str) -> String {
+        if !self.without_https {
+            return format!("routes = [\n{routes_hcl}]");
+        }
+        format!(
+            "host \"{READY_HOST}\" {{\n  tls = false\n  location \"/\" {{\n    upstream \"127.0.0.1:{}\" {{}}\n  }}\n}}",
+            self.http_upstream.port
         )
     }
 
@@ -304,10 +330,17 @@ routes = [
         for _ in 0..100 {
             assert!(self.is_alive(), "proksi exited:\n{}", self.logs());
 
-            if let Ok(res) = self.get(READY_HOST, "/").await {
-                if res.status == 200 {
-                    return;
-                }
+            let ready = if self.without_https {
+                self.get_http_port(READY_HOST, "/")
+                    .await
+                    .is_ok_and(|res| res.starts_with("HTTP/1.1 200"))
+            } else {
+                self.get(READY_HOST, "/")
+                    .await
+                    .is_ok_and(|res| res.status == 200)
+            };
+            if ready {
+                return;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }

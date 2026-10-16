@@ -569,6 +569,17 @@ pub struct ServerCfg {
         default_value = "0.0.0.0:80"
     )]
     pub http_address: Option<Cow<'static, str>>,
+
+    /// Listen on the HTTPS address (`false`: only plain HTTP, every host needs `tls = false`)
+    #[arg(long = "server.https_enabled", default_value = "true")]
+    pub https_enabled: Option<bool>,
+}
+
+impl ServerCfg {
+    /// Whether proksi listens on the HTTPS address
+    pub fn serves_https(&self) -> bool {
+        self.https_enabled.unwrap_or(true)
+    }
 }
 
 /// The main configuration struct.
@@ -698,6 +709,7 @@ impl Default for Config {
             server: ServerCfg {
                 https_address: Some(Cow::Borrowed("0.0.0.0:443")),
                 http_address: Some(Cow::Borrowed("0.0.0.0:80")),
+                https_enabled: Some(true),
             },
             worker_threads: Some(default_worker_threads()),
             upgrade: false,
