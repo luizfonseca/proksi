@@ -954,3 +954,76 @@ async fn test_hosts_are_only_served_on_their_addresses() {
 
     proksi.assert_healthy();
 }
+
+const ADMIN: &str = r#"
+admin {
+  listen = "127.0.0.1:{tcp_port_2}"
+  token  = "e2e-token"
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_admin_metrics() {
+    let mut proksi = Harness::start_with(vec![Route::new("app.test", Upstream::Http)], ADMIN).await;
+    let admin_port = proksi.tcp_ports[2];
+    let metrics = |token: Option<&str>| {
+        let authorization = token
+            .map(|token| format!("Authorization: Bearer {token}\r\n"))
+            .unwrap_or_default();
+        format!("GET /metrics HTTP/1.1\r\nHost: admin\r\n{authorization}Connection: close\r\n\r\n")
+    };
+
+    proksi.resolve("app.test");
+    assert_eq!(proksi.get("app.test", "/hello").await.unwrap().status, 200);
+    assert_eq!(proksi.get("app.test", "/hello").await.unwrap().status, 200);
+    // A host proksi doesn't serve (over a connection for one it does)
+    let res = proksi
+        .tls_request(
+            proksi.https_port,
+            "app.test",
+            "GET / HTTP/1.1\r\nHost: unknown.test\r\nConnection: close\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 404"), "{res}");
+
+    let res = proksi
+        .raw_http_on(admin_port, metrics(None).as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 401"), "{res}");
+
+    let res = proksi
+        .raw_http_on(admin_port, metrics(Some("e2e-token")).as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    let line = |prefix: &str, suffix: &str| {
+        res.lines()
+            .find(|line| line.starts_with(prefix) && line.contains(suffix))
+            .map(|line| line.rsplit(' ').next().unwrap_or_default().to_string())
+    };
+    // By host and location, and status class
+    assert_eq!(
+        line("proksi_requests_total{host=\"app.test\"", "status=\"2xx\"").as_deref(),
+        Some("2"),
+        "{res}"
+    );
+    assert_eq!(
+        line("proksi_requests_total{host=\"_unknown\"", "status=\"4xx\"").as_deref(),
+        Some("1"),
+        "{res}"
+    );
+    // Time to the upstream's response headers, by upstream
+    assert_eq!(
+        line(
+            "proksi_upstream_duration_seconds_count{host=\"app.test\"",
+            &format!("upstream=\"127.0.0.1:{}\"", proksi.http_upstream.port)
+        )
+        .as_deref(),
+        Some("2"),
+        "{res}"
+    );
+
+    proksi.assert_healthy();
+}

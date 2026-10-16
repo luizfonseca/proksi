@@ -14,10 +14,12 @@ use pingora::server::configuration::Opt;
 
 use services::{logger::ProxyLoggerReceiver, BackgroundFunctionService};
 
+mod admin;
 mod blocks;
 mod cache;
 mod channel;
 mod config;
+mod metrics;
 mod plugins;
 mod proxy_server;
 mod routing;
@@ -167,6 +169,13 @@ fn add_listeners(
             &tcp_targets,
             proxy_config.worker_threads,
         )?);
+    }
+    if let Some(address) = listeners.admin {
+        let token = proxy_config
+            .admin
+            .as_ref()
+            .and_then(|admin| admin.token().map(ToString::to_string));
+        server.add_service(admin::admin_service(address, token));
     }
     server.add_services(tcp::services::tcp_services(
         &listeners.tcp,
