@@ -6,6 +6,8 @@ Similar to other proxies, Proksi can be run as a Docker container. The following
 docker run -d -p 80:80 -p 443:443 -v /path/to/config:/etc/proksi/ luizfonseca/proksi
 ```
 
+The image is available for `amd64` and `arm64`, and ships a static binary (it doesn't depend on the image's libraries). Proksi only opens the ports its hosts need, so publish the ports of your configuration: `80` and `443` by default, or the `listen` addresses of your hosts.
+
 If you are using `docker-compose.yml`  to manage your services, you can configure Proksi as your main host-mode container without even creating a `proksi.hcl` file.
 
 ```yaml

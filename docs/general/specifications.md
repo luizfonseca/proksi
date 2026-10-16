@@ -24,13 +24,13 @@ This can be used for development and testing purposes.
 
 ### Store keys
 
-The following keys are used by the Redis store (see [ADR 0001](../adrs/0001-route-sources.md) for routes):
+The following keys are used by the Redis store (see [ADR 0001](adrs/0001-route-sources.md) for routes):
 
 | Key | Description | Content |
 | --- | ----------- | ------- |
 | `proksi:cert:<domain>` | Certificate for a domain | `{ "key": "...", "leaf": "...", "chain": "..." }` (base64-encoded PEM) |
 | `proksi:challenge:<domain>` | ACME challenge for a domain (TTL: 300 seconds) | `["<token>", "<proof>"]` |
-| `proksi:route:<host>` | Route for a host (lowercase) | `{ "schema_version": 1, "route": { ...same as a route in the configuration file } }` |
+| `proksi:route:<host>` | A host (lowercase name) | `{ "schema_version": 2, "host": { "name": "...", "listen": [], "tls": { ... }, "locations": [ ... ] } }` (entries with `schema_version: 1` and a `route` are still read) |
 | `proksi:routes` | Set of hosts that have a route | set of `<host>` |
 | `proksi:revision` | Revision of the routes, incremented on every change | integer |
 | `proksi:replica:<id>` | Revision applied by each proksi instance (TTL: 3 sync intervals) | `{ "id": "...", "revision": 1, "applied_at": 1700000000, "version": "...", "hostname": "..." }` |
