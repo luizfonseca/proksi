@@ -3664,6 +3664,7 @@ dependencies = [
  "futures-util",
  "hcl-rs",
  "http",
+ "ipnet",
  "itertools 0.14.0",
  "jsonwebtoken",
  "k8s-openapi",

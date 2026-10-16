@@ -44,4 +44,12 @@ host "mywebsite.com" {
 - Each location counts its own requests, and requests are counted in fixed periods (a client can make `requests` in each period of `per`).
 - Counts are kept in memory, on each Proksi server, and start over when the configuration changes.
 - Counts use a fixed amount of memory and are estimates: with a very large number of clients in the same period, a client can be limited slightly before reaching `requests`, never after.
-- Clients are identified by the IP address of the connection. Behind another proxy or load balancer, every request comes from its address, so the limit applies to all clients together.
+- Clients are identified by the IP address of the connection. Behind another proxy or load balancer, every request comes from its address, so the limit would apply to all clients together. List it in `server.trusted_proxies`, and the client is the address it forwards in `X-Forwarded-For` instead:
+
+  ```hcl
+  server {
+    trusted_proxies = ["10.0.0.0/8", "192.168.1.10"]
+  }
+  ```
+
+  Only addresses forwarded by trusted proxies are used: going from the right of `X-Forwarded-For`, the client is the first address that isn't a trusted proxy, so a client can't choose its own address by sending the header itself. Access logs show the same client.

@@ -107,6 +107,8 @@ pub struct Harness {
     hosts: Vec<String>,
     /// Extra configuration added to the generated one (e.g. `auto_reload`)
     extra_config: String,
+    /// Extra attributes of the generated `server` block
+    server_config: String,
     /// Started with only the hosts of `extra_config` (see `start_without_https`)
     without_https: bool,
     pub https_port: u16,
@@ -126,17 +128,31 @@ impl Harness {
 
     /// Starts proksi with extra configuration (e.g. an `auto_reload` block)
     pub async fn start_with(routes: Vec<Route>, extra_config: &str) -> Self {
-        Self::start_inner(routes, extra_config, false).await
+        Self::start_inner(routes, "", extra_config, false).await
     }
 
     /// Starts proksi with only the hosts of `extra_config`, all with `tls = false`:
     /// no host needs HTTPS, so proksi doesn't open the HTTPS port.
     /// Readiness is checked on the HTTP port.
     pub async fn start_without_https(extra_config: &str) -> Self {
-        Self::start_inner(vec![], extra_config, true).await
+        Self::start_inner(vec![], "", extra_config, true).await
     }
 
-    async fn start_inner(routes: Vec<Route>, extra_config: &str, without_https: bool) -> Self {
+    /// Like `start_with`, with extra attributes in the `server` block
+    pub async fn start_with_server(
+        routes: Vec<Route>,
+        server_config: &str,
+        extra_config: &str,
+    ) -> Self {
+        Self::start_inner(routes, server_config, extra_config, false).await
+    }
+
+    async fn start_inner(
+        routes: Vec<Route>,
+        server_config: &str,
+        extra_config: &str,
+        without_https: bool,
+    ) -> Self {
         raise_open_files_limit();
 
         let dir = tempfile::tempdir().unwrap();
@@ -160,6 +176,7 @@ impl Harness {
             dir,
             hosts: vec![],
             extra_config: extra_config.to_string(),
+            server_config: server_config.to_string(),
             without_https,
             https_port,
             http_port,
@@ -266,6 +283,7 @@ worker_threads = 2
 server {{
   https_address = "127.0.0.1:{https_port}"
   http_address = "127.0.0.1:{http_port}"
+  {server_config}
 }}
 
 logging {{
@@ -289,6 +307,7 @@ paths {{
 "#,
             https_port = self.https_port,
             http_port = self.http_port,
+            server_config = self.server_config,
             hosts = self.render_hosts(&routes_hcl),
             le = dir.join("le").to_string_lossy(),
             extra_config = self.render_extra_config(),

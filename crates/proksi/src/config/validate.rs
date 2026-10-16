@@ -19,6 +19,9 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
         ));
     }
 
+    crate::proxy_server::client::TrustedProxies::parse(&config.server.trusted_proxies)
+        .map_err(|err| anyhow!("server.{err}"))?;
+
     if config.store.sync_interval_secs == 0 {
         return Err(anyhow!("store.sync_interval_secs must be greater than 0"));
     }
@@ -103,6 +106,19 @@ mod tests {
                 "{file}"
             );
         }
+    }
+
+    #[test]
+    fn test_check_config_trusted_proxies() {
+        let mut config = Config::default();
+        config.server.trusted_proxies = vec!["10.0.0.0/8".to_string(), "proxy.internal".to_string()];
+
+        let err = check_config(&config).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "server.trusted_proxies: \"proxy.internal\" is not an address or a network (10.0.0.0/8)"
+        );
     }
 
     #[test]

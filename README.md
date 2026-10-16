@@ -119,6 +119,10 @@ server {
   # HTTP requests are redirected to HTTPS (and used for Let's Encrypt challenges),
   # except for hosts with `tls = false`
   http_address = "0.0.0.0:80"
+
+  # Behind a load balancer: the client of a request is the address it forwards in
+  # X-Forwarded-For (for rate limits and access logs)
+  # trusted_proxies = ["10.0.0.0/8"]
 }
 
 logging {
