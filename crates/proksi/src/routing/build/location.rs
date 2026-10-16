@@ -38,7 +38,6 @@ pub(super) fn build_location_container(
         .iter()
         .map(|upstream| format!("{}:{}", upstream.ip, upstream.port))
         .collect::<Vec<_>>();
-    container.metrics = Some(LocationMetrics::new(host, &location.path, &upstreams));
 
     container.blocks = match Blocks::build(location) {
         Ok(blocks) => blocks,
@@ -47,6 +46,12 @@ pub(super) fn build_location_container(
             return None;
         }
     };
+    container.metrics = Some(LocationMetrics::with_blocks(
+        host,
+        &location.path,
+        &upstreams,
+        &container.blocks.answering(),
+    ));
 
     Some(container)
 }

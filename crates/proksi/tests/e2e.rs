@@ -960,6 +960,28 @@ admin {
   listen = "127.0.0.1:{tcp_port_2}"
   token  = "e2e-token"
 }
+
+host "limited.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  location "/" {
+    rate_limit {
+      requests = 1
+      per      = "1m"
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+
+tcp "web" {
+  listen = "127.0.0.1:{tcp_port_0}"
+  upstream "127.0.0.1:{http_upstream_port}" {}
+}
 "#;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -986,6 +1008,20 @@ async fn test_admin_metrics() {
         .await
         .unwrap();
     assert!(res.starts_with("HTTP/1.1 404"), "{res}");
+
+    // Answered by `rate_limit` the second time
+    proksi.resolve("limited.test");
+    assert_eq!(proksi.get("limited.test", "/").await.unwrap().status, 200);
+    assert_eq!(proksi.get("limited.test", "/").await.unwrap().status, 429);
+    // Through a tcp block
+    let res = proksi
+        .raw_http_on(
+            proksi.tcp_ports[0],
+            b"GET /tcp HTTP/1.1\r\nHost: tcp.test\r\nConnection: close\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
 
     let res = proksi
         .raw_http_on(admin_port, metrics(None).as_bytes())
@@ -1024,6 +1060,78 @@ async fn test_admin_metrics() {
         Some("2"),
         "{res}"
     );
+    assert_eq!(
+        line(
+            "proksi_upstream_healthy{host=\"app.test\"",
+            &format!("upstream=\"127.0.0.1:{}\"", proksi.http_upstream.port)
+        )
+        .as_deref(),
+        Some("1"),
+        "{res}"
+    );
+    // Building blocks
+    assert_eq!(
+        line(
+            "proksi_blocked_requests_total{block=\"rate_limit\",host=\"limited.test\"",
+            ""
+        )
+        .as_deref(),
+        Some("1"),
+        "{res}"
+    );
+    assert_eq!(
+        line(
+            "proksi_requests_total{host=\"limited.test\"",
+            "status=\"4xx\""
+        )
+        .as_deref(),
+        Some("1"),
+        "{res}"
+    );
+    // TCP: the connection closed once the upstream answered
+    assert_eq!(
+        line("proksi_tcp_connections_total{block=\"tcp \\\"web\\\"\"}", "").as_deref(),
+        Some("1"),
+        "{res}"
+    );
+    assert_eq!(
+        line("proksi_tcp_connections_active{block=\"tcp \\\"web\\\"\"}", "").as_deref(),
+        Some("0"),
+        "{res}"
+    );
+    let bytes = |direction: &str| {
+        line(
+            "proksi_tcp_bytes_total{block=\"tcp \\\"web\\\"\"",
+            &format!("direction=\"{direction}\""),
+        )
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or_default()
+    };
+    assert!(bytes("in") > 40 && bytes("out") > 100, "{res}");
+    // Hosts by source
+    assert!(line("proksi_routes{source=\"file\"}", "").is_some(), "{res}");
+
+    // Certificate expiry, refreshed 5 seconds after starting
+    let mut expiry = None;
+    for _ in 0..30 {
+        let res = proksi
+            .raw_http_on(admin_port, metrics(Some("e2e-token")).as_bytes())
+            .await
+            .unwrap();
+        expiry = res
+            .lines()
+            .find(|line| {
+                line.starts_with(
+                    "proksi_certificate_expiry_timestamp_seconds{domain=\"limited.test\"}",
+                )
+            })
+            .map(ToString::to_string);
+        if expiry.is_some() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    assert!(expiry.is_some(), "no certificate expiry for limited.test");
 
     proksi.assert_healthy();
 }

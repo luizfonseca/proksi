@@ -109,6 +109,7 @@ mod tests {
             tls,
             alpn: alpn.iter().map(ToString::to_string).collect(),
             load_balancer: Arc::new(LoadBalancer::try_from_iter(["127.0.0.1:1"]).unwrap()),
+            metrics: crate::metrics::TcpMetrics::new("tcp"),
         }
     }
 

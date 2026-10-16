@@ -145,7 +145,10 @@ impl ProxyHttp for Router {
         ctx.route_container = Some(route_container.clone());
 
         // The location's building blocks, in order: a block can answer the request (e.g. a `401`)
-        if route_container.blocks.request(session, ctx).await {
+        if let Some(block) = route_container.blocks.request(session, ctx).await {
+            if let Some(metrics) = &route_container.metrics {
+                metrics.blocked(block.name());
+            }
             return Ok(true);
         }
 
@@ -160,10 +163,18 @@ impl ProxyHttp for Router {
         _end_of_stream: bool,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
-        match ctx.route_container.clone() {
-            Some(location) => location.blocks.request_body(body.as_ref(), ctx),
-            None => Ok(()),
-        }
+        let Some(location) = ctx.route_container.clone() else {
+            return Ok(());
+        };
+        location
+            .blocks
+            .request_body(body.as_ref(), ctx)
+            .map_err(|(block, err)| {
+                if let Some(metrics) = &location.metrics {
+                    metrics.blocked(block.name());
+                }
+                err
+            })
     }
 
     /// Define where the proxy should send the request to.

@@ -113,6 +113,15 @@ impl Reconciler {
         }
 
         self.log_changes(&merged, &report);
+        for source in [
+            RouteSourceKind::File,
+            RouteSourceKind::Docker,
+            RouteSourceKind::Kubernetes,
+            RouteSourceKind::Store,
+        ] {
+            let hosts = self.applied.values().filter(|(s, _)| *s == source).count();
+            crate::metrics::set_routes(&format!("{source:?}").to_lowercase(), hosts);
+        }
         self.conflicts = merged.conflicts;
         self.invalid = merged.invalid;
         ROUTING_STATUS.store(Arc::new(self.status()));
