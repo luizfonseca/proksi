@@ -19,6 +19,7 @@ pub mod blocks;
 pub mod deprecations;
 pub(crate) mod hcl;
 pub mod host;
+pub mod kubernetes;
 pub mod listeners;
 pub mod tcp;
 pub mod validate;
@@ -702,6 +703,11 @@ pub(crate) struct Config {
     #[serde(default)]
     pub tcp: BTreeMap<String, blocks::TcpBlock>,
 
+    /// The Kubernetes ingress controller (`kubernetes { ... }`, ADR 0005)
+    #[clap(skip)]
+    #[serde(default)]
+    pub kubernetes: kubernetes::KubernetesConfig,
+
     /// The admin API and metrics (`admin { ... }`, ADR 0004), off without it
     #[clap(skip)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -729,6 +735,7 @@ impl Default for Config {
             host: BTreeMap::new(),
             tcp: BTreeMap::new(),
             admin: None,
+            kubernetes: kubernetes::KubernetesConfig::default(),
             auto_reload: AutoReload::default(),
             store: StoreConfig::default(),
             cache: CacheConfig::default(),

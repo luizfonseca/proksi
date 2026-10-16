@@ -19,6 +19,8 @@ mod blocks;
 mod cache;
 mod channel;
 mod config;
+#[cfg(feature = "kubernetes")]
+mod kubernetes;
 mod metrics;
 mod plugins;
 mod proxy_server;

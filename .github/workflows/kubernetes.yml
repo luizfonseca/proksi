@@ -1,0 +1,28 @@
+name: Kubernetes
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  ingress:
+    name: Ingress controller
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo build -p proksi
+      # Only the binary in the build context
+      - run: |
+          mkdir -p image
+          cp target/debug/proksi image/
+          docker build -f .github/kubernetes/Dockerfile -t proksi:ci image
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: proksi
+      - run: kind load docker-image proksi:ci --name proksi
+      - run: .github/kubernetes/test.sh

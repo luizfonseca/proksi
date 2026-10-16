@@ -11,6 +11,7 @@
 
 * [Docker](installation/docker.md)
 * [Single binary](installation/single-binary.md)
+* [Kubernetes](installation/kubernetes.md)
 
 ## Configuration
 
