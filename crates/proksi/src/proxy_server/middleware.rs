@@ -9,13 +9,16 @@ pub async fn execute_response_plugins(
     session: &mut pingora::proxy::Session,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) -> Result<()> {
-    for (name, value) in ctx.route_container.plugins.clone() {
+    let Some(location) = ctx.route_container.clone() else {
+        return Ok(());
+    };
+    for (name, value) in &location.plugins {
         if name == "oauth2" {
             use crate::plugins::MiddlewarePlugin;
 
             if crate::plugins::PLUGINS
                 .oauth2
-                .response_filter(session, ctx, &value)
+                .response_filter(session, ctx, value)
                 .await
                 .is_ok_and(|v| v)
             {
@@ -73,7 +76,10 @@ pub async fn execute_upstream_request_plugins(
     upstream_request: &mut pingora::http::RequestHeader,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) -> Result<()> {
-    for name in ctx.route_container.plugins.clone().keys() {
+    let Some(location) = ctx.route_container.clone() else {
+        return Ok(());
+    };
+    for name in location.plugins.keys() {
         if name == "request_id" {
             crate::plugins::PLUGINS
                 .request_id
@@ -91,7 +97,10 @@ pub fn execute_upstream_response_plugins(
     upstream_response: &mut pingora::http::ResponseHeader,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
 ) {
-    for name in ctx.route_container.plugins.clone().keys() {
+    let Some(location) = ctx.route_container.clone() else {
+        return;
+    };
+    for name in location.plugins.keys() {
         if name == "request_id" {
             crate::plugins::PLUGINS
                 .request_id
