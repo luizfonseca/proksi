@@ -548,6 +548,26 @@ paths {{
             .to_string()
     }
 
+    /// Access logs of TCP connections (their fields), waiting up to 2 seconds for `count` of them
+    pub async fn tcp_access_logs(&self, count: usize) -> Vec<serde_json::Value> {
+        let mut logs = vec![];
+        for _ in 0..20 {
+            let stdout =
+                std::fs::read_to_string(self.dir.path().join("stdout.log")).unwrap_or_default();
+            logs = stdout
+                .lines()
+                .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+                .map(|line| line.get("fields").cloned().unwrap_or(line))
+                .filter(|fields| fields["access_log"] == true && fields["protocol"] == "tcp")
+                .collect();
+            if logs.len() >= count {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        logs
+    }
+
     /// Warning and error lines from proksi's logs (and anything on stderr)
     pub fn error_logs(&self) -> String {
         let stdout =

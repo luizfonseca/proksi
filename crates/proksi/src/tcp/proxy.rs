@@ -62,41 +62,86 @@ impl TcpProxy {
         target
     }
 
-    /// Forwards the connection to an upstream of `target`, until either side closes it
+    /// Forwards the connection to an upstream of `target`, until either side closes it, then
+    /// writes its access log
     pub async fn forward(&self, mut downstream: Stream, target: &TcpTarget) {
         let _connection = target.metrics.connection();
-        let Some(addr) = target
+        let start = std::time::Instant::now();
+        let client_ip = downstream
+            .get_socket_digest()
+            .and_then(|digest| digest.peer_addr().map(ToString::to_string));
+        let server_name = downstream.get_ssl_digest().and_then(|digest| {
+            digest
+                .extension
+                .get::<ServerName>()
+                .map(|name| name.0.clone())
+        });
+
+        let mut forwarded = Forwarded::default();
+        let error = Self::copy(&mut downstream, target, &mut forwarded).await.err();
+
+        tracing::info!(
+            protocol = "tcp",
+            block = target.label,
+            client_ip,
+            server_name,
+            upstream = forwarded.upstream.map(|addr| addr.to_string()),
+            duration_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
+            bytes_in = forwarded.bytes_in,
+            bytes_out = forwarded.bytes_out,
+            error,
+            access_log = true
+        );
+    }
+
+    /// Connects to an upstream and copies both ways, until either side closes the connection
+    async fn copy(
+        downstream: &mut Stream,
+        target: &TcpTarget,
+        forwarded: &mut Forwarded,
+    ) -> Result<(), String> {
+        let addr = target
             .load_balancer
             .select(b"", 32)
             .and_then(|backend| backend.addr.as_inet().copied())
-        else {
-            tracing::warn!("{}: no healthy upstream", target.label);
-            return;
-        };
+            .ok_or_else(|| {
+                tracing::warn!("{}: no healthy upstream", target.label);
+                "no healthy upstream".to_string()
+            })?;
+        forwarded.upstream = Some(addr);
 
-        let mut upstream = match TcpStream::connect(addr).await {
-            Ok(upstream) => upstream,
-            Err(err) => {
-                tracing::warn!(
-                    "{}: could not connect to upstream {addr}: {err}",
-                    target.label
-                );
-                return;
-            }
-        };
+        let mut upstream = TcpStream::connect(addr).await.map_err(|err| {
+            tracing::warn!("{}: could not connect to upstream {addr}: {err}", target.label);
+            format!("could not connect to the upstream: {err}")
+        })?;
+
         // Bytes are counted as they're read, so long connections show up while they're open
         let mut downstream = Counted {
-            inner: &mut downstream,
+            inner: downstream,
             bytes: &target.metrics.bytes_in,
+            read: &mut forwarded.bytes_in,
         };
         let mut upstream = Counted {
             inner: &mut upstream,
             bytes: &target.metrics.bytes_out,
+            read: &mut forwarded.bytes_out,
         };
-        if let Err(err) = tokio::io::copy_bidirectional(&mut downstream, &mut upstream).await {
-            tracing::debug!("{}: connection to {addr} ended: {err}", target.label);
-        }
+        tokio::io::copy_bidirectional(&mut downstream, &mut upstream)
+            .await
+            .map(|_| ())
+            .map_err(|err| {
+                tracing::debug!("{}: connection to {addr} ended: {err}", target.label);
+                err.to_string()
+            })
     }
+}
+
+/// What a connection forwarded, for its access log
+#[derive(Default)]
+struct Forwarded {
+    upstream: Option<std::net::SocketAddr>,
+    bytes_in: u64,
+    bytes_out: u64,
 }
 
 #[async_trait]
@@ -112,10 +157,11 @@ impl ServerApp for TcpProxy {
     }
 }
 
-/// A stream counting the bytes read from it
+/// A stream counting the bytes read from it (in its metric, and for its connection)
 struct Counted<'a, S> {
     inner: &'a mut S,
     bytes: &'a IntCounter,
+    read: &'a mut u64,
 }
 
 impl<S: AsyncRead + Unpin> AsyncRead for Counted<'_, S> {
@@ -127,8 +173,9 @@ impl<S: AsyncRead + Unpin> AsyncRead for Counted<'_, S> {
         let before = buf.filled().len();
         let poll = Pin::new(&mut *self.inner).poll_read(cx, buf);
         if let Poll::Ready(Ok(())) = poll {
-            self.bytes
-                .inc_by(u64::try_from(buf.filled().len() - before).unwrap_or_default());
+            let read = u64::try_from(buf.filled().len() - before).unwrap_or_default();
+            self.bytes.inc_by(read);
+            *self.read += read;
         }
         poll
     }

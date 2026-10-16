@@ -94,5 +94,6 @@ In a host with `tls = false`, a `tcp` block is plain TCP.
 - Each `tcp` block needs its own address: it can't be used by HTTP hosts, or by other `tcp` blocks. Blocks of different hosts with TLS are the exception: they can share an address with each other and with HTTPS hosts (see above).
 - `tcp` blocks come from the configuration file (not from docker labels or the store), and are set up when Proksi starts: changing them restarts Proksi.
 - Upstreams of a `tcp` block only take `weight`.
+- Each connection gets an [access log](configuration/logging.md#access-logs) line when it closes, with its bytes in each direction.
 - TLS passthrough can't share the HTTPS port yet.
 - A host with a `tcp` block on the HTTPS port takes every connection asking for its name, including names added later through docker labels or the store.

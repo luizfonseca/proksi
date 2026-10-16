@@ -45,6 +45,16 @@ logging {
 
 This will then create a log file named `proksi.<date>.log` in the `/var/log/proksi` directory and rotate it daily.
 
+### Access logs
+
+Every request gets an access log line (`access_log: true`) with its method, path, host, status, duration, client and upstream. Every connection of a [`tcp` block](routing/tcp.md) gets one too, once it closes:
+
+```json
+{ "protocol": "tcp", "block": "tcp \"db\" in host \"db.example.com\"", "client_ip": "10.0.0.7:51234", "server_name": "db.example.com", "upstream": "10.0.0.5:5432", "duration_ms": 61234, "bytes_in": 5120, "bytes_out": 81920, "access_log": true }
+```
+
+`server_name` is set when TLS is terminated, `upstream` once one was chosen, and `error` when the connection couldn't be forwarded (no healthy upstream, or the upstream refused it) or ended with an error. `access_logs_enabled = false` turns both off.
+
 ### Logging under heavy load
 
 Logs are written in the background, so writing them never slows down requests. Up to 100,000 log lines can be waiting to be written; if the output can't keep up beyond that (e.g. a slow disk or a stalled pipe), new lines are dropped and a warning with the number of dropped lines is logged once it catches up.
