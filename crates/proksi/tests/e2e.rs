@@ -518,6 +518,51 @@ async fn test_blocks_run_by_priority() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_RATE_LIMIT: &str = r#"
+host "limited.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  location "/login" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    rate_limit {
+      requests = 2
+      per      = "1m"
+    }
+  }
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rate_limit() {
+    let mut proksi = Harness::start_with(vec![], HOST_WITH_RATE_LIMIT).await;
+    proksi.resolve("limited.test");
+
+    for _ in 0..2 {
+        assert_eq!(
+            proksi.get("limited.test", "/login").await.unwrap().status,
+            200
+        );
+    }
+    let res = proksi.get("limited.test", "/login").await.unwrap();
+    assert_eq!(res.status, 429);
+    assert_eq!(res.header("retry-after"), Some("60"));
+
+    // The limit belongs to its location
+    assert_eq!(proksi.get("limited.test", "/").await.unwrap().status, 200);
+
+    proksi.assert_healthy();
+}
+
 const PLAIN_HTTP_HOSTS: &str = r#"
 host "plain.test" {
   tls = false

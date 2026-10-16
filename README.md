@@ -19,7 +19,7 @@ Proksi is a simple, lightweight, and easy-to-use proxy server that automatically
 Of the many features Proksi offers is the ability to load balance to your infrastructure or any IP that supports your host configurations. Other features of Proksi also include:
 
 - Automatic Docker and Docker Swarm service discovery through labels
-- Built-in most common middlewares such as OAuth, Basic Auth, CDN Caching and others
+- Built-in most common middlewares such as OAuth, Basic Auth, Rate Limiting, CDN Caching and others
 - The ability of running it as a single binary in your system
 - Automatic SSL through Let's Encrypt and redirection from HTTP to HTTPS
 - Hosts with their own ports, plain HTTP hosts (e.g. behind another load balancer) and a catch-all host
@@ -263,6 +263,12 @@ location "/" {
   # Adds an X-Request-Id header to requests and responses
   request_id {}
 
+  # 120 requests per minute for each client (IP address), then a 429
+  rate_limit {
+    requests = 120
+    per      = "1m"
+  }
+
   basic_auth {
     user = env("BASIC_AUTH_USER")
     pass = env("BASIC_AUTH_PASS")
@@ -402,7 +408,7 @@ host:
 
 ## What's next
 
-**TCP** proxying (chosen by port and SNI, sharing the host's certificate), **rate limiting** and **body limits** are the next steps. See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
+**TCP** proxying (chosen by port and SNI, sharing the host's certificate) and **body limits** are the next steps. See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
 
 
 # Documentation

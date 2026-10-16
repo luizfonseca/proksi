@@ -26,6 +26,7 @@ pub struct LocationBlock {
     pub basic_auth: Option<PluginConfig>,
     pub oauth2: Option<PluginConfig>,
     pub request_id: Option<PluginConfig>,
+    pub rate_limit: Option<PluginConfig>,
 }
 
 impl LocationBlock {
@@ -51,12 +52,13 @@ impl LocationBlock {
         })
     }
 
-    /// Built-in plugins enabled in the location
+    /// Built-in plugins enabled in the location (validated as building blocks)
     fn plugins(&self) -> Vec<RoutePlugin> {
         [
             ("basic_auth", &self.basic_auth),
             ("oauth2", &self.oauth2),
             ("request_id", &self.request_id),
+            ("rate_limit", &self.rate_limit),
         ]
         .into_iter()
         .filter_map(|(name, config)| {

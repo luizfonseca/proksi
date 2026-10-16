@@ -20,6 +20,7 @@ use cache::Cache;
 use headers::Headers;
 use oauth2::Oauth2;
 use priority::{plugin_priority, priority};
+use rate_limit::RateLimit;
 use request_id::RequestId;
 
 mod basic_auth;
@@ -27,6 +28,7 @@ mod cache;
 mod headers;
 mod oauth2;
 mod priority;
+mod rate_limit;
 mod request_id;
 
 /// The stages of a request a block can take part in
@@ -74,6 +76,7 @@ pub trait Middleware: Send + Sync {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Kind {
     RequestId,
+    RateLimit,
     BasicAuth,
     Oauth2,
     Headers,
@@ -84,6 +87,7 @@ impl Kind {
     pub fn name(self) -> &'static str {
         match self {
             Kind::RequestId => "request_id",
+            Kind::RateLimit => "rate_limit",
             Kind::BasicAuth => "basic_auth",
             Kind::Oauth2 => "oauth2",
             Kind::Headers => "headers",
@@ -94,7 +98,7 @@ impl Kind {
     /// Where the block runs unless it sets `priority`
     pub fn default_priority(self) -> u8 {
         match self {
-            Kind::RequestId => 0,
+            Kind::RequestId | Kind::RateLimit => 0,
             Kind::BasicAuth | Kind::Oauth2 => 20,
             Kind::Headers => 50,
             Kind::Cache => 60,
@@ -127,6 +131,7 @@ impl Blocks {
                         plugin: plugin.clone(),
                     }),
                 ),
+                "rate_limit" => (Kind::RateLimit, Arc::new(RateLimit::new(plugin)?)),
                 "basic_auth" => (Kind::BasicAuth, Arc::new(BasicAuth::new(plugin)?)),
                 "oauth2" => (Kind::Oauth2, Arc::new(Oauth2::new(plugin)?)),
                 // Other plugins of `routes = [...]` and docker labels are ignored, as before
@@ -270,6 +275,23 @@ mod tests {
                 ("headers", 50),
                 ("cache", 60),
             ]
+        );
+    }
+
+    #[test]
+    fn test_rate_limit_runs_first_after_request_id() {
+        let blocks = Blocks::build(&location(serde_json::json!({
+            "plugins": [
+                basic_auth(),
+                { "name": "rate_limit", "config": { "requests": 10, "per": "1m" } },
+                { "name": "request_id" },
+            ],
+        })))
+        .unwrap();
+
+        assert_eq!(
+            order(&blocks),
+            vec![("request_id", 0), ("rate_limit", 0), ("basic_auth", 20)]
         );
     }
 
