@@ -88,6 +88,22 @@ host "api.example.com" {
 }
 ```
 
+**Hosts without TLS, and any host**
+
+- `tls = false` serves a host over plain HTTP on `server.http_address` instead of redirecting to HTTPS, and no certificate is issued for it.
+- `host "*"` serves requests whose `Host` has no host of its own. It needs `tls = false` (certificates are issued per name). Other wildcards (`*.example.com`) aren't supported yet.
+- `server { https_enabled = false }` doesn't open the HTTPS port at all. Every host in the configuration file then needs `tls = false`, and `routes = [...]` can't be used.
+
+```hcl
+host "*" {
+  tls = false
+
+  location "/" {
+    upstream "app:8080" {}
+  }
+}
+```
+
 **Matching paths**
 
 - A request goes to the **most specific** location of its host: a static path beats a parameter (`/users/:id`), which beats a wildcard (`/files/*`).

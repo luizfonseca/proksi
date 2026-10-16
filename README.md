@@ -112,8 +112,11 @@ worker_threads = 4
 
 server {
   https_address = "0.0.0.0:443"
-  # HTTP requests are redirected to HTTPS (and used for Let's Encrypt challenges)
+  # HTTP requests are redirected to HTTPS (and used for Let's Encrypt challenges),
+  # except for hosts with `tls = false`
   http_address = "0.0.0.0:80"
+  # Set to false to only serve plain HTTP (every host then needs `tls = false`)
+  https_enabled = true
 }
 
 logging {
@@ -148,6 +151,27 @@ host "api.example.com" {
 - The **most specific** location wins: `/login` beats `/`, a static path beats a parameter (`/users/:id`), which beats a wildcard (`/files/*`).
 - A location matches its path **and everything below it**: `/login` serves `/login`, `/login/` and `/login/callback`, but not `/logins`.
 - A request matching no location gets a `404`.
+
+### Without TLS, or any host
+
+A host with `tls = false` is served over plain HTTP on the HTTP port, and no certificate is issued for it. This is useful behind another proxy or load balancer that already handles TLS, or when running Proksi on an IP address.
+
+`host "*"` serves requests for any name that doesn't have a host of its own (it needs `tls = false`, as certificates are issued per name):
+
+```hcl
+server {
+  # Only serve plain HTTP
+  https_enabled = false
+}
+
+host "*" {
+  tls = false
+
+  location "/" {
+    upstream "app:8080" {}
+  }
+}
+```
 
 ## Upstreams
 
