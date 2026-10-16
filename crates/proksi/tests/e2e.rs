@@ -718,6 +718,24 @@ async fn test_tcp_blocks() {
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     assert!(res.contains("\"path\":\"/passthrough\""), "{res}");
 
+    // An access log line for each connection, once closed
+    let logs = proksi.tcp_access_logs(3).await;
+    let log = |block: &str| {
+        logs.iter()
+            .find(|log| log["block"] == block)
+            .unwrap_or_else(|| panic!("no access log for {block}: {logs:?}"))
+    };
+    let plain = log("tcp \"web\"");
+    assert_eq!(
+        plain["upstream"],
+        format!("127.0.0.1:{}", proksi.http_upstream.port)
+    );
+    assert!(plain["client_ip"].as_str().unwrap().starts_with("127.0.0.1"), "{plain}");
+    assert!(plain["bytes_in"].as_u64().unwrap() > 40, "{plain}");
+    assert!(plain["bytes_out"].as_u64().unwrap() > 100, "{plain}");
+    assert!(plain["duration_ms"].as_u64().is_some(), "{plain}");
+    assert_eq!(log("tcp \"app\" in host \"a.test\"")["server_name"], "a.test");
+
     proksi.assert_healthy();
 }
 
