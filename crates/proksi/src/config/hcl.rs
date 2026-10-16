@@ -18,11 +18,25 @@ impl figment::providers::Format for HclFormat {
     }
 }
 
-/// Rejects blocks repeated with the same labels (e.g. two `location "/api"` in a host),
-/// which HCL would otherwise read as a list
+/// Rejects what HCL would silently merge or drop:
+/// - blocks repeated with the same labels (e.g. two `location "/api"` in a host),
+///   which would be read as a list
+/// - an attribute and blocks with the same name (e.g. `host = {...}` and `host "a" {}`),
+///   where the blocks would replace the attribute
 fn check_duplicate_blocks(body: &hcl::Body, parent: &str) -> Result<(), hcl::Error> {
+    let attributes = body
+        .attributes()
+        .map(hcl::Attribute::key)
+        .collect::<std::collections::HashSet<_>>();
     let mut seen = std::collections::HashSet::new();
     for block in body.blocks() {
+        if attributes.contains(block.identifier()) {
+            return Err(hcl::Error::Message(format!(
+                "`{}` is used both as an attribute and as a block, use one or the other",
+                block.identifier()
+            )));
+        }
+
         let mut name = block.identifier().to_string();
         for label in block.labels() {
             let _ = write!(name, " \"{}\"", label.as_str());
@@ -185,6 +199,19 @@ host "a.test" {
             .unwrap_err();
 
         assert_eq!(err.to_string(), "duplicate block `host \"a.test\"`");
+    }
+
+    #[test]
+    fn test_attribute_and_blocks_with_the_same_name_are_rejected() {
+        let err = HclFormat::from_str::<hcl::Value>(
+            "host = {\n  \"a.test\" = {}\n}\nhost \"b.test\" {}\n",
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "`host` is used both as an attribute and as a block, use one or the other"
+        );
     }
 
     #[test]
