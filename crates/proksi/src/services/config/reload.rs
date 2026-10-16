@@ -93,7 +93,7 @@ mod tests {
         };
 
         assert_eq!(snapshot.source, RouteSourceKind::File);
-        assert_eq!(snapshot.routes.len(), 2);
+        assert_eq!(snapshot.hosts.len(), 2);
     }
 
     #[test]

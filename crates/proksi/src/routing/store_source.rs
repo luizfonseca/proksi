@@ -2,9 +2,12 @@
 
 use std::{sync::Arc, time::Duration};
 
-use crate::stores::{
-    store_trait::Store,
-    stored_route::{ReplicaStatus, StoreError},
+use crate::{
+    config::host::Host,
+    stores::{
+        store_trait::Store,
+        stored_route::{ReplicaStatus, StoreError},
+    },
 };
 
 use super::{RouteSnapshot, RouteSourceKind, SnapshotSender};
@@ -52,7 +55,7 @@ impl StoreSource {
             let mut routes = Vec::with_capacity(stored.routes.len());
             for route in stored.routes {
                 match route {
-                    Ok(route) => routes.push(route.route),
+                    Ok(route) => routes.push(Host::from_route(&route.route)),
                     Err(err) => tracing::warn!(
                         "skipping route for host {} from the store: {}",
                         err.host,
@@ -252,9 +255,9 @@ mod tests {
 
     fn hosts(snapshot: &RouteSnapshot) -> Vec<String> {
         let mut hosts = snapshot
-            .routes
+            .hosts
             .iter()
-            .map(|r| r.host.to_string())
+            .map(|h| h.name.clone())
             .collect::<Vec<_>>();
         hosts.sort();
         hosts

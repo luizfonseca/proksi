@@ -1,10 +1,11 @@
 //! Routes come from several sources (configuration file, docker, store...).
-//! Each source sends its complete list of routes, and the reconciler merges them
-//! into the route table used by the proxy. See `docs/adrs/0001-route-sources.md`.
+//! Each source sends its complete list of hosts, and the reconciler merges them
+//! into the route table used by the proxy. See `docs/adrs/0001-route-sources.md`
+//! and `docs/adrs/0003-configuration-model.md`.
 
 use serde::Serialize;
 
-use crate::config::Route;
+use crate::config::host::Host;
 
 pub mod build;
 pub mod file_source;
@@ -27,20 +28,20 @@ pub enum RouteSourceKind {
     Store,
 }
 
-/// The complete list of routes of a source
+/// The complete list of hosts of a source
 #[derive(Debug, Clone)]
 pub struct RouteSnapshot {
     pub source: RouteSourceKind,
-    pub routes: Vec<Route>,
+    pub hosts: Vec<Host>,
     /// Revision of the routes, for sources that have one (the store)
     pub revision: Option<u64>,
 }
 
 impl RouteSnapshot {
-    pub fn new(source: RouteSourceKind, routes: Vec<Route>) -> Self {
+    pub fn new(source: RouteSourceKind, hosts: Vec<Host>) -> Self {
         Self {
             source,
-            routes,
+            hosts,
             revision: None,
         }
     }

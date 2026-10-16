@@ -1,8 +1,9 @@
-use std::hash::RandomState;
+use std::{hash::RandomState, sync::Arc};
 
+use host_container::HostContainer;
 use once_cell::sync::Lazy;
 use papaya::HashMapRef;
-use routes::{RouteStore, RouteStoreContainer};
+use routes::RouteStore;
 
 pub mod cache;
 pub mod certificates;
@@ -38,16 +39,16 @@ pub use redis_store::RedisStore;
 // ROUTE store
 static ROUTE_STORE: Lazy<RouteStore> = Lazy::new(papaya::HashMap::new);
 
-pub fn get_route_by_key(key: &str) -> Option<RouteStoreContainer> {
+pub fn get_route_by_key(key: &str) -> Option<Arc<HostContainer>> {
     ROUTE_STORE.pin().get(key).cloned()
 }
 
 pub fn get_routes(
-) -> HashMapRef<'static, String, RouteStoreContainer, RandomState, seize::OwnedGuard<'static>> {
+) -> HashMapRef<'static, String, Arc<HostContainer>, RandomState, seize::OwnedGuard<'static>> {
     ROUTE_STORE.pin_owned()
 }
 
-pub fn insert_route(key: String, value: RouteStoreContainer) {
+pub fn insert_route(key: String, value: Arc<HostContainer>) {
     ROUTE_STORE.pin().insert(key, value);
 }
 

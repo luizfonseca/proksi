@@ -7,10 +7,10 @@ use arc_swap::ArcSwap;
 use once_cell::sync::Lazy;
 use serde::Serialize;
 
-use crate::{config::Route, stores};
+use crate::{config::host::Host, stores};
 
 use super::{
-    build::{build_route_container, load_route_certificate},
+    build::{build_host_container, load_host_certificate},
     merge::{merge, Conflict, InvalidRoute, MergeResult},
     RouteSnapshot, RouteSourceKind,
 };
@@ -46,9 +46,9 @@ pub struct ApplyReport {
 /// Keeps the latest routes of every source and applies the merged result to the route table
 #[derive(Default)]
 pub struct Reconciler {
-    snapshots: BTreeMap<RouteSourceKind, Vec<Route>>,
-    /// Routes currently in the route table, by host
-    applied: HashMap<String, (RouteSourceKind, Route)>,
+    snapshots: BTreeMap<RouteSourceKind, Vec<Host>>,
+    /// Hosts currently in the route table, by name
+    applied: HashMap<String, (RouteSourceKind, Host)>,
     store_revision: Option<u64>,
     conflicts: Vec<Conflict>,
     invalid: Vec<InvalidRoute>,
@@ -64,33 +64,35 @@ impl Reconciler {
         if snapshot.source == RouteSourceKind::Store {
             self.store_revision = snapshot.revision.or(self.store_revision);
         }
-        self.snapshots.insert(snapshot.source, snapshot.routes);
+        self.snapshots.insert(snapshot.source, snapshot.hosts);
 
         let merged = merge(&self.snapshots);
         let mut report = ApplyReport::default();
 
-        for (host, (source, route)) in &merged.routes {
+        for (host, (source, definition)) in &merged.hosts {
             let is_new = match self.applied.get(host) {
                 // Same definition from another source: nothing to rebuild
-                Some((_, applied)) if applied == route => {
-                    self.applied.insert(host.clone(), (*source, route.clone()));
+                Some((_, applied)) if applied == definition => {
+                    self.applied
+                        .insert(host.clone(), (*source, definition.clone()));
                     continue;
                 }
                 Some(_) => false,
                 None => true,
             };
 
-            let Some(container) = build_route_container(route) else {
-                // Keep serving the previous version of the route, if any
+            let Some(container) = build_host_container(definition) else {
+                // Keep serving the previous version of the host, if any
                 continue;
             };
 
-            if let Err(err) = load_route_certificate(route).await {
+            if let Err(err) = load_host_certificate(definition).await {
                 tracing::error!("failed to load the certificate for host {host}: {err}");
             }
 
-            stores::insert_route(host.clone(), container);
-            self.applied.insert(host.clone(), (*source, route.clone()));
+            stores::insert_route(host.clone(), Arc::new(container));
+            self.applied
+                .insert(host.clone(), (*source, definition.clone()));
             if is_new {
                 report.added.push(host.clone());
             } else {
@@ -101,7 +103,7 @@ impl Reconciler {
         let removed_hosts = self
             .applied
             .keys()
-            .filter(|host| !merged.routes.contains_key(*host))
+            .filter(|host| !merged.hosts.contains_key(*host))
             .cloned()
             .collect::<Vec<_>>();
         for host in removed_hosts {
@@ -175,14 +177,14 @@ mod tests {
     use std::sync::Arc;
 
     use crate::{
-        routing::{test_utils::route, RouteSnapshot, RouteSourceKind},
+        routing::{test_utils::host, RouteSnapshot, RouteSourceKind},
         stores,
     };
 
     use super::{ApplyReport, Reconciler};
 
     fn upstream_ip(host: &str) -> Option<String> {
-        stores::get_route_by_key(host).map(|c| c.upstreams[0].ip.to_string())
+        stores::get_route_by_key(host).map(|c| c.locations[0].upstreams[0].ip.to_string())
     }
 
     #[tokio::test]
@@ -192,7 +194,7 @@ mod tests {
         let report = reconciler
             .apply(RouteSnapshot::new(
                 RouteSourceKind::File,
-                vec![route("rec-add.test", "10.0.0.1")],
+                vec![host("rec-add.test", "10.0.0.1")],
             ))
             .await;
 
@@ -205,7 +207,7 @@ mod tests {
         let mut reconciler = Reconciler::new();
         let snapshot = RouteSnapshot::new(
             RouteSourceKind::File,
-            vec![route("rec-same.test", "10.0.0.1")],
+            vec![host("rec-same.test", "10.0.0.1")],
         );
         reconciler.apply(snapshot.clone()).await;
         let before = stores::get_route_by_key("rec-same.test").unwrap();
@@ -214,7 +216,10 @@ mod tests {
 
         assert_eq!(report, ApplyReport::default());
         let after = stores::get_route_by_key("rec-same.test").unwrap();
-        assert!(Arc::ptr_eq(&before.load_balancer, &after.load_balancer));
+        assert!(Arc::ptr_eq(
+            &before.locations[0].load_balancer,
+            &after.locations[0].load_balancer
+        ));
     }
 
     #[tokio::test]
@@ -223,14 +228,14 @@ mod tests {
         reconciler
             .apply(RouteSnapshot::new(
                 RouteSourceKind::File,
-                vec![route("rec-update.test", "10.0.0.1")],
+                vec![host("rec-update.test", "10.0.0.1")],
             ))
             .await;
 
         let report = reconciler
             .apply(RouteSnapshot::new(
                 RouteSourceKind::File,
-                vec![route("rec-update.test", "10.0.0.2")],
+                vec![host("rec-update.test", "10.0.0.2")],
             ))
             .await;
 
@@ -244,7 +249,7 @@ mod tests {
         reconciler
             .apply(RouteSnapshot::new(
                 RouteSourceKind::File,
-                vec![route("rec-remove.test", "10.0.0.1")],
+                vec![host("rec-remove.test", "10.0.0.1")],
             ))
             .await;
 
@@ -262,14 +267,14 @@ mod tests {
         reconciler
             .apply(RouteSnapshot::new(
                 RouteSourceKind::File,
-                vec![route("rec-priority.test", "10.0.0.1")],
+                vec![host("rec-priority.test", "10.0.0.1")],
             ))
             .await;
 
         reconciler
             .apply(RouteSnapshot::new(
                 RouteSourceKind::Store,
-                vec![route("rec-priority.test", "10.0.0.2")],
+                vec![host("rec-priority.test", "10.0.0.2")],
             ))
             .await;
         assert_eq!(upstream_ip("rec-priority.test"), Some("10.0.0.2".into()));
@@ -287,7 +292,7 @@ mod tests {
         reconciler
             .apply(RouteSnapshot::new(
                 RouteSourceKind::File,
-                vec![route("Rec-Case.Test", "10.0.0.1")],
+                vec![host("Rec-Case.Test", "10.0.0.1")],
             ))
             .await;
 
@@ -300,12 +305,12 @@ mod tests {
         reconciler
             .apply(RouteSnapshot::new(
                 RouteSourceKind::File,
-                vec![route("rec-status.test", "10.0.0.1")],
+                vec![host("rec-status.test", "10.0.0.1")],
             ))
             .await;
         let mut store = RouteSnapshot::new(
             RouteSourceKind::Store,
-            vec![route("rec-status.test", "10.0.0.2")],
+            vec![host("rec-status.test", "10.0.0.2")],
         );
         store.revision = Some(7);
 
@@ -317,5 +322,29 @@ mod tests {
             .contains(&("rec-status.test".to_string(), RouteSourceKind::Store)));
         assert_eq!(status.conflicts.len(), 1);
         assert_eq!(status.store_revision, Some(7));
+    }
+
+    #[tokio::test]
+    async fn test_reconciler_serves_locations_by_path() {
+        let mut host = crate::routing::test_utils::host("rec-locations.test", "10.0.0.1");
+        let mut session = host.locations[0].clone();
+        session.path = "/v1/session".to_string();
+        session.exact = false;
+        session.upstreams[0].ip = "10.0.0.2".into();
+        host.locations.push(session);
+
+        let mut reconciler = Reconciler::new();
+        reconciler
+            .apply(RouteSnapshot::new(RouteSourceKind::File, vec![host]))
+            .await;
+
+        let container = stores::get_route_by_key("rec-locations.test").unwrap();
+        let served = |path: &str| {
+            container.location_for(path).unwrap().upstreams[0]
+                .ip
+                .to_string()
+        };
+        assert_eq!(served("/v1/session"), "10.0.0.2");
+        assert_eq!(served("/"), "10.0.0.1");
     }
 }
