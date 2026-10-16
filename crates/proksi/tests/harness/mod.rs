@@ -269,8 +269,22 @@ routes = [
             https_port = self.https_port,
             http_port = self.http_port,
             le = dir.join("le").to_string_lossy(),
-            extra_config = self.extra_config,
+            extra_config = self.render_extra_config(),
         )
+    }
+
+    /// Extra configuration, with `{http_upstream_port}`, `{cert_pem}` and `{cert_key}` replaced
+    fn render_extra_config(&self) -> String {
+        let dir = self.dir.path();
+        self.extra_config
+            .replace("{http_upstream_port}", &self.http_upstream.port.to_string())
+            .replace("{cert_pem}", &dir.join("cert.pem").to_string_lossy())
+            .replace("{cert_key}", &dir.join("key.pem").to_string_lossy())
+    }
+
+    /// Makes the client resolve `host` to proksi (for hosts defined in `extra_config`)
+    pub fn resolve(&mut self, host: &str) {
+        self.hosts.push(host.to_string());
     }
 
     /// Waits until a request returns the given status (or 10 seconds), returning the last status
