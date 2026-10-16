@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use anyhow::anyhow;
 
-use super::Config;
+use super::{listeners::listeners, Config};
 use crate::routing::validate::{validate_host, validate_route};
 
 /// given a Config struct, validate the values to ensure
@@ -42,30 +42,8 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
     }
 
     check_hosts(config)?;
-    check_without_https(config)
-}
-
-/// Without the HTTPS port, every host in the configuration file must be served over plain HTTP
-fn check_without_https(config: &Config) -> Result<(), anyhow::Error> {
-    if config.server.serves_https() {
-        return Ok(());
-    }
-    if !config.routes.is_empty() {
-        return Err(anyhow!(
-            "routes = [...] always use TLS: use host blocks with tls = false when server.https_enabled is false"
-        ));
-    }
-    if let Some(name) = config
-        .hosts()
-        .into_iter()
-        .find(|host| host.tls.enabled)
-        .map(|host| host.name)
-    {
-        return Err(anyhow!(
-            "host \"{name}\" needs tls = false when server.https_enabled is false"
-        ));
-    }
-    Ok(())
+    // A port can't serve both HTTP and HTTPS hosts
+    listeners(config).map(|_| ()).map_err(|err| anyhow!(err))
 }
 
 /// `host` blocks must be valid, and not define a host also in `routes`
@@ -208,43 +186,14 @@ host "a.test" {
     }
 
     #[test]
-    fn test_without_https_hosts_need_tls_disabled() {
-        let mut config = config_with_host_block(
-            "host \"a.test\" {\n  location \"/\" {\n    upstream \"10.0.0.1:3000\" {}\n  }\n}\n",
+    fn test_address_used_for_http_and_https() {
+        let config = config_with_host_block(
+            "host \"*\" {\n  tls = false\n  listen = [\"0.0.0.0:8080\"]\n}\nhost \"a.test\" {\n  listen = [\"0.0.0.0:8080\"]\n}\n",
         );
-        config.server.https_enabled = Some(false);
 
         assert_eq!(
             check_config(&config).unwrap_err().to_string(),
-            "host \"a.test\" needs tls = false when server.https_enabled is false"
+            "address 0.0.0.0:8080 is used both for HTTP and HTTPS hosts"
         );
-    }
-
-    #[test]
-    fn test_without_https_routes_cant_be_used() {
-        let mut config = Config::default();
-        config.server.https_enabled = Some(false);
-        config.routes = vec![route("a.test", "10.0.0.1")];
-
-        assert_eq!(
-            check_config(&config).unwrap_err().to_string(),
-            "routes = [...] always use TLS: use host blocks with tls = false when server.https_enabled is false"
-        );
-    }
-
-    #[test]
-    fn test_without_https_and_hosts_without_tls() {
-        let mut config = config_with_host_block(
-            "host \"*\" {\n  tls = false\n  location \"/\" {\n    upstream \"10.0.0.1:3000\" {}\n  }\n}\n",
-        );
-        config.server.https_enabled = Some(false);
-
-        assert!(check_config(&config).is_ok());
-        assert!(!config.server.serves_https());
-    }
-
-    #[test]
-    fn test_https_is_enabled_by_default() {
-        assert!(Config::default().server.serves_https());
     }
 }

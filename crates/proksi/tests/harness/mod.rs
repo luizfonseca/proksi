@@ -107,7 +107,7 @@ pub struct Harness {
     hosts: Vec<String>,
     /// Extra configuration added to the generated one (e.g. `auto_reload`)
     extra_config: String,
-    /// Started with `server.https_enabled = false` (see `start_without_https`)
+    /// Started with only the hosts of `extra_config` (see `start_without_https`)
     without_https: bool,
     pub https_port: u16,
     pub http_port: u16,
@@ -125,8 +125,9 @@ impl Harness {
         Self::start_inner(routes, extra_config, false).await
     }
 
-    /// Starts proksi without the HTTPS port: hosts must be defined in `extra_config`
-    /// with `tls = false`, and readiness is checked on the HTTP port
+    /// Starts proksi with only the hosts of `extra_config`, all with `tls = false`:
+    /// no host needs HTTPS, so proksi doesn't open the HTTPS port.
+    /// Readiness is checked on the HTTP port.
     pub async fn start_without_https(extra_config: &str) -> Self {
         Self::start_inner(vec![], extra_config, true).await
     }
@@ -257,7 +258,6 @@ worker_threads = 2
 server {{
   https_address = "127.0.0.1:{https_port}"
   http_address = "127.0.0.1:{http_port}"
-  https_enabled = {https_enabled}
 }}
 
 logging {{
@@ -281,7 +281,6 @@ paths {{
 "#,
             https_port = self.https_port,
             http_port = self.http_port,
-            https_enabled = !self.without_https,
             hosts = self.render_hosts(&routes_hcl),
             le = dir.join("le").to_string_lossy(),
             extra_config = self.render_extra_config(),
