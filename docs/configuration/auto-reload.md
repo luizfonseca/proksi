@@ -25,5 +25,5 @@ auto_reload {
 When the configuration file changes:
 
 - if it's invalid, the change is ignored (and logged): Proksi keeps running with the current configuration;
-- if only `routes` changed, the new routes are applied without restarting;
+- if only hosts (`host` blocks or `routes`) changed, they are applied without restarting;
 - if other settings changed, Proksi restarts with the new configuration.

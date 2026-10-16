@@ -28,7 +28,19 @@ Of the many features Proksi offers is the ability to load balance to your infras
 
 # Quick start
 
-1. Download the latest release from [https://github.com/luizfonseca/proksi/releases](https://github.com/luizfonseca/proksi/releases)
+1. Install Proksi:
+
+```bash
+# Option 1: Download the latest release for your system
+# https://github.com/luizfonseca/proksi/releases
+
+# Option 2: Install it with cargo
+cargo install proksi
+
+# Option 3: Run it with Docker
+docker run -d -p 80:80 -p 443:443 -v /path/to/config:/etc/proksi/ luizfonseca/proksi
+```
+
 2. Create a configuration file named `proksi.hcl`
 3. Add the following content to the file:
 
@@ -83,7 +95,274 @@ Proksi supports flexible configuration file loading:
 - **Directory paths**: Proksi will look for `proksi.hcl`, `proksi.yml`, or `proksi.yaml` in the specified directory
 - **No configuration**: If no `-c` flag is provided, Proksi uses minimal default settings with Let's Encrypt disabled and emits a warning
 
-For more information or guides, please refer to the [documentation](https://docs.proksi.info).
+
+# Configuration
+
+Proksi is configured through **HCL** (recommended), **YAML** or **environment variables**. Below is everything you need to get going; the [documentation](https://docs.proksi.info) goes into more detail.
+
+## Server
+
+All of these are optional, the values below are the defaults:
+
+```hcl
+service_name = "proksi"
+
+# Defaults to 80% of the available CPUs (at least 2)
+worker_threads = 4
+
+server {
+  https_address = "0.0.0.0:443"
+  # HTTP requests are redirected to HTTPS (and used for Let's Encrypt challenges)
+  http_address = "0.0.0.0:80"
+}
+
+logging {
+  enabled = true
+  level = "info"             # debug, info, warn, error
+  format = "json"            # json or pretty
+  access_logs_enabled = true
+  error_logs_enabled = true
+  # path = "/var/log/proksi" # write logs to files instead of stdout
+  # rotation = "daily"       # never, hourly, daily, minutely
+}
+```
+
+## Hosts and locations
+
+Every host Proksi accepts requests for is a `host` block. The label is matched against the `Host` header (case-insensitive), and it's also the name certificates are issued for.
+
+Inside a host, `location` blocks decide where requests go based on their path:
+
+```hcl
+host "api.example.com" {
+  location "/login" {
+    upstream "auth:8080" {}
+  }
+
+  location "/" {
+    upstream "app:8080" {}
+  }
+}
+```
+
+- The **most specific** location wins: `/login` beats `/`, a static path beats a parameter (`/users/:id`), which beats a wildcard (`/files/*`).
+- A location matches its path **and everything below it**: `/login` serves `/login`, `/login/` and `/login/callback`, but not `/logins`.
+- A request matching no location gets a `404`.
+
+## Upstreams
+
+Upstreams are where requests are sent. They are labelled by their address (`host:port`, or `[ipv6]:port`) and requests are load balanced between them (round-robin), with health checks running in the background:
+
+```hcl
+location "/" {
+  upstream "10.0.0.1:3000" { weight = 2 }
+  upstream "10.0.0.2:3000" {}
+
+  # An external service using TLS
+  upstream "example.com:443" {
+    sni = "example.com"
+
+    # Headers added to the request sent to the upstream
+    headers {
+      add = { "Host" = "example.com" }
+    }
+  }
+}
+```
+
+## Certificates
+
+With Let's Encrypt enabled, Proksi issues and renews a certificate for every host automatically:
+
+```hcl
+lets_encrypt {
+  enabled = true
+  email = "my@email.com"
+  # Use the staging environment while testing, then switch to `false`
+  staging = true
+}
+
+paths {
+  lets_encrypt = "/etc/proksi/letsencrypt"
+}
+```
+
+You can also bring your own certificate, or fall back to a self-signed one (useful for development):
+
+```hcl
+host "example.com" {
+  tls {
+    certificate {
+      pem = "/etc/proksi/certs/example.com.pem"
+      key = "/etc/proksi/certs/example.com.key"
+    }
+
+    self_signed_on_failure = true
+  }
+}
+```
+
+## Headers
+
+Headers can be added or removed from responses, for a whole host or a single location (a location's headers come after the host's):
+
+```hcl
+host "example.com" {
+  headers {
+    response {
+      add = { "X-Api-Version" = "2" }
+      remove = ["Server"]
+    }
+  }
+}
+```
+
+## Plugins
+
+Built-in plugins are enabled per location:
+
+```hcl
+location "/" {
+  upstream "app:8080" {}
+
+  # Adds an X-Request-Id header to requests and responses
+  request_id {}
+
+  basic_auth {
+    user = env("BASIC_AUTH_USER")
+    pass = env("BASIC_AUTH_PASS")
+  }
+
+  oauth2 {
+    provider = "github"
+    client_id = env("OAUTH_CLIENT_ID")
+    client_secret = env("OAUTH_CLIENT_SECRET")
+    jwt_secret = env("OAUTH_JWT_SECRET")
+    validations = [{ key = "email", value = ["me@example.com"] }]
+  }
+}
+```
+
+## Caching
+
+Responses can be cached in memory or on disk:
+
+```hcl
+host "example.com" {
+  location "/" {
+    upstream "app:8080" {}
+
+    cache {
+      enabled = true
+      cache_type = "disk"        # or "memcache"
+      path = "/tmp/proksi-cache"
+      expires_in_secs = 3600
+    }
+  }
+}
+
+# Memory used by the disk cache to keep popular responses (default: 256MB)
+cache {
+  memory_limit_mb = 256
+}
+```
+
+## Docker
+
+Proksi can find your containers (or Docker Swarm services) through labels, without touching the configuration file:
+
+```hcl
+docker {
+  enabled = true
+  mode = "container" # or "swarm"
+  endpoint = "unix:///var/run/docker.sock"
+  interval_secs = 15
+}
+```
+
+```yaml
+services:
+  web:
+    image: nginxdemos/hello
+    labels:
+      proksi.enabled: "true"
+      proksi.host: "mysite.localhost"
+      proksi.port: "80"
+      proksi.ssl_certificate.self_signed_on_failure: "true"
+```
+
+Routes from labels are kept when a container stops (requests get a `503`) and are removed when Proksi restarts.
+
+## Running many servers
+
+To run more than one Proksi server with the same routes and certificates, use a shared store. Routes in the store take priority over the configuration file and docker labels, and every server syncs them every `sync_interval_secs`:
+
+```hcl
+store {
+  store_type = "redis"   # memory (default), redis, sqlite, postgres
+  redis_url = "redis://localhost:6379"
+  # database_url = "postgres://user:pass@localhost/proksi" # for sqlite and postgres
+  sync_interval_secs = 10
+}
+```
+
+SQLite and Postgres need Proksi to be built with the `store-sqlite` / `store-postgres` features.
+
+## Auto reload
+
+Proksi can watch the configuration file and apply changes on the fly. Changes to hosts are applied without restarting; an invalid file is ignored (and logged), so Proksi keeps running:
+
+```hcl
+auto_reload {
+  enabled = true
+  interval_secs = 30
+  # Extra paths to watch (e.g. files used with import())
+  paths = ["/etc/proksi/sites"]
+}
+```
+
+## Functions and environment variables
+
+HCL configurations can use a few functions:
+
+- `env("NAME")`: reads an environment variable (fails if it's not set)
+- `import("./sites/example.com.hcl")`: includes another HCL file
+- `num_cpus()`: the number of CPUs available
+
+```hcl
+worker_threads = num_cpus()
+
+# One file per host
+host = {
+  "example.com" = import("./sites/example.com.hcl")
+}
+```
+
+Every setting can also be set (and overridden) through environment variables starting with `PROKSI_`, using `__` for nested keys, e.g. `PROKSI_LOGGING__LEVEL=debug` or `PROKSI_LETS_ENCRYPT__EMAIL=my@email.com`.
+
+## YAML
+
+The same configuration in YAML:
+
+```yaml
+lets_encrypt:
+  enabled: true
+  email: "my@email.com"
+
+host:
+  api.example.com:
+    location:
+      /login:
+        upstream:
+          "auth:8080": {}
+      /:
+        upstream:
+          "app:8080": {}
+```
+
+## Migrating from `routes = [...]`
+
+`routes = [...]` still works but is deprecated (Proksi logs a warning). The [HCL documentation](https://docs.proksi.info/#/configuration/hcl/) shows how each route becomes a `host` block.
 
 
 # Documentation

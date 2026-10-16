@@ -36,7 +36,7 @@ To only allow access from specific emails:
 ```hcl
 # ... the rest of the plugin config from above
 validations  = [
-  { key = "email", values = ["email@gmail.com", "valid@yahoo.com"]
+  { key = "email", value = ["email@gmail.com", "valid@yahoo.com"]
 ]
 ```
 
@@ -46,7 +46,7 @@ To only allow access from specific usernames (depends on provider)
 
 ```hcl
 validations  = [
-  { key = "username", values = ["user2021", "proksi"]
+  { key = "username", value = ["user2021", "proksi"]
 ]
 ```
 
@@ -56,8 +56,8 @@ You can combine all validations together
 
 ```hcl
 validations  = [
-  { key = "username", values = ["user2021", "proksi"],
-  { key = "email", values = ["email@gmail.com", "valid@yahoo.com"]
+  { key = "username", value = ["user2021", "proksi"],
+  { key = "email", value = ["email@gmail.com", "valid@yahoo.com"]
 ]
 ```
 
@@ -87,7 +87,7 @@ host "website.com" {
       # Generated using `openssl rand -hex 64`
       jwt_secret = "d1a86503f928b387dcde695176e02c9c6fb0a96f91f4436d2f724b312c4a1e7fc16d5f86bd37f4fe6267e628dca8a55f621f8e4f2f41725ff00cdfbb971b0384"
       validations = [
-        { key = "email", values = ["me@proksi.info"] }
+        { key = "email", value = ["me@proksi.info"] }
       ]
     }
   }
