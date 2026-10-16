@@ -9,11 +9,13 @@ use super::host::Host;
 
 mod headers;
 mod location;
+mod tcp;
 mod tls;
 mod upstream;
 
 pub use headers::HeadersBlock;
 pub use location::LocationBlock;
+pub use tcp::TcpBlock;
 pub use tls::TlsSetting;
 
 /// `host "<name>" { ... }`
@@ -29,6 +31,9 @@ pub struct HostBlock {
     pub headers: Option<HeadersBlock>,
     #[serde(default)]
     pub location: BTreeMap<String, LocationBlock>,
+    /// TCP proxying with the host's certificate (or its TLS forwarded, or plain TCP)
+    #[serde(default)]
+    pub tcp: BTreeMap<String, TcpBlock>,
 }
 
 impl HostBlock {

@@ -61,7 +61,7 @@ impl HostContainer {
 
 /// Whether a listener bound to `bound` receives connections on `local`
 /// (`0.0.0.0`/`::` receive on every local address of the port)
-fn binds(bound: &SocketAddr, local: &SocketAddr) -> bool {
+pub(crate) fn binds(bound: &SocketAddr, local: &SocketAddr) -> bool {
     bound.port() == local.port() && (bound.ip().is_unspecified() || bound.ip() == local.ip())
 }
 

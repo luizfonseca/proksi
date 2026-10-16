@@ -24,6 +24,7 @@ mod routing;
 mod server;
 mod services;
 mod stores;
+mod tcp;
 mod tools;
 mod wasm;
 
@@ -146,8 +147,19 @@ fn main() -> Result<(), anyhow::Error> {
             proxy_config.worker_threads,
         )?);
     }
+    // TCP: `tcp` blocks (validated when loading the configuration)
+    pingora_server.add_services(tcp::services::tcp_services(
+        &listeners.tcp,
+        proxy_config.worker_threads,
+    )?);
+
+    let tcp = listeners
+        .tcp
+        .iter()
+        .map(|route| route.listen.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
     let server_info = format!(
-        "listening for HTTPS on {:?} and HTTP on {:?}",
+        "listening for HTTPS on {:?}, HTTP on {:?} and TCP on {tcp:?}",
         listeners.https, listeners.http
     );
     tracing::info!(

@@ -180,6 +180,30 @@ mod tests {
     }
 
     #[test]
+    fn test_tcp_block_change_restarts() {
+        let tcp = |upstream: &str| {
+            let mut block = crate::config::blocks::TcpBlock {
+                listen: "0.0.0.0:7777".to_string(),
+                ..Default::default()
+            };
+            block
+                .upstream
+                .insert(upstream.to_string(), Default::default());
+            block
+        };
+        let mut current = Config::default();
+        current.tcp.insert("game".to_string(), tcp("game-1:7777"));
+        let mut new = Config::default();
+        new.tcp.insert("game".to_string(), tcp("game-2:7777"));
+
+        // TCP blocks are set up at startup
+        assert!(matches!(
+            reload_action(&current, Ok(new)),
+            ReloadAction::Restart
+        ));
+    }
+
+    #[test]
     fn test_host_change_needing_other_ports_restarts() {
         let current = Config::default();
         let mut new = Config::default();

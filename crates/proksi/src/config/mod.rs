@@ -19,6 +19,7 @@ pub mod deprecations;
 pub(crate) mod hcl;
 pub mod host;
 pub mod listeners;
+pub mod tcp;
 pub mod validate;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ValueEnum)]
@@ -694,6 +695,11 @@ pub(crate) struct Config {
     #[clap(skip)]
     #[serde(default)]
     pub host: BTreeMap<String, blocks::HostBlock>,
+
+    /// TCP proxying without a host (`tcp "<name>" { ... }`, ADR 0003)
+    #[clap(skip)]
+    #[serde(default)]
+    pub tcp: BTreeMap<String, blocks::TcpBlock>,
     // Listeners -- a list of specific listeners and upstrems
     // that don't necessarily need to be HTTP/HTTPS related
     // pub listeners: Vec<ConfigListener>,
@@ -715,6 +721,7 @@ impl Default for Config {
             lets_encrypt: LetsEncrypt::default(),
             routes: vec![],
             host: BTreeMap::new(),
+            tcp: BTreeMap::new(),
             auto_reload: AutoReload::default(),
             store: StoreConfig::default(),
             cache: CacheConfig::default(),

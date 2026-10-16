@@ -91,6 +91,11 @@ mod tests {
 
             check_config(&config).unwrap_or_else(|err| panic!("{file} is invalid: {err}"));
             assert_eq!(config.hosts().len(), 3, "{file}");
+            assert_eq!(
+                config.tcp_routes().map(|routes| routes.len()),
+                Ok(1),
+                "{file}"
+            );
         }
     }
 

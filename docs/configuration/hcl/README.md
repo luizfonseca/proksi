@@ -160,6 +160,10 @@ location "/" {
 
 Unknown attributes are rejected, so a typo fails when the configuration is loaded instead of being ignored. So are two locations matching the same paths (e.g. `/api` and `/api/*`).
 
+**TCP**
+
+`tcp "<name>" { listen = "ip:port", upstream "<host:port>" {} }` forwards TCP connections, at the top level (plain TCP) or inside a host (TLS with the host's certificate, or `tls = "passthrough"`). See [TCP](routing/tcp.md).
+
 To keep hosts in separate files, see [`import`](configuration/hcl/functions.md#import).
 
 ## Migrating from `routes = [...]`

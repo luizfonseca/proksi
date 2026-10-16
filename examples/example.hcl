@@ -207,6 +207,15 @@ host "example.com" {
   }
 }
 
+# TCP connections forwarded as they are, for services that don't speak HTTP.
+# Inside a host, `tcp` blocks use the host's certificate (see docs/routing/tcp.md).
+tcp "game" {
+  listen = "0.0.0.0:7777"
+
+  upstream "10.1.2.40:7777" { weight = 2 }
+  upstream "10.1.2.41:7777" {}
+}
+
 # A host served over plain HTTP, without certificates.
 # Useful behind another proxy or load balancer that already handles TLS.
 host "internal.example.com" {

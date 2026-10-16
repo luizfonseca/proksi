@@ -37,6 +37,7 @@ async fn run_health_check_loop() {
                     .map(|location| (host.clone(), location.load_balancer.clone()))
                     .collect::<Vec<_>>()
             })
+            .chain(crate::tcp::load_balancers().iter().cloned())
             .collect::<Vec<_>>();
 
         for (host, load_balancer) in load_balancers {

@@ -24,6 +24,7 @@ Of the many features Proksi offers is the ability to load balance to your infras
 - Automatic SSL through Let's Encrypt and redirection from HTTP to HTTPS
 - Hosts with their own ports, plain HTTP hosts (e.g. behind another load balancer) and a catch-all host
 - Running many servers with the same routes and certificates (Redis, SQLite, Postgres)
+- TCP proxying for anything that isn't HTTP, with or without TLS
 - Configuration through **HCL** with support for functions (get environment variables, etc)
 - Powerful plugin system for adding new middlewares and other features using **WebAssembly (WASM)**
 - Many others.
@@ -183,6 +184,28 @@ host "internal.example.com" {
 ```
 
 A port is either HTTP or HTTPS: a host with TLS and a host without it can't share an address. Hosts with TLS also need port 80 (`server.http_address`), for redirects and Let's Encrypt challenges.
+
+## TCP
+
+`tcp` blocks forward TCP connections, for services that don't speak HTTP. At the top level they are plain TCP; inside a host, TLS is terminated with the host's certificate (or forwarded untouched with `tls = "passthrough"`):
+
+```hcl
+# Plain TCP
+tcp "game" {
+  listen = "0.0.0.0:7777"
+  upstream "10.0.0.1:7777" {}
+}
+
+# TLS with the certificate of db.example.com, plain TCP to the upstream
+host "db.example.com" {
+  tcp "postgres" {
+    listen = "0.0.0.0:5433"
+    upstream "10.0.0.5:5432" {}
+  }
+}
+```
+
+See the [TCP documentation](https://docs.proksi.info/#/routing/tcp) for more.
 
 ## Upstreams
 
@@ -413,7 +436,7 @@ host:
 
 ## What's next
 
-**TCP** proxying (chosen by port and SNI, sharing the host's certificate) is the next step. See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
+Sharing port `443` between HTTPS and **TCP** (chosen by ALPN) is the next step. See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
 
 
 # Documentation

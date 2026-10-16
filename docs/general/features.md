@@ -20,10 +20,11 @@ Proksi is evolving day by day, and new features are being added all the time. Be
 - [X] **RequestId** Middleware
 - [x] **Rate limiting** per location and client
 - [x] **Body limits** per location
+- [x] **TCP** proxying: plain, TLS with the host's certificate (chosen by SNI) and TLS passthrough
 
 Planned next (see [ADR 0003](adrs/0003-configuration-model.md)):
 
-- [ ] **TCP** proxying (`tcp` blocks), chosen by port and SNI, sharing the host's certificate
+- [ ] Sharing port `443` between HTTPS and TCP (chosen by ALPN)
 
 
 We are constantly adding new features, and we welcome your feedback and contributions. If you have any suggestions or ideas, please feel free to open an issue or a pull request on the GitHub repository.
