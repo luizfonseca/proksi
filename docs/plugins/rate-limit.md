@@ -52,4 +52,4 @@ host "mywebsite.com" {
   }
   ```
 
-  Only addresses forwarded by trusted proxies are used: going from the right of `X-Forwarded-For`, the client is the first address that isn't a trusted proxy, so a client can't choose its own address by sending the header itself. Access logs show the same client.
+  Only addresses forwarded by trusted proxies are used: going from the right of `X-Forwarded-For`, the client is the first address that isn't a trusted proxy, so a client can't choose its own address by sending the header itself. Access logs show the same client, and so do upstreams (`X-Real-IP`, see [headers](routing/headers.md)).

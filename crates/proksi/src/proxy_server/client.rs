@@ -63,6 +63,67 @@ fn parse_hop(hop: &str) -> Option<IpAddr> {
         .or_else(|| hop.parse::<std::net::SocketAddr>().ok().map(|addr| addr.ip()))
 }
 
+/// The `X-Forwarded-*` headers of a request, as received
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Incoming<'a> {
+    pub forwarded_for: Option<&'a str>,
+    pub proto: Option<&'a str>,
+    pub host: Option<&'a str>,
+}
+
+/// The headers sent to upstreams about the client
+#[derive(Debug, PartialEq)]
+#[allow(clippy::struct_field_names)] // named after the headers
+pub struct Forwarded {
+    pub forwarded_for: String,
+    pub proto: String,
+    pub host: Option<String>,
+    pub real_ip: String,
+}
+
+impl TrustedProxies {
+    /// The headers for a request from `peer`, received over `proto` (`http`, `https`) for
+    /// `host`. What a trusted proxy sent is kept (and `peer` appended to `X-Forwarded-For`);
+    /// what anyone else sent is replaced, so clients can't forge them.
+    pub fn forwarded(
+        &self,
+        peer: IpAddr,
+        incoming: Incoming<'_>,
+        proto: &str,
+        host: Option<&str>,
+    ) -> Forwarded {
+        let trusted = self.trusts(&peer);
+        let kept = |value: Option<&str>| {
+            value
+                .map(str::trim)
+                .filter(|value| trusted && !value.is_empty())
+                .map(ToString::to_string)
+        };
+        Forwarded {
+            forwarded_for: match kept(incoming.forwarded_for) {
+                Some(chain) => format!("{chain}, {peer}"),
+                None => peer.to_string(),
+            },
+            proto: kept(incoming.proto).unwrap_or_else(|| proto.to_string()),
+            host: kept(incoming.host).or_else(|| host.map(ToString::to_string)),
+            real_ip: self.client(peer, incoming.forwarded_for).to_string(),
+        }
+    }
+}
+
+/// See [`TrustedProxies::forwarded`]
+pub fn forwarded(
+    peer: IpAddr,
+    incoming: Incoming<'_>,
+    proto: &str,
+    host: Option<&str>,
+) -> Forwarded {
+    TRUSTED
+        .get()
+        .unwrap_or(&TrustedProxies(vec![]))
+        .forwarded(peer, incoming, proto, host)
+}
+
 /// Sets the trusted proxies (once, when proksi starts)
 pub fn init(proxies: TrustedProxies) {
     let _ = TRUSTED.set(proxies);
@@ -141,5 +202,51 @@ mod tests {
         assert_eq!(proxies.client(ip("10.0.0.1"), Some("10.0.0.2, 10.0.0.3")), ip("10.0.0.2"));
         // Garbage stops the walk: the last address that was valid
         assert_eq!(proxies.client(ip("10.0.0.1"), Some("unknown, 10.0.0.2")), ip("10.0.0.2"));
+    }
+
+    #[test]
+    fn test_forwarded_headers_from_clients_are_replaced() {
+        let proxies = trusted(&["10.0.0.0/8"]);
+        let incoming = super::Incoming {
+            forwarded_for: Some("1.2.3.4"),
+            proto: Some("https"),
+            host: Some("forged.test"),
+        };
+
+        assert_eq!(
+            proxies.forwarded(ip("203.0.113.9"), incoming, "http", Some("a.test")),
+            super::Forwarded {
+                forwarded_for: "203.0.113.9".to_string(),
+                proto: "http".to_string(),
+                host: Some("a.test".to_string()),
+                real_ip: "203.0.113.9".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_forwarded_headers_from_trusted_proxies_are_kept() {
+        let proxies = trusted(&["10.0.0.0/8"]);
+        let incoming = super::Incoming {
+            forwarded_for: Some("203.0.113.9, 10.0.0.2"),
+            proto: Some("https"),
+            host: Some("www.a.test"),
+        };
+
+        assert_eq!(
+            proxies.forwarded(ip("10.0.0.1"), incoming, "http", Some("a.test")),
+            super::Forwarded {
+                forwarded_for: "203.0.113.9, 10.0.0.2, 10.0.0.1".to_string(),
+                proto: "https".to_string(),
+                host: Some("www.a.test".to_string()),
+                real_ip: "203.0.113.9".to_string(),
+            }
+        );
+        // Without headers: as for any client
+        let forwarded =
+            proxies.forwarded(ip("10.0.0.1"), super::Incoming::default(), "https", None);
+        assert_eq!(forwarded.forwarded_for, "10.0.0.1");
+        assert_eq!(forwarded.proto, "https");
+        assert_eq!(forwarded.host, None);
     }
 }

@@ -270,8 +270,40 @@ impl ProxyHttp for Router {
         upstream_request: &mut RequestHeader,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
-        // If there's no host matching, returns a 404
-        // let route_container = &ctx.route_container;
+        // Who the client is, set first so the location's headers can still change them
+        if let Some(peer) = session
+            .client_addr()
+            .and_then(|addr| addr.as_inet())
+            .map(std::net::SocketAddr::ip)
+        {
+            let header = |name: &str| {
+                session
+                    .req_header()
+                    .headers
+                    .get(name)
+                    .and_then(|value| value.to_str().ok())
+            };
+            let proto = match self.listener {
+                Listener::Https => "https",
+                Listener::Http => "http",
+            };
+            let forwarded = crate::proxy_server::client::forwarded(
+                peer,
+                crate::proxy_server::client::Incoming {
+                    forwarded_for: header("x-forwarded-for"),
+                    proto: header("x-forwarded-proto"),
+                    host: header("x-forwarded-host"),
+                },
+                proto,
+                header("host").or_else(|| session.req_header().uri.host()),
+            );
+            upstream_request.insert_header("x-forwarded-for", forwarded.forwarded_for)?;
+            upstream_request.insert_header("x-forwarded-proto", forwarded.proto)?;
+            if let Some(host) = forwarded.host {
+                upstream_request.insert_header("x-forwarded-host", host)?;
+            }
+            upstream_request.insert_header("x-real-ip", forwarded.real_ip)?;
+        }
 
         let upstream = &ctx.upstream;
 
