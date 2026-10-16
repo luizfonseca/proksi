@@ -98,8 +98,9 @@ pub async fn replicas_contract(store: &dyn Store) {
         .report(status("replica-1", 1), Duration::from_secs(60))
         .await
         .unwrap();
+    // Expiries can be kept in whole seconds: 2 seconds is at least 1
     store
-        .report(status("replica-2", 1), Duration::from_secs(1))
+        .report(status("replica-2", 1), Duration::from_secs(2))
         .await
         .unwrap();
     // A new report replaces the previous one
@@ -116,7 +117,7 @@ pub async fn replicas_contract(store: &dyn Store) {
     );
 
     // Expired replicas aren't listed
-    tokio::time::sleep(Duration::from_millis(2100)).await;
+    tokio::time::sleep(Duration::from_millis(3100)).await;
     let replicas = store.replicas().await.unwrap();
     assert_eq!(replicas, vec![status("replica-1", 2)]);
 }
@@ -146,12 +147,8 @@ pub fn certificate(domain: &str, days: u32) -> Certificate {
     }
 }
 
-fn days_left(certificate: &Certificate) -> i32 {
-    Asn1Time::days_from_now(0)
-        .unwrap()
-        .diff(certificate.leaf.not_after())
-        .unwrap()
-        .days
+fn pem(certificate: &Certificate) -> Vec<u8> {
+    certificate.leaf.to_pem().unwrap()
 }
 
 /// Leases: one holder at a time, released by their holder only, and expiring
@@ -195,8 +192,9 @@ pub async fn leases_contract(store: &dyn Store) {
 pub async fn certificates_contract(store: &dyn Store, other: &dyn Store) {
     let initial = store.certificates_revision().await.unwrap();
 
+    let first = certificate("renewed.test", 10);
     store
-        .set_certificate("renewed.test", certificate("renewed.test", 10))
+        .set_certificate("renewed.test", first.clone())
         .await
         .unwrap();
     assert_eq!(store.certificates_revision().await.unwrap(), initial + 1);
@@ -204,14 +202,15 @@ pub async fn certificates_contract(store: &dyn Store, other: &dyn Store) {
 
     // `other` caches the certificate, then `store` renews it
     let cached = other.get_certificate("renewed.test").await.unwrap();
-    assert_eq!(days_left(&cached), 10);
+    assert_eq!(pem(&cached), pem(&first));
+    let renewed = certificate("renewed.test", 90);
     store
-        .set_certificate("renewed.test", certificate("renewed.test", 90))
+        .set_certificate("renewed.test", renewed.clone())
         .await
         .unwrap();
     assert_eq!(other.certificates_revision().await.unwrap(), initial + 2);
 
     other.reload_certificates().await.unwrap();
     let reloaded = other.get_certificate("renewed.test").await.unwrap();
-    assert_eq!(days_left(&reloaded), 90);
+    assert_eq!(pem(&reloaded), pem(&renewed));
 }

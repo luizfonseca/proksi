@@ -8,7 +8,7 @@ Proksi can run as an ingress controller: it serves the `Ingress` resources of it
 kubectl apply -f https://raw.githubusercontent.com/luizfonseca/proksi/main/deploy/kubernetes/proksi.yaml
 ```
 
-This creates the `proksi` namespace with Proksi's `Deployment`, a `LoadBalancer` `Service` for ports 80 and 443, its permissions (read `Ingress`es, `IngressClass`es, `Service`s and `EndpointSlice`s), the `proksi` `IngressClass`, and a `ConfigMap` with Proksi's configuration:
+This creates the `proksi` namespace with Proksi's `Deployment`, a `LoadBalancer` `Service` for ports 80 and 443, its permissions (read `Ingress`es, `IngressClass`es, `Service`s, `EndpointSlice`s and TLS `Secret`s), the `proksi` `IngressClass`, and a `ConfigMap` with Proksi's configuration:
 
 ```hcl
 kubernetes {
@@ -53,7 +53,22 @@ spec:
 - Rules of several `Ingress`es for the same host are merged. When two define the same path, the oldest `Ingress` keeps it and the other is logged.
 - A rule without a `host`, and `defaultBackend`, are served for any other name (`host "*"`).
 - `Ingress`es without a class are served when the `proksi` `IngressClass` has the annotation `ingressclass.kubernetes.io/is-default-class: "true"`.
-- Hosts are served over HTTPS with certificates from Let's Encrypt (enable `lets_encrypt` in the `ConfigMap`). With the annotation `proksi.info/tls: "false"`, the hosts of an `Ingress` are plain HTTP.
+- With the annotation `proksi.info/upstream: service`, the upstream is the service's own address (its cluster IP) instead of its pods, and Kubernetes balances the requests.
+
+## TLS
+
+Hosts are served over HTTPS. Hosts listed in an `Ingress`' `tls` use the certificate of its `Secret` (of type `kubernetes.io/tls`, in the same namespace), and pick up changes to it, e.g. renewals by cert-manager:
+
+```yaml
+spec:
+  tls:
+    - hosts: ["web.example.com"]
+      secretName: web-example-com
+```
+
+Other hosts get certificates from Let's Encrypt (enable `lets_encrypt` in the `ConfigMap`). With the annotation `proksi.info/tls: "false"`, the hosts of an `Ingress` are plain HTTP.
+
+With a shared store, a certificate from a `Secret` reaches every replica through the store.
 
 Hosts can still come from Proksi's configuration file, docker labels or the store. When the same host comes from several places, the store wins over Kubernetes, which wins over docker labels and the configuration file.
 
@@ -63,4 +78,4 @@ With more than one replica, use a shared store (Redis or Postgres) so certificat
 
 ## Coming next
 
-TLS secrets from `tls[]`, plugins through annotations, the `Ingress` status, and a Helm chart.
+Plugins through annotations, the `Ingress` status, and a Helm chart.

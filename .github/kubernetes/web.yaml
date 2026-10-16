@@ -56,3 +56,27 @@ spec:
                 name: web
                 port:
                   name: http
+---
+# HTTPS with the certificate of a TLS secret (created by test.sh), through the service's address
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-tls
+  annotations:
+    proksi.info/upstream: service
+spec:
+  ingressClassName: proksi
+  tls:
+    - hosts: ["secure.test"]
+      secretName: web-tls
+  rules:
+    - host: secure.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80

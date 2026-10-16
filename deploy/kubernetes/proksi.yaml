@@ -23,7 +23,8 @@ rules:
     resources: ["ingresses", "ingressclasses"]
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
-    resources: ["services"]
+    # Secrets: only the TLS secrets of Ingresses are used
+    resources: ["services", "secrets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
