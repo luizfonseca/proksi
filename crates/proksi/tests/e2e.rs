@@ -1905,6 +1905,84 @@ host "plain.test" {
     assert!(!closed_within(&mut upload, std::time::Duration::from_secs(3)).await);
 }
 
+const TLS_HOST: &str = r#"
+host "tls.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+/// The cipher negotiated with proksi on `port`, offering only the TLS 1.2 `ciphers`, or
+/// OpenSSL's defaults without any; or why the handshake failed
+async fn negotiated_cipher(port: u16, ciphers: Option<&'static str>) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode, SslVersion};
+        let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
+        connector.set_verify(SslVerifyMode::NONE);
+        if let Some(ciphers) = ciphers {
+            connector.set_max_proto_version(Some(SslVersion::TLS1_2)).unwrap();
+            connector.set_cipher_list(ciphers).unwrap();
+        }
+        let stream =
+            std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|err| err.to_string())?;
+        let stream = connector
+            .build()
+            .connect("tls.test", stream)
+            .map_err(|err| err.to_string())?;
+        let cipher = stream.ssl().current_cipher();
+        Ok(cipher.map(|cipher| cipher.name().to_string()).unwrap_or_default())
+    })
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_dhe_ciphers_are_refused_by_default() {
+    let proksi = Harness::start_with(vec![], TLS_HOST).await;
+
+    let refused = negotiated_cipher(proksi.https_port, Some("DHE-RSA-AES128-GCM-SHA256")).await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert_eq!(
+        negotiated_cipher(proksi.https_port, Some("ECDHE-RSA-AES128-GCM-SHA256")).await,
+        Ok("ECDHE-RSA-AES128-GCM-SHA256".to_string())
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_tls_ciphers_can_be_chosen() {
+    let proksi = Harness::start_with_server(
+        vec![],
+        "tls {\n ciphers = [\"ECDHE-RSA-AES256-GCM-SHA384\"]\n }",
+        TLS_HOST,
+    )
+    .await;
+
+    let refused = negotiated_cipher(proksi.https_port, Some("ECDHE-RSA-AES128-GCM-SHA256")).await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert_eq!(
+        negotiated_cipher(proksi.https_port, Some("ECDHE-RSA-AES256-GCM-SHA384")).await,
+        Ok("ECDHE-RSA-AES256-GCM-SHA384".to_string())
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_tls_1_2_can_be_refused() {
+    let proksi =
+        Harness::start_with_server_ready_over_http("tls {\n min_version = \"1.3\"\n }", TLS_HOST)
+            .await;
+
+    let refused = negotiated_cipher(proksi.https_port, Some("ECDHE-RSA-AES128-GCM-SHA256")).await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert!(negotiated_cipher(proksi.https_port, None).await.is_ok());
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_request_bodies_must_arrive_in_time() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
