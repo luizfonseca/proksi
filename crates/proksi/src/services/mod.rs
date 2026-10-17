@@ -127,7 +127,13 @@ impl pingora::services::Service for BackgroundFunctionService {
             }
         };
 
+        let drain = crate::proxy_server::connections::exit_when_drained(
+            shutdown.clone(),
+            self.config.server.shutdown_timeout(),
+        );
+
         let _ = tokio::join!(
+            drain,
             store_sync,
             kubernetes,
             certificate_metrics,

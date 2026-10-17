@@ -105,6 +105,8 @@ spec:
         app.kubernetes.io/name: proksi
     spec:
       serviceAccountName: proksi
+      # Longer than `server.shutdown_timeout_secs` (30 by default), so connections can finish
+      terminationGracePeriodSeconds: 35
       containers:
         - name: proksi
           image: luizfonseca/proksi:latest

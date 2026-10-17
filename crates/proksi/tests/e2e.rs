@@ -4,6 +4,8 @@
 
 mod harness;
 
+use std::time::Duration;
+
 use futures_util::future::join_all;
 use harness::{websocket_echo, Harness, Route, Upstream, UTF8_CONTENT_DISPOSITION};
 
@@ -1654,6 +1656,68 @@ host "chain.test" {
         Ok(3)
     );
     proksi.assert_healthy();
+}
+
+const TCP_BLOCK: &str = r#"
+tcp "web" {
+  listen = "127.0.0.1:{tcp_port_0}"
+  upstream "127.0.0.1:{http_upstream_port}" {}
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stops_right_away_without_connections() {
+    let mut proksi = Harness::start_with_server(
+        vec![Route::new("app.test", Upstream::Http)],
+        "shutdown_timeout_secs = 30",
+        TCP_BLOCK,
+    )
+    .await;
+    // A connection kept alive by the client, idle: closed by proksi when it stops
+    let client = proksi.client();
+    let res = client
+        .get(format!("https://app.test:{}/", proksi.https_port))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+
+    proksi.terminate();
+
+    assert!(proksi.exits_within(Duration::from_secs(3)).await);
+    drop(client);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stopping_waits_for_open_connections() {
+    let mut proksi =
+        Harness::start_with_server(vec![], "shutdown_timeout_secs = 30", TCP_BLOCK).await;
+    let connection = tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[0]))
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    proksi.terminate();
+    assert!(!proksi.exits_within(Duration::from_secs(2)).await);
+
+    // Stops once the connection closes
+    drop(connection);
+    assert!(proksi.exits_within(Duration::from_secs(3)).await);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stopping_closes_connections_after_the_timeout() {
+    let mut proksi =
+        Harness::start_with_server(vec![], "shutdown_timeout_secs = 2", TCP_BLOCK).await;
+    let _connection = tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[0]))
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    proksi.terminate();
+
+    assert!(!proksi.exits_within(Duration::from_secs(1)).await);
+    assert!(proksi.exits_within(Duration::from_secs(4)).await);
 }
 
 #[tokio::test(flavor = "multi_thread")]
