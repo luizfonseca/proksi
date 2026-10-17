@@ -5,6 +5,7 @@ Proksi is evolving day by day, and new features are being added all the time. Be
 - [x] **HTTPS**: SSL termination, automatic redirect from HTTP and certificate renewal (Let's Encrypt)
 - [x] **Plain HTTP** hosts (`tls = false`), for running behind another load balancer or on an IP address
 - [x] **Hosts and locations**: the most specific location of a host serves each request (static paths, parameters and wildcards)
+- [x] **Path rewriting** per location: strip or add a prefix to the path sent to upstreams
 - [x] **Catch-all host** (`host "*"`) for names without a host of their own
 - [x] **Listen addresses per host**: Proksi only opens the ports its hosts need
 - [x] **Docker**: Swarm/Compose Label Support
