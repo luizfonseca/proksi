@@ -14,17 +14,7 @@ pub(super) fn build_location_container(
     host: &str,
     location: &Location,
 ) -> Option<RouteStoreContainer> {
-    let mut load_balancer = match load_balancer(&location.upstreams) {
-        Ok(load_balancer) => load_balancer,
-        Err(err) => {
-            tracing::warn!(
-                "could not create upstreams for host {host} (location {}): {err}, upstreams {:?}",
-                location.path,
-                location.upstreams
-            );
-            return None;
-        }
-    };
+    let mut load_balancer = load_balancer(&location.upstreams);
 
     // TODO: support defining health checks in the configuration file
     load_balancer.set_health_check(TcpHealthCheck::new());

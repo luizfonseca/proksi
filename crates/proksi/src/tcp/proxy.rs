@@ -124,6 +124,9 @@ impl TcpProxy {
 
         let mut upstream = TcpStream::connect(addr).await.map_err(|err| {
             tracing::warn!("{}: could not connect to upstream {addr}: {err}", target.label);
+            // The upstream's name may point elsewhere now (ADR 0006)
+            let load_balancer = target.load_balancer.clone();
+            tokio::spawn(async move { load_balancer.update().await });
             format!("could not connect to the upstream: {err}")
         })?;
 

@@ -1,15 +1,12 @@
-use std::{
-    collections::{BTreeSet, HashMap},
-    net::{SocketAddr, ToSocketAddrs},
-    sync::Arc,
-};
+use std::{collections::BTreeSet, sync::Arc};
 
-use pingora::lb::{discovery::Static, selection::RoundRobin, Backends, LoadBalancer};
+use pingora::lb::{discovery::Static, selection::RoundRobin, Backend, Backends, LoadBalancer};
 
 use crate::{
     blocks::Blocks,
     config::{RouteCache, RouteUpstream},
     metrics::LocationMetrics,
+    routing::build::upstream_index,
 };
 
 use super::host_container::HostContainer;
@@ -21,8 +18,6 @@ pub struct RouteStoreContainer {
     pub load_balancer: Arc<LoadBalancer<RoundRobin>>,
 
     pub upstreams: Vec<RouteUpstream>,
-    /// Resolved address of each upstream (index into `upstreams`)
-    upstream_addrs: HashMap<SocketAddr, usize>,
 
     /// Building blocks (plugins, headers, cache), in the order they run
     pub blocks: Blocks,
@@ -42,7 +37,6 @@ impl Default for RouteStoreContainer {
             ))),
             blocks: Blocks::default(),
             upstreams: Vec::new(),
-            upstream_addrs: HashMap::new(),
             cache: None,
             metrics: None,
         }
@@ -56,33 +50,13 @@ impl RouteStoreContainer {
             load_balancer: Arc::new(load_balancer),
             blocks: Blocks::default(),
             upstreams: Vec::with_capacity(5),
-            upstream_addrs: HashMap::new(),
             cache: None,
             metrics: None,
         }
     }
 
-    /// Sets the upstreams of this route, resolving their addresses once so that
-    /// requests don't need to resolve them again (the load balancer backends are
-    /// resolved at the same time).
+    /// Sets the upstreams of this route (the ones its load balancer was built with)
     pub fn set_upstreams(&mut self, upstreams: Vec<RouteUpstream>) {
-        let mut upstream_addrs = HashMap::new();
-        for (index, upstream) in upstreams.iter().enumerate() {
-            let Ok(addrs) = format!("{}:{}", upstream.ip, upstream.port).to_socket_addrs() else {
-                tracing::warn!(
-                    "could not resolve upstream {}:{}",
-                    upstream.ip,
-                    upstream.port
-                );
-                continue;
-            };
-
-            for addr in addrs {
-                upstream_addrs.entry(addr).or_insert(index);
-            }
-        }
-
-        self.upstream_addrs = upstream_addrs;
         self.upstreams = upstreams;
     }
 
@@ -91,20 +65,17 @@ impl RouteStoreContainer {
         let backends = self.load_balancer.backends();
         let mut healthy = vec![false; self.upstreams.len()];
         for backend in backends.get_backend().iter() {
-            let index = backend
-                .addr
-                .as_inet()
-                .and_then(|addr| self.upstream_index(addr));
-            if let Some(slot) = index.and_then(|index| healthy.get_mut(index)) {
+            if let Some(slot) = upstream_index(backend).and_then(|index| healthy.get_mut(index)) {
                 *slot |= backends.ready(backend);
             }
         }
         healthy
     }
 
-    /// The index in `upstreams` of a resolved (load balancer) address
-    pub fn upstream_index(&self, addr: &SocketAddr) -> Option<usize> {
-        self.upstream_addrs.get(addr).copied()
+    /// The upstream a backend of the load balancer came from
+    pub fn upstream(&self, backend: &Backend) -> Option<(usize, &RouteUpstream)> {
+        let index = upstream_index(backend)?;
+        Some((index, self.upstreams.get(index)?))
     }
 }
 
@@ -118,10 +89,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_router_container_finds_upstream_by_resolved_addr() {
-        let load_balancer = LoadBalancer::<RoundRobin>::try_from_iter(vec!["1.1.1.1:80"]).unwrap();
-        let mut route_store = RouteStoreContainer::new(load_balancer);
-        route_store.set_upstreams(vec![
+    fn test_router_container_finds_the_upstream_of_a_backend() {
+        let upstreams = vec![
             RouteUpstream {
                 ip: Cow::Borrowed("127.0.0.1"),
                 port: 8080,
@@ -134,24 +103,18 @@ mod tests {
                 sni: Some("hostname.test".to_string()),
                 ..RouteUpstream::default()
             },
-            RouteUpstream {
-                ip: Cow::Borrowed("does-not-resolve.invalid"),
-                port: 80,
-                ..RouteUpstream::default()
-            },
-        ]);
+        ];
+        let mut route_store =
+            RouteStoreContainer::new(crate::routing::build::load_balancer(&upstreams));
+        route_store.set_upstreams(upstreams);
 
-        let upstream = |addr: &str| {
-            route_store
-                .upstream_index(&addr.parse().unwrap())
-                .and_then(|index| route_store.upstreams.get(index))
+        let backends = route_store.load_balancer.backends().get_backend();
+        let sni = |addr: &str| {
+            let backend = backends.iter().find(|b| b.addr.to_string() == addr)?;
+            route_store.upstream(backend)?.1.sni.clone()
         };
-        assert_eq!(upstream("127.0.0.1:8080").unwrap().sni.as_deref(), Some("ip.test"));
-        assert_eq!(
-            upstream("127.0.0.1:9090").unwrap().sni.as_deref(),
-            Some("hostname.test")
-        );
-        assert!(upstream("127.0.0.1:1234").is_none());
-        assert_eq!(route_store.upstreams.len(), 3);
+        assert_eq!(sni("127.0.0.1:8080").as_deref(), Some("ip.test"));
+        assert_eq!(sni("127.0.0.1:9090").as_deref(), Some("hostname.test"));
+        assert!(sni("127.0.0.1:1234").is_none());
     }
 }

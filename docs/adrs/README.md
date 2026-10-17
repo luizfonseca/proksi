@@ -9,3 +9,4 @@ Larger changes to how proksi works are recorded here, with the context and reaso
 | [0003](adrs/0003-configuration-model.md) | Hosts, locations and TCP in the configuration | accepted |
 | [0004](adrs/0004-admin-api-and-metrics.md) | Admin API and metrics | accepted |
 | [0005](adrs/0005-kubernetes-ingress.md) | Kubernetes ingress controller | accepted |
+| [0006](adrs/0006-upstream-name-resolution.md) | Upstream name resolution | accepted |
