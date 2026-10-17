@@ -32,6 +32,9 @@ pub struct TcpRoute {
     /// How long a connection can go without bytes either way (`None`: forever)
     #[serde(skip)]
     pub idle_timeout: Option<std::time::Duration>,
+    /// How the upstreams are checked (with the host's settings)
+    #[serde(skip)]
+    pub health_check: Option<super::host::HealthCheck>,
     pub upstreams: Vec<RouteUpstream>,
 }
 
@@ -62,7 +65,7 @@ impl Config {
                 (
                     name,
                     block,
-                    Some((host.as_str(), tls.clone())),
+                    Some((host.as_str(), tls.clone(), host_block.health_check)),
                     format!("tcp \"{name}\" in host \"{host}\""),
                 )
             })
@@ -71,9 +74,16 @@ impl Config {
         top_level
             .chain(in_hosts)
             .map(|(name, block, host, label)| {
-                block
-                    .to_route(name, host.as_ref().map(|(host, tls)| (*host, tls)))
-                    .map_err(|err| format!("{label}: {err}"))
+                let mut route = block
+                    .to_route(name, host.as_ref().map(|(host, tls, _)| (*host, tls)))
+                    .map_err(|err| format!("{label}: {err}"))?;
+                if let Some((_, _, host_health_check)) = host {
+                    route.health_check = match route.health_check {
+                        Some(health_check) => Some(health_check.or(host_health_check)),
+                        None => host_health_check,
+                    };
+                }
+                Ok(route)
             })
             .collect()
     }
@@ -109,6 +119,45 @@ mod tests {
             weight,
             ..RouteUpstream::default()
         }
+    }
+
+    #[test]
+    fn test_tcp_blocks_inherit_the_health_check_of_their_host() {
+        let config = config(
+            r#"
+tcp "game" {
+  listen = "0.0.0.0:7777"
+  health_check {
+    enabled = false
+  }
+  upstream "game:7777" {}
+}
+
+host "db.example.com" {
+  health_check {
+    interval_secs = 5
+  }
+  tcp "postgres" {
+    listen = "0.0.0.0:5433"
+    health_check {
+      enabled = true
+    }
+    upstream "db:5432" {}
+  }
+}
+"#,
+        );
+        let routes = config.tcp_routes().unwrap();
+        let health_check = |name: &str| {
+            routes
+                .iter()
+                .find(|route| route.name == name)
+                .and_then(|route| route.health_check)
+                .map(|check| (check.enabled, check.interval_secs))
+        };
+
+        assert_eq!(health_check("game"), Some((Some(false), None)));
+        assert_eq!(health_check("postgres"), Some((Some(true), Some(5))));
     }
 
     #[test]
@@ -156,6 +205,7 @@ host "plain.example.com" {
                     alpn: vec![],
                     connect_timeout: std::time::Duration::from_secs(5),
                     idle_timeout: None,
+                    health_check: None,
                     upstreams: vec![
                         upstream("game-1", 7777, Some(2)),
                         upstream("game-2", 7777, None)
@@ -169,6 +219,7 @@ host "plain.example.com" {
                     alpn: vec![],
                     connect_timeout: std::time::Duration::from_secs(5),
                     idle_timeout: None,
+                    health_check: None,
                     upstreams: vec![upstream("db", 5432, None)],
                 },
                 TcpRoute {
@@ -179,6 +230,7 @@ host "plain.example.com" {
                     alpn: vec![],
                     connect_timeout: std::time::Duration::from_secs(5),
                     idle_timeout: None,
+                    health_check: None,
                     upstreams: vec![upstream("tls-app", 443, None)],
                 },
                 TcpRoute {
@@ -189,6 +241,7 @@ host "plain.example.com" {
                     alpn: vec![],
                     connect_timeout: std::time::Duration::from_secs(5),
                     idle_timeout: None,
+                    health_check: None,
                     upstreams: vec![upstream("redis", 6379, None)],
                 },
             ])

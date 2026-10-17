@@ -29,6 +29,8 @@ pub struct TcpBlock {
     pub connect_timeout_secs: Option<u64>,
     /// How long a connection can go without bytes either way before it's closed (default: never)
     pub idle_timeout_secs: Option<u64>,
+    /// How the upstreams are checked
+    pub health_check: Option<crate::config::host::HealthCheck>,
     #[serde(default)]
     pub upstream: BTreeMap<String, TcpUpstreamBlock>,
 }
@@ -97,6 +99,7 @@ impl TcpBlock {
                 .connect_timeout_secs
                 .map_or(DEFAULT_CONNECT_TIMEOUT, std::time::Duration::from_secs),
             idle_timeout: self.idle_timeout_secs.map(std::time::Duration::from_secs),
+            health_check: self.health_check,
             upstreams,
         })
     }

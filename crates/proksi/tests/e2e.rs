@@ -2337,6 +2337,72 @@ host "plain.test" {{
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_upstreams_that_failed_their_health_check_get_requests_when_none_is_healthy() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    // Nothing listens on this port yet: the game server is still starting
+    let port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let proksi = Harness::start_with(
+        vec![],
+        &format!(
+            r#"
+admin {{
+  listen = "127.0.0.1:{{tcp_port_2}}"
+  token  = "e2e-token"
+}}
+
+host "starting.test" {{
+  tls = false
+  health_check {{
+    interval_secs = 1
+  }}
+  location "/" {{
+    upstream "127.0.0.1:{port}" {{}}
+  }}
+}}
+"#
+        ),
+    )
+    .await;
+
+    // Two failed checks, a second apart
+    let unhealthy = format!(
+        "proksi_upstream_healthy{{host=\"starting.test\",location=\"/\",upstream=\"127.0.0.1:{port}\"}} 0"
+    );
+    let mut metrics = String::new();
+    for _ in 0..50 {
+        metrics = proksi
+            .raw_http_on(
+                proksi.tcp_ports[2],
+                b"GET /metrics HTTP/1.1\r\nHost: admin\r\nAuthorization: Bearer e2e-token\r\nConnection: close\r\n\r\n",
+            )
+            .await
+            .unwrap();
+        if metrics.lines().any(|line| line.trim_end() == unhealthy) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(metrics.lines().any(|line| line.trim_end() == unhealthy), "{metrics}");
+
+    // Up now: requests get to it before its next check
+    let upstream = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = upstream.accept().await {
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf).await;
+            let _ = stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .await;
+        }
+    });
+    let res = proksi.get_http_port("starting.test", "/").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_locations_rewrite_the_path_sent_to_upstreams() {
     let mut proksi = Harness::start_with(
         vec![],

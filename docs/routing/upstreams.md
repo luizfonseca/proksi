@@ -94,7 +94,24 @@ Measured per request: a prefix rewrite takes around 50 ns, a regular expression 
 
 ## Health checks
 
-Every upstream is checked in the background (a TCP connection every 15 seconds). Upstreams that fail the check stop receiving requests until they are healthy again. If none of the upstreams of a location are healthy, the request gets a `503`.
+Every upstream is checked in the background, with a TCP connection every 15 seconds. An upstream that fails two checks in a row stops receiving requests until a check succeeds again. When none of the upstreams of a location is healthy, they're tried anyway, so a check that failed while an upstream was starting never leaves the location without upstreams.
+
+`health_check` changes the interval, or turns the checks off. In a host it applies to its locations and `tcp` blocks, which can set their own:
+
+```hcl
+host "app.example.com" {
+  health_check {
+    interval_secs = 5
+  }
+
+  location "/game" {
+    health_check {
+      enabled = false  # a single upstream: let failed connections speak for themselves
+    }
+    upstream "game:8080" {}
+  }
+}
+```
 
 ## External services (TLS)
 

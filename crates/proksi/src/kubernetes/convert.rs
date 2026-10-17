@@ -134,6 +134,7 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
                 cache: blocks.as_ref().and_then(|blocks| blocks.cache.clone()),
                 timeouts: blocks.as_ref().and_then(|blocks| blocks.timeouts),
                 rewrite: blocks.as_ref().and_then(|blocks| blocks.rewrite.clone()),
+                health_check: blocks.as_ref().and_then(|blocks| blocks.health_check),
             };
             locations.insert((path, exact), (location, id.clone()));
         }
@@ -259,7 +260,7 @@ fn blocks(cluster: &Cluster, ingress: &Ingress, namespace: &str) -> Result<Optio
         ));
     }
     let mut location = block
-        .to_location("/", None, None)
+        .to_location("/", &crate::config::blocks::HostBlock::default())
         .map_err(|err| format!("invalid {BLOCKS}: {err}"))?;
 
     if let Some(name) = annotation(ingress, AUTH_SECRET) {

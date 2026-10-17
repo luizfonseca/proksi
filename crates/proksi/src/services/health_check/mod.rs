@@ -1,4 +1,8 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use async_trait::async_trait;
 use pingora::{
@@ -39,14 +43,33 @@ fn load_balancers() -> Vec<(String, Arc<LoadBalancer<RoundRobin>>)> {
         .collect()
 }
 
+/// Checks the upstreams of each load balancer on its own interval (`health_check_frequency`,
+/// unset when its checks are off)
 async fn run_health_check_loop() {
-    let mut interval = tokio::time::interval(Duration::from_secs(30));
-    interval.tick().await;
+    let mut interval = tokio::time::interval(Duration::from_secs(1));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // When each load balancer (by address) was last checked
+    let mut checked_at = HashMap::<usize, Instant>::new();
 
     loop {
         interval.tick().await;
 
-        for (host, load_balancer) in load_balancers() {
+        let load_balancers = load_balancers();
+        checked_at.retain(|id, _| {
+            load_balancers
+                .iter()
+                .any(|(_, load_balancer)| Arc::as_ptr(load_balancer) as usize == *id)
+        });
+        for (host, load_balancer) in load_balancers {
+            let Some(frequency) = load_balancer.health_check_frequency else {
+                continue;
+            };
+            let last = checked_at.entry(Arc::as_ptr(&load_balancer) as usize);
+            let last = last.or_insert_with(Instant::now);
+            if last.elapsed() < frequency {
+                continue;
+            }
+            *last = Instant::now();
             tracing::trace!("Running health check for host {}", host);
             load_balancer.backends().run_health_check(false).await;
         }
