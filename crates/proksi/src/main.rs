@@ -55,6 +55,14 @@ fn main() -> Result<(), anyhow::Error> {
     #[cfg(target_os = "linux")]
     let _ = nix::sys::prctl::set_thp_disable(true);
 
+    // Linux: a supervisor starts the worker serving requests, and replaces it without dropping
+    // connections when settings change (see `supervisor`). It's started before anything else
+    // loads, so it holds only what supervising needs.
+    #[cfg(target_os = "linux")]
+    if supervisor::should_supervise() {
+        std::process::exit(supervisor::run()?);
+    }
+
     // Configuration can be refreshed on file change
     // Loads configuration from command-line, YAML or TOML sources
     let proxy_config = Arc::new(
@@ -62,11 +70,10 @@ fn main() -> Result<(), anyhow::Error> {
             .map_err(|err| anyhow::anyhow!("Failed to load configuration: {err}"))?,
     );
 
-    // Linux: a supervisor starts the worker serving requests, and replaces it without dropping
-    // connections when settings change (see `supervisor`)
+    // `daemon = true` in the configuration file: this worker runs on its own in the background
     #[cfg(target_os = "linux")]
-    if !proxy_config.daemon && !supervisor::is_worker() {
-        std::process::exit(supervisor::run()?);
+    if proxy_config.daemon {
+        supervisor::detach();
     }
 
     // The addresses the hosts need (validated when loading the configuration)

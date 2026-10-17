@@ -17,6 +17,7 @@ use std::{
     hash::Hasher,
     path::Path,
     process::ExitStatus,
+    sync::atomic::Ordering,
 };
 
 use nix::{sys::signal::Signal, unistd::Pid};
@@ -31,9 +32,51 @@ use crate::config::Config;
 /// Set for workers: the supervisor's process id
 const SUPERVISOR_ENV: &str = "PROKSI_SUPERVISOR_PID";
 
+/// Set by a worker that runs on its own instead (see `detach`)
+static DETACHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Whether this process is a worker started by a supervisor
 pub fn is_worker() -> bool {
-    std::env::var_os(SUPERVISOR_ENV).is_some()
+    std::env::var_os(SUPERVISOR_ENV).is_some() && !DETACHED.load(Ordering::Relaxed)
+}
+
+/// Whether to start a supervisor: decided before the configuration loads, so the supervisor
+/// only holds what supervising needs. Not in a worker, nor in daemon mode asked for on the
+/// command line or in `PROKSI_DAEMON`; `daemon = true` in a configuration file is found by the
+/// worker, which then runs on its own (`detach`).
+pub fn should_supervise() -> bool {
+    !is_worker()
+        && !daemon_requested(
+            std::env::args_os().skip(1),
+            std::env::var_os("PROKSI_DAEMON").as_deref(),
+        )
+}
+
+/// `-d`, `--daemon` (or `-d` among other short flags, `-vd`), or `PROKSI_DAEMON=true`
+fn daemon_requested(
+    mut args: impl Iterator<Item = OsString>,
+    env: Option<&std::ffi::OsStr>,
+) -> bool {
+    let env = env
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case("true") || value == "1");
+    env || args.any(|arg| {
+        let Some(arg) = arg.to_str() else {
+            return false;
+        };
+        arg == "--daemon"
+            || arg.strip_prefix('-').is_some_and(|flags| {
+                !flags.starts_with('-')
+                    && flags.contains('d')
+                    && flags.chars().all(|flag| flag.is_ascii_alphabetic())
+            })
+    })
+}
+
+/// This worker runs on its own (`daemon = true` in the configuration file): its supervisor
+/// stops with the process that daemonizes, and upgrades restart it instead
+pub fn detach() {
+    DETACHED.store(true, Ordering::Relaxed);
 }
 
 /// Asks the supervisor to replace this worker with a new one, with the configuration on disk.
@@ -48,6 +91,9 @@ pub fn notify_ready() {
 }
 
 fn signal_supervisor(signal: Signal) -> bool {
+    if !is_worker() {
+        return false;
+    }
     let Some(pid) = std::env::var(SUPERVISOR_ENV)
         .ok()
         .and_then(|pid| pid.parse::<i32>().ok())
@@ -231,3 +277,31 @@ fn log(message: &str) {
     eprintln!("proksi supervisor: {message}");
 }
 
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsString;
+
+    use super::daemon_requested;
+
+    fn requested(args: &[&str], env: Option<&str>) -> bool {
+        daemon_requested(args.iter().map(OsString::from), env.map(std::ffi::OsStr::new))
+    }
+
+    #[test]
+    fn test_daemon_requested_before_loading_the_configuration() {
+        assert!(!requested(&[], None));
+        assert!(!requested(&["-c", "/etc/proksi/"], None));
+        // A value that happens to have a `d`
+        assert!(!requested(&["-c", "/data/proksi.hcl"], None));
+        assert!(!requested(&["-c/data/proksi.hcl"], None));
+        assert!(!requested(&["--config", "-d.hcl"], None));
+
+        assert!(requested(&["--daemon"], None));
+        assert!(requested(&["-c", "/etc/proksi/", "-d"], None));
+        assert!(requested(&["-dc", "/etc/proksi/"], None));
+        assert!(requested(&[], Some("true")));
+        assert!(requested(&[], Some("1")));
+        assert!(!requested(&[], Some("false")));
+    }
+}
