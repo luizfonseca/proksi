@@ -34,6 +34,7 @@ Like the other listeners, the `admin` block is read when Proksi starts: changing
 | Metric | Labels | |
 | --- | --- | --- |
 | `proksi_requests_total` | `host`, `location`, `status` | Requests, by status class (`1xx`…`5xx`, or `none` when no response was sent) |
+| `proksi_responses_total` | `host`, `location`, `code` | Responses, by status code (`200`, `429`…), once a location has answered that code |
 | `proksi_request_duration_seconds` | `host`, `location` | Time to answer requests (histogram) |
 | `proksi_upstream_duration_seconds` | `host`, `location`, `upstream` | Time until the upstream's response headers (histogram) |
 | `proksi_upstream_errors_total` | `host`, `location`, `upstream` | Failures to connect to an upstream, or while proxying to it |
