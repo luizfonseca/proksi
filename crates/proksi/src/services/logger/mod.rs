@@ -308,6 +308,11 @@ impl Service for ProxyLoggerReceiver {
         self.write_logs().await;
     }
 
+    /// Listens on nothing: inherited sockets no service declares are closed after an upgrade
+    fn listen_addresses(&self) -> Option<Vec<String>> {
+        Some(vec![])
+    }
+
     fn name(&self) -> &'static str {
         "logging_service"
     }

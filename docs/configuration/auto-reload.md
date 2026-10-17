@@ -26,4 +26,4 @@ When the configuration file changes:
 
 - if it's invalid, the change is ignored (and logged): Proksi keeps running with the current configuration;
 - if only hosts (`host` blocks or `routes`) changed, they are applied without restarting;
-- if other settings changed, Proksi restarts with the new configuration.
+- if other settings changed, a new Proksi worker starts with the new configuration and takes over, without dropping connections on Linux (see [Restarts and upgrades](configuration/upgrades.md)).

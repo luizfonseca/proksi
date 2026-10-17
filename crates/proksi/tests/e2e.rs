@@ -1890,3 +1890,191 @@ host "plain.test" {
     let mut upload = slow_body("/upload").await;
     assert!(!closed_within(&mut upload, std::time::Duration::from_secs(3)).await);
 }
+
+/// Upgrades hand the listening sockets over to a new process, which needs Linux
+#[cfg(target_os = "linux")]
+mod upgrades {
+    use std::{
+        sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Arc,
+        },
+        time::Duration,
+    };
+
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    use super::{Harness, Route, Upstream};
+
+    const CONFIG: &str = r#"
+auto_reload {
+  enabled = true
+  interval_secs = 1
+}
+
+tcp "web" {
+  listen = "127.0.0.1:{tcp_port_0}"
+  upstream "127.0.0.1:{http_upstream_port}" {}
+}
+"#;
+
+    /// Sends requests to `app.test` until stopped, counting the ones that failed
+    fn requests_in_a_loop(proksi: &Harness) -> (Arc<AtomicBool>, Arc<AtomicUsize>, tokio::task::JoinHandle<usize>) {
+        let (stop, failed) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicUsize::new(0)));
+        let client = proksi.client();
+        let url = format!("https://app.test:{}/", proksi.https_port);
+        let (stopping, failures) = (stop.clone(), failed.clone());
+        let task = tokio::spawn(async move {
+            let mut sent = 0;
+            while !stopping.load(Ordering::Relaxed) {
+                // A new connection each time, as new clients would
+                let res = client.get(&url).header("connection", "close").send().await;
+                if !res.is_ok_and(|res| res.status() == 200) {
+                    failures.fetch_add(1, Ordering::Relaxed);
+                }
+                sent += 1;
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            sent
+        });
+        (stop, failed, task)
+    }
+
+    /// Waits until a new proksi process has started (counted by its startup log line)
+    async fn wait_for_started(proksi: &Harness, processes: usize) {
+        for _ in 0..250 {
+            if proksi.logs().matches("listening for HTTPS on").count() >= processes {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        panic!("no new process started:\n{}", proksi.logs());
+    }
+
+    /// Waits until the previous worker has stopped, its connections closed
+    async fn wait_for_previous_to_stop(proksi: &Harness) {
+        // Pingora keeps accepting for 5 seconds after handing its sockets over
+        for _ in 0..100 {
+            if proksi.logs().contains("stopped (exit code 0)") {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        panic!("the previous worker didn't stop:\n{}", proksi.logs());
+    }
+
+    async fn request_on(connection: &mut tokio::net::TcpStream, path: &str) -> String {
+        connection
+            .write_all(format!("GET {path} HTTP/1.1\r\nHost: tcp.test\r\n\r\n").as_bytes())
+            .await
+            .unwrap();
+        let mut buf = vec![0u8; 4096];
+        let n = tokio::time::timeout(Duration::from_secs(5), connection.read(&mut buf))
+            .await
+            .unwrap()
+            .unwrap();
+        String::from_utf8_lossy(&buf[..n]).to_string()
+    }
+
+    /// Upgrades with `upgrade`, checking that no new connection fails meanwhile, and that a
+    /// connection open before is still served, by the previous process
+    async fn assert_upgrade_keeps_connections(upgrade: impl FnOnce(&mut Harness)) {
+        let mut proksi = Harness::start_with_server(
+            vec![Route::new("app.test", Upstream::Http)],
+            "shutdown_timeout_secs = 30",
+            CONFIG,
+        )
+        .await;
+        let mut open = tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[0]))
+            .await
+            .unwrap();
+        assert!(request_on(&mut open, "/before").await.starts_with("HTTP/1.1 200"));
+        let (stop, failed, requests) = requests_in_a_loop(&proksi);
+
+        upgrade(&mut proksi);
+        wait_for_started(&proksi, 2).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        stop.store(true, Ordering::Relaxed);
+        let sent = requests.await.unwrap();
+
+        assert_eq!(failed.load(Ordering::Relaxed), 0, "of {sent}:\n{}", proksi.logs());
+        // The connection open before the upgrade is still served
+        assert!(request_on(&mut open, "/after").await.starts_with("HTTP/1.1 200"));
+        // The previous process stops once it's closed
+        drop(open);
+        wait_for_previous_to_stop(&proksi).await;
+        // And the new one serves new connections
+        assert_eq!(proksi.get("app.test", "/").await.unwrap().status, 200);
+        assert!(proksi.is_alive());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_settings_changes_keep_connections() {
+        assert_upgrade_keeps_connections(|proksi| {
+            // Anything but hosts restarts proksi
+            proksi.rewrite_extra_config(&format!("{CONFIG}\ndocker {{\n  interval_secs = 99\n}}\n"));
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sighup_upgrades_without_dropping_connections() {
+        assert_upgrade_keeps_connections(|proksi| {
+            proksi.signal(nix::sys::signal::Signal::SIGHUP);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_changes_during_an_upgrade_are_applied_after_it() {
+        let proksi = Harness::start_with(vec![Route::new("app.test", Upstream::Http)], CONFIG)
+            .await;
+        let (stop, failed, requests) = requests_in_a_loop(&proksi);
+
+        proksi.signal(nix::sys::signal::Signal::SIGHUP);
+        // While the first upgrade is still handing over
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        proksi.signal(nix::sys::signal::Signal::SIGHUP);
+        wait_for_started(&proksi, 3).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        stop.store(true, Ordering::Relaxed);
+        let sent = requests.await.unwrap();
+
+        assert_eq!(failed.load(Ordering::Relaxed), 0, "of {sent}:\n{}", proksi.logs());
+        assert_eq!(proksi.get("app.test", "/").await.unwrap().status, 200);
+        // Each worker handed over to the next one, none failed
+        for _ in 0..200 {
+            if proksi.logs().matches("stopped (exit code 0)").count() >= 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let logs = proksi.logs();
+        assert_eq!(logs.matches("stopped (exit code 0)").count(), 2, "{logs}");
+        assert!(!logs.contains("panicked"), "{logs}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_removed_listeners_are_closed_after_an_upgrade() {
+        let mut proksi = Harness::start_with(
+            vec![Route::new("app.test", Upstream::Http)],
+            &format!(
+                "{CONFIG}\ntcp \"other\" {{\n  listen = \"127.0.0.1:{{tcp_port_1}}\"\n  upstream \"127.0.0.1:{{http_upstream_port}}\" {{}}\n}}\n"
+            ),
+        )
+        .await;
+        assert!(tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[1]))
+            .await
+            .is_ok());
+
+        proksi.rewrite_extra_config(CONFIG);
+        wait_for_started(&proksi, 2).await;
+        // The previous worker keeps its sockets until it stops
+        wait_for_previous_to_stop(&proksi).await;
+
+        assert!(tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[1]))
+            .await
+            .is_err());
+        assert_eq!(proksi.get("app.test", "/").await.unwrap().status, 200);
+    }
+}

@@ -106,8 +106,15 @@ fn config_watcher<H: EventHandler>(handler: H) -> notify::Result<notify::poll::P
     )
 }
 
-/// Restarts proksi with the same arguments
+/// Restarts proksi with the same arguments: replaced by a new worker without dropping
+/// connections when supervised (Linux), started again otherwise
 fn restart() {
+    #[cfg(target_os = "linux")]
+    if crate::supervisor::request_upgrade() {
+        tracing::warn!("settings changed: upgrading to a new worker");
+        return;
+    }
+
     let Ok(cmd) = std::env::current_exe() else {
         return;
     };
