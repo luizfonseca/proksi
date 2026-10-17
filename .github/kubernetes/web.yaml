@@ -42,7 +42,7 @@ kind: Ingress
 metadata:
   name: web
   annotations:
-    proksi.info/tls: "false"
+    proksi.ingress/tls: "false"
 spec:
   ingressClassName: proksi
   rules:
@@ -63,7 +63,7 @@ kind: Ingress
 metadata:
   name: web-tls
   annotations:
-    proksi.info/upstream: service
+    proksi.ingress/upstream: service
 spec:
   ingressClassName: proksi
   tls:
@@ -87,15 +87,15 @@ kind: Ingress
 metadata:
   name: web-auth
   annotations:
-    proksi.info/tls: "false"
-    proksi.info/blocks: |
+    proksi.ingress/tls: "false"
+    proksi.ingress/blocks: |
       basic_auth {}
       headers {
         response {
           add = { "x-from" = "ingress" }
         }
       }
-    proksi.info/auth-secret: web-auth
+    proksi.ingress/auth-secret: web-auth
 spec:
   ingressClassName: proksi
   rules:
@@ -116,7 +116,7 @@ kind: Ingress
 metadata:
   name: web-invalid
   annotations:
-    proksi.info/blocks: |
+    proksi.ingress/blocks: |
       upstream "10.0.0.1:80" {}
 spec:
   ingressClassName: proksi

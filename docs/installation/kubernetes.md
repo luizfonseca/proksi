@@ -64,7 +64,7 @@ spec:
 - Rules of several `Ingress`es for the same host are merged. When two define the same path, the oldest `Ingress` keeps it and the other is logged.
 - A rule without a `host`, and `defaultBackend`, are served for any other name (`host "*"`).
 - `Ingress`es without a class are served when the `proksi` `IngressClass` has the annotation `ingressclass.kubernetes.io/is-default-class: "true"`.
-- With the annotation `proksi.info/upstream: service`, the upstream is the service's own address (its cluster IP) instead of its pods, and Kubernetes balances the requests.
+- With the annotation `proksi.ingress/upstream: service`, the upstream is the service's own address (its cluster IP) instead of its pods, and Kubernetes balances the requests.
 
 ## TLS
 
@@ -77,18 +77,18 @@ spec:
       secretName: web-example-com
 ```
 
-Other hosts get certificates from Let's Encrypt (enable `lets_encrypt` in the `ConfigMap`). With the annotation `proksi.info/tls: "false"`, the hosts of an `Ingress` are plain HTTP.
+Other hosts get certificates from Let's Encrypt (enable `lets_encrypt` in the `ConfigMap`). With the annotation `proksi.ingress/tls: "false"`, the hosts of an `Ingress` are plain HTTP.
 
 With a shared store, a certificate from a `Secret` reaches every replica through the store.
 
 ## Plugins
 
-The annotation `proksi.info/blocks` adds plugins, headers and cache to every path of an `Ingress`, written like the inside of a `location` block of the [configuration](configuration/hcl/README.md):
+The annotation `proksi.ingress/blocks` adds plugins, headers and cache to every path of an `Ingress`, written like the inside of a `location` block of the [configuration](configuration/hcl/README.md):
 
 ```yaml
 metadata:
   annotations:
-    proksi.info/blocks: |
+    proksi.ingress/blocks: |
       rate_limit {
         requests = 100
         per      = "1m"
@@ -101,19 +101,19 @@ metadata:
       }
 ```
 
-The settings of `basic_auth` (`user`, `pass`) and `oauth2` (`client_id`, `client_secret`, `jwt_secret`) are better kept out of annotations: put them in a `Secret` of the same namespace, labelled `proksi.info/auth`, and name it in `proksi.info/auth-secret`. Its keys fill the settings the block leaves out:
+The settings of `basic_auth` (`user`, `pass`) and `oauth2` (`client_id`, `client_secret`, `jwt_secret`) are better kept out of annotations: put them in a `Secret` of the same namespace, labelled `proksi.ingress/auth`, and name it in `proksi.ingress/auth-secret`. Its keys fill the settings the block leaves out:
 
 ```bash
 kubectl create secret generic web-auth --from-literal=user=admin --from-literal=pass=...
-kubectl label secret web-auth proksi.info/auth=true
+kubectl label secret web-auth proksi.ingress/auth=true
 ```
 
 ```yaml
 metadata:
   annotations:
-    proksi.info/blocks: |
+    proksi.ingress/blocks: |
       basic_auth {}
-    proksi.info/auth-secret: web-auth
+    proksi.ingress/auth-secret: web-auth
 ```
 
 Only labelled `Secret`s (and TLS ones) are watched. An `Ingress` with invalid blocks, or whose auth secret is missing, isn't served, and the reason is logged and recorded as a warning `Event` on it (`kubectl describe ingress`).

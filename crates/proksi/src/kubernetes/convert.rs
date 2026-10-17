@@ -18,15 +18,15 @@ use crate::config::{
 /// Marks the default `IngressClass`, used by `Ingress`es without a class
 const DEFAULT_CLASS: &str = "ingressclass.kubernetes.io/is-default-class";
 /// `"false"`: the hosts of the `Ingress` are plain HTTP
-const TLS: &str = "proksi.info/tls";
+const TLS: &str = "proksi.ingress/tls";
 /// Plugins, headers and cache, written like the inside of a `location` block
-const BLOCKS: &str = "proksi.info/blocks";
-/// A `Secret` (labelled `proksi.info/auth`) with the settings of `basic_auth` and `oauth2`
-const AUTH_SECRET: &str = "proksi.info/auth-secret";
+const BLOCKS: &str = "proksi.ingress/blocks";
+/// A `Secret` (labelled `proksi.ingress/auth`) with the settings of `basic_auth` and `oauth2`
+const AUTH_SECRET: &str = "proksi.ingress/auth-secret";
 /// The label auth secrets need, so only those are watched
-pub const AUTH_LABEL: &str = "proksi.info/auth";
+pub const AUTH_LABEL: &str = "proksi.ingress/auth";
 /// `"service"`: upstreams are the services' cluster IPs, balanced by Kubernetes
-const UPSTREAM: &str = "proksi.info/upstream";
+const UPSTREAM: &str = "proksi.ingress/upstream";
 /// Links an `EndpointSlice` to its `Service`
 const SERVICE_NAME: &str = "kubernetes.io/service-name";
 
@@ -238,7 +238,7 @@ fn tls_certificates(
     }
 }
 
-/// The blocks of an `Ingress` (`proksi.info/blocks`), as a location without upstreams, with the
+/// The blocks of an `Ingress` (`proksi.ingress/blocks`), as a location without upstreams, with the
 /// settings of its auth secret
 fn blocks(cluster: &Cluster, ingress: &Ingress, namespace: &str) -> Result<Option<Location>, String> {
     let Some(text) = annotation(ingress, BLOCKS) else {
@@ -587,7 +587,7 @@ mod tests {
                 "name": "proksi",
                 "annotations": { "ingressclass.kubernetes.io/is-default-class": "true" },
             },
-            "spec": { "controller": "proksi.info/ingress-controller" },
+            "spec": { "controller": "proksi.ingress/controller" },
         })))];
         let Converted { hosts, .. } = hosts(&cluster, "proksi");
         assert_eq!(hosts.len(), 1);
@@ -738,7 +738,7 @@ mod tests {
         Arc::make_mut(&mut cluster.ingresses[0])
             .metadata
             .annotations = Some(
-            [("proksi.info/tls".to_string(), "false".to_string())]
+            [("proksi.ingress/tls".to_string(), "false".to_string())]
                 .into_iter()
                 .collect(),
         );
@@ -802,7 +802,7 @@ mod tests {
         Arc::make_mut(&mut cluster.ingresses[0])
             .metadata
             .annotations = Some(
-            [("proksi.info/upstream".to_string(), "service".to_string())]
+            [("proksi.ingress/upstream".to_string(), "service".to_string())]
                 .into_iter()
                 .collect(),
         );
@@ -850,7 +850,7 @@ mod tests {
         let cluster = with_annotations(
             two_paths(),
             &[(
-                "proksi.info/blocks",
+                "proksi.ingress/blocks",
                 "rate_limit {\n  requests = 10\n  per = \"1m\"\n}\nheaders {\n  response {\n    add = { \"x-from\" = \"ingress\" }\n  }\n}\n",
             )],
         );
@@ -872,15 +872,15 @@ mod tests {
         let mut cluster = with_annotations(
             two_paths(),
             &[
-                ("proksi.info/blocks", "basic_auth {}"),
-                ("proksi.info/auth-secret", "web-auth"),
+                ("proksi.ingress/blocks", "basic_auth {}"),
+                ("proksi.ingress/auth-secret", "web-auth"),
             ],
         );
         cluster.secrets.push(Arc::new(object(json!({
             "metadata": {
                 "name": "web-auth",
                 "namespace": "default",
-                "labels": { "proksi.info/auth": "true" },
+                "labels": { "proksi.ingress/auth": "true" },
             },
             // "admin" and "secret"
             "data": { "user": "YWRtaW4=", "pass": "c2VjcmV0" },
@@ -901,19 +901,19 @@ mod tests {
     fn test_invalid_blocks() {
         for (annotations, reason) in [
             (
-                vec![("proksi.info/blocks", "rate_limit {")],
-                "invalid proksi.info/blocks: ",
+                vec![("proksi.ingress/blocks", "rate_limit {")],
+                "invalid proksi.ingress/blocks: ",
             ),
             (
-                vec![("proksi.info/blocks", "upstream \"10.0.0.1:80\" {}")],
-                "proksi.info/blocks can't have upstreams: they come from the Ingress' backends",
+                vec![("proksi.ingress/blocks", "upstream \"10.0.0.1:80\" {}")],
+                "proksi.ingress/blocks can't have upstreams: they come from the Ingress' backends",
             ),
             (
                 vec![
-                    ("proksi.info/blocks", "basic_auth {}"),
-                    ("proksi.info/auth-secret", "missing"),
+                    ("proksi.ingress/blocks", "basic_auth {}"),
+                    ("proksi.ingress/auth-secret", "missing"),
                 ],
-                "auth secret default/missing not found (it needs the label proksi.info/auth)",
+                "auth secret default/missing not found (it needs the label proksi.ingress/auth)",
             ),
         ] {
             let cluster = with_annotations(two_paths(), &annotations);
