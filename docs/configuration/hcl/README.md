@@ -58,7 +58,7 @@ Each `host` block defines a host proksi accepts requests for. Its label is match
 host "api.example.com" {
   tls {
     certificate {                 // certificate files, instead of Let's Encrypt
-      pem = "/etc/proksi/certs/api.pem"
+      pem = "/etc/proksi/certs/api.pem" // the certificate, then its intermediates
       key = "/etc/proksi/certs/api.key"
     }
     self_signed_on_failure = true // fall back to a self-signed certificate

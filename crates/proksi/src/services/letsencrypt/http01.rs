@@ -40,11 +40,6 @@ impl LetsencryptService {
         Self { config }
     }
 
-    /// Parse a PEM-encoded X509 certificate from a string slice
-    fn parse_x509_cert(cert_pem: &str) -> Result<X509, anyhow::Error> {
-        Ok(X509::from_pem(cert_pem.as_bytes())?)
-    }
-
     /// Parse a PEM-encoded private key from a string slice
     fn parse_private_key(key_pem: &str) -> Result<PKey<openssl::pkey::Private>, anyhow::Error> {
         Ok(PKey::private_key_from_pem(key_pem.as_bytes())?)
@@ -57,26 +52,12 @@ impl LetsencryptService {
         bundle: &str,
         key_pem: &str,
     ) -> Result<(), anyhow::Error> {
-        let end = "-----END CERTIFICATE-----";
-        // Split certificates (leaf and chain) from the bundle
-        let split = bundle
-            .split_inclusive(end)
-            .map(str::trim)
-            .collect::<Vec<&str>>();
-
-        let leaf_pem = split.first();
-        let chain_pem = split.get(1);
-
-        let Some(leaf) = leaf_pem else {
+        // The leaf, followed by its chain
+        let mut certificates = X509::stack_from_pem(bundle.as_bytes())?.into_iter();
+        let Some(leaf) = certificates.next() else {
             return Err(anyhow::anyhow!("Certificate is empty"));
         };
-        let leaf = Self::parse_x509_cert(leaf)?;
-        let mut chain: Option<X509> = None;
-
-        if let Some(chain_pem) = chain_pem {
-            tracing::trace!("chain PEM: {:?}", chain_pem);
-            chain = Some(Self::parse_x509_cert(chain_pem)?);
-        }
+        let chain = certificates.collect();
 
         let key = Self::parse_private_key(key_pem)?;
 
@@ -165,7 +146,7 @@ impl LetsencryptService {
                 Certificate {
                     key,
                     leaf: openssl_cert,
-                    chain: None,
+                    chain: vec![],
                 },
             )
             .await
@@ -410,5 +391,39 @@ impl Service for LetsencryptService {
 
     fn threads(&self) -> Option<usize> {
         Some(1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::stores::certificates::tests::signed;
+
+    #[tokio::test]
+    async fn test_ordered_certificates_keep_their_whole_chain() {
+        let first = signed("intermediate 1", None);
+        let second = signed("intermediate 2", Some(&first));
+        let (leaf, key) = signed("acme-chain.test", Some(&second));
+        let bundle = [&leaf, &second.0, &first.0]
+            .map(|c| String::from_utf8(c.to_pem().unwrap()).unwrap())
+            .join("\n");
+        let key = String::from_utf8(key.private_key_to_pem_pkcs8().unwrap()).unwrap();
+
+        super::LetsencryptService::insert_certificate("acme-chain.test", &bundle, &key)
+            .await
+            .unwrap();
+
+        let stored = crate::stores::global::get_store()
+            .get_certificate("acme-chain.test")
+            .await
+            .unwrap();
+        assert_eq!(stored.leaf.to_pem().unwrap(), leaf.to_pem().unwrap());
+        assert_eq!(
+            stored
+                .chain
+                .iter()
+                .map(|c| c.to_pem().unwrap())
+                .collect::<Vec<_>>(),
+            vec![second.0.to_pem().unwrap(), first.0.to_pem().unwrap()]
+        );
     }
 }

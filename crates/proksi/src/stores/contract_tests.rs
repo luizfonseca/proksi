@@ -143,7 +143,7 @@ pub fn certificate(domain: &str, days: u32) -> Certificate {
     Certificate {
         key,
         leaf: leaf.build(),
-        chain: None,
+        chain: vec![],
     }
 }
 
