@@ -20,7 +20,7 @@ pub fn parse(certificate: &[u8], key: &[u8]) -> Result<Certificate, String> {
     Ok(Certificate {
         key,
         leaf,
-        chain: certificates.next(),
+        chain: certificates.collect(),
     })
 }
 
@@ -66,10 +66,8 @@ mod tests {
         let parsed = super::parse(&bundle, &key.private_key_to_pem_pkcs8().unwrap()).unwrap();
 
         assert_eq!(parsed.leaf.to_pem().unwrap(), leaf.to_pem().unwrap());
-        assert_eq!(
-            parsed.chain.unwrap().to_pem().unwrap(),
-            ca.to_pem().unwrap()
-        );
+        assert_eq!(parsed.chain.len(), 1);
+        assert_eq!(parsed.chain[0].to_pem().unwrap(), ca.to_pem().unwrap());
         assert!(parsed.key.public_eq(&key));
     }
 

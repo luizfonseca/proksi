@@ -1625,3 +1625,33 @@ async fn test_admin_without_metrics() {
 
     proksi.assert_healthy();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_certificate_files_are_served_with_their_chain() {
+    let mut proksi = Harness::start_with(
+        vec![],
+        r#"
+host "chain.test" {
+  tls {
+    certificate {
+      pem = "{chain_pem}"
+      key = "{chain_key}"
+    }
+  }
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#,
+    )
+    .await;
+    proksi.resolve("chain.test");
+    proksi.wait_for("chain.test", "/", 200).await;
+
+    // The leaf and both intermediates, verified against the root alone
+    assert_eq!(
+        proksi.verified_handshake(proksi.https_port, "chain.test").await,
+        Ok(3)
+    );
+    proksi.assert_healthy();
+}

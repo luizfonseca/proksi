@@ -23,10 +23,15 @@ pub(super) async fn load_certificate(
         .map_err(anyhow::Error::from)
         .and_then(|key| Ok(PKey::private_key_from_pem(&key)?))
         .map_err(|err| anyhow!("failed to load private key from {:?}: {err}", files.key))?;
-    let leaf = std::fs::read(&files.pem)
+    // The leaf, followed by its chain
+    let mut certificates = std::fs::read(&files.pem)
         .map_err(anyhow::Error::from)
-        .and_then(|pem| Ok(X509::from_pem(&pem)?))
-        .map_err(|err| anyhow!("failed to load certificate from {:?}: {err}", files.pem))?;
+        .and_then(|pem| Ok(X509::stack_from_pem(&pem)?))
+        .map_err(|err| anyhow!("failed to load certificate from {:?}: {err}", files.pem))?
+        .into_iter();
+    let leaf = certificates
+        .next()
+        .ok_or_else(|| anyhow!("no certificate in {:?}", files.pem))?;
 
     stores::global::get_store()
         .set_certificate(
@@ -34,7 +39,7 @@ pub(super) async fn load_certificate(
             Certificate {
                 key,
                 leaf,
-                chain: None,
+                chain: certificates.collect(),
             },
         )
         .await

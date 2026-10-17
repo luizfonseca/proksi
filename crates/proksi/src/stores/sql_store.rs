@@ -645,7 +645,7 @@ mod tests {
         Certificate {
             key,
             leaf: leaf.build(),
-            chain: None,
+            chain: vec![],
         }
     }
 

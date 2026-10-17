@@ -226,7 +226,7 @@ mod tests {
         Certificate {
             key,
             leaf: cert,
-            chain: None,
+            chain: vec![],
         }
     }
 

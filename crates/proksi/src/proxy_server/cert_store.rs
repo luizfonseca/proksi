@@ -66,7 +66,7 @@ impl TlsAccept for CertStore {
             return;
         }
 
-        if let Some(chain) = &cert.chain {
+        for chain in &cert.chain {
             if let Err(err) = ext::ssl_add_chain_cert(ssl, chain) {
                 tracing::error!("Failed to add chain certificate for host {host_name:?}: {err}");
             }

@@ -496,7 +496,7 @@ mod tests {
         let certificate = crate::stores::certificates::Certificate {
             key,
             leaf: leaf.build(),
-            chain: None,
+            chain: vec![],
         };
         crate::stores::store_trait::Store::set_certificate(&store, "cert.test", certificate)
             .await
