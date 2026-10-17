@@ -12,7 +12,10 @@ use pingora::server::configuration::ServerConf;
 
 use crate::{
     config::tcp::{TcpRoute, TcpTls},
-    proxy_server::services::{https_app, tls_acceptor},
+    proxy_server::{
+        connections::Counted,
+        services::{https_app, tls_acceptor},
+    },
     proxy_server::cert_store::CertStore,
     metrics::TcpMetrics,
     routing::build::load_balancer,
@@ -32,7 +35,7 @@ use super::{
 pub fn tcp_targets(routes: &[TcpRoute]) -> Result<Arc<Vec<TcpTarget>>, anyhow::Error> {
     let mut targets = vec![];
     for route in routes {
-        let mut load_balancer = load_balancer(&route.upstreams)?;
+        let mut load_balancer = load_balancer(&route.upstreams);
         load_balancer.set_health_check(TcpHealthCheck::new());
         targets.push(TcpTarget {
             label: route.label(),
@@ -89,14 +92,15 @@ pub fn tcp_services(
             tls_acceptor(protocols).map(|acceptor| (acceptor, Arc::new(app)))
         });
         let sni_router = SniRouter::new(TcpProxy::new(targets.clone()), shared.transpose()?);
-        let mut service = Service::new(format!("tls passthrough on {address}"), sni_router);
+        let mut service =
+            Service::new(format!("tls passthrough on {address}"), Counted::new(sni_router));
         service.threads = worker_threads;
         service.add_tcp(address);
         services.push(Box::new(service));
     }
 
     if !plain.is_empty() {
-        let mut service = Service::new("tcp".to_string(), TcpProxy::new(targets.clone()));
+        let mut service = Service::new("tcp".to_string(), Counted::new(TcpProxy::new(targets.clone())));
         service.threads = worker_threads;
         for address in &plain {
             service.add_tcp(address);
@@ -104,7 +108,10 @@ pub fn tcp_services(
         services.push(Box::new(service));
     }
     if !with_tls.is_empty() {
-        let mut service = Service::new("tcp with tls".to_string(), TcpProxy::new(targets.clone()));
+        let mut service = Service::new(
+            "tcp with tls".to_string(),
+            Counted::new(TcpProxy::new(targets.clone())),
+        );
         service.threads = worker_threads;
         for address in &with_tls {
             let mut settings = tls_settings()?;

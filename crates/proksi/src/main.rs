@@ -124,6 +124,12 @@ fn main() -> Result<(), anyhow::Error> {
     };
 
     let mut pingora_server = Server::new(Some(pingora_opts))?;
+    // Proksi stops once the connections are closed (`connections::exit_when_drained`): Pingora's
+    // grace period only applies if that doesn't happen
+    if let Some(configuration) = std::sync::Arc::get_mut(&mut pingora_server.configuration) {
+        configuration.grace_period_seconds =
+            Some(proxy_config.server.shutdown_timeout().as_secs() + 5);
+    }
     pingora_server.bootstrap();
 
     // Add Prometheus service
