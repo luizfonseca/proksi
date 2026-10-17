@@ -23,7 +23,7 @@ use crate::routing::build::select_or_resolve;
 use crate::metrics::{LocationMetrics, UpstreamMetrics};
 use crate::stores::{self, routes::RouteStoreContainer};
 
-use super::{default_peer_opts, http_proxy, listener::Listener};
+use super::{default_peer_opts, http_proxy, listener::Listener, respond::respond_error};
 
 static CACHEABLE_METHODS: Lazy<Vec<http::Method>> =
     Lazy::new(|| vec![http::Method::GET, http::Method::HEAD]);
@@ -133,7 +133,7 @@ impl ProxyHttp for Router {
                         })
                     });
                     if host_container.is_none() {
-                        session.respond_error(404).await?;
+                        respond_error(session, ctx, 404).await?;
                         return Ok(true);
                     }
                 } else {
@@ -146,14 +146,14 @@ impl ProxyHttp for Router {
 
         // If there's no host matching, returns a 404
         let Some(host_container) = host_container else {
-            session.respond_error(404).await?;
+            respond_error(session, ctx, 404).await?;
             return Ok(true);
         };
 
         // The most specific location of the host for the path, or a 404
         let uri = get_uri(session);
         let Some(route_container) = host_container.location_for(uri.path()) else {
-            session.respond_error(404).await?;
+            respond_error(session, ctx, 404).await?;
             return Ok(true);
         };
 
@@ -598,11 +598,11 @@ impl ProxyHttp for Router {
         &self,
         session: &mut Session,
         e: &pingora::Error,
-        _ctx: &mut Self::CTX,
+        ctx: &mut Self::CTX,
     ) -> FailToProxy {
         let code = error_status(e);
         if code > 0 {
-            if let Err(err) = session.respond_error(code).await {
+            if let Err(err) = respond_error(session, ctx, code).await {
                 tracing::error!("failed to send error response to downstream: {err}");
             }
         }
