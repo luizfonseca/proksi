@@ -104,6 +104,25 @@ def write_certificate(directory):
     )
 
 
+def cpu_seconds(pid):
+    """CPU time (user and system) of a process so far, 0 once it's gone"""
+    try:
+        if platform.system() == "Linux":
+            fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+            ticks = os.sysconf("SC_CLK_TCK")
+            # utime and stime (fields 14 and 15 of /proc/<pid>/stat)
+            return (int(fields[11]) + int(fields[12])) / ticks
+    except FileNotFoundError:
+        return 0.0
+    out = subprocess.run(
+        ["ps", "-o", "time=", "-p", str(pid)], capture_output=True, text=True
+    ).stdout.strip()
+    seconds = 0.0
+    for part in out.split(":") if out else []:
+        seconds = seconds * 60 + float(part)
+    return seconds
+
+
 class Process:
     """A running proksi, with its CPU time and peak memory"""
 
@@ -116,26 +135,34 @@ class Process:
         self.peak_rss_kb = 0
         self._sampling = False
 
-    def cpu_seconds(self):
-        pid = self.process.pid
-        if platform.system() == "Linux":
-            fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
-            ticks = os.sysconf("SC_CLK_TCK")
-            # utime and stime (fields 14 and 15 of /proc/<pid>/stat)
-            return (int(fields[11]) + int(fields[12])) / ticks
+    def pids(self):
+        """proksi's processes: the one started (a supervisor on Linux) and its descendants (the
+        workers serving requests)"""
         out = subprocess.run(
-            ["ps", "-o", "time=", "-p", str(pid)], capture_output=True, text=True
-        ).stdout.strip()
-        seconds = 0.0
-        for part in out.split(":"):
-            seconds = seconds * 60 + float(part)
-        return seconds
+            ["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True
+        ).stdout
+        children = {}
+        for line in out.splitlines():
+            pid, ppid = (int(field) for field in line.split())
+            children.setdefault(ppid, []).append(pid)
+        pids, pending = [], [self.process.pid]
+        while pending:
+            pid = pending.pop()
+            pids.append(pid)
+            pending.extend(children.get(pid, []))
+        return pids
+
+    def cpu_seconds(self):
+        return sum(cpu_seconds(pid) for pid in self.pids())
 
     def rss_kb(self):
-        out = subprocess.run(
-            ["ps", "-o", "rss=", "-p", str(self.process.pid)], capture_output=True, text=True
-        ).stdout.strip()
-        return int(out or 0)
+        total = 0
+        for pid in self.pids():
+            out = subprocess.run(
+                ["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True
+            ).stdout.strip()
+            total += int(out or 0)
+        return total
 
     def sample_memory(self):
         """Samples the RSS in the background until `stop_sampling`"""
