@@ -21,22 +21,25 @@ pub async fn serve_ping(session: &mut Session) -> pingora::Result<bool> {
     Ok(true)
 }
 
-/// Answers Let's Encrypt/ZeroSSL HTTP-01 challenges for `host`.
-/// Returns `true` if the request was handled.
+/// Where ACME HTTP-01 challenges are answered
+pub const ACME_CHALLENGES: &str = "/.well-known/acme-challenge";
+
+/// Answers the HTTP-01 challenge of proksi's own certificate orders (Let's Encrypt) for `host`.
+/// Returns whether it did.
 pub async fn serve_acme_challenge(session: &mut Session, host: &str) -> pingora::Result<bool> {
     let path = session.req_header().uri.path().to_string();
-    if !path.starts_with("/.well-known/acme-challenge") {
+    if !path.starts_with(ACME_CHALLENGES) {
         return Ok(false);
     }
 
     // Get the token and proof from the challenge store
     let Some((token, proof)) = global::get_store().get_challenge(host).await else {
-        return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));
+        return Ok(false);
     };
 
     // The token in the URL must be the one of the challenge
     if token != path.rsplit('/').next().unwrap_or_default() {
-        return Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)));
+        return Ok(false);
     }
 
     respond_text(session, StatusCode::OK, &proof).await?;

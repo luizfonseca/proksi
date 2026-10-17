@@ -17,6 +17,8 @@ use crate::config::{
 
 /// Marks the default `IngressClass`, used by `Ingress`es without a class
 const DEFAULT_CLASS: &str = "ingressclass.kubernetes.io/is-default-class";
+/// The class of an `Ingress` before `spec.ingressClassName`
+const CLASS_ANNOTATION: &str = "kubernetes.io/ingress.class";
 /// `"false"`: the hosts of the `Ingress` are plain HTTP
 const TLS: &str = "proksi.ingress/tls";
 /// Plugins, headers and cache, written like the inside of a `location` block
@@ -174,11 +176,14 @@ pub fn of_class<'a>(cluster: &'a Cluster, class: &str) -> Vec<&'a Arc<Ingress>> 
         .ingresses
         .iter()
         .filter(|ingress| {
-            match ingress
+            // `spec.ingressClassName`, or the annotation it replaced (still set by some tools,
+            // like cert-manager's HTTP-01 solver with `class`)
+            let name = ingress
                 .spec
                 .as_ref()
                 .and_then(|spec| spec.ingress_class_name.as_deref())
-            {
+                .or_else(|| annotation(ingress, CLASS_ANNOTATION));
+            match name {
                 Some(name) => name == class,
                 None => default_class,
             }
@@ -593,6 +598,39 @@ mod tests {
         let Converted { hosts, .. } = hosts(&cluster, "proksi");
         assert_eq!(hosts.len(), 1);
         assert_eq!(hosts[0].locations[0].path, "/");
+    }
+
+    #[test]
+    fn test_the_class_annotation_is_respected() {
+        let annotated = |name: &str, class: &str| {
+            let mut ingress = ingress(
+                name,
+                "2026-01-01T00:00:00Z",
+                json!({
+                    "rules": [rule(Some(&format!("{name}.test")), json!([path(None, "Prefix", "web", json!({ "number": 80 }))]))],
+                }),
+            );
+            ingress.metadata.annotations = Some(
+                [("kubernetes.io/ingress.class".to_string(), class.to_string())].into(),
+            );
+            ingress
+        };
+        let mut cluster = cluster(vec![annotated("mine", "proksi"), annotated("theirs", "traefik")]);
+        // Even when proksi's class is the default one, Ingresses annotated for another aren't served
+        cluster.ingress_classes = vec![Arc::new(object(json!({
+            "metadata": {
+                "name": "proksi",
+                "annotations": { "ingressclass.kubernetes.io/is-default-class": "true" },
+            },
+            "spec": { "controller": "proksi.ingress/controller" },
+        })))];
+
+        let names = hosts(&cluster, "proksi")
+            .hosts
+            .into_iter()
+            .map(|host| host.name)
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["mine.test"]);
     }
 
     #[test]

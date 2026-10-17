@@ -63,7 +63,7 @@ spec:
 - Upstreams are the ready pods of the backend service, for the port it targets. They follow the pods as they scale or restart. A service without ready pods answers `503`.
 - Rules of several `Ingress`es for the same host are merged. When two define the same path, the oldest `Ingress` keeps it and the other is logged.
 - A rule without a `host`, and `defaultBackend`, are served for any other name (`host "*"`).
-- `Ingress`es without a class are served when the `proksi` `IngressClass` has the annotation `ingressclass.kubernetes.io/is-default-class: "true"`.
+- The class is `spec.ingressClassName`, or the older annotation `kubernetes.io/ingress.class` without it. `Ingress`es with neither are served when the `proksi` `IngressClass` has the annotation `ingressclass.kubernetes.io/is-default-class: "true"`; ones for another class never are.
 - With the annotation `proksi.ingress/upstream: service`, the upstream is the service's own address (its cluster IP) instead of its pods, and Kubernetes balances the requests.
 
 ## TLS
@@ -80,6 +80,23 @@ spec:
 Other hosts get certificates from Let's Encrypt (enable `lets_encrypt` in the `ConfigMap`). With the annotation `proksi.ingress/tls: "false"`, the hosts of an `Ingress` are plain HTTP.
 
 With a shared store, a certificate from a `Secret` reaches every replica through the store.
+
+### cert-manager
+
+cert-manager's certificates are `Secret`s like any other, renewed in place. With an HTTP-01 solver, use proksi's class:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+spec:
+  acme:
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: proksi   # or `class: proksi`, which sets the annotation
+```
+
+To prove a domain, cert-manager adds a temporary `Ingress` for `/.well-known/acme-challenge/<token>`, which Let's Encrypt requests over plain HTTP. On the HTTP port, Proksi proxies the challenges of locations of their own (under `/.well-known/acme-challenge/`) to their upstream, even for hosts with TLS, whose other paths are still redirected to HTTPS. Proksi's own Let's Encrypt challenges, when it orders a certificate itself, are answered first.
 
 ## Plugins
 

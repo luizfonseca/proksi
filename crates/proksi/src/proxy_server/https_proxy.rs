@@ -106,7 +106,7 @@ impl ProxyHttp for Router {
             };
             protocol && host.listens_on(local.as_ref(), &self.default_address)
         };
-        let host_container = stores::lookup::find_host(host_without_port, serves_host);
+        let mut host_container = stores::lookup::find_host(host_without_port, serves_host);
 
         if self.listener == Listener::Http {
             if req_host.is_empty() {
@@ -119,12 +119,27 @@ impl ProxyHttp for Router {
             // Hosts with TLS (and unknown hosts): ACME challenges, then redirect to HTTPS.
             // Hosts without TLS get no certificates, so all their paths are proxied.
             if host_container.is_none() {
-                if http_proxy::serve_acme_challenge(session, &req_host).await? {
-                    return Ok(true);
+                let path = session.req_header().uri.path().to_string();
+                if path.starts_with(http_proxy::ACME_CHALLENGES) {
+                    if http_proxy::serve_acme_challenge(session, &req_host).await? {
+                        return Ok(true);
+                    }
+                    // Challenges answered by an upstream, in a location of their own (e.g.
+                    // cert-manager's HTTP-01 solver): proxied, over HTTP
+                    host_container = stores::lookup::find_host(host_without_port, |host| {
+                        host.location_for(&path).is_some_and(|location| {
+                            location.path.starts_with(http_proxy::ACME_CHALLENGES)
+                        })
+                    });
+                    if host_container.is_none() {
+                        session.respond_error(404).await?;
+                        return Ok(true);
+                    }
+                } else {
+                    let port = stores::get_route_by_key(&host_without_port.to_lowercase())
+                        .and_then(|host| host.https_redirect_port());
+                    return http_proxy::redirect_to_https(session, &req_host, port).await;
                 }
-                let port = stores::get_route_by_key(&host_without_port.to_lowercase())
-                    .and_then(|host| host.https_redirect_port());
-                return http_proxy::redirect_to_https(session, &req_host, port).await;
             }
         }
 

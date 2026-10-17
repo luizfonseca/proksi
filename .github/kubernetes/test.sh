@@ -72,6 +72,40 @@ body="$(curl -sk --resolve secure.test:8443:127.0.0.1 https://secure.test:8443/)
 [[ "$body" == *"hello from web"* ]] || { echo "failed: HTTPS through the service ($body)"; false; }
 echo "ok: HTTPS through the service"
 
+# cert-manager's HTTP-01 solver: an Ingress for the challenge path of a host with TLS, with the
+# class in the annotation it uses, answered over plain HTTP instead of redirected to HTTPS
+kubectl apply -f - <<'YAML'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-solver
+  annotations:
+    kubernetes.io/ingress.class: proksi
+spec:
+  rules:
+    - host: secure.test
+      http:
+        paths:
+          - path: /.well-known/acme-challenge/token-123
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80
+YAML
+for _ in $(seq 1 60); do
+  body="$(curl -s -w ' %{http_code}' -H 'Host: secure.test' \
+    http://127.0.0.1:8080/.well-known/acme-challenge/token-123 || true)"
+  [[ "$body" == *"hello from web"*" 200" ]] && break
+  sleep 1
+done
+[[ "$body" == *"hello from web"*" 200" ]] || { echo "failed: the solver's challenge ($body)"; false; }
+echo "ok: the HTTP-01 solver's challenge is proxied over HTTP"
+status="$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: secure.test' http://127.0.0.1:8080/page)"
+[[ "$status" == "308" ]] || { echo "failed: other paths of secure.test ($status)"; false; }
+echo "ok: other paths of the host are still redirected to HTTPS"
+
 # Plugins from the annotation
 for _ in $(seq 1 60); do
   status="$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: auth.test' http://127.0.0.1:8080/ || true)"
