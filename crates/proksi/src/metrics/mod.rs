@@ -39,6 +39,7 @@ pub const BUCKETS: [f64; 14] = [
 struct Metrics {
     registry: Registry,
     requests: IntCounterVec,
+    responses: IntCounterVec,
     request_duration: HistogramVec,
     upstream_duration: HistogramVec,
     upstream_errors: IntCounterVec,
@@ -79,6 +80,11 @@ static METRICS: Lazy<Metrics> = Lazy::new(|| {
             "proksi_requests_total",
             "Requests, by status class",
             &["host", "location", "status"],
+        ),
+        responses: counter(
+            "proksi_responses_total",
+            "Responses, by status code",
+            &["host", "location", "code"],
         ),
         request_duration: histogram(
             "proksi_request_duration_seconds",
@@ -138,7 +144,11 @@ static METRICS: Lazy<Metrics> = Lazy::new(|| {
 /// The metrics of one location (clones share the same series)
 #[derive(Clone)]
 pub struct LocationMetrics {
+    host: String,
+    location: String,
     requests: [IntCounter; 6],
+    /// By status code, created as codes are first answered
+    responses: std::sync::Arc<std::sync::RwLock<Vec<(u16, IntCounter)>>>,
     duration: Histogram,
     upstreams: Vec<UpstreamMetrics>,
     blocked: Vec<(&'static str, IntCounter)>,
@@ -168,6 +178,9 @@ impl LocationMetrics {
     ) -> Self {
         let metrics = &*METRICS;
         Self {
+            host: host.to_string(),
+            location: location.to_string(),
+            responses: std::sync::Arc::default(),
             requests: STATUS_CLASSES
                 .map(|status| metrics.requests.with_label_values(&[host, location, status])),
             duration: metrics
@@ -220,7 +233,39 @@ impl LocationMetrics {
         if let Some(requests) = self.requests.get(class) {
             requests.inc();
         }
+        if class > 0 {
+            self.count_response(status);
+        }
         self.duration.observe(duration.as_secs_f64());
+    }
+
+    /// Counts a response with `code`: a location answers few codes, kept in a list
+    fn count_response(&self, code: u16) {
+        let responses = self
+            .responses
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some((_, counter)) = responses.iter().find(|(known, _)| *known == code) {
+            counter.inc();
+            return;
+        }
+        drop(responses);
+
+        let mut responses = self
+            .responses
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !responses.iter().any(|(known, _)| *known == code) {
+            let counter = METRICS.responses.with_label_values(&[
+                self.host.as_str(),
+                self.location.as_str(),
+                &code.to_string(),
+            ]);
+            responses.push((code, counter));
+        }
+        if let Some((_, counter)) = responses.iter().find(|(known, _)| *known == code) {
+            counter.inc();
+        }
     }
 
     /// The metrics of the upstream at `index` in the location's upstreams
@@ -415,6 +460,28 @@ mod tests {
 
         assert!(gather()
             .contains("proksi_requests_total{host=\"_unknown\",location=\"\",status=\"4xx\"}"));
+    }
+
+    #[test]
+    fn test_responses_by_status_code() {
+        let metrics = LocationMetrics::new("metrics-codes.test", "/", &[]);
+        metrics.record(200, Duration::from_millis(1));
+        metrics.record(429, Duration::from_millis(1));
+        metrics.record(429, Duration::from_millis(1));
+        // No response was sent
+        metrics.record(0, Duration::from_millis(1));
+
+        let text = gather();
+        let code = |code: &str| {
+            format!("proksi_responses_total{{code=\"{code}\",host=\"metrics-codes.test\",location=\"/\"}}")
+        };
+        assert!(text.contains(&format!("{} 1", code("200"))), "{text}");
+        assert!(text.contains(&format!("{} 2", code("429"))), "{text}");
+        assert!(!text.contains(&code("0")), "{text}");
+        // By class too
+        assert!(text.contains(
+            "proksi_requests_total{host=\"metrics-codes.test\",location=\"/\",status=\"4xx\"} 2"
+        ));
     }
 
     #[test]

@@ -1210,6 +1210,8 @@ async fn test_admin_metrics() {
         "proksi_tcp_connections_active{block=\"tcp \\\"web\\\"\"} 0",
         "proksi_blocked_requests_total{block=\"rate_limit\",host=\"limited.test\",location=\"/\"} 1",
         "proksi_requests_total{host=\"limited.test\",location=\"/\",status=\"4xx\"} 1",
+        // By status code too
+        "proksi_responses_total{code=\"429\",host=\"limited.test\",location=\"/\"} 1",
     ];
     let mut res = String::new();
     for _ in 0..20 {
@@ -1223,6 +1225,9 @@ async fn test_admin_metrics() {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    for line in recorded {
+        assert!(res.lines().any(|l| l.trim_end() == line), "{line}\n{res}");
+    }
     let line = |prefix: &str, suffix: &str| {
         res.lines()
             .find(|line| line.starts_with(prefix) && line.contains(suffix))
