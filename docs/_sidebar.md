@@ -41,6 +41,12 @@
 * [Rate Limit](plugins/rate-limit.md)
 * [Body Limit](plugins/body-limit.md)
 
+## Migrating
+
+* [From Traefik](migrating/traefik.md)
+* [From nginx](migrating/nginx.md)
+* [From Caddy](migrating/caddy.md)
+
 ## Use cases
 
 * [Cache](use-cases/cache.md)
