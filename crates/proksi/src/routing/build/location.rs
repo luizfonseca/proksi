@@ -1,7 +1,3 @@
-use std::time::Duration;
-
-use pingora::lb::health_check::TcpHealthCheck;
-
 use crate::{
     blocks::Blocks,
     config::host::{Location, PathRewrite},
@@ -9,7 +5,7 @@ use crate::{
     stores::routes::RouteStoreContainer,
 };
 
-use super::load_balancer::load_balancer;
+use super::load_balancer::{load_balancer, set_health_check};
 
 /// Builds a location's container: load balancer (with health checks) and building blocks
 pub(super) fn build_location_container(
@@ -17,10 +13,7 @@ pub(super) fn build_location_container(
     location: &Location,
 ) -> Option<RouteStoreContainer> {
     let mut load_balancer = load_balancer(&location.upstreams);
-
-    // TODO: support defining health checks in the configuration file
-    load_balancer.set_health_check(TcpHealthCheck::new());
-    load_balancer.health_check_frequency = Some(Duration::from_secs(15));
+    set_health_check(&mut load_balancer, location.health_check);
 
     let mut container = RouteStoreContainer::new(load_balancer);
     container.path.clone_from(&location.path);

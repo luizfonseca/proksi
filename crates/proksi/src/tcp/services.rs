@@ -3,7 +3,6 @@
 use std::{collections::BTreeSet, net::SocketAddr, sync::Arc};
 
 use pingora::{
-    lb::health_check::TcpHealthCheck,
     listeners::tls::TlsSettings,
     services::{listening::Service, ServiceWithDependents},
 };
@@ -18,7 +17,7 @@ use crate::{
     },
     proxy_server::cert_store::CertStore,
     metrics::TcpMetrics,
-    routing::build::load_balancer,
+    routing::build::{load_balancer, set_health_check},
 };
 
 use super::{
@@ -36,7 +35,7 @@ pub fn tcp_targets(routes: &[TcpRoute]) -> Result<Arc<Vec<TcpTarget>>, anyhow::E
     let mut targets = vec![];
     for route in routes {
         let mut load_balancer = load_balancer(&route.upstreams);
-        load_balancer.set_health_check(TcpHealthCheck::new());
+        set_health_check(&mut load_balancer, route.health_check);
         targets.push(TcpTarget {
             label: route.label(),
             host: route.host.clone(),

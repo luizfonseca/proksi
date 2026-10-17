@@ -6,7 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    host::{Location, LocationTimeouts, PathRewrite},
+    host::{HealthCheck, Location, LocationTimeouts, PathRewrite},
     RouteCache, RoutePlugin,
 };
 
@@ -33,16 +33,17 @@ pub struct LocationBlock {
     pub body_limit: Option<PluginConfig>,
     pub timeouts: Option<LocationTimeouts>,
     pub rewrite: Option<PathRewrite>,
+    pub health_check: Option<HealthCheck>,
 }
 
 impl LocationBlock {
-    /// Converts the block of location `path`, adding the host's headers and timeouts
+    /// Converts the block of location `path`, adding the host's headers, timeouts and health check
     pub(crate) fn to_location(
         &self,
         path: &str,
-        host_headers: Option<&HeadersBlock>,
-        host_timeouts: Option<LocationTimeouts>,
+        host: &super::HostBlock,
     ) -> Result<Location, String> {
+        let (host_headers, host_timeouts) = (host.headers.as_ref(), host.timeouts);
         let upstreams = self
             .upstream
             .iter()
@@ -66,6 +67,10 @@ impl LocationBlock {
             timeouts: match self.timeouts {
                 Some(timeouts) => Some(timeouts.or(host_timeouts)),
                 None => host_timeouts,
+            },
+            health_check: match self.health_check {
+                Some(health_check) => Some(health_check.or(host.health_check)),
+                None => host.health_check,
             },
         })
     }

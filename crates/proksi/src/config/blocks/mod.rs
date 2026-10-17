@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::host::{Host, LocationTimeouts};
+use super::host::{HealthCheck, Host, LocationTimeouts};
 
 mod headers;
 mod location;
@@ -31,6 +31,8 @@ pub struct HostBlock {
     pub headers: Option<HeadersBlock>,
     /// Timeouts for every location of the host (a location can set its own)
     pub timeouts: Option<LocationTimeouts>,
+    /// How the upstreams of every location and `tcp` block of the host are checked
+    pub health_check: Option<HealthCheck>,
     #[serde(default)]
     pub location: BTreeMap<String, LocationBlock>,
     /// TCP proxying with the host's certificate (or its TLS forwarded, or plain TCP)
@@ -46,7 +48,7 @@ impl HostBlock {
             .iter()
             .map(|(path, location)| {
                 location
-                    .to_location(path, self.headers.as_ref(), self.timeouts)
+                    .to_location(path, self)
                     .map_err(|err| format!("location \"{path}\": {err}"))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -200,6 +202,7 @@ host:
                     cache: None,
                     timeouts: None,
                     rewrite: None,
+                    health_check: None,
                 },
                 Location {
                     path: "/v1/session".to_string(),
@@ -217,6 +220,7 @@ host:
                     cache: None,
                     timeouts: None,
                     rewrite: None,
+                    health_check: None,
                 },
             ],
         }
@@ -385,6 +389,37 @@ host "app.test" {
 
         assert_eq!(upstream("/reports"), Some((Some(2), None, Some(600), None, Some(5))));
         assert_eq!(upstream("/"), Some((Some(2), None, Some(30), None, None)));
+    }
+
+    #[test]
+    fn test_locations_inherit_the_health_check_of_their_host() {
+        let doc = HclFormat::from_str::<Doc>(
+            r#"
+host "app.test" {
+  health_check {
+    interval_secs = 5
+  }
+  location "/game" {
+    health_check {
+      enabled = false
+    }
+  }
+  location "/" {}
+}
+"#,
+        )
+        .unwrap();
+        let host = doc.host["app.test"].to_host("app.test").unwrap();
+        let health_check = |path: &str| {
+            host.locations
+                .iter()
+                .find(|location| location.path == path)
+                .and_then(|location| location.health_check)
+                .map(|check| (check.enabled, check.interval_secs))
+        };
+
+        assert_eq!(health_check("/game"), Some((Some(false), Some(5))));
+        assert_eq!(health_check("/"), Some((None, Some(5))));
     }
 
     #[test]

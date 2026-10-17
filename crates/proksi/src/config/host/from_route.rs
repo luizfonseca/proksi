@@ -50,6 +50,7 @@ impl Host {
                     cache: route.cache.clone(),
                     timeouts: None,
                     rewrite: None,
+                    health_check: None,
                 })
                 .collect(),
         }
