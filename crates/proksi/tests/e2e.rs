@@ -1204,15 +1204,20 @@ async fn test_admin_metrics() {
         .unwrap();
     assert!(res.starts_with("HTTP/1.1 401"), "{res}");
 
-    // The tcp connection is counted until proksi has closed its side too, just after the client
-    let active = "proksi_tcp_connections_active{block=\"tcp \\\"web\\\"\"} 0";
+    // Counted once proksi is done with them, just after the client: the tcp connection when
+    // proksi has closed its side too, and the `429` once it has been written
+    let recorded = [
+        "proksi_tcp_connections_active{block=\"tcp \\\"web\\\"\"} 0",
+        "proksi_blocked_requests_total{block=\"rate_limit\",host=\"limited.test\",location=\"/\"} 1",
+        "proksi_requests_total{host=\"limited.test\",location=\"/\",status=\"4xx\"} 1",
+    ];
     let mut res = String::new();
     for _ in 0..20 {
         res = proksi
             .raw_http_on(admin_port, metrics(Some("e2e-token")).as_bytes())
             .await
             .unwrap();
-        if res.contains(active) {
+        if recorded.iter().all(|line| res.lines().any(|l| l.trim_end() == *line)) {
             break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
