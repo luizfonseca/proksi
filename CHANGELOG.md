@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.8.0...proksi-v0.9.0) (2026-10-17)
+
+
+### Features
+
+* rewrite paths with regular expressions ([#435](https://github.com/luizfonseca/proksi/issues/435)) ([976c13e](https://github.com/luizfonseca/proksi/commit/976c13e7a719e3ddf82126f363e89bfa7f21b2b7))
+* rewrite the path sent to upstreams, per location ([#433](https://github.com/luizfonseca/proksi/issues/433)) ([4e6ed48](https://github.com/luizfonseca/proksi/commit/4e6ed4807efc5582ead574f7cf5545800e8e402d))
+* upgrade to a new worker without dropping connections (Linux) ([#427](https://github.com/luizfonseca/proksi/issues/427)) ([d57e88b](https://github.com/luizfonseca/proksi/commit/d57e88b7acc1515bb19470ed35dd5bea77ddce63))
+
+
+### Bug Fixes
+
+* tcp connect timeout, and follow upstream containers that are removed ([#430](https://github.com/luizfonseca/proksi/issues/430)) ([3b96ab7](https://github.com/luizfonseca/proksi/commit/3b96ab7e8a28501c2bd0ddeeb76195e028655e6a))
+* work with cert-manager's HTTP-01 solver, and the ingress class annotation ([#428](https://github.com/luizfonseca/proksi/issues/428)) ([06ad194](https://github.com/luizfonseca/proksi/commit/06ad1944cfcaa0027d76b2df3a3379d11c9ce29e))
+
 ## [0.8.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.7.0...proksi-v0.8.0) (2026-10-17)
 
 
