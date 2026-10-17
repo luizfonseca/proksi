@@ -1906,6 +1906,78 @@ host "plain.test" {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_request_bodies_must_arrive_in_time() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let proksi = Harness::start_with_server(
+        vec![],
+        "timeouts {\n body_secs = 1\n }",
+        r#"
+host "plain.test" {
+  tls = false
+  location "/upload" {
+    timeouts {
+      body_secs = 30
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#,
+    )
+    .await;
+
+    // A byte every 300 ms: each read is quick, the whole body isn't. Returns how long until
+    // proksi gave up on it, if it did within 3 seconds.
+    let trickle = |path: &'static str| {
+        let port = proksi.http_port;
+        async move {
+            let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .unwrap();
+            stream
+                .write_all(
+                    format!("POST {path} HTTP/1.1\r\nHost: plain.test\r\nContent-Length: 100\r\n\r\n")
+                        .as_bytes(),
+                )
+                .await
+                .unwrap();
+            let started = std::time::Instant::now();
+            let mut buf = [0u8; 1024];
+            while started.elapsed() < std::time::Duration::from_secs(3) {
+                if stream.write_all(b"a").await.is_err() {
+                    return Some((started.elapsed(), String::new()));
+                }
+                match tokio::time::timeout(
+                    std::time::Duration::from_millis(300),
+                    stream.read(&mut buf),
+                )
+                .await
+                {
+                    Ok(Ok(0) | Err(_)) => return Some((started.elapsed(), String::new())),
+                    Ok(Ok(read)) => {
+                        return Some((
+                            started.elapsed(),
+                            String::from_utf8_lossy(&buf[..read]).to_string(),
+                        ));
+                    }
+                    Err(_) => {}
+                }
+            }
+            None
+        }
+    };
+
+    let (elapsed, res) = trickle("/").await.expect("the body was still accepted after 3 s");
+    assert!(elapsed < std::time::Duration::from_secs(2), "{elapsed:?}");
+    assert!(res.is_empty() || res.starts_with("HTTP/1.1 408"), "{res}");
+
+    // The location's limit, longer
+    assert!(trickle("/upload").await.is_none());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_acme_challenge_locations_are_proxied_on_the_http_port() {
     // As cert-manager's HTTP-01 solver adds one for a host with TLS
     let proksi = Harness::start_with(

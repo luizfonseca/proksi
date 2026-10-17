@@ -173,11 +173,14 @@ server {
     idle_secs  = 60 # for a request's headers, and between requests of a connection
     read_secs  = 60 # for each read of a request body, and websocket messages
     write_secs = 60 # for a client to read each write of a response
+    body_secs  = 300 # for a request's whole body, after its headers (no limit by default)
   }
 }
 ```
 
-A host or a location can change `read_secs` and `write_secs` for its requests (a location's override its host's). `idle_secs` only applies to the server: it's used before a request, so before its host is known.
+A host or a location can change `read_secs`, `write_secs` and `body_secs` for its requests (a location's override its host's). `idle_secs` only applies to the server: it's used before a request, so before its host is known.
+
+Request bodies are streamed to the upstream as they arrive, not buffered. A client that sends a body slowly, each part just within `read_secs`, keeps the upstream busy with that request. `body_secs` puts a limit on the whole body: past it, the connection is closed (a `408` if no response was sent yet). Set it to the longest a legitimate upload can take, and longer for upload locations. On HTTP/2 it's checked as each part of the body arrives, as HTTP/2 has no per-read timeout.
 
 ```hcl
 host "app.example.com" {
