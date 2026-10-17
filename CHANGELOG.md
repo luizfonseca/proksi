@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.9.0...proksi-v0.10.0) (2026-10-17)
+
+
+### Features
+
+* timeouts toward upstreams, and for idle tcp connections ([#438](https://github.com/luizfonseca/proksi/issues/438)) ([67d39e4](https://github.com/luizfonseca/proksi/commit/67d39e45ced1cde1a1d9fdda4a74259d41c6c6d3))
+
+
+### Bug Fixes
+
+* send requests to a replaced upstream as soon as it's up ([#439](https://github.com/luizfonseca/proksi/issues/439)) ([2b4d36b](https://github.com/luizfonseca/proksi/commit/2b4d36bbbca9bd08de120f507e26989719e2561f))
+* wait for the rate limit metrics in test_admin_metrics ([#436](https://github.com/luizfonseca/proksi/issues/436)) ([048c26a](https://github.com/luizfonseca/proksi/commit/048c26a69574282097c22a85dde7974dc6f5dfc4))
+
 ## [0.9.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.8.0...proksi-v0.9.0) (2026-10-17)
 
 
