@@ -204,10 +204,7 @@ impl ProxyHttp for Router {
         };
         let healthy_port = healthy_addr.port();
 
-        let Some(index) = route_container.upstream_index(healthy_addr) else {
-            return Err(pingora::Error::new(HTTPStatus(503)));
-        };
-        let Some(upstream) = route_container.upstreams.get(index) else {
+        let Some((index, upstream)) = route_container.upstream(&healthy_upstream) else {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
 
@@ -544,6 +541,11 @@ impl ProxyHttp for Router {
     ) -> Box<pingora::Error> {
         if let Some(upstream) = upstream_metrics(ctx) {
             upstream.error();
+        }
+        // The upstream's name may point elsewhere now (ADR 0006)
+        if let Some(route) = &ctx.route_container {
+            let load_balancer = route.load_balancer.clone();
+            tokio::spawn(async move { load_balancer.update().await });
         }
         e
     }
