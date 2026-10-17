@@ -201,6 +201,43 @@ host "app.example.com" {
 }
 ```
 
+**Toward upstreams**, `timeouts { upstream { ... } }` sets how long proksi waits for them. In `server.timeouts` it applies to every location; a host or location changes it for its own, one value at a time (a location's override its host's, which override the server's):
+
+```hcl
+server {
+  timeouts {
+    upstream {
+      connect_secs = 5   # to connect
+      tls_secs     = 10  # for the TLS handshake of an HTTPS upstream, after connecting
+      read_secs    = 360 # for each read of a response, including its headers
+      write_secs   = 60  # for the upstream to read each write of a request
+      idle_secs    = 360 # to keep an unused connection open, to reuse it
+    }
+  }
+}
+
+host "api.example.com" {
+  timeouts {
+    upstream {
+      connect_secs = 1 # fail fast while a container is replaced
+    }
+  }
+
+  location "/reports" {
+    timeouts {
+      upstream {
+        read_secs = 900 # slow reports
+      }
+    }
+    upstream "reports:8080" {}
+  }
+}
+```
+
+The values above are the defaults. An upstream that doesn't connect or answer in time gets the client a `504`; other upstream errors (e.g. a refused connection), a `502`.
+
+`tcp` blocks have their own: `connect_timeout_secs` and `idle_timeout_secs` (see [TCP](routing/tcp.md)).
+
 ## Migrating from `routes = [...]`
 
 `routes = [...]` still works, but is deprecated and logs a warning. Each route corresponds to a host:

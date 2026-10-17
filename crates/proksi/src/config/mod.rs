@@ -594,7 +594,7 @@ pub struct ServerCfg {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shutdown_timeout_secs: Option<u64>,
 
-    /// Timeouts toward clients
+    /// Timeouts toward clients, and toward upstreams unless a host or location sets them
     #[arg(skip)]
     #[serde(default)]
     pub timeouts: ClientTimeouts,
@@ -607,7 +607,7 @@ impl ServerCfg {
     }
 }
 
-/// Timeouts toward clients (`server.timeouts`), in seconds
+/// Timeouts toward clients (`server.timeouts`), in seconds, and the defaults toward upstreams
 // Named like the other durations of the configuration (`*_secs`)
 #[allow(clippy::struct_field_names)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -620,6 +620,8 @@ pub struct ClientTimeouts {
     pub read_secs: u64,
     /// How long each write of a response can wait for the client to read
     pub write_secs: u64,
+    /// Toward upstreams, unless a host or location sets them
+    pub upstream: host::UpstreamTimeouts,
 }
 
 impl Default for ClientTimeouts {
@@ -628,6 +630,7 @@ impl Default for ClientTimeouts {
             idle_secs: 60,
             read_secs: 60,
             write_secs: 60,
+            upstream: host::UpstreamTimeouts::default(),
         }
     }
 }

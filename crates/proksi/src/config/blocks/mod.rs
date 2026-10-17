@@ -349,6 +349,45 @@ host "app.test" {
     }
 
     #[test]
+    fn test_locations_inherit_the_upstream_timeouts_of_their_host() {
+        let doc = HclFormat::from_str::<Doc>(
+            r#"
+host "app.test" {
+  timeouts {
+    upstream {
+      connect_secs = 2
+      read_secs    = 30
+    }
+  }
+  location "/reports" {
+    timeouts {
+      read_secs = 300
+      upstream {
+        read_secs = 600
+        idle_secs = 5
+      }
+    }
+  }
+  location "/" {}
+}
+"#,
+        )
+        .unwrap();
+        let host = doc.host["app.test"].to_host("app.test").unwrap();
+        let upstream = |path: &str| {
+            host.locations
+                .iter()
+                .find(|location| location.path == path)
+                .and_then(|location| location.timeouts)
+                .and_then(|timeouts| timeouts.upstream)
+                .map(|t| (t.connect_secs, t.tls_secs, t.read_secs, t.write_secs, t.idle_secs))
+        };
+
+        assert_eq!(upstream("/reports"), Some((Some(2), None, Some(600), None, Some(5))));
+        assert_eq!(upstream("/"), Some((Some(2), None, Some(30), None, None)));
+    }
+
+    #[test]
     fn test_idle_timeouts_are_only_for_the_server() {
         let err = HclFormat::from_str::<Doc>(
             "host \"app.test\" {\n  timeouts {\n    idle_secs = 5\n  }\n}\n",

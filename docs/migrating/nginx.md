@@ -97,6 +97,7 @@ Mind the defaults that differ:
 | `keepalive_timeout`, `client_header_timeout` | `server.timeouts.idle_secs` |
 | `client_body_timeout` | `server.timeouts.read_secs`, or per host/location |
 | `send_timeout` | `server.timeouts.write_secs`, or per host/location |
+| `proxy_connect_timeout`, `proxy_read_timeout`, `proxy_send_timeout` | `timeouts { upstream { connect_secs, read_secs, write_secs } }`, in the server or per host/location |
 | `access_log` | JSON access logs on stdout (see [Logging](configuration/logging.md)) |
 | `stub_status` | The [admin API](configuration/admin.md): Prometheus metrics and live stats |
 | `max_fails`, `fail_timeout` | Health checks: a TCP connection to each upstream every 15 seconds |
@@ -146,7 +147,7 @@ ingress-nginx has been retired by the Kubernetes project. Proksi serves the same
 | `limit-rps`, `limit-rpm` | `rate_limit { ... }` in `proksi.ingress/blocks` |
 | `auth-type: basic`, `auth-secret` | `basic_auth {}` in `proksi.ingress/blocks`, and `proksi.ingress/auth-secret`, naming a `Secret` labelled `proksi.ingress/auth` with `user` and `pass` keys (not an htpasswd file) |
 | `configuration-snippet` (`more_set_headers`) | `headers { response { add = { ... } } }` in `proksi.ingress/blocks` |
-| `proxy-read-timeout`, `proxy-send-timeout` | `timeouts { read_secs, write_secs }` in `proksi.ingress/blocks` |
+| `proxy-connect-timeout`, `proxy-read-timeout`, `proxy-send-timeout` | `timeouts { upstream { connect_secs, read_secs, write_secs } }` in `proksi.ingress/blocks` |
 | `service-upstream` | `proksi.ingress/upstream: service` |
 | `rewrite-target` (with `use-regex`) | `rewrite { match, replace }` in `proksi.ingress/blocks`, e.g. `match = "^/api(/\|$)(.*)"` and `replace = "/$2"`; or `rewrite { strip_prefix = "/api" }` |
 | `backend-protocol`, `affinity`, `whitelist-source-range` | Not available |

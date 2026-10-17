@@ -1,4 +1,5 @@
-//! Timeouts toward clients (`server.timeouts`), for every HTTP and HTTPS connection
+//! Timeouts toward clients (`server.timeouts`), for every HTTP and HTTPS connection, and the
+//! defaults toward upstreams
 
 use std::{sync::Arc, time::Duration};
 
@@ -17,6 +18,11 @@ static TIMEOUTS: OnceCell<ClientTimeouts> = OnceCell::new();
 /// Sets the timeouts of the HTTP and HTTPS apps built from now on
 pub fn set_client_timeouts(timeouts: ClientTimeouts) {
     let _ = TIMEOUTS.set(timeouts);
+}
+
+/// The timeouts toward upstreams of `server.timeouts`
+pub fn upstream_timeouts() -> crate::config::host::UpstreamTimeouts {
+    TIMEOUTS.get().map(|timeouts| timeouts.upstream).unwrap_or_default()
 }
 
 /// An HTTP app whose clients get the configured timeouts: Pingora's own leave connections

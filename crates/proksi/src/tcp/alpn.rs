@@ -109,6 +109,7 @@ mod tests {
             tls,
             alpn: alpn.iter().map(ToString::to_string).collect(),
             connect_timeout: std::time::Duration::from_secs(5),
+            idle_timeout: None,
             load_balancer: Arc::new(LoadBalancer::try_from_iter(["127.0.0.1:1"]).unwrap()),
             metrics: None,
         }

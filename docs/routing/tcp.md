@@ -17,10 +17,13 @@ tcp "game" {
 
 Connecting to an upstream can take up to `connect_timeout_secs` (5 by default). After that, or when no upstream is available, the client's connection is closed, so it can retry. Upstreams can be names, followed as their addresses change (see [Upstreams](routing/upstreams.md#names)).
 
+Connections stay open as long as both sides keep them, even without any traffic. With `idle_timeout_secs`, a connection with no bytes either way for that long is closed.
+
 ```hcl
 tcp "game" {
   listen               = "0.0.0.0:7777"
   connect_timeout_secs = 2
+  idle_timeout_secs    = 600 # longer than the clients' keepalive interval
   upstream "game:7777" {}
 }
 ```
