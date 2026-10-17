@@ -144,6 +144,10 @@ pub fn tls_acceptor(protocols: AlpnProtocols) -> Result<SslAcceptor, anyhow::Err
 fn configure_tls(builder: &mut SslAcceptorBuilder) -> Result<(), anyhow::Error> {
     // tls_settings.set_session_cache_mode(SslSessionCacheMode::SERVER);
     builder.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
+    builder.set_client_hello_callback(|ssl, _| {
+        super::handshakes::started(ssl);
+        Ok(pingora::tls::ssl::ClientHelloResponse::SUCCESS)
+    });
 
     // For now this is a hardcoded recommendation based on
     // https://developers.cloudflare.com/ssl/reference/protocols/

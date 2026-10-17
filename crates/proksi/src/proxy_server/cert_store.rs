@@ -77,6 +77,8 @@ impl TlsAccept for CertStore {
         &self,
         ssl: &pingora::tls::ssl::SslRef,
     ) -> Option<std::sync::Arc<dyn std::any::Any + Send + Sync>> {
+        // Not a failed handshake (see `handshakes`)
+        super::handshakes::completed(ssl);
         let name = ssl.servername(NameType::HOST_NAME)?;
         Some(std::sync::Arc::new(ServerName(name.to_lowercase())))
     }

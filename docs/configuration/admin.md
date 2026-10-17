@@ -42,6 +42,8 @@ Like the other listeners, the `admin` block is read when Proksi starts: changing
 | `proksi_tcp_connections_total` | `block` | Connections accepted by a `tcp` block (`block` is how it's named in logs: `tcp "db" in host "a.com"`) |
 | `proksi_tcp_connections_active` | `block` | Connections open right now |
 | `proksi_tcp_bytes_total` | `block`, `direction` | Bytes from the client (`in`) and to it (`out`), counted while the connection is open |
+| `proksi_tcp_upstream_errors_total` | `block` | Connections that couldn't reach an upstream: refused, timed out (`connect_timeout_secs`), or none available |
+| `proksi_tls_handshake_failures_total` | | TLS handshakes with clients (HTTPS and `tcp` blocks) that started and didn't complete: a version or cipher refused, a certificate the client doesn't trust, a client that went away |
 | `proksi_tcp_connection_duration_seconds` | `block` | How long connections stay open (histogram) |
 | `proksi_certificate_expiry_timestamp_seconds` | `domain` | When each certificate expires (refreshed every minute) |
 | `proksi_routes` | `source` | Hosts applied from each source (`file`, `docker`, `kubernetes`, `store`) |
