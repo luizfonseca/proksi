@@ -1,7 +1,7 @@
 // Paths are formatted with `{:?}` on purpose, see `disallowed-methods` in clippy.toml
 #![allow(clippy::unnecessary_debug_formatting)]
 
-use ::pingora::server::Server;
+use ::pingora::{server::Server, services::ServiceHandle};
 
 use clap::crate_version;
 use config::{load, LogFormat};
@@ -10,7 +10,7 @@ use tracing_subscriber::EnvFilter;
 
 use std::sync::{atomic::AtomicU64, Arc};
 
-use pingora::server::configuration::Opt;
+use pingora::server::configuration::{Opt, ServerConf};
 
 use services::{logger::ProxyLoggerReceiver, BackgroundFunctionService};
 
@@ -28,6 +28,8 @@ mod routing;
 mod server;
 mod services;
 mod stores;
+#[cfg(target_os = "linux")]
+mod supervisor;
 mod tcp;
 mod tools;
 mod wasm;
@@ -53,6 +55,13 @@ fn main() -> Result<(), anyhow::Error> {
         load("/etc/proksi/configs")
             .map_err(|err| anyhow::anyhow!("Failed to load configuration: {err}"))?,
     );
+
+    // Linux: a supervisor starts the worker serving requests, and replaces it without dropping
+    // connections when settings change (see `supervisor`)
+    #[cfg(target_os = "linux")]
+    if !proxy_config.daemon && !supervisor::is_worker() {
+        std::process::exit(supervisor::run()?);
+    }
 
     // The addresses the hosts need (validated when loading the configuration)
     let listeners = config::listeners::listeners(&proxy_config).map_err(anyhow::Error::msg)?;
@@ -123,13 +132,17 @@ fn main() -> Result<(), anyhow::Error> {
         test: false,
     };
 
-    let mut pingora_server = Server::new(Some(pingora_opts))?;
     // Proksi stops once the connections are closed (`connections::exit_when_drained`): Pingora's
     // grace period only applies if that doesn't happen
-    if let Some(configuration) = std::sync::Arc::get_mut(&mut pingora_server.configuration) {
-        configuration.grace_period_seconds =
-            Some(proxy_config.server.shutdown_timeout().as_secs() + 5);
+    let mut server_conf = ServerConf::new_with_opt_override(&pingora_opts)
+        .ok_or_else(|| anyhow::anyhow!("invalid server configuration"))?;
+    server_conf.grace_period_seconds = Some(proxy_config.server.shutdown_timeout().as_secs() + 5);
+    // Set before the server is created: it's where a new worker waits for the listening sockets
+    #[cfg(target_os = "linux")]
+    {
+        server_conf.upgrade_sock = supervisor::upgrade_socket(&proxy_config);
     }
+    let mut pingora_server = Server::new_with_opt_and_conf(pingora_opts, server_conf);
     pingora_server.bootstrap();
 
     // Add Prometheus service
@@ -138,7 +151,9 @@ fn main() -> Result<(), anyhow::Error> {
     // pingora_server.add_service(prometheus_service_http);
 
     // Non-dedicated background services
-    pingora_server.add_service(BackgroundFunctionService::new(
+    // The listening services start once it's ready: routes applied (and, when upgrading,
+    // certificates loaded), see `routing::readiness`
+    let background = pingora_server.add_service(BackgroundFunctionService::new(
         proxy_config.clone(),
         route_sender,
         route_receiver,
@@ -152,12 +167,14 @@ fn main() -> Result<(), anyhow::Error> {
     ));
 
     proxy_server::timeouts::set_client_timeouts(proxy_config.server.timeouts);
-    add_listeners(
+    for listening in add_listeners(
         &mut pingora_server,
         &proxy_config,
         &listeners,
         (default_https, default_http),
-    )?;
+    )? {
+        listening.add_dependency(&background);
+    }
 
     pingora_server.run_forever();
 }
@@ -168,18 +185,19 @@ fn add_listeners(
     proxy_config: &config::Config,
     listeners: &config::listeners::Listeners,
     (default_https, default_http): (std::net::SocketAddr, std::net::SocketAddr),
-) -> Result<(), anyhow::Error> {
+) -> Result<Vec<ServiceHandle>, anyhow::Error> {
+    let mut handles = vec![];
     // TCP: `tcp` blocks (validated when loading the configuration)
     let tcp_targets = tcp::services::tcp_targets(&listeners.tcp)?;
 
     // Listen on the HTTP and HTTPS addresses the hosts need
     if !listeners.http.is_empty() {
-        server.add_service(proxy_server::services::http_service(
+        handles.push(server.add_service(proxy_server::services::http_service(
             &server.configuration,
             &listeners.http,
             default_http,
             proxy_config.worker_threads,
-        ));
+        )));
     }
     // Addresses with TLS passthrough blocks are served by `tcp::router` (HTTPS included)
     let https = listeners
@@ -188,13 +206,13 @@ fn add_listeners(
         .cloned()
         .collect::<std::collections::BTreeSet<_>>();
     if !https.is_empty() {
-        server.add_service(proxy_server::services::https_service(
+        handles.push(server.add_service(proxy_server::services::https_service(
             &server.configuration,
             &https,
             default_https,
             &tcp_targets,
             proxy_config.worker_threads,
-        )?);
+        )?));
     }
     if let Some(address) = listeners.admin {
         let token = proxy_config
@@ -211,15 +229,15 @@ fn add_listeners(
                 "admin": address.to_string(),
             }),
         };
-        server.add_service(admin::admin_service(address, token, instance));
+        handles.push(server.add_service(admin::admin_service(address, token, instance)));
     }
-    server.add_services(tcp::services::tcp_services(
+    handles.extend(server.add_services(tcp::services::tcp_services(
         &listeners.tcp,
         &tcp_targets,
         &listeners.https,
         (&server.configuration, default_https),
         proxy_config.worker_threads,
-    )?);
+    )?));
 
     let tcp = listeners
         .tcp
@@ -236,7 +254,7 @@ fn add_listeners(
         server_info,
     );
 
-    Ok(())
+    Ok(handles)
 }
 
 /// Creates the tracing/logging subscriber based on the configuration provided

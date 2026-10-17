@@ -51,6 +51,7 @@ pub enum Upstream {
 }
 
 /// A route to configure in proksi
+#[derive(Clone)]
 pub struct Route {
     host: String,
     upstream: Upstream,
@@ -112,6 +113,8 @@ pub struct Harness {
     child: Child,
     dir: tempfile::TempDir,
     hosts: Vec<String>,
+    /// The routes of the configuration file
+    routes: Vec<Route>,
     /// Extra configuration added to the generated one (e.g. `auto_reload`)
     extra_config: String,
     /// Extra attributes of the generated `server` block
@@ -183,6 +186,7 @@ impl Harness {
             child: placeholder,
             dir,
             hosts: vec![],
+            routes: vec![],
             extra_config: extra_config.to_string(),
             server_config: server_config.to_string(),
             without_https,
@@ -197,7 +201,11 @@ impl Harness {
 
         // `PROKSI_BIN` allows running the tests against another build (e.g. a release binary)
         let bin = std::env::var("PROKSI_BIN").unwrap_or(env!("CARGO_BIN_EXE_proksi").to_string());
-        harness.child = Command::new(bin)
+        // In a group of its own, so that every process it starts is stopped with it
+        harness.child = std::os::unix::process::CommandExt::process_group(
+            &mut Command::new(bin),
+            0,
+        )
             .arg("-c")
             .arg(harness.config_path())
             .stdout(Stdio::from(stdout))
@@ -215,6 +223,7 @@ impl Harness {
 
     /// Writes the configuration file with the given routes
     pub fn rewrite_routes(&mut self, routes: Vec<Route>) {
+        self.routes.clone_from(&routes);
         let mut routes = routes;
         routes.push(Route::new(READY_HOST, Upstream::Http));
         // Hosts of removed routes are kept, so that the client still resolves them
@@ -582,6 +591,18 @@ paths {{
         matches!(self.child.try_wait(), Ok(None))
     }
 
+    /// Changes the extra configuration (`{tcp_port_0}`... replaced), and writes the file again
+    pub fn rewrite_extra_config(&mut self, extra_config: &str) {
+        extra_config.clone_into(&mut self.extra_config);
+        self.rewrite_routes(self.routes.clone());
+    }
+
+    /// Sends `signal` to proksi
+    pub fn signal(&self, signal: nix::sys::signal::Signal) {
+        let pid = nix::unistd::Pid::from_raw(i32::try_from(self.child.id()).unwrap());
+        nix::sys::signal::kill(pid, signal).unwrap();
+    }
+
     /// Asks proksi to stop, as `docker stop` or Kubernetes do (`SIGTERM`)
     pub fn terminate(&self) {
         let pid = nix::unistd::Pid::from_raw(i32::try_from(self.child.id()).unwrap());
@@ -676,6 +697,12 @@ paths {{
 
 impl Drop for Harness {
     fn drop(&mut self) {
+        if let Ok(pid) = i32::try_from(self.child.id()) {
+            let _ = nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(-pid),
+                nix::sys::signal::Signal::SIGKILL,
+            );
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
