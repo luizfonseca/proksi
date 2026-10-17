@@ -71,6 +71,22 @@ scrape_configs:
       - targets: ["127.0.0.1:7555"]
 ```
 
+### A listener for metrics only
+
+The admin API's token also lets its holder change routes. To give a scraper metrics and nothing else, serve them on an address of their own, with `metrics_listen`. It answers `/metrics` only, `404` on every other path, and takes its own `metrics_token`, if any:
+
+```hcl
+admin {
+  listen = "127.0.0.1:7555"
+  token  = env("PROKSI_ADMIN_TOKEN")
+
+  metrics_listen = "0.0.0.0:9100"
+  metrics_token  = env("PROKSI_METRICS_TOKEN") # optional
+}
+```
+
+Without a `metrics_token`, `metrics_listen` can be any address: metrics name hosts, locations and upstream addresses, but can't change anything. Keep it on a private network, or set a token.
+
 Metrics are only recorded with an `admin` block. To use the rest of the admin API without them, turn them off:
 
 ```hcl
