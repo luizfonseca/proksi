@@ -124,6 +124,9 @@ impl TcpProxy {
             .and_then(|backend| backend.addr.as_inet().copied())
             .ok_or_else(|| {
                 tracing::warn!("{}: no healthy upstream", target.label);
+                if let Some(metrics) = &target.metrics {
+                    metrics.upstream_error();
+                }
                 "no healthy upstream".to_string()
             })?;
         forwarded.upstream = Some(addr);
@@ -137,6 +140,9 @@ impl TcpProxy {
                     _ => format!("no answer within {:?}", target.connect_timeout),
                 };
                 tracing::warn!("{}: could not connect to upstream {addr}: {err}", target.label);
+                if let Some(metrics) = &target.metrics {
+                    metrics.upstream_error();
+                }
                 // The upstream's name may point elsewhere now (ADR 0006)
                 let load_balancer = target.load_balancer.clone();
                 tokio::spawn(async move { load_balancer.update().await });

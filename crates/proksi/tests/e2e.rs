@@ -2091,6 +2091,73 @@ admin {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_failed_tls_handshakes_and_tcp_upstream_errors_are_counted() {
+    use tokio::io::AsyncReadExt;
+    // Nothing listens on this port
+    let refused_port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        &format!(
+            r#"
+admin {{
+  listen = "127.0.0.1:{{tcp_port_2}}"
+}}
+
+tcp "gone" {{
+  listen = "127.0.0.1:{{tcp_port_0}}"
+  upstream "127.0.0.1:{refused_port}" {{}}
+}}
+"#
+        ),
+    )
+    .await;
+
+    // A client that doesn't trust proksi's (self-signed) certificate gives up mid-handshake
+    let https_port = proksi.https_port;
+    let handshake = tokio::task::spawn_blocking(move || {
+        let connector = openssl::ssl::SslConnector::builder(openssl::ssl::SslMethod::tls())
+            .unwrap()
+            .build();
+        let stream = std::net::TcpStream::connect(("127.0.0.1", https_port)).unwrap();
+        connector.connect("app.test", stream).map(|_| ())
+    })
+    .await
+    .unwrap();
+    assert!(handshake.is_err());
+    // A tcp connection whose upstream refuses it
+    let mut client = tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[0]))
+        .await
+        .unwrap();
+    let mut buf = [0u8; 16];
+    let _ = client.read(&mut buf).await;
+
+    let expected = [
+        "proksi_tls_handshake_failures_total 1",
+        "proksi_tcp_upstream_errors_total{block=\"tcp \\\"gone\\\"\"} 1",
+    ];
+    let mut metrics = String::new();
+    for _ in 0..30 {
+        metrics = proksi
+            .raw_http_on(
+                proksi.tcp_ports[2],
+                b"GET /metrics HTTP/1.1\r\nHost: admin\r\nConnection: close\r\n\r\n",
+            )
+            .await
+            .unwrap();
+        if expected.iter().all(|line| metrics.lines().any(|l| l.trim_end() == *line)) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    for line in expected {
+        assert!(metrics.lines().any(|l| l.trim_end() == line), "{line}\n{metrics}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_acme_challenge_locations_are_proxied_on_the_http_port() {
     // As cert-manager's HTTP-01 solver adds one for a host with TLS
     let proksi = Harness::start_with(

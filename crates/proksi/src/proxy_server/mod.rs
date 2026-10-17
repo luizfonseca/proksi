@@ -10,6 +10,7 @@ use crate::config::host::UpstreamTimeouts;
 pub mod cert_store;
 pub mod client;
 pub mod connections;
+pub mod handshakes;
 pub mod http_proxy;
 pub mod https_proxy;
 pub mod listener;

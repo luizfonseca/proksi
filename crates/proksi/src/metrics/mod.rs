@@ -48,6 +48,8 @@ struct Metrics {
     tcp_connections: IntCounterVec,
     tcp_active: IntGaugeVec,
     tcp_bytes: IntCounterVec,
+    tcp_upstream_errors: IntCounterVec,
+    tls_handshake_failures: IntCounterVec,
     tcp_duration: HistogramVec,
     certificate_expiry: IntGaugeVec,
     routes: IntGaugeVec,
@@ -126,6 +128,21 @@ static METRICS: Lazy<Metrics> = Lazy::new(|| {
             "Bytes forwarded by a tcp block, from the client (in) and to it (out)",
             &["block", "direction"],
         ),
+        tcp_upstream_errors: counter(
+            "proksi_tcp_upstream_errors_total",
+            "Connections of a tcp block that couldn't reach an upstream (refused, timed out, or \
+             none available)",
+            &["block"],
+        ),
+        tls_handshake_failures: {
+            let failures = counter(
+                "proksi_tls_handshake_failures_total",
+                "TLS handshakes with clients that started and didn't complete",
+                &[],
+            );
+            failures.with_label_values::<&str>(&[]);
+            failures
+        },
         tcp_duration: histogram(
             "proksi_tcp_connection_duration_seconds",
             "How long connections of a tcp block stay open",
@@ -307,6 +324,7 @@ pub struct TcpMetrics {
     pub bytes_in: IntCounter,
     pub bytes_out: IntCounter,
     duration: Histogram,
+    upstream_errors: IntCounter,
 }
 
 /// An open TCP connection: counted as active until dropped, when its duration is recorded
@@ -325,7 +343,13 @@ impl TcpMetrics {
             bytes_in: metrics.tcp_bytes.with_label_values(&[block, "in"]),
             bytes_out: metrics.tcp_bytes.with_label_values(&[block, "out"]),
             duration: metrics.tcp_duration.with_label_values(&[block]),
+            upstream_errors: metrics.tcp_upstream_errors.with_label_values(&[block]),
         }
+    }
+
+    /// A connection that couldn't reach an upstream
+    pub fn upstream_error(&self) {
+        self.upstream_errors.inc();
     }
 
     /// A new connection
@@ -357,6 +381,16 @@ pub fn set_certificates(expiry: &[(String, i64)]) {
     gauge.reset();
     for (domain, timestamp) in expiry {
         gauge.with_label_values(&[domain]).set(*timestamp);
+    }
+}
+
+/// A TLS handshake with a client that didn't complete
+pub fn tls_handshake_failed() {
+    if enabled() {
+        METRICS
+            .tls_handshake_failures
+            .with_label_values::<&str>(&[])
+            .inc();
     }
 }
 
