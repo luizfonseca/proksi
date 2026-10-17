@@ -21,7 +21,14 @@ use openssl::{
     hash::MessageDigest,
     pkey::PKey,
     rsa::Rsa,
-    x509::{extension::SubjectAlternativeName, X509NameBuilder, X509},
+    ec::{EcGroup, EcKey},
+    nid::Nid,
+    pkey::Private,
+    ssl::{SslConnector, SslMethod},
+    x509::{
+        extension::{BasicConstraints, SubjectAlternativeName},
+        X509NameBuilder, X509,
+    },
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -157,6 +164,7 @@ impl Harness {
 
         let dir = tempfile::tempdir().unwrap();
         write_self_signed_cert(dir.path());
+        write_certificate_chain(dir.path());
 
         let http_upstream = HttpUpstream::start().await;
         let websocket_upstream = WebSocketUpstream::start().await;
@@ -325,8 +333,8 @@ paths {{
         )
     }
 
-    /// Extra configuration, with `{http_upstream_port}`, the ports of proksi, `{cert_pem}` and
-    /// `{cert_key}` replaced
+    /// Extra configuration, with `{http_upstream_port}`, the ports of proksi, `{cert_pem}`,
+    /// `{cert_key}`, `{chain_pem}` and `{chain_key}` replaced
     fn render_extra_config(&self) -> String {
         let dir = self.dir.path();
         let mut config = self.extra_config.clone();
@@ -340,6 +348,8 @@ paths {{
             .replace("{extra_port}", &self.extra_port.to_string())
             .replace("{cert_pem}", &dir.join("cert.pem").to_string_lossy())
             .replace("{cert_key}", &dir.join("key.pem").to_string_lossy())
+            .replace("{chain_pem}", &dir.join("chain.pem").to_string_lossy())
+            .replace("{chain_key}", &dir.join("chain-key.pem").to_string_lossy())
     }
 
     /// Makes the client resolve `host` to proksi (for hosts defined in `extra_config`)
@@ -476,6 +486,25 @@ paths {{
             let mut response = String::new();
             std::io::Read::read_to_string(&mut stream, &mut response)?;
             Ok(response)
+        })
+        .await
+        .unwrap()
+    }
+
+    /// Connects over TLS to proksi on `port`, asking for `server_name`, trusting only the root
+    /// of `write_certificate_chain`: returns how many certificates proksi sent, or why the
+    /// handshake failed
+    pub async fn verified_handshake(&self, port: u16, server_name: &str) -> Result<usize, String> {
+        let (root, server_name) = (self.dir.path().join("root.pem"), server_name.to_string());
+        tokio::task::spawn_blocking(move || {
+            let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
+            connector.set_ca_file(root).unwrap();
+            let stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            let stream = connector
+                .build()
+                .connect(&server_name, stream)
+                .map_err(|err| err.to_string())?;
+            Ok(stream.ssl().peer_cert_chain().map_or(0, |chain| chain.len()))
         })
         .await
         .unwrap()
@@ -910,4 +939,65 @@ fn write_self_signed_cert(dir: &Path) {
     let key_path = dir.join("key.pem");
     std::fs::write(&cert_path, cert.to_pem().unwrap()).unwrap();
     std::fs::write(&key_path, key.private_key_to_pem_pkcs8().unwrap()).unwrap();
+}
+
+/// Writes a root (`root.pem`), two intermediates and a leaf for `chain.test`: the leaf followed
+/// by the intermediates to `chain.pem`, and the leaf's key to `chain-key.pem`
+fn write_certificate_chain(dir: &Path) {
+    let root = signed_certificate("root", None, true);
+    let first = signed_certificate("intermediate 1", Some(&root), true);
+    let second = signed_certificate("intermediate 2", Some(&first), true);
+    let leaf = signed_certificate("chain.test", Some(&second), false);
+
+    let chain = [&leaf.0, &second.0, &first.0].map(|cert| cert.to_pem().unwrap());
+    std::fs::write(dir.join("chain.pem"), chain.concat()).unwrap();
+    std::fs::write(
+        dir.join("chain-key.pem"),
+        leaf.1.private_key_to_pem_pkcs8().unwrap(),
+    )
+    .unwrap();
+    std::fs::write(dir.join("root.pem"), root.0.to_pem().unwrap()).unwrap();
+}
+
+/// A certificate for `name`, signed by `issuer` (self-signed without one)
+fn signed_certificate(
+    name: &str,
+    issuer: Option<&(X509, PKey<Private>)>,
+    ca: bool,
+) -> (X509, PKey<Private>) {
+    let group = EcGroup::from_curve_name(Nid::X9_62_PRIME256V1).unwrap();
+    let key = PKey::from_ec_key(EcKey::generate(&group).unwrap()).unwrap();
+
+    let mut subject = X509NameBuilder::new().unwrap();
+    subject.append_entry_by_text("CN", name).unwrap();
+    let subject = subject.build();
+
+    let mut serial = BigNum::new().unwrap();
+    serial.rand(64, MsbOption::MAYBE_ZERO, false).unwrap();
+
+    let mut cert = X509::builder().unwrap();
+    cert.set_version(2).unwrap();
+    cert.set_serial_number(&serial.to_asn1_integer().unwrap())
+        .unwrap();
+    cert.set_subject_name(&subject).unwrap();
+    cert.set_issuer_name(issuer.map_or(&subject, |(issuer, _)| issuer.subject_name()))
+        .unwrap();
+    cert.set_pubkey(&key).unwrap();
+    cert.set_not_before(&Asn1Time::days_from_now(0).unwrap())
+        .unwrap();
+    cert.set_not_after(&Asn1Time::days_from_now(2).unwrap())
+        .unwrap();
+    if ca {
+        cert.append_extension(BasicConstraints::new().critical().ca().build().unwrap())
+            .unwrap();
+    } else {
+        let san = SubjectAlternativeName::new()
+            .dns(name)
+            .build(&cert.x509v3_context(issuer.map(|(issuer, _)| issuer.as_ref()), None))
+            .unwrap();
+        cert.append_extension(san).unwrap();
+    }
+    cert.sign(issuer.map_or(&key, |(_, key)| key), MessageDigest::sha256())
+        .unwrap();
+    (cert.build(), key)
 }

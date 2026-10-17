@@ -264,6 +264,8 @@ host "example.com" {
 }
 ```
 
+The `pem` file holds the certificate followed by its intermediates (a "fullchain"), which proksi sends to clients along with it.
+
 ## Headers
 
 Headers can be added or removed from responses, for a whole host or a single location (a location's headers come after the host's):
