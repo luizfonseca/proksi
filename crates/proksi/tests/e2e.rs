@@ -2056,6 +2056,36 @@ host "plain.test" {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_metrics_on_a_listener_of_their_own() {
+    let proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        r#"
+admin {
+  listen         = "127.0.0.1:{tcp_port_2}"
+  token          = "admin-token"
+  metrics_listen = "127.0.0.1:{tcp_port_1}"
+}
+"#,
+    )
+    .await;
+    let get = |port: u16, path: &str| {
+        let request = format!("GET {path} HTTP/1.1\r\nHost: admin\r\nConnection: close\r\n\r\n");
+        let proksi = &proksi;
+        async move { proksi.raw_http_on(port, request.as_bytes()).await.unwrap() }
+    };
+
+    let metrics = get(proksi.tcp_ports[1], "/metrics").await;
+    assert!(metrics.starts_with("HTTP/1.1 200"), "{metrics}");
+    assert!(metrics.contains("proksi_requests_total"), "{metrics}");
+    // Nothing else, not even with the admin API's token
+    let routes = get(proksi.tcp_ports[1], "/api/v1/routes").await;
+    assert!(routes.starts_with("HTTP/1.1 404"), "{routes}");
+    // The admin API still needs its token
+    let admin = get(proksi.tcp_ports[2], "/metrics").await;
+    assert!(admin.starts_with("HTTP/1.1 401"), "{admin}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_acme_challenge_locations_are_proxied_on_the_http_port() {
     // As cert-manager's HTTP-01 solver adds one for a host with TLS
     let proksi = Harness::start_with(
