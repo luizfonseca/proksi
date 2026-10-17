@@ -6,20 +6,20 @@ Similar to other proxies, Proksi can be run as a Docker container. The following
 docker run -d -p 80:80 -p 443:443 -v /path/to/config:/etc/proksi/ luizfonseca/proksi
 ```
 
+Images are tagged with each release (`luizfonseca/proksi:proksi-v0.8.0`) and `latest`.
+
 The image is available for `amd64` and `arm64`, and ships a static binary (it doesn't depend on the image's libraries). Proksi only opens the ports its hosts need, so publish the ports of your configuration: `80` and `443` by default, or the `listen` addresses of your hosts.
 
-If you are using `docker-compose.yml`  to manage your services, you can configure Proksi as your main host-mode container without even creating a `proksi.hcl` file.
+If you are using `docker-compose.yml` to manage your services, you can configure Proksi as your main host-mode container without even creating a `proksi.hcl` file.
 
 ```yaml
-version: '3.8'
 services:
   proksi:
     environment:
       PROKSI_LOGGING__LEVEL: "info"
       PROKSI_WORKER_THREADS: 2
 
-      # Enables Proksi to fetch services/containers 
-      # matching Smart labels 
+      # Routes to containers (or swarm services) with `proksi.*` labels
       PROKSI_DOCKER__ENABLED: "true"
       PROKSI_DOCKER__MODE: container
 
@@ -31,16 +31,25 @@ services:
     image: luizfonseca/proksi:latest
     networks:
       # Any service in the same network will be able to communicate with Proksi
-      - web 
+      - web
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /path/to/config:/etc/proksi/certs
+      # Certificates from Let's Encrypt, kept across restarts
+      - certs:/etc/proksi/certs
+    # Lets open connections finish when the container stops (see Restarts and upgrades)
+    stop_grace_period: 35s
+
+volumes:
+  certs:
+
+networks:
+  web:
 ```
 
-And then you can expose any service by using `proksi.host` and `proksi.enable` labels. For example a simple `nginxdemos/hello` container/service:
+And then you can expose any service by using the `proksi.enabled` and `proksi.host` labels. For example a simple `nginxdemos/hello` container/service, on the same network:
 
 ```yaml
 services:
@@ -49,10 +58,7 @@ services:
     image: nginxdemos/hello
 
     networks:
-      - public
-      - shared
-    deploy:
-      replicas: 2
+      - web
     labels:
       proksi.enabled: "true"
       proksi.host: "your-site.localhost"

@@ -1,14 +1,8 @@
----
-description: Protects a route by using an authorization header
----
-
 # Basic Auth
 
-{% hint style="info" %}
-This is not necessarily a very safe method as anyone can try to brute force the username and password.
-{% endhint %}
+?> This is not necessarily a very safe method as anyone can try to brute force the username and password.
 
-By enabling this, routes can only be accessed if the user (downstream) provides the user & password combination through the `Authorization` header.&#x20;
+By enabling this, routes can only be accessed if the user (downstream) provides the user & password combination through the `Authorization` header.
 
 In many cases, your browser will prompt for this information.
 
@@ -16,7 +10,7 @@ In many cases, your browser will prompt for this information.
 
 ## Options
 
-Plugin options are always passed via the `config` key.
+Options are set in the plugin's block, inside a `location`.
 
 <table><thead><tr><th width="205">Name</th><th>Description</th></tr></thead><tbody><tr><td><code>user</code></td><td>username for the basic authentication</td></tr><tr><td><code>pass</code></td><td>password for the basic authentication</td></tr></tbody></table>
 
@@ -24,7 +18,7 @@ Plugin options are always passed via the `config` key.
 
 ### Usage
 
-{% code title="proksi.hcl" overflow="wrap" lineNumbers="true" %}
+**proksi.hcl**
 ```hcl
 lets_encrypt {
   enabled = true
@@ -42,4 +36,3 @@ host "mywebsite.com" {
   }
 }
 ```
-{% endcode %}

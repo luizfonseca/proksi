@@ -6,18 +6,17 @@
 
 The logging configuration can be set using the `logging` key in the HCL configuration file. The default configuration is:
 
-{% code title="proksi.hcl" lineNumbers="true" %}
+**proksi.hcl**
 ```hcl
 logging {
   level = "info"
   access_logs_enabled = true
   error_logs_enabled = true
   format = "json"
-  path = "/tmp"
+  # path = "/var/log/proksi" # write to files instead of stdout
   rotation = "never"
 }
 ```
-{% endcode %}
 
 You can customize the logging configuration by adding the following keys to the `logging` block:
 
@@ -25,14 +24,13 @@ You can customize the logging configuration by adding the following keys to the 
 | --------------------- | --------------------------------------------------------------- |
 | level                 | The logging level (`debug`, `info`, `warn`, `error`, `trace`)   |
 | access\_logs\_enabled | Whether to enable access logs (default: true)                   |
-| error\_logs\_enabled  | Whether to enable error logs (default: false)                   |
+| error\_logs\_enabled  | Whether to enable error logs (default: true)                    |
 | format                | The logging format (`json`, `pretty`)                           |
-| path                  | The path to the log file (default: /tmp)                        |
+| path                  | A directory to write log files to (default: none, stdout)       |
 | rotation              | The rotation frequency (`daily`, `hourly`, `minutely`, `never`) |
 
 For example, to set the logging level to `debug`, the format to `pretty`, the path to `/var/log/proksi`, and the rotation to `daily`, you can use the following configuration:
 
-{% code title="" overflow="wrap" lineNumbers="true" %}
 ```hcl
 logging {
   level = "debug"
@@ -41,7 +39,6 @@ logging {
   rotation = "daily"
 }
 ```
-{% endcode %}
 
 This will then create a log file named `proksi.<date>.log` in the `/var/log/proksi` directory and rotate it daily.
 
@@ -82,18 +79,18 @@ The logging format can be set using the `--log.format` flag. The default format 
 
 ### Logging Path
 
-The logging path can be set using the `--log.path` flag. The default path is `/tmp`.
+The logging path can be set using the `--log.path` flag. By default, logs are written to stdout.
 
 If a path is provided, the logs will be written to a file in the specified path. The file name will be prefixed or named `proksi.log.*`.
 
 ### Logging Rotation
 
-The logging rotation can be set using the `--log.rotation` flag. The default rotation is `never`.
+The logging rotation is set with `rotation` in the `logging` block (it has no command-line flag), for log files written to `path`. The default rotation is `never`.
 
 | Rotation | Description                   |
 | -------- | ----------------------------- |
 | daily    | Rotates the log file daily    |
-| hour     | Rotates the log file hourly   |
+| hourly   | Rotates the log file hourly   |
 | minutely | Rotates the log file minutely |
 | never    | Does not rotate the log file  |
 
@@ -113,4 +110,4 @@ proksi --log.path /var/log/proksi
 
 ```
 
-In this example, the logging level is set to `debug`, the format is set to `pretty`, the path is set to `/var/log/proksi`, and the rotation is set to `daily`.
+Each flag can also be set in the `logging` block, or with environment variables (`PROKSI_LOGGING__LEVEL`...).

@@ -4,7 +4,7 @@ Proksi can be configured to automatically reload the configuration file when it 
 
 To enable auto reload, you can set the `auto_reload` key to `true` in the configuration file. The default value is `false`.
 
-{% code title="proksi.hcl" overflow="wrap" lineNumbers="true" %}
+**proksi.hcl**
 ```hcl
 auto_reload {
   # Whether to enable auto reload (default: false)
@@ -20,7 +20,6 @@ auto_reload {
   paths = ["/etc/sites"]
 }
 ```
-{% endcode %}
 
 When the configuration file changes:
 
