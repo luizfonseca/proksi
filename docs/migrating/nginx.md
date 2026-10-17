@@ -100,7 +100,7 @@ Mind the defaults that differ:
 | `proxy_connect_timeout`, `proxy_read_timeout`, `proxy_send_timeout` | `timeouts { upstream { connect_secs, read_secs, write_secs } }`, in the server or per host/location |
 | `access_log` | JSON access logs on stdout (see [Logging](configuration/logging.md)) |
 | `stub_status` | The [admin API](configuration/admin.md): Prometheus metrics and live stats |
-| `max_fails`, `fail_timeout` | Health checks: a TCP connection to each upstream every 15 seconds |
+| `max_fails`, `fail_timeout` | [`health_check { interval_secs }`](routing/upstreams.md#health-checks): a TCP connection to each upstream, unhealthy after 2 failures |
 | `least_conn`, `ip_hash`, `hash` | Not available (weighted round robin only) |
 | `rewrite ^/old/(.*)$ /new/$1 break;` | [`rewrite`](routing/upstreams.md#rewriting-paths) `{ match = "^/old/(.*)$", replace = "/new/$1" }` (redirecting rewrites, `last`/`redirect`/`permanent`, aren't supported) |
 | `root`, `try_files`, `return`, `gzip`, `allow`/`deny` | Not available: Proksi only proxies |

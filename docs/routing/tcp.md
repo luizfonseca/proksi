@@ -17,6 +17,8 @@ tcp "game" {
 
 Connecting to an upstream can take up to `connect_timeout_secs` (5 by default). After that, or when no upstream is available, the client's connection is closed, so it can retry. Upstreams can be names, followed as their addresses change (see [Upstreams](routing/upstreams.md#names)).
 
+Upstreams are health checked as in locations, and `health_check { enabled, interval_secs }` works the same way (see [Health checks](routing/upstreams.md#health-checks)).
+
 Connections stay open as long as both sides keep them, even without any traffic. With `idle_timeout_secs`, a connection with no bytes either way for that long is closed.
 
 ```hcl

@@ -16,11 +16,14 @@ use std::{
 use async_trait::async_trait;
 use http::Extensions;
 use pingora::{
-    lb::{discovery::ServiceDiscovery, selection::RoundRobin, Backend, Backends, LoadBalancer},
+    lb::{
+        discovery::ServiceDiscovery, health_check::TcpHealthCheck, selection::RoundRobin, Backend,
+        Backends, LoadBalancer,
+    },
     protocols::l4::socket::SocketAddr as BackendAddr,
 };
 
-use crate::config::RouteUpstream;
+use crate::config::{host::HealthCheck, RouteUpstream};
 
 /// Names are never resolved more often than this, however many connections fail
 pub const MIN_RESOLVE_INTERVAL: Duration = Duration::from_secs(1);
@@ -66,15 +69,33 @@ pub fn load_balancer_with(upstreams: &[RouteUpstream], lookup: Lookup) -> LoadBa
     load_balancer
 }
 
-/// An upstream to send a request or connection to. Without any, the upstreams' names are resolved
-/// again first: a container being replaced may be up by now (ADR 0006).
+/// Checks the upstreams of `load_balancer` as `health_check` says, if it's enabled: unhealthy
+/// after two failed checks in a row (the health check service runs them)
+pub fn set_health_check(
+    load_balancer: &mut LoadBalancer<RoundRobin>,
+    health_check: Option<HealthCheck>,
+) {
+    load_balancer.health_check_frequency = HealthCheck::interval(health_check);
+    if load_balancer.health_check_frequency.is_some() {
+        let mut check = TcpHealthCheck::new();
+        check.consecutive_failure = 2;
+        load_balancer.set_health_check(check);
+    }
+}
+
+/// An upstream to send a request or connection to, a healthy one first. Without any, the
+/// upstreams' names are resolved again: a container being replaced may be up by now (ADR 0006).
+/// When none is healthy, they're tried anyway: a failed health check (e.g. while an upstream
+/// starts) never leaves a location without upstreams.
 pub async fn select_or_resolve(load_balancer: &LoadBalancer<RoundRobin>) -> Option<Backend> {
     if let Some(backend) = load_balancer.select(b"", 32) {
         return Some(backend);
     }
     // Resolved at most every `EMPTY_RESOLVE_INTERVAL`: requests in between don't wait
     let _ = load_balancer.update().await;
-    load_balancer.select(b"", 32)
+    load_balancer
+        .select(b"", 32)
+        .or_else(|| load_balancer.select_with(b"", 32, |_, _| true))
 }
 
 /// Resolves `name` with the system's resolver (`getaddrinfo`, as `ToSocketAddrs` does), telling
@@ -414,6 +435,61 @@ mod tests {
             selected.map(|backend| backend.addr.to_string()).as_deref(),
             Some("10.0.0.5:8080")
         );
+    }
+
+    #[tokio::test]
+    async fn test_upstreams_are_tried_when_none_is_healthy() {
+        let load_balancer = load_balancer_with(
+            &[upstream("10.0.0.1", 80), upstream("10.0.0.2", 80)],
+            Dns::default().lookup(),
+        );
+        // Both failed a health check (e.g. while starting)
+        let backends = load_balancer.backends();
+        for backend in backends.get_backend().iter() {
+            backends.set_enable(backend, false);
+        }
+
+        let selected = [
+            super::select_or_resolve(&load_balancer).await,
+            super::select_or_resolve(&load_balancer).await,
+        ]
+        .map(|backend| backend.map(|backend| backend.addr.to_string()));
+
+        // In turn, as when healthy
+        assert!(selected.contains(&Some("10.0.0.1:80".to_string())), "{selected:?}");
+        assert!(selected.contains(&Some("10.0.0.2:80".to_string())), "{selected:?}");
+    }
+
+    #[tokio::test]
+    async fn test_healthy_upstreams_are_preferred() {
+        let load_balancer = load_balancer_with(
+            &[upstream("10.0.0.1", 80), upstream("10.0.0.2", 80)],
+            Dns::default().lookup(),
+        );
+        let backends = load_balancer.backends();
+        let unhealthy = backends.get_backend().iter().next().unwrap().clone();
+        backends.set_enable(&unhealthy, false);
+
+        for _ in 0..4 {
+            let selected = super::select_or_resolve(&load_balancer).await.unwrap();
+            assert_ne!(selected.addr, unhealthy.addr);
+        }
+    }
+
+    #[test]
+    fn test_health_checks_can_be_turned_off() {
+        use crate::config::host::HealthCheck;
+        let frequency = |health_check: Option<HealthCheck>| {
+            let mut load_balancer =
+                load_balancer_with(&[upstream("10.0.0.1", 80)], Dns::default().lookup());
+            super::set_health_check(&mut load_balancer, health_check);
+            load_balancer.health_check_frequency.map(|frequency| frequency.as_secs())
+        };
+        let check = |enabled, interval_secs| Some(HealthCheck { enabled, interval_secs });
+
+        assert_eq!(frequency(None), Some(15));
+        assert_eq!(frequency(check(None, Some(3))), Some(3));
+        assert_eq!(frequency(check(Some(false), Some(3))), None);
     }
 
     #[tokio::test]

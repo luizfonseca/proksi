@@ -22,6 +22,9 @@ pub struct Location {
     /// How the path sent to upstreams is changed
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rewrite: Option<PathRewrite>,
+    /// How the upstreams are checked, instead of the default
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_check: Option<HealthCheck>,
 }
 
 /// `rewrite { ... }` in a location: the path sent to upstreams, instead of the request's
@@ -182,6 +185,37 @@ impl LocationTimeouts {
     }
 }
 
+/// `health_check { ... }` in a host, a location or a `tcp` block: a TCP connection to each
+/// upstream on an interval. An upstream is unhealthy after two failed checks in a row, and gets
+/// connections again after a successful one, or when no upstream is healthy.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HealthCheck {
+    /// Off, upstreams are never marked unhealthy (default: on)
+    pub enabled: Option<bool>,
+    /// How often each upstream is checked (default: 15)
+    pub interval_secs: Option<u64>,
+}
+
+impl HealthCheck {
+    /// This health check, with what it doesn't set taken from `defaults` (the host's)
+    pub fn or(self, defaults: Option<Self>) -> Self {
+        let defaults = defaults.unwrap_or_default();
+        Self {
+            enabled: self.enabled.or(defaults.enabled),
+            interval_secs: self.interval_secs.or(defaults.interval_secs),
+        }
+    }
+
+    /// How often upstreams are checked, if they are
+    pub fn interval(this: Option<Self>) -> Option<std::time::Duration> {
+        let this = this.unwrap_or_default();
+        this.enabled
+            .unwrap_or(true)
+            .then(|| std::time::Duration::from_secs(this.interval_secs.unwrap_or(15).max(1)))
+    }
+}
+
 /// Timeouts toward upstreams (`upstream { ... }` in `timeouts`), in seconds
 // Named like `server.timeouts`
 #[allow(clippy::struct_field_names)]
@@ -240,6 +274,7 @@ mod tests {
             cache: None,
             timeouts: None,
             rewrite: None,
+            health_check: None,
         }
     }
 

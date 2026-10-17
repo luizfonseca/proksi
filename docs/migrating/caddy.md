@@ -72,7 +72,7 @@ host "app.example.com" {
 | Caddyfile | Proksi |
 | --- | --- |
 | `reverse_proxy a b` with `lb_policy weighted_round_robin` | Several `upstream` blocks, with `weight` |
-| `health_uri`, `health_interval` | Health checks: a TCP connection to each upstream every 15 seconds (no HTTP path) |
+| `health_uri`, `health_interval` | [`health_check { interval_secs }`](routing/upstreams.md#health-checks): a TCP connection to each upstream (no HTTP path) |
 | `header` (response) | `headers { response { add, remove } }` |
 | `header_up` | `headers { add = { ... } }` in an `upstream` |
 | `basic_auth` | [`basic_auth { user, pass }`](plugins/basic-auth.md) (one user, a plain password rather than a bcrypt hash) |
