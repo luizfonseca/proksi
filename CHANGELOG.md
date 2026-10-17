@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.8.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.7.0...proksi-v0.8.0) (2026-10-17)
+
+
+### Features
+
+* certificates of kubernetes ingresses from their tls secrets, and upstreams through services ([#416](https://github.com/luizfonseca/proksi/issues/416)) ([93832db](https://github.com/luizfonseca/proksi/commit/93832dbeb18338980dba068efcd67be26ae4f30c))
+* kubernetes plugins through annotations, ingress status, events and a helm chart ([#417](https://github.com/luizfonseca/proksi/issues/417)) ([b32db89](https://github.com/luizfonseca/proksi/commit/b32db89f4fff2d317ab7879da7cb8baf29f8d59a))
+* record metrics only with the admin api, and allow turning them off ([#419](https://github.com/luizfonseca/proksi/issues/419)) ([acfec67](https://github.com/luizfonseca/proksi/commit/acfec67697d5e0104bd2af15272c83b16ba999e2))
+* reload certificate files when they change ([#423](https://github.com/luizfonseca/proksi/issues/423)) ([a256748](https://github.com/luizfonseca/proksi/commit/a2567489de4d630c218dea34f370a297002674ed)), closes [#278](https://github.com/luizfonseca/proksi/issues/278)
+* resolve upstream names again, following their addresses ([#424](https://github.com/luizfonseca/proksi/issues/424)) ([ddf7bf2](https://github.com/luizfonseca/proksi/commit/ddf7bf2c2a5d82f69c0454ac55d9c4ce64357370))
+* send x-forwarded-for, -proto, -host and x-real-ip to upstreams ([#418](https://github.com/luizfonseca/proksi/issues/418)) ([5796f58](https://github.com/luizfonseca/proksi/commit/5796f589dff3075df02646e39dc42ee63a250d9b))
+* stop once connections are closed, waiting up to server.shutdown_timeout_secs ([#425](https://github.com/luizfonseca/proksi/issues/425)) ([1f05596](https://github.com/luizfonseca/proksi/commit/1f0559687c617fa6730d1278b58e52845fdb55f8))
+* timeouts toward clients, in server.timeouts ([#426](https://github.com/luizfonseca/proksi/issues/426)) ([6d699a3](https://github.com/luizfonseca/proksi/commit/6d699a31fce611b76c98a1d43802d08439e9c4ff))
+
+
+### Bug Fixes
+
+* serve certificates with every intermediate of their chain ([#421](https://github.com/luizfonseca/proksi/issues/421)) ([61ee6f7](https://github.com/luizfonseca/proksi/commit/61ee6f7198b47481a3798066f4c6ff1312385928)), closes [#420](https://github.com/luizfonseca/proksi/issues/420)
+* use the proksi.ingress prefix for kubernetes annotations and labels ([#422](https://github.com/luizfonseca/proksi/issues/422)) ([43c96ea](https://github.com/luizfonseca/proksi/commit/43c96ea247d448441a15e4a2d97635646e6cffd0))
+
 ## [0.7.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.6.2...proksi-v0.7.0) (2026-10-16)
 
 
