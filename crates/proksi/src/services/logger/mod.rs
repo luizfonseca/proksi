@@ -19,6 +19,7 @@ use tracing_subscriber::fmt::MakeWriter;
 
 use crate::config::Config;
 
+pub mod handshake_error_filter;
 mod rotation;
 
 /// Maximum number of log lines waiting to be written.

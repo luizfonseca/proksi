@@ -56,6 +56,10 @@ Every request gets an access log line (`access_log: true`) with its method, path
 
 Logs are written in the background, so writing them never slows down requests. Up to 100,000 log lines can be waiting to be written; if the output can't keep up beyond that (e.g. a slow disk or a stalled pipe), new lines are dropped and a warning with the number of dropped lines is logged once it catches up.
 
+### Failed TLS handshakes
+
+Clients that give up on a TLS handshake (scanners, load balancers' TCP health checks, browsers closing connections they opened ahead of time) are common and aren't a problem with Proksi, so they're only logged with `level = "debug"` (or `trace`). They're counted in the `proksi_tls_handshake_failures_total` metric (see [Admin API and metrics](configuration/admin.md#metrics)).
+
 ### Logging Levels (CLI)
 
 The logging level can be set using the `--log.level` flag. The default level is `info`.

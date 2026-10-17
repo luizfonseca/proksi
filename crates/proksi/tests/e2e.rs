@@ -2158,6 +2158,26 @@ tcp "gone" {{
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_clients_giving_up_on_tls_handshakes_are_not_logged_as_errors() {
+    use tokio::io::AsyncWriteExt;
+    let proksi = Harness::start_with(vec![Route::new("app.test", Upstream::Http)], "").await;
+
+    // The start of a ClientHello, then the client goes away (as scanners and health checks do)
+    for _ in 0..3 {
+        let mut client = tokio::net::TcpStream::connect(("127.0.0.1", proksi.https_port))
+            .await
+            .unwrap();
+        client.write_all(&[0x16, 0x03, 0x01, 0x00, 0x40]).await.unwrap();
+    }
+    // A request after them: their failures were logged by then, if they were
+    assert_eq!(proksi.get("app.test", "/").await.unwrap().status, 200);
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    let logs = proksi.logs();
+    assert!(!logs.contains("Downstream handshake error"), "{logs}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_acme_challenge_locations_are_proxied_on_the_http_port() {
     // As cert-manager's HTTP-01 solver adds one for a host with TLS
     let proksi = Harness::start_with(
