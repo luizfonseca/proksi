@@ -18,6 +18,8 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "proksi.name" . }}
+      # Longer than `server.shutdown_timeout_secs` (30 by default), so connections can finish
+      terminationGracePeriodSeconds: 35
       containers:
         - name: proksi
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

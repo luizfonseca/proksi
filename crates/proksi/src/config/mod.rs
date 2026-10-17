@@ -587,6 +587,19 @@ pub struct ServerCfg {
     #[arg(skip)]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trusted_proxies: Vec<String>,
+
+    /// How long open connections are given to finish when proksi stops, in seconds (default:
+    /// 30). Proksi stops as soon as they're all closed.
+    #[arg(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shutdown_timeout_secs: Option<u64>,
+}
+
+impl ServerCfg {
+    /// How long open connections are given to finish when proksi stops
+    pub fn shutdown_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.shutdown_timeout_secs.unwrap_or(30))
+    }
 }
 
 /// The main configuration struct.
@@ -732,6 +745,7 @@ impl Default for Config {
                 https_address: Some(Cow::Borrowed("0.0.0.0:443")),
                 http_address: Some(Cow::Borrowed("0.0.0.0:80")),
                 trusted_proxies: vec![],
+                shutdown_timeout_secs: None,
             },
             worker_threads: Some(default_worker_threads()),
             upgrade: false,

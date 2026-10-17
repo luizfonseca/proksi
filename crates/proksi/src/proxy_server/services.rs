@@ -8,7 +8,7 @@ use pingora::{
     tls::ssl::{AlpnError, NameType, SslAcceptor, SslAcceptorBuilder, SslMethod},
     listeners::tls::TlsSettings,
     protocols::Stream,
-    proxy::{http_proxy, http_proxy_service, HttpProxy},
+    proxy::{http_proxy, HttpProxy},
     server::{configuration::ServerConf, ShutdownWatch},
     services::listening::Service,
 };
@@ -20,9 +20,11 @@ use crate::tcp::{
     TcpTarget,
 };
 
-use super::{cert_store::CertStore, https_proxy::Router, listener::Listener};
+use super::{
+    cert_store::CertStore, connections::Counted, https_proxy::Router, listener::Listener,
+};
 
-pub type ProxyService = Service<HttpProxy<Router>>;
+pub type ProxyService = Service<Counted<HttpProxy<Router>>>;
 
 /// HTTPS, and the `tcp` blocks of hosts sharing its addresses: once TLS is terminated, the
 /// connections of those hosts (by SNI) are forwarded, the rest are HTTPS
@@ -63,7 +65,10 @@ pub fn http_service(
         listener: Listener::Http,
         default_address,
     };
-    let mut service = http_proxy_service(configuration, router);
+    let mut service = Service::new(
+        "Pingora HTTP Proxy Service".to_string(),
+        Counted::new(http_proxy(configuration, router)),
+    );
     service.threads = worker_threads;
     for address in addresses {
         service.add_tcp(address);
@@ -78,9 +83,9 @@ pub fn https_service(
     default_address: SocketAddr,
     tcp_targets: &Arc<Vec<TcpTarget>>,
     worker_threads: Option<usize>,
-) -> Result<Service<HttpsApp>, anyhow::Error> {
+) -> Result<Service<Counted<HttpsApp>>, anyhow::Error> {
     let app = https_app(configuration, addresses, default_address, tcp_targets);
-    let mut service = Service::new("Pingora HTTP Proxy Service".to_string(), app);
+    let mut service = Service::new("Pingora HTTP Proxy Service".to_string(), Counted::new(app));
     service.threads = worker_threads;
     for address in addresses {
         let mut settings = tls_settings()?;

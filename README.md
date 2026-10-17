@@ -123,6 +123,11 @@ server {
   # Behind a load balancer: the client of a request is the address it forwards in
   # X-Forwarded-For (for rate limits and access logs)
   # trusted_proxies = ["10.0.0.0/8"]
+
+  # When stopping, open connections get this long to finish (proksi stops as soon as they
+  # have). Give docker or kubernetes a little longer before they kill it, e.g.
+  # `stop_grace_period: 35s` in compose, or `terminationGracePeriodSeconds: 35`.
+  # shutdown_timeout_secs = 30
 }
 
 logging {

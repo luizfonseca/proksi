@@ -568,6 +568,24 @@ paths {{
         matches!(self.child.try_wait(), Ok(None))
     }
 
+    /// Asks proksi to stop, as `docker stop` or Kubernetes do (`SIGTERM`)
+    pub fn terminate(&self) {
+        let pid = nix::unistd::Pid::from_raw(i32::try_from(self.child.id()).unwrap());
+        nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGTERM).unwrap();
+    }
+
+    /// Whether proksi exits within `timeout`
+    pub async fn exits_within(&mut self, timeout: Duration) -> bool {
+        let started = std::time::Instant::now();
+        while started.elapsed() < timeout {
+            if !self.is_alive() {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        !self.is_alive()
+    }
+
     pub fn logs(&self) -> String {
         let read =
             |name: &str| std::fs::read_to_string(self.dir.path().join(name)).unwrap_or_default();
