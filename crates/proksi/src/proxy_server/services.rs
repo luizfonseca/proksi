@@ -8,7 +8,7 @@ use pingora::{
     tls::ssl::{AlpnError, NameType, SslAcceptor, SslAcceptorBuilder, SslMethod},
     listeners::tls::TlsSettings,
     protocols::Stream,
-    proxy::{http_proxy, http_proxy_service, HttpProxy},
+    proxy::{http_proxy, HttpProxy},
     server::{configuration::ServerConf, ShutdownWatch},
     services::listening::Service,
 };
@@ -20,14 +20,16 @@ use crate::tcp::{
     TcpTarget,
 };
 
-use super::{cert_store::CertStore, https_proxy::Router, listener::Listener};
+use super::{
+    cert_store::CertStore, https_proxy::Router, listener::Listener, timeouts::WithTimeouts,
+};
 
-pub type ProxyService = Service<HttpProxy<Router>>;
+pub type ProxyService = Service<WithTimeouts<HttpProxy<Router>>>;
 
 /// HTTPS, and the `tcp` blocks of hosts sharing its addresses: once TLS is terminated, the
 /// connections of those hosts (by SNI) are forwarded, the rest are HTTPS
 pub struct HttpsApp {
-    http: Arc<HttpProxy<Router>>,
+    http: Arc<WithTimeouts<HttpProxy<Router>>>,
     tcp: Option<TcpProxy>,
 }
 
@@ -63,7 +65,10 @@ pub fn http_service(
         listener: Listener::Http,
         default_address,
     };
-    let mut service = http_proxy_service(configuration, router);
+    let mut service = Service::new(
+        "Pingora HTTP Proxy Service".to_string(),
+        WithTimeouts::new(http_proxy(configuration, router)),
+    );
     service.threads = worker_threads;
     for address in addresses {
         service.add_tcp(address);
@@ -109,7 +114,7 @@ pub fn https_app(
         default_address,
     };
     HttpsApp {
-        http: Arc::new(http_proxy(configuration, router)),
+        http: Arc::new(WithTimeouts::new(http_proxy(configuration, router))),
         tcp,
     }
 }

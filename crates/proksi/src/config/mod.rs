@@ -587,6 +587,36 @@ pub struct ServerCfg {
     #[arg(skip)]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trusted_proxies: Vec<String>,
+
+    /// Timeouts toward clients
+    #[arg(skip)]
+    #[serde(default)]
+    pub timeouts: ClientTimeouts,
+}
+
+/// Timeouts toward clients (`server.timeouts`), in seconds
+// Named like the other durations of the configuration (`*_secs`)
+#[allow(clippy::struct_field_names)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClientTimeouts {
+    /// How long a connection can wait for a request, or for each read of its headers, including
+    /// between requests on a kept-alive connection (HTTP/2: without any request)
+    pub idle_secs: u64,
+    /// How long each read of a request body can wait
+    pub read_secs: u64,
+    /// How long each write of a response can wait for the client to read
+    pub write_secs: u64,
+}
+
+impl Default for ClientTimeouts {
+    fn default() -> Self {
+        Self {
+            idle_secs: 60,
+            read_secs: 60,
+            write_secs: 60,
+        }
+    }
 }
 
 /// The main configuration struct.
@@ -732,6 +762,7 @@ impl Default for Config {
                 https_address: Some(Cow::Borrowed("0.0.0.0:443")),
                 http_address: Some(Cow::Borrowed("0.0.0.0:80")),
                 trusted_proxies: vec![],
+                timeouts: ClientTimeouts::default(),
             },
             worker_threads: Some(default_worker_threads()),
             upgrade: false,

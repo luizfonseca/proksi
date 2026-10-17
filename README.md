@@ -123,6 +123,13 @@ server {
   # Behind a load balancer: the client of a request is the address it forwards in
   # X-Forwarded-For (for rate limits and access logs)
   # trusted_proxies = ["10.0.0.0/8"]
+
+  # Timeouts toward clients, in seconds (these are the defaults)
+  # timeouts {
+  #   idle_secs  = 60 # waiting for a request's headers, and between requests of a connection
+  #   read_secs  = 60 # waiting for each read of a request body, and for websocket messages
+  #   write_secs = 60 # waiting for a client to read each write of a response
+  # }
 }
 
 logging {
