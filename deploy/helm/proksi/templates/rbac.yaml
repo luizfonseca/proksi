@@ -17,7 +17,7 @@ rules:
     resources: ["ingresses/status"]
     verbs: ["get", "patch", "update"]
   - apiGroups: [""]
-    # Secrets: only TLS secrets and the ones labelled proksi.info/auth are used
+    # Secrets: only TLS secrets and the ones labelled proksi.ingress/auth are used
     resources: ["services", "secrets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["discovery.k8s.io"]

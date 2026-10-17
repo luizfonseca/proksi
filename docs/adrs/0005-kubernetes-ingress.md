@@ -26,7 +26,7 @@ kubernetes {
 ```
 
 - An `Ingress` is proksi's when `spec.ingressClassName` is `ingress_class`, or when it has no class and the `IngressClass` named `ingress_class` is marked as the cluster's default.
-- The `IngressClass` uses the controller name `proksi.info/ingress-controller`.
+- The `IngressClass` uses the controller name `proksi.ingress/controller`.
 - Proksi connects with its pod's service account (in-cluster), or with a kubeconfig outside the cluster (for development).
 - Gateway API resources (`HTTPRoute`, `TLSRoute`, `TCPRoute`) are not part of this decision; they map to the same model and can be added as another source.
 
@@ -41,20 +41,20 @@ kubernetes {
 | `tls[].hosts`, `tls[].secretName` | These hosts use the certificate in the `Secret` (`tls.crt`, `tls.key`) |
 | A rule without a `host` | Host `*` |
 
-- **Upstreams are pods, not the service's cluster IP.** Load balancing, weights and health checks then work per pod, and a pod that stops being ready is removed without waiting for a health check. With the annotation `proksi.info/upstream: service`, the service's cluster IP is used instead (one upstream, balanced by Kubernetes).
-- **Certificates:** hosts listed in `tls` use their `Secret`, reloaded when it changes. Other hosts get Let's Encrypt certificates as configured (`lets_encrypt`), or `tls = false` with the annotation `proksi.info/tls: "false"`.
-- **Building blocks** come from the annotation `proksi.info/blocks`, written like the inside of a `location` block, and apply to every path of the `Ingress`:
+- **Upstreams are pods, not the service's cluster IP.** Load balancing, weights and health checks then work per pod, and a pod that stops being ready is removed without waiting for a health check. With the annotation `proksi.ingress/upstream: service`, the service's cluster IP is used instead (one upstream, balanced by Kubernetes).
+- **Certificates:** hosts listed in `tls` use their `Secret`, reloaded when it changes. Other hosts get Let's Encrypt certificates as configured (`lets_encrypt`), or `tls = false` with the annotation `proksi.ingress/tls: "false"`.
+- **Building blocks** come from the annotation `proksi.ingress/blocks`, written like the inside of a `location` block, and apply to every path of the `Ingress`:
 
   ```yaml
   metadata:
     annotations:
-      proksi.info/blocks: |
+      proksi.ingress/blocks: |
         rate_limit { requests = 100  per = "1m" }
         body_limit { max = "10MiB" }
         request_id {}
   ```
 
-  `basic_auth` and `oauth2` read their secrets from a `Secret` in the same namespace (`proksi.info/auth-secret: <name>`), never from the annotation itself. Only `Secret`s labelled `proksi.info/auth` (and TLS ones) are watched, so proksi doesn't keep every `Secret` of the cluster in memory.
+  `basic_auth` and `oauth2` read their secrets from a `Secret` in the same namespace (`proksi.ingress/auth-secret: <name>`), never from the annotation itself. Only `Secret`s labelled `proksi.ingress/auth` (and TLS ones) are watched, so proksi doesn't keep every `Secret` of the cluster in memory.
 - **Invalid `Ingress`es are skipped**, with the reason logged and recorded as a Kubernetes `Event` on the `Ingress` (and in the admin API's status, ADR 0004). The other `Ingress`es are still applied.
 
 ### Status
@@ -87,8 +87,8 @@ With more than one replica, the store must be shared (redis or postgres): certif
 ### Implementation
 
 1. The kubernetes source: watching `Ingress`es, `Service`s and `EndpointSlice`s, and hosts with locations and pod upstreams.
-2. TLS secrets, `proksi.info/tls`, `proksi.info/upstream`.
-3. `proksi.info/blocks` and auth secrets.
+2. TLS secrets, `proksi.ingress/tls`, `proksi.ingress/upstream`.
+3. `proksi.ingress/blocks` and auth secrets.
 4. `status.loadBalancer` and `Event`s.
 5. Manifests, Helm chart, and the kind end-to-end test.
 

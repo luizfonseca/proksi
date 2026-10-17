@@ -59,7 +59,7 @@ metadata:
   # annotations:
   #   ingressclass.kubernetes.io/is-default-class: "true"
 spec:
-  controller: proksi.info/ingress-controller
+  controller: proksi.ingress/controller
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -75,7 +75,7 @@ data:
     }
 
     # Certificates for the hosts of Ingresses (hosts with the annotation
-    # `proksi.info/tls: "false"` are served over plain HTTP instead)
+    # `proksi.ingress/tls: "false"` are served over plain HTTP instead)
     lets_encrypt {
       enabled = false
       # enabled = true

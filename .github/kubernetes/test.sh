@@ -33,7 +33,7 @@ kubectl create secret tls web-tls --cert /tmp/secure.crt --key /tmp/secure.key
 
 # The settings of basic_auth for auth.test
 kubectl create secret generic web-auth --from-literal=user=admin --from-literal=pass=secret
-kubectl label secret web-auth proksi.info/auth=true
+kubectl label secret web-auth proksi.ingress/auth=true
 
 kubectl apply -f "$here/web.yaml"
 kubectl rollout status deployment/web --timeout=120s
