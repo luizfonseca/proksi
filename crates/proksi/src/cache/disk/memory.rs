@@ -20,8 +20,6 @@ pub const DEFAULT_MEMORY_LIMIT_MB: usize = 256;
 /// Larger entries are only served from disk.
 const MAX_ENTRY_SIZE_KB: usize = u16::MAX as usize;
 
-static MEMORY_CACHE: OnceCell<Option<MemoryCache>> = OnceCell::new();
-
 pub struct MemoryCache {
     cache: TinyUfo<String, MemoryCacheItem>,
     limit_kb: usize,
@@ -55,20 +53,55 @@ impl MemoryCache {
     }
 }
 
-/// Sets the memory limit (in MB). A limit of 0 disables the in-memory copy.
-/// Has no effect if the memory cache was already used.
-pub fn init_memory_cache(memory_limit_mb: usize) {
-    let cache = (memory_limit_mb > 0).then(|| MemoryCache::new(memory_limit_mb));
-    if MEMORY_CACHE.set(cache).is_err() {
-        tracing::warn!("memory cache already initialized");
+/// The memory cache, created when first used: proksi only sets its limit when it starts, as
+/// it's sized for the whole limit (about 2 MB for the default 256 MB) and most configurations
+/// don't cache
+pub struct LazyMemoryCache {
+    limit_mb: OnceCell<usize>,
+    cache: OnceCell<Option<MemoryCache>>,
+}
+
+impl LazyMemoryCache {
+    pub const fn new() -> Self {
+        Self {
+            limit_mb: OnceCell::new(),
+            cache: OnceCell::new(),
+        }
     }
+
+    /// Sets the memory limit (in MB). A limit of 0 disables the in-memory copy.
+    pub fn set_limit(&self, memory_limit_mb: usize) {
+        if self.limit_mb.set(memory_limit_mb).is_err() {
+            tracing::warn!("memory cache limit already set");
+        }
+    }
+
+    /// The cache, or `None` if it's disabled
+    pub fn get(&self) -> Option<&MemoryCache> {
+        self.cache
+            .get_or_init(|| {
+                let limit_mb = self.limit_mb.get().copied().unwrap_or(DEFAULT_MEMORY_LIMIT_MB);
+                (limit_mb > 0).then(|| MemoryCache::new(limit_mb))
+            })
+            .as_ref()
+    }
+
+    #[cfg(test)]
+    fn created(&self) -> bool {
+        self.cache.get().is_some()
+    }
+}
+
+static MEMORY_CACHE: LazyMemoryCache = LazyMemoryCache::new();
+
+/// Sets the memory limit (in MB). A limit of 0 disables the in-memory copy.
+pub fn init_memory_cache(memory_limit_mb: usize) {
+    MEMORY_CACHE.set_limit(memory_limit_mb);
 }
 
 /// Returns the memory cache, or `None` if it's disabled
 pub fn memory_cache() -> Option<&'static MemoryCache> {
-    MEMORY_CACHE
-        .get_or_init(|| Some(MemoryCache::new(DEFAULT_MEMORY_LIMIT_MB)))
-        .as_ref()
+    MEMORY_CACHE.get()
 }
 
 #[cfg(test)]
@@ -87,6 +120,20 @@ mod tests {
             headers: std::collections::BTreeMap::new(),
         };
         Arc::new((meta, bytes::Bytes::from(vec![b'x'; size])))
+    }
+
+    #[test]
+    fn test_memory_cache_is_created_when_first_used() {
+        let lazy = super::LazyMemoryCache::new();
+        lazy.set_limit(1);
+        assert!(!lazy.created());
+
+        assert!(lazy.get().is_some());
+        assert!(lazy.created());
+
+        let disabled = super::LazyMemoryCache::new();
+        disabled.set_limit(0);
+        assert!(disabled.get().is_none());
     }
 
     #[test]
