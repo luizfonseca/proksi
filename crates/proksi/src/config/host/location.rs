@@ -166,6 +166,8 @@ pub struct LocationTimeouts {
     pub read_secs: Option<u64>,
     /// How long each write of a response can wait for the client to read
     pub write_secs: Option<u64>,
+    /// How long the whole body of a request can take to arrive, after its headers
+    pub body_secs: Option<u64>,
     /// Toward the location's upstreams
     pub upstream: Option<UpstreamTimeouts>,
 }
@@ -177,6 +179,7 @@ impl LocationTimeouts {
         Self {
             read_secs: self.read_secs.or(defaults.read_secs),
             write_secs: self.write_secs.or(defaults.write_secs),
+            body_secs: self.body_secs.or(defaults.body_secs),
             upstream: match self.upstream {
                 Some(upstream) => Some(upstream.or(defaults.upstream)),
                 None => defaults.upstream,

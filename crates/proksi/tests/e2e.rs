@@ -1984,6 +1984,78 @@ async fn test_tls_1_2_can_be_refused() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_request_bodies_must_arrive_in_time() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let proksi = Harness::start_with_server(
+        vec![],
+        "timeouts {\n body_secs = 1\n }",
+        r#"
+host "plain.test" {
+  tls = false
+  location "/upload" {
+    timeouts {
+      body_secs = 30
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#,
+    )
+    .await;
+
+    // A byte every 300 ms: each read is quick, the whole body isn't. Returns how long until
+    // proksi gave up on it, if it did within 3 seconds.
+    let trickle = |path: &'static str| {
+        let port = proksi.http_port;
+        async move {
+            let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .unwrap();
+            stream
+                .write_all(
+                    format!("POST {path} HTTP/1.1\r\nHost: plain.test\r\nContent-Length: 100\r\n\r\n")
+                        .as_bytes(),
+                )
+                .await
+                .unwrap();
+            let started = std::time::Instant::now();
+            let mut buf = [0u8; 1024];
+            while started.elapsed() < std::time::Duration::from_secs(3) {
+                if stream.write_all(b"a").await.is_err() {
+                    return Some((started.elapsed(), String::new()));
+                }
+                match tokio::time::timeout(
+                    std::time::Duration::from_millis(300),
+                    stream.read(&mut buf),
+                )
+                .await
+                {
+                    Ok(Ok(0) | Err(_)) => return Some((started.elapsed(), String::new())),
+                    Ok(Ok(read)) => {
+                        return Some((
+                            started.elapsed(),
+                            String::from_utf8_lossy(&buf[..read]).to_string(),
+                        ));
+                    }
+                    Err(_) => {}
+                }
+            }
+            None
+        }
+    };
+
+    let (elapsed, res) = trickle("/").await.expect("the body was still accepted after 3 s");
+    assert!(elapsed < std::time::Duration::from_secs(2), "{elapsed:?}");
+    assert!(res.is_empty() || res.starts_with("HTTP/1.1 408"), "{res}");
+
+    // The location's limit, longer
+    assert!(trickle("/upload").await.is_none());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_acme_challenge_locations_are_proxied_on_the_http_port() {
     // As cert-manager's HTTP-01 solver adds one for a host with TLS
     let proksi = Harness::start_with(
@@ -2353,6 +2425,65 @@ tcp "web" {
         assert!(buf[..read].starts_with(b"HTTP/1.1 200"));
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_responses_of_proksi_itself_have_the_configured_headers() {
+    // Nothing listens on this port
+    let refused_port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        &format!(
+            r#"
+host "plain.test" {{
+  tls = false
+  headers {{
+    response {{
+      add = {{ "X-Frame-Options" = "DENY" }}
+    }}
+  }}
+  location "/down" {{
+    upstream "127.0.0.1:{refused_port}" {{}}
+  }}
+  location "/" {{
+    rate_limit {{
+      requests = 1
+      per      = "1m"
+    }}
+    upstream "127.0.0.1:{{http_upstream_port}}" {{}}
+  }}
+}}
+"#
+        ),
+    )
+    .await;
+    let check = |res: &str, status: &str| {
+        assert!(res.starts_with(&format!("HTTP/1.1 {status}")), "{res}");
+        let headers = res.split("\r\n\r\n").next().unwrap_or_default().to_lowercase();
+        assert!(headers.contains("x-frame-options: deny"), "{res}");
+        assert!(!headers.contains("\r\nserver:"), "{res}");
+    };
+
+    // Proxied, then answered by `rate_limit`
+    check(&proksi.get_http_port("plain.test", "/").await.unwrap(), "200");
+    check(&proksi.get_http_port("plain.test", "/").await.unwrap(), "429");
+    // The upstream refused the connection
+    check(&proksi.get_http_port("plain.test", "/down").await.unwrap(), "502");
+
+    // A host proksi doesn't serve: no headers to add, nor a `Server`
+    let res = proksi
+        .tls_request(
+            proksi.https_port,
+            "app.test",
+            "GET / HTTP/1.1\r\nHost: unknown.test\r\nConnection: close\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 404"), "{res}");
+    assert!(!res.to_lowercase().contains("\r\nserver:"), "{res}");
 }
 
 #[tokio::test(flavor = "multi_thread")]

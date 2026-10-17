@@ -31,6 +31,8 @@ host "example.com" {
 
 A location's headers are applied after the host's, so a location can override a header added by its host.
 
+They're also applied to the responses Proksi sends itself, such as a `429` from `rate_limit`, a `401` from `basic_auth`, or a `502`, `503` or `504` when an upstream fails. A request that matches no location gets a `404` without them, as it has no location to take them from. Proksi's own responses have no `Server` header.
+
 ## Request headers
 
 Headers added to the request sent to an upstream are set on the upstream itself. This is mostly useful for external services that expect a specific `Host` header:

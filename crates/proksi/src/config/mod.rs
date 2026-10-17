@@ -626,6 +626,9 @@ pub struct ClientTimeouts {
     pub read_secs: u64,
     /// How long each write of a response can wait for the client to read
     pub write_secs: u64,
+    /// How long the whole body of a request can take to arrive, after its headers (default: no
+    /// limit)
+    pub body_secs: Option<u64>,
     /// Toward upstreams, unless a host or location sets them
     pub upstream: host::UpstreamTimeouts,
 }
@@ -636,6 +639,7 @@ impl Default for ClientTimeouts {
             idle_secs: 60,
             read_secs: 60,
             write_secs: 60,
+            body_secs: None,
             upstream: host::UpstreamTimeouts::default(),
         }
     }

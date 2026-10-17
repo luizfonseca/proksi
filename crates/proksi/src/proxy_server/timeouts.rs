@@ -20,6 +20,11 @@ pub fn set_client_timeouts(timeouts: ClientTimeouts) {
     let _ = TIMEOUTS.set(timeouts);
 }
 
+/// `server.timeouts`
+pub fn client_timeouts() -> ClientTimeouts {
+    TIMEOUTS.get().copied().unwrap_or_default()
+}
+
 /// The timeouts toward upstreams of `server.timeouts`
 pub fn upstream_timeouts() -> crate::config::host::UpstreamTimeouts {
     TIMEOUTS.get().map(|timeouts| timeouts.upstream).unwrap_or_default()
