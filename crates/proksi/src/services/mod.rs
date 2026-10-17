@@ -4,7 +4,10 @@ use async_trait::async_trait;
 use config::FileWatcherService;
 use docker::LabelService;
 use letsencrypt::http01::LetsencryptService;
-use pingora::server::{ListenFds, ShutdownWatch};
+use pingora::{
+    server::{ListenFds, ShutdownWatch},
+    services::{Service, ServiceReadyNotifier},
+};
 use tokio::sync::mpsc::Receiver;
 
 use crate::{
@@ -13,7 +16,7 @@ use crate::{
         file_source::file_snapshot,
         service::RoutingService,
         store_source::{spawn_isolated, StoreSource},
-        RouteSnapshot, SnapshotSender,
+        RouteSnapshot, RouteSourceKind, SnapshotSender,
     },
     stores,
 };
@@ -46,12 +49,15 @@ impl BackgroundFunctionService {
 }
 
 #[async_trait]
-impl pingora::services::Service for BackgroundFunctionService {
+impl pingora::services::ServiceWithDependents for BackgroundFunctionService {
+    /// Ready (and the listening services start) once the routes are applied, see
+    /// `routing::readiness`
     async fn start_service(
         &mut self,
         _fds: Option<ListenFds>,
         shutdown: ShutdownWatch,
         _listeners_per_fd: usize,
+        ready_notifier: ServiceReadyNotifier,
     ) {
         let Some(route_receiver) = self.route_receiver.take() else {
             tracing::error!("background services already started");
@@ -127,22 +133,25 @@ impl pingora::services::Service for BackgroundFunctionService {
             }
         };
 
+        let ready = ready(&self.config, shared, ready_notifier);
+
         let drain = crate::proxy_server::connections::exit_when_drained(
             shutdown.clone(),
             self.config.server.shutdown_timeout(),
         );
 
         let _ = tokio::join!(
+            ready,
             drain,
             store_sync,
             kubernetes,
             certificate_metrics,
             live_stats,
-            routing_service.start_service(None, shutdown.clone(), _listeners_per_fd),
-            health_service.start_service(None, shutdown.clone(), _listeners_per_fd),
-            config_server.start_service(None, shutdown.clone(), _listeners_per_fd),
-            docker_service.start_service(None, shutdown.clone(), _listeners_per_fd),
-            letsencrypt_service.start_service(None, shutdown, _listeners_per_fd),
+            Service::start_service(&mut routing_service, None, shutdown.clone(), _listeners_per_fd),
+            Service::start_service(&mut health_service, None, shutdown.clone(), _listeners_per_fd),
+            Service::start_service(&mut config_server, None, shutdown.clone(), _listeners_per_fd),
+            Service::start_service(&mut docker_service, None, shutdown.clone(), _listeners_per_fd),
+            Service::start_service(&mut letsencrypt_service, None, shutdown, _listeners_per_fd),
         );
     }
 
@@ -150,9 +159,40 @@ impl pingora::services::Service for BackgroundFunctionService {
         "background_services"
     }
 
+    /// Listens on nothing: inherited sockets no service declares are closed after an upgrade
+    fn listen_addresses(&self) -> Option<Vec<String>> {
+        Some(vec![])
+    }
+
     fn threads(&self) -> Option<usize> {
         Some(1)
     }
+}
+
+/// Reports the background services ready once the routes of every source are applied (and,
+/// when upgrading, certificates loaded), so the listening services can start: during an upgrade,
+/// the new worker only accepts connections once it serves the hosts the previous one did
+async fn ready(config: &Config, store_routes: bool, ready_notifier: ServiceReadyNotifier) {
+    let mut sources = vec![RouteSourceKind::File];
+    if config.docker.enabled.unwrap_or(false) {
+        sources.push(RouteSourceKind::Docker);
+    }
+    if store_routes || config.admin.is_some() {
+        sources.push(RouteSourceKind::Store);
+    }
+    #[cfg(feature = "kubernetes")]
+    if config.kubernetes.enabled {
+        sources.push(RouteSourceKind::Kubernetes);
+    }
+    if !crate::routing::readiness::wait(&sources, config.upgrade).await {
+        tracing::warn!(
+            "starting to listen before every route or certificate is ready (waited {}s)",
+            crate::routing::readiness::READY_TIMEOUT.as_secs()
+        );
+    }
+    ready_notifier.notify_ready();
+    #[cfg(target_os = "linux")]
+    crate::supervisor::notify_ready();
 }
 
 /// Keeps `proksi_certificate_expiry_timestamp_seconds` up to date

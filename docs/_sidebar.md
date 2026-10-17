@@ -21,6 +21,7 @@
 * [ENV](configuration/environment-variables.md)
 * [Logging](configuration/logging.md)
 * [Auto Reload](configuration/auto-reload.md)
+* [Restarts and upgrades](configuration/upgrades.md)
 * [Daemon](configuration/daemon.md)
 * [Redis](configuration/redis.md)
 * [SQLite / Postgres](configuration/sql.md)

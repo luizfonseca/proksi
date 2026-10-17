@@ -11,6 +11,7 @@ pub mod build;
 pub mod file_source;
 pub mod merge;
 pub mod paths;
+pub mod readiness;
 pub mod reconciler;
 pub mod service;
 pub mod store_source;

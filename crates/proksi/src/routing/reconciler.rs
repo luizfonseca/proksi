@@ -66,6 +66,7 @@ impl Reconciler {
         if snapshot.source == RouteSourceKind::Store {
             self.store_revision = snapshot.revision.or(self.store_revision);
         }
+        let snapshot_source = snapshot.source;
         self.snapshots.insert(snapshot.source, snapshot.hosts);
 
         let merged = merge(&self.snapshots);
@@ -132,6 +133,7 @@ impl Reconciler {
         self.conflicts = merged.conflicts;
         self.invalid = merged.invalid;
         ROUTING_STATUS.store(Arc::new(self.status()));
+        super::readiness::applied(snapshot_source);
 
         report
     }
