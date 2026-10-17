@@ -83,7 +83,8 @@ host "app.example.com" {
 | Timeouts (`servers { timeouts { ... } }`) | `server.timeouts` (`idle_secs`, `read_secs`, `write_secs`) |
 | `grace_period` | `server.shutdown_timeout_secs` |
 | `handle_path /api/*`, `uri strip_prefix`, `uri prefix` | `location "/api"` with [`rewrite`](routing/upstreams.md#rewriting-paths) `{ strip_prefix, add_prefix }` |
-| `rewrite`, `uri replace`, `redir` | Not available |
+| `rewrite`, `uri path_regexp` | [`rewrite`](routing/upstreams.md#rewriting-paths) `{ match, replace }` |
+| `redir` | Not available |
 | `encode`, `file_server`, `php_fastcgi`, `templates`, `respond` | Not available: Proksi only proxies |
 | On-demand TLS, wildcard sites (`*.example.com`), DNS challenges | Not available |
 

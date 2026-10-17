@@ -66,7 +66,8 @@ host "app.example.com" {
 | `redirectScheme` (to HTTPS) | Built in |
 | `forwardAuth` | [`oauth2`](plugins/oauth2.md) covers GitHub and WorkOS sign-in; no generic forward auth |
 | `stripPrefix`, `addPrefix` | [`rewrite`](routing/upstreams.md#rewriting-paths) `{ strip_prefix, add_prefix }` in the location |
-| `replacePath`, `replacePathRegex`, `redirectRegex` | Not available (fixed prefixes only) |
+| `replacePath`, `replacePathRegex` | [`rewrite`](routing/upstreams.md#rewriting-paths) `{ match, replace }` |
+| `redirectRegex` | Not available |
 | `ipAllowList`, `compress`, `retry`, `circuitBreaker` | Not available |
 
 ## Docker labels
@@ -146,4 +147,4 @@ TLS is terminated with the host's certificate; `tls = "passthrough"` forwards it
 - **Timeouts**: `server.timeouts` (`idle_secs`, `read_secs`, `write_secs`, 60 each by default), and per host or location `read_secs`/`write_secs`, instead of `respondingTimeouts`.
 - **Stopping**: open connections get `server.shutdown_timeout_secs` (30) to finish, instead of `lifeCycle.graceTimeOut`. On Linux, settings changes take effect without dropping connections (see [Restarts and upgrades](configuration/upgrades.md)).
 - **Health checks** are TCP connections to each upstream, every 15 seconds; there are no HTTP health check paths.
-- **Not available**: DNS-01 challenges, wildcard hosts (`*.example.com`), regular expression rewrites, sticky sessions, HTTP/3.
+- **Not available**: DNS-01 challenges, wildcard hosts (`*.example.com`), sticky sessions, HTTP/3.

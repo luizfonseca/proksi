@@ -58,7 +58,7 @@ impl LocationBlock {
             cache: self.cache.clone(),
             rewrite: match &self.rewrite {
                 Some(rewrite) => {
-                    rewrite.validate()?;
+                    rewrite.compile()?;
                     Some(rewrite.clone())
                 }
                 None => None,

@@ -101,8 +101,8 @@ Mind the defaults that differ:
 | `stub_status` | The [admin API](configuration/admin.md): Prometheus metrics and live stats |
 | `max_fails`, `fail_timeout` | Health checks: a TCP connection to each upstream every 15 seconds |
 | `least_conn`, `ip_hash`, `hash` | Not available (weighted round robin only) |
-| `rewrite ^/api/(.*)$ /$1 break;` (prefixes) | [`rewrite`](routing/upstreams.md#rewriting-paths) `{ strip_prefix, add_prefix }` |
-| `root`, `try_files`, `return`, regular expression `rewrite`s, `gzip`, `allow`/`deny` | Not available: Proksi only proxies |
+| `rewrite ^/old/(.*)$ /new/$1 break;` | [`rewrite`](routing/upstreams.md#rewriting-paths) `{ match = "^/old/(.*)$", replace = "/new/$1" }` (redirecting rewrites, `last`/`redirect`/`permanent`, aren't supported) |
+| `root`, `try_files`, `return`, `gzip`, `allow`/`deny` | Not available: Proksi only proxies |
 
 ## TCP (`stream`)
 
@@ -148,7 +148,7 @@ ingress-nginx has been retired by the Kubernetes project. Proksi serves the same
 | `configuration-snippet` (`more_set_headers`) | `headers { response { add = { ... } } }` in `proksi.ingress/blocks` |
 | `proxy-read-timeout`, `proxy-send-timeout` | `timeouts { read_secs, write_secs }` in `proksi.ingress/blocks` |
 | `service-upstream` | `proksi.ingress/upstream: service` |
-| `rewrite-target` (removing the path's prefix, e.g. `/api(/\|$)(.*)` to `/$2`) | `rewrite { strip_prefix = "/api" }` in `proksi.ingress/blocks` (fixed prefixes, no capture groups) |
+| `rewrite-target` (with `use-regex`) | `rewrite { match, replace }` in `proksi.ingress/blocks`, e.g. `match = "^/api(/\|$)(.*)"` and `replace = "/$2"`; or `rewrite { strip_prefix = "/api" }` |
 | `backend-protocol`, `affinity`, `whitelist-source-range` | Not available |
 
 cert-manager works as before, including HTTP-01 challenges (set the solver's class to `proksi`, see [cert-manager](installation/kubernetes.md#cert-manager)).

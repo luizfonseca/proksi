@@ -5,7 +5,7 @@ use pingora::lb::{discovery::Static, selection::RoundRobin, Backend, Backends, L
 use crate::{
     blocks::Blocks,
     config::{
-        host::{LocationTimeouts, PathRewrite},
+        host::{CompiledRewrite, LocationTimeouts},
         RouteCache, RouteUpstream,
     },
     metrics::LocationMetrics,
@@ -31,7 +31,7 @@ pub struct RouteStoreContainer {
     pub timeouts: Option<LocationTimeouts>,
 
     /// How the path sent to upstreams is changed
-    pub rewrite: Option<PathRewrite>,
+    pub rewrite: Option<CompiledRewrite>,
 
     /// Requests and upstreams of this location (ADR 0004)
     pub metrics: Option<LocationMetrics>,

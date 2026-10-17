@@ -1204,10 +1204,19 @@ async fn test_admin_metrics() {
         .unwrap();
     assert!(res.starts_with("HTTP/1.1 401"), "{res}");
 
-    let res = proksi
-        .raw_http_on(admin_port, metrics(Some("e2e-token")).as_bytes())
-        .await
-        .unwrap();
+    // The tcp connection is counted until proksi has closed its side too, just after the client
+    let active = "proksi_tcp_connections_active{block=\"tcp \\\"web\\\"\"} 0";
+    let mut res = String::new();
+    for _ in 0..20 {
+        res = proksi
+            .raw_http_on(admin_port, metrics(Some("e2e-token")).as_bytes())
+            .await
+            .unwrap();
+        if res.contains(active) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     let line = |prefix: &str, suffix: &str| {
         res.lines()
@@ -2189,6 +2198,44 @@ host "rewrite.test" {
         ("/static/?v=1", "/?v=1"),
     ] {
         let res = proksi.get("rewrite.test", path).await.unwrap();
+        assert_eq!(res.status, 200, "{path}");
+        assert_eq!(res.upstream_request()["path"], upstream_path, "{path}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_locations_rewrite_paths_with_regular_expressions() {
+    let mut proksi = Harness::start_with(
+        vec![],
+        r#"
+host "regex.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+  location "/users" {
+    rewrite {
+      match   = "^/users/(?P<id>\\d+)/profile$"
+      replace = "/profiles/$${id}"
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#,
+    )
+    .await;
+    proksi.resolve("regex.test");
+    proksi.wait_for("regex.test", "/users", 200).await;
+
+    for (path, upstream_path) in [
+        ("/users/42/profile?tab=posts", "/profiles/42?tab=posts"),
+        // Not matching: unchanged
+        ("/users/42", "/users/42"),
+        ("/users/abc/profile", "/users/abc/profile"),
+    ] {
+        let res = proksi.get("regex.test", path).await.unwrap();
         assert_eq!(res.status, 200, "{path}");
         assert_eq!(res.upstream_request()["path"], upstream_path, "{path}");
     }

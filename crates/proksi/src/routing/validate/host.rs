@@ -29,6 +29,9 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
         validate_upstreams(&location.upstreams).map_err(in_location)?;
         validate_headers(location.headers.as_ref()).map_err(in_location)?;
         Blocks::build(location).map_err(in_location)?;
+        if let Some(rewrite) = &location.rewrite {
+            rewrite.compile().map_err(in_location)?;
+        }
     }
 
     Ok(())

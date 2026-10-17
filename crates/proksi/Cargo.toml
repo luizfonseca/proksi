@@ -95,6 +95,7 @@ kube = { version = "4.2.0", default-features = false, features = ["client", "ope
 k8s-openapi = { version = "0.28.0", features = ["v1_32"], optional = true }
 futures-util = { version = "0.3.34", optional = true }
 dns-lookup = "4.0.2"
+regex = "1"
 # wasmtime = "31.0.0"
 
 [[bench]]
