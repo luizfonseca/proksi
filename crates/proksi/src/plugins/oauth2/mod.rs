@@ -11,7 +11,10 @@ use pingora::proxy::Session;
 
 use provider::{OauthType, OauthUser, Provider};
 
-use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
+use crate::{
+    config::RoutePlugin,
+    proxy_server::{https_proxy::RouterContext, respond::respond},
+};
 
 use super::{get_required_config, jwt, MiddlewarePlugin};
 
@@ -65,6 +68,7 @@ impl Oauth2 {
     async fn redirect_to_oauth_callback(
         &self,
         session: &mut Session,
+        ctx: &mut RouterContext,
         oauth_provider: &Provider,
     ) -> Result<bool> {
         let current_address = session.req_header().uri.to_string();
@@ -91,9 +95,7 @@ impl Oauth2 {
         )?;
 
         // Store the current path in the state
-        session
-            .write_response_header(Box::new(res_headers), true)
-            .await?;
+        respond(session, ctx, res_headers).await?;
 
         // Finish the request, we don't want to continue processing
         // and the user has been redirected
@@ -101,13 +103,15 @@ impl Oauth2 {
     }
 
     /// Ends the Oauth2 flow and returns HTTP unauthorized if errors occur during the Oauth process
-    async fn unauthorized_response(&self, session: &mut Session) -> Result<bool> {
+    async fn unauthorized_response(
+        &self,
+        session: &mut Session,
+        ctx: &mut RouterContext,
+    ) -> Result<bool> {
         let res_headers = ResponseHeader::build_no_case(StatusCode::UNAUTHORIZED, Some(1))?;
 
         // Store the current path in the stat
-        session
-            .write_response_header(Box::new(res_headers), true)
-            .await?;
+        respond(session, ctx, res_headers).await?;
 
         // Finish the request, we don't want to continue processing
         // and the user has been redirected
@@ -119,6 +123,7 @@ impl Oauth2 {
     async fn validate_cookie(
         &self,
         session: &mut Session,
+        ctx: &mut RouterContext,
         jwt_secret: &str,
         validations: Option<&serde_json::Value>,
     ) -> Result<bool> {
@@ -152,7 +157,7 @@ impl Oauth2 {
         }
 
         if !Self::is_authorized(&decoded?.into(), validations) {
-            return self.unauthorized_response(session).await;
+            return self.unauthorized_response(session, ctx).await;
         }
 
         Ok(true)
@@ -232,46 +237,46 @@ impl MiddlewarePlugin for Oauth2 {
         // Step 0. Check if the request is for the Oauth Callback URL
         if uri.path() == callback_path {
             let Some(query) = uri.query() else {
-                return self.unauthorized_response(session).await;
+                return self.unauthorized_response(session, ctx).await;
             };
 
             let query_params = shared::from_string_to_query_params(query);
 
             let Some(code) = query_params.get("code") else {
                 tracing::info!("missing code in the query");
-                return self.unauthorized_response(session).await;
+                return self.unauthorized_response(session, ctx).await;
             };
 
             let Some(state) = query_params.get("state") else {
                 tracing::info!("missing state in the query");
-                return self.unauthorized_response(session).await;
+                return self.unauthorized_response(session, ctx).await;
             };
 
             // Get encrypted state and decrypt it
             let Ok(encrypted) = self.short_crypt.decrypt_url_component(state) else {
                 tracing::info!("state does not exist or was removed");
-                return self.unauthorized_response(session).await;
+                return self.unauthorized_response(session, ctx).await;
             };
 
             let Ok(redirect_from_state) = String::from_utf8(encrypted) else {
                 tracing::info!("state is not a valid UTF-8 string");
-                return self.unauthorized_response(session).await;
+                return self.unauthorized_response(session, ctx).await;
             };
 
             let Some((timestamp, current_address)) = redirect_from_state.split_once(';') else {
                 tracing::info!("state is not in the expected format");
-                return self.unauthorized_response(session).await;
+                return self.unauthorized_response(session, ctx).await;
             };
             let Ok(timestamp) = timestamp.parse::<u64>() else {
                 tracing::info!("state has an invalid timestamp");
-                return self.unauthorized_response(session).await;
+                return self.unauthorized_response(session, ctx).await;
             };
             let current_address = current_address.to_string();
 
             // Check if the state is still valid from the last 120 seconds (2 minutes)
             if timestamp.saturating_add(120) < get_current_timestamp() {
                 tracing::info!("state has expired");
-                return self.unauthorized_response(session).await;
+                return self.unauthorized_response(session, ctx).await;
             }
 
             // Step 1: Exchange the code for an access token
@@ -280,7 +285,7 @@ impl MiddlewarePlugin for Oauth2 {
                     tracing::error!(
                         "Failed to exchange code {code}, state {redirect_from_state}: {err}"
                     );
-                    return self.unauthorized_response(session).await;
+                    return self.unauthorized_response(session, ctx).await;
                 }
                 Ok(user) => user,
             };
@@ -288,7 +293,7 @@ impl MiddlewarePlugin for Oauth2 {
             // Validate if user is authorized to access the protected resource
             if !Self::is_authorized(&user, validations) {
                 tracing::info!("user is not authorized {:?}", user);
-                return self.unauthorized_response(session).await;
+                return self.unauthorized_response(session, ctx).await;
             }
 
             let jwt_cookie = secure_cookie::create_secure_cookie(&user, &jwt_secret, &ctx.host)?;
@@ -301,15 +306,13 @@ impl MiddlewarePlugin for Oauth2 {
                 "no-store, no-cache, must-revalidate, max-age=0",
             )?;
 
-            session
-                .write_response_header(Box::new(res_headers), true)
-                .await?;
+            respond(session, ctx, res_headers).await?;
 
             return Ok(true);
         }
 
         if self
-            .validate_cookie(session, &jwt_secret, validations)
+            .validate_cookie(session, ctx, &jwt_secret, validations)
             .await?
         {
             // If the user is not authorized, return true to
@@ -317,7 +320,7 @@ impl MiddlewarePlugin for Oauth2 {
             return Ok(false);
         }
 
-        self.redirect_to_oauth_callback(session, &oauth_provider)
+        self.redirect_to_oauth_callback(session, ctx, &oauth_provider)
             .await
     }
 

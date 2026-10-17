@@ -6,7 +6,10 @@ use bytes::Bytes;
 use http::{header, StatusCode};
 use pingora::{http::ResponseHeader, proxy::Session, ErrorType::HTTPStatus};
 
-use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
+use crate::{
+    config::RoutePlugin,
+    proxy_server::{https_proxy::RouterContext, respond::respond},
+};
 
 use super::Middleware;
 
@@ -34,7 +37,7 @@ impl BodyLimit {
 
 #[async_trait]
 impl Middleware for BodyLimit {
-    async fn request(&self, session: &mut Session, _ctx: &mut RouterContext) -> Result<bool> {
+    async fn request(&self, session: &mut Session, ctx: &mut RouterContext) -> Result<bool> {
         let content_length = session
             .req_header()
             .headers
@@ -49,9 +52,7 @@ impl Middleware for BodyLimit {
         response.insert_header(header::CONTENT_LENGTH, "0")?;
         response.insert_header(header::CONNECTION, "close")?;
         session.set_keepalive(None);
-        session
-            .write_response_header(Box::new(response), true)
-            .await?;
+        respond(session, ctx, response).await?;
         Ok(true)
     }
 

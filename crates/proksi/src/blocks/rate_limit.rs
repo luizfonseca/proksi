@@ -8,7 +8,10 @@ use http::{header, StatusCode};
 use pingora::{http::ResponseHeader, proxy::Session};
 use pingora_limits::rate::Rate;
 
-use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
+use crate::{
+    config::RoutePlugin,
+    proxy_server::{https_proxy::RouterContext, respond::respond},
+};
 
 use super::Middleware;
 
@@ -51,7 +54,7 @@ impl RateLimit {
 
 #[async_trait]
 impl Middleware for RateLimit {
-    async fn request(&self, session: &mut Session, _ctx: &mut RouterContext) -> Result<bool> {
+    async fn request(&self, session: &mut Session, ctx: &mut RouterContext) -> Result<bool> {
         let Some(peer) = session
             .client_addr()
             .and_then(|addr| addr.as_inet())
@@ -72,9 +75,7 @@ impl Middleware for RateLimit {
         let mut response = ResponseHeader::build_no_case(StatusCode::TOO_MANY_REQUESTS, Some(1))?;
         response.insert_header(header::RETRY_AFTER, self.per.as_secs().to_string())?;
         response.insert_header(header::CONTENT_LENGTH, "0")?;
-        session
-            .write_response_header(Box::new(response), true)
-            .await?;
+        respond(session, ctx, response).await?;
         Ok(true)
     }
 }
