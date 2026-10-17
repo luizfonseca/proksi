@@ -22,7 +22,10 @@ use tokio::{
     net::TcpStream,
 };
 
-use crate::{metrics::TcpMetrics, proxy_server::cert_store::ServerName};
+use crate::{
+    metrics::TcpMetrics, proxy_server::cert_store::ServerName,
+    routing::build::select_or_resolve,
+};
 
 use super::{choose, TcpTarget};
 
@@ -116,15 +119,11 @@ impl TcpProxy {
         target: &TcpTarget,
         forwarded: &mut Forwarded,
     ) -> Result<(), String> {
-        let addr = target
-            .load_balancer
-            .select(b"", 32)
+        let addr = select_or_resolve(&target.load_balancer)
+            .await
             .and_then(|backend| backend.addr.as_inet().copied())
             .ok_or_else(|| {
                 tracing::warn!("{}: no healthy upstream", target.label);
-                // A name without addresses may resolve again (ADR 0006)
-                let load_balancer = target.load_balancer.clone();
-                tokio::spawn(async move { load_balancer.update().await });
                 "no healthy upstream".to_string()
             })?;
         forwarded.upstream = Some(addr);

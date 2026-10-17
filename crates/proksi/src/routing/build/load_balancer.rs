@@ -25,6 +25,9 @@ use crate::config::RouteUpstream;
 /// Names are never resolved more often than this, however many connections fail
 pub const MIN_RESOLVE_INTERVAL: Duration = Duration::from_secs(1);
 
+/// Or than this when no upstream has an address, while requests wait for one
+pub const EMPTY_RESOLVE_INTERVAL: Duration = Duration::from_millis(100);
+
 /// How long a lookup can take before its last addresses are kept
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -61,6 +64,17 @@ pub fn load_balancer_with(upstreams: &[RouteUpstream], lookup: Lookup) -> LoadBa
         let _ = update.poll(&mut Context::from_waker(Waker::noop()));
     }
     load_balancer
+}
+
+/// An upstream to send a request or connection to. Without any, the upstreams' names are resolved
+/// again first: a container being replaced may be up by now (ADR 0006).
+pub async fn select_or_resolve(load_balancer: &LoadBalancer<RoundRobin>) -> Option<Backend> {
+    if let Some(backend) = load_balancer.select(b"", 32) {
+        return Some(backend);
+    }
+    // Resolved at most every `EMPTY_RESOLVE_INTERVAL`: requests in between don't wait
+    let _ = load_balancer.update().await;
+    load_balancer.select(b"", 32)
 }
 
 /// Resolves `name` with the system's resolver (`getaddrinfo`, as `ToSocketAddrs` does), telling
@@ -142,9 +156,14 @@ impl Resolver {
 
     /// Resolves the names again, unless they were just resolved
     async fn resolve(&self) {
+        let interval = if self.backends().is_empty() {
+            EMPTY_RESOLVE_INTERVAL
+        } else {
+            MIN_RESOLVE_INTERVAL
+        };
         {
             let mut resolved_at = self.resolved_at.lock().unwrap_or_else(PoisonError::into_inner);
-            if resolved_at.elapsed() < MIN_RESOLVE_INTERVAL {
+            if resolved_at.elapsed() < interval {
                 return;
             }
             *resolved_at = Instant::now();
@@ -366,6 +385,35 @@ mod tests {
         load_balancer.update().await.unwrap();
 
         assert_eq!(addresses(&load_balancer), vec![("10.0.0.4:8080".to_string(), Some(0))]);
+    }
+
+    #[tokio::test]
+    async fn test_names_without_addresses_are_resolved_again_sooner() {
+        let dns = Dns::default();
+        let load_balancer = load_balancer_with(&[upstream("app", 8080)], dns.lookup());
+
+        // The new container is up: requests waiting for it get it in a moment
+        dns.answer("app", &["10.0.0.5"]);
+        tokio::time::sleep(super::EMPTY_RESOLVE_INTERVAL).await;
+        load_balancer.update().await.unwrap();
+
+        assert_eq!(addresses(&load_balancer), vec![("10.0.0.5:8080".to_string(), Some(0))]);
+    }
+
+    #[tokio::test]
+    async fn test_requests_without_an_upstream_wait_for_names_to_resolve_again() {
+        let dns = Dns::default();
+        let load_balancer = load_balancer_with(&[upstream("app", 8080)], dns.lookup());
+        assert!(super::select_or_resolve(&load_balancer).await.is_none());
+
+        dns.answer("app", &["10.0.0.5"]);
+        tokio::time::sleep(super::EMPTY_RESOLVE_INTERVAL).await;
+        let selected = super::select_or_resolve(&load_balancer).await;
+
+        assert_eq!(
+            selected.map(|backend| backend.addr.to_string()).as_deref(),
+            Some("10.0.0.5:8080")
+        );
     }
 
     #[tokio::test]
