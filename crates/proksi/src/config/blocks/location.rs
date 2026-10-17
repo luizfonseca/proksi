@@ -6,7 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    host::{Location, LocationTimeouts},
+    host::{Location, LocationTimeouts, PathRewrite},
     RouteCache, RoutePlugin,
 };
 
@@ -32,6 +32,7 @@ pub struct LocationBlock {
     pub rate_limit: Option<PluginConfig>,
     pub body_limit: Option<PluginConfig>,
     pub timeouts: Option<LocationTimeouts>,
+    pub rewrite: Option<PathRewrite>,
 }
 
 impl LocationBlock {
@@ -55,6 +56,13 @@ impl LocationBlock {
             headers: Some(response_headers([host_headers, self.headers.as_ref()])),
             plugins: Some(self.plugins()),
             cache: self.cache.clone(),
+            rewrite: match &self.rewrite {
+                Some(rewrite) => {
+                    rewrite.validate()?;
+                    Some(rewrite.clone())
+                }
+                None => None,
+            },
             timeouts: match self.timeouts {
                 Some(timeouts) => Some(timeouts.or(host_timeouts)),
                 None => host_timeouts,

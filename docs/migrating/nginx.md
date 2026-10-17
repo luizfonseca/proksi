@@ -81,7 +81,7 @@ Mind the defaults that differ:
 
 - **Body size**: nginx refuses bodies over 1 MB unless `client_max_body_size` says otherwise. Proksi has no limit unless a location has a `body_limit`.
 - **Locations** match their path and everything below it: `location "/api"` serves `/api` and `/api/users`, but not `/apis` (nginx's `location /api` serves `/apis` too). The most specific location wins. The `=`, `~`, `~*` and `^~` modifiers and regular expressions aren't supported.
-- **`proxy_pass` with a path** (`proxy_pass http://app/v2/;`) replaces the matched prefix; Proksi always forwards the path unchanged.
+- **`proxy_pass` with a path** (`location /api/ { proxy_pass http://app/v2/; }`) replaces the matched prefix; in Proksi, that's [`rewrite`](routing/upstreams.md#rewriting-paths) with `strip_prefix = "/api"` and `add_prefix = "/v2"`. Without it, the path is forwarded unchanged.
 
 ## Directives
 
@@ -101,7 +101,8 @@ Mind the defaults that differ:
 | `stub_status` | The [admin API](configuration/admin.md): Prometheus metrics and live stats |
 | `max_fails`, `fail_timeout` | Health checks: a TCP connection to each upstream every 15 seconds |
 | `least_conn`, `ip_hash`, `hash` | Not available (weighted round robin only) |
-| `root`, `try_files`, `return`, `rewrite`, `gzip`, `allow`/`deny` | Not available: Proksi only proxies |
+| `rewrite ^/api/(.*)$ /$1 break;` (prefixes) | [`rewrite`](routing/upstreams.md#rewriting-paths) `{ strip_prefix, add_prefix }` |
+| `root`, `try_files`, `return`, regular expression `rewrite`s, `gzip`, `allow`/`deny` | Not available: Proksi only proxies |
 
 ## TCP (`stream`)
 
@@ -147,6 +148,7 @@ ingress-nginx has been retired by the Kubernetes project. Proksi serves the same
 | `configuration-snippet` (`more_set_headers`) | `headers { response { add = { ... } } }` in `proksi.ingress/blocks` |
 | `proxy-read-timeout`, `proxy-send-timeout` | `timeouts { read_secs, write_secs }` in `proksi.ingress/blocks` |
 | `service-upstream` | `proksi.ingress/upstream: service` |
-| `rewrite-target`, `backend-protocol`, `affinity`, `whitelist-source-range` | Not available |
+| `rewrite-target` (removing the path's prefix, e.g. `/api(/\|$)(.*)` to `/$2`) | `rewrite { strip_prefix = "/api" }` in `proksi.ingress/blocks` (fixed prefixes, no capture groups) |
+| `backend-protocol`, `affinity`, `whitelist-source-range` | Not available |
 
 cert-manager works as before, including HTTP-01 challenges (set the solver's class to `proksi`, see [cert-manager](installation/kubernetes.md#cert-manager)).

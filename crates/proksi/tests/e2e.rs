@@ -2148,3 +2148,48 @@ tcp "gone" {
     assert!(matches!(read, Ok(Ok(0) | Err(_))), "{read:?}");
     assert!(started.elapsed() < std::time::Duration::from_secs(3), "{:?}", started.elapsed());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_locations_rewrite_the_path_sent_to_upstreams() {
+    let mut proksi = Harness::start_with(
+        vec![],
+        r#"
+host "rewrite.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+  location "/api" {
+    rewrite {
+      strip_prefix = "/api"
+      add_prefix   = "/v2"
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+  location "/static" {
+    rewrite {
+      strip_prefix = "/static"
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#,
+    )
+    .await;
+    proksi.resolve("rewrite.test");
+    proksi.wait_for("rewrite.test", "/api", 200).await;
+
+    for (path, upstream_path) in [
+        ("/api/users?page=2", "/v2/users?page=2"),
+        ("/api", "/v2"),
+        ("/static/app.css", "/app.css"),
+        ("/static", "/"),
+        ("/static/?v=1", "/?v=1"),
+    ] {
+        let res = proksi.get("rewrite.test", path).await.unwrap();
+        assert_eq!(res.status, 200, "{path}");
+        assert_eq!(res.upstream_request()["path"], upstream_path, "{path}");
+    }
+}

@@ -8,7 +8,7 @@ mod from_route;
 mod location;
 mod upstream_address;
 
-pub use location::{Location, LocationTimeouts};
+pub use location::{Location, LocationTimeouts, PathRewrite};
 pub use upstream_address::parse_upstream_address;
 
 /// A host: its name, TLS settings and the locations serving its requests

@@ -82,7 +82,8 @@ host "app.example.com" {
 | `log` | JSON access logs on stdout (see [Logging](configuration/logging.md)) |
 | Timeouts (`servers { timeouts { ... } }`) | `server.timeouts` (`idle_secs`, `read_secs`, `write_secs`) |
 | `grace_period` | `server.shutdown_timeout_secs` |
-| `handle_path`, `uri strip_prefix`, `rewrite`, `redir` | Not available: requests are forwarded with their path unchanged |
+| `handle_path /api/*`, `uri strip_prefix`, `uri prefix` | `location "/api"` with [`rewrite`](routing/upstreams.md#rewriting-paths) `{ strip_prefix, add_prefix }` |
+| `rewrite`, `uri replace`, `redir` | Not available |
 | `encode`, `file_server`, `php_fastcgi`, `templates`, `respond` | Not available: Proksi only proxies |
 | On-demand TLS, wildcard sites (`*.example.com`), DNS challenges | Not available |
 

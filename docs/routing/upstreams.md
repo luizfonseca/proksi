@@ -29,6 +29,36 @@ An upstream can be a name instead of an address (`app:3000`, `api.example.com:44
 - Names are resolved again every 5 seconds, and right away when connecting to one of their addresses fails, so a recreated container or a moved service is followed without restarting Proksi.
 - When a lookup fails (the resolver doesn't answer), the last addresses are kept. A name that doesn't exist (a container that isn't up yet, or was removed) has no addresses: requests get a `503` right away, and the name is resolved again, so a new container is followed within a second of being up.
 
+## Rewriting paths
+
+Requests are forwarded with their path unchanged. A location can change the path its upstreams receive, for an app served under a prefix it doesn't know about, or one that expects another prefix:
+
+```hcl
+host "example.com" {
+  # /api/users?page=2 is sent as /users?page=2
+  location "/api" {
+    rewrite {
+      strip_prefix = "/api"
+    }
+    upstream "api:8080" {}
+  }
+
+  # /legacy/orders is sent as /v2/orders
+  location "/legacy" {
+    rewrite {
+      strip_prefix = "/legacy"
+      add_prefix   = "/v2"
+    }
+    upstream "app:8080" {}
+  }
+}
+```
+
+- `strip_prefix` is removed from the start of the path, only at a segment boundary: `/api` is removed from `/api` and `/api/users`, not from `/apis`. Stripping the whole path leaves `/`.
+- `add_prefix` is added to the start of the path, after `strip_prefix`.
+- The query string is kept. Access logs show the path the client asked for.
+- Prefixes are fixed paths; regular expressions aren't supported.
+
 ## Health checks
 
 Every upstream is checked in the background (a TCP connection every 15 seconds). Upstreams that fail the check stop receiving requests until they are healthy again. If none of the upstreams of a location are healthy, the request gets a `503`.
