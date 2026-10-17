@@ -49,6 +49,7 @@ impl Host {
                     plugins: route.plugins.clone(),
                     cache: route.cache.clone(),
                     timeouts: None,
+                    rewrite: None,
                 })
                 .collect(),
         }

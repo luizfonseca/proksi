@@ -25,6 +25,7 @@ pub(super) fn build_location_container(
     container.set_upstreams(location.upstreams.clone());
     container.cache.clone_from(&location.cache);
     container.timeouts = location.timeouts;
+    container.rewrite.clone_from(&location.rewrite);
     let upstreams = location
         .upstreams
         .iter()

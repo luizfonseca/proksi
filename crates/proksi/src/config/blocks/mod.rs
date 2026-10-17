@@ -199,6 +199,7 @@ host:
                     }]),
                     cache: None,
                     timeouts: None,
+                    rewrite: None,
                 },
                 Location {
                     path: "/v1/session".to_string(),
@@ -215,6 +216,7 @@ host:
                     plugins: Some(vec![]),
                     cache: None,
                     timeouts: None,
+                    rewrite: None,
                 },
             ],
         }

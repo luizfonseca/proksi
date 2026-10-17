@@ -133,6 +133,7 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
                 plugins: blocks.as_ref().and_then(|blocks| blocks.plugins.clone()),
                 cache: blocks.as_ref().and_then(|blocks| blocks.cache.clone()),
                 timeouts: blocks.as_ref().and_then(|blocks| blocks.timeouts),
+                rewrite: blocks.as_ref().and_then(|blocks| blocks.rewrite.clone()),
             };
             locations.insert((path, exact), (location, id.clone()));
         }

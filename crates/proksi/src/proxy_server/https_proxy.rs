@@ -344,6 +344,15 @@ impl ProxyHttp for Router {
         }
 
         if let Some(location) = ctx.route_container.clone() {
+            // The location's path rewrite
+            if let Some(rewrite) = &location.rewrite {
+                let uri = &upstream_request.uri;
+                let rewritten = rewrite.apply(uri.path(), uri.query());
+                if let Ok(uri) = rewritten.parse::<http::Uri>() {
+                    upstream_request.set_uri(uri);
+                }
+            }
+
             location
                 .blocks
                 .upstream_request(session, upstream_request, ctx)
