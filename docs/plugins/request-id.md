@@ -1,14 +1,8 @@
----
-description: >-
-  Adds a `x-request-id` header to every response to downstream (client) and
-  upstream (your website)
----
-
 # Request ID
 
 In order to enable a particular route to include `x-request-id`, you can do the following:
 
-{% code title="proksi.hcl" lineNumbers="true" %}
+**proksi.hcl**
 ```hcl
 lets_encrypt {
   enabled = true
@@ -22,4 +16,3 @@ host "mywebsite.com" {
   }
 }
 ```
-{% endcode %}

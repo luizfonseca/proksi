@@ -1,22 +1,21 @@
 # Docker swarm
 
-Proksi can be used in conjunction with Docker to automatically discover **services** and route traffic to them.&#x20;
+Proksi can be used in conjunction with Docker to automatically discover **services** and route traffic to them.
 
 To enable this, you need to add labels to your Docker **services** (_swarm_ or not). The following labels are supported:
 
 ```yaml
 # docker-compose.yml
-version: 3.8
 services:
   my_service:
     image: your-service:latest
-    ports:
-      - "3000:3000"
     deploy:
+      # Swarm services: labels of the service (`deploy.labels`).
+      # Containers (docker.mode = "container"): `labels` of the container.
       labels:
         # Whether the service should be proxied or not.
         # By default, Proksi won't discover any services where the value is not explicitly `true`
-        proksi.enable: "true"
+        proksi.enabled: "true"
 
         # The hostname that the service should be available at. E.g. `example.com`.
         proksi.host: "example.com"
@@ -24,21 +23,24 @@ services:
         # The port that your service is running on. E.g. `3000`.
         proksi.port: "3000"
 
-        # (Optional) The path prefix that the service should be available at.
-        # E.g. `/api` will match only requests with "example.com/api*" to this service.
-        proksi.path.prefix: "/api"
+        # (Optional) Only requests matching these path patterns go to the service
+        # (as `location` paths: `/api/*`, `/users/:id`). Any suffix after `pattern.` works.
+        proksi.match_with.path.pattern.api: "/api/*"
 
-        # (Optional) The suffix that the service will use to handle requests.
-        # E.g. `.json` will match only requests with "example.com/*.json"
-        proksi.path.suffix: ".json"
+        # (Optional) Headers to add to responses, as JSON
+        proksi.headers.add: '[{"name": "X-Api-Version", "value": "1.0"}]'
 
-        # (Optional) A dictionary of Headers to add to the response at the end of proxying
-        proksi.headers.add: |
-          [
-            {name="X-Forwarded-For", value="my-api"},
-            {name="X-Api-Version", value="1.0\"}
-          ]
-
-        # A list of comma-separated headers to remove from the response at the end of proxying.
-        proksi.headers.remove: "Server,X-User-Id"
+        # (Optional) Headers to remove from responses, as JSON
+        proksi.headers.remove: '[{"name": "Server"}, {"name": "X-User-Id"}]'
 ```
+
+Other labels (the plugin labels are read for swarm services only):
+
+| Label | |
+| --- | --- |
+| `proksi.ssl_certificate.self_signed_on_failure` | `"true"`: a self-signed certificate when Let's Encrypt can't issue one |
+| `proksi.plugins.request_id.enabled` | `"true"`: the [request ID](plugins/request-id.md) plugin |
+| `proksi.plugins.basic_auth.user`, `proksi.plugins.basic_auth.password` | [Basic auth](plugins/basic-auth.md) |
+| `proksi.plugins.oauth2.provider`, `.client_id`, `.client_secret`, `.jwt_secret`, `.validations` (JSON) | [OAuth2](plugins/oauth2.md) |
+
+Services or containers with the same `proksi.host` are load balanced as upstreams of one host. Swarm services are reached through Docker's DNS (`tasks.<service>`), followed as their tasks change (see [Upstreams](routing/upstreams.md#names)); containers by their address, updated every `docker.interval_secs`.

@@ -1,10 +1,6 @@
----
-description: Use SQLite or Postgres to store certificates and routes.
----
-
 # SQLite / Postgres
 
-Like [Redis](redis.md), SQLite and Postgres can store certificates, ACME challenges and routes, shared by every Proksi instance using the same database.
+Like [Redis](configuration/redis.md), SQLite and Postgres can store certificates, ACME challenges and routes, shared by every Proksi instance using the same database.
 
 These stores are optional and need Proksi to be built with the `store-sqlite` and/or `store-postgres` cargo features:
 
@@ -14,7 +10,7 @@ cargo install proksi --features store-sqlite,store-postgres
 
 ## Configuration
 
-{% code title="proksi.hcl" lineNumbers="true" %}
+**proksi.hcl**
 ```hcl
 store {
   store_type = "postgres" # or "sqlite"
@@ -25,7 +21,6 @@ store {
   sync_interval_secs = 10
 }
 ```
-{% endcode %}
 
 Proksi creates (and updates) its tables on startup. For SQLite, `?mode=rwc` creates the database file if it doesn't exist.
 
@@ -52,4 +47,4 @@ Each instance reports the revision it applied in `proksi_replicas`. As with Redi
 
 Let's Encrypt data (account, certificates and challenges) is stored in the database too, so all instances share the same account.
 
-As with [Redis](redis.md#certificates-with-several-instances), instances order each certificate once (through a lease in `proksi_locks`), and a certificate written by one instance reaches the others within `sync_interval_secs`.
+As with [Redis](configuration/redis.md#certificates-with-several-instances), instances order each certificate once (through a lease in `proksi_locks`), and a certificate written by one instance reaches the others within `sync_interval_secs`.

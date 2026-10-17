@@ -1,7 +1,3 @@
----
-description: Apply settings and new versions without dropping connections
----
-
 # Restarts and upgrades
 
 Hosts (`host` blocks, `routes`, docker labels, the store, Kubernetes) are applied while Proksi runs. Everything else (listening addresses, `server`, `logging`, `store`, ...) is read at startup, so changing it needs a new Proksi process. On Linux, that new process takes over without dropping a connection.

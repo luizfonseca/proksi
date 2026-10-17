@@ -1,7 +1,3 @@
----
-description: Limits how many requests each client can make
----
-
 # Rate Limit
 
 Limits the number of requests each client (by IP address) can make to a location in a period of time. Clients over the limit get a `429 Too Many Requests`, with a `Retry-After` header.
@@ -14,7 +10,7 @@ By default, `rate_limit` runs before any other block (priority `0`), so it also 
 
 ### Usage
 
-{% code title="proksi.hcl" overflow="wrap" lineNumbers="true" %}
+**proksi.hcl**
 ```hcl
 host "mywebsite.com" {
   # A stricter limit for the login page
@@ -37,7 +33,6 @@ host "mywebsite.com" {
   }
 }
 ```
-{% endcode %}
 
 ### Good to know
 

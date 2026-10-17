@@ -14,7 +14,7 @@ For a quick introduction, check the ASCII recording of a small configuration fil
 
 </div>
 
-**Proksi** is a **simple**, **lightweight**, and easy-to-use proxy server that automatically handles SSL, HTTP, and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in [Rust](https://www.rust-lang.org/) and uses [Cloudflare Pingora](https://blog.cloudflare.com/pingora-open-source) as its core networking library.
+**Proksi** is a **simple**, **lightweight**, and easy-to-use proxy server that proxies HTTP, HTTPS and TCP, with certificates handled for you (Let's Encrypt, your own files, or Kubernetes secrets). It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in [Rust](https://www.rust-lang.org/) and uses [Cloudflare Pingora](https://blog.cloudflare.com/pingora-open-source) as its core networking library.
 
 
 
@@ -53,8 +53,19 @@ paths {
 # The hosts Proksi should handle
 # You might need to edit your /etc/hosts file here.
 host "mysite.localhost" {
+  tls {
+    # Let's Encrypt can't issue certificates for localhost: use a self-signed one instead
+    self_signed_on_failure = true
+  }
+
   location "/" {
-    upstream "docs.proksi.info:443" {}
+    upstream "docs.proksi.info:443" {
+      # An external HTTPS service expects its own name, not mysite.localhost
+      sni = "docs.proksi.info"
+      headers {
+        add = { "Host" = "docs.proksi.info" }
+      }
+    }
   }
 }
 ```
@@ -79,9 +90,12 @@ proksi
 
 Of the many features **Proksi** offers is the ability to **load balance** to your infrastructure or **any IP** that supports your host configurations. Other features of **Proksi** also include:
 
-1. Automatic **Docker** and **Docker Swarm** service discovery through labels
+1. Automatic **Docker** and **Docker Swarm** service discovery through labels, and a **Kubernetes** ingress controller
 2. Built-in most common middlewares such as **OAuth**, **Rate Limiting**, **CDN** **Caching** and others
 3. The ability of running it as a single binary in your system
 4. Automatic **SSL** through **Let's Encrypt** and redirection from HTTP to HTTPS
-5. Configuration through **HCL with support for functions**&#x20;
-6. Many others.
+5. Configuration through **HCL with support for functions**
+6. **TCP** proxying, by port or by name (SNI), with TLS terminated or passed through
+7. An **admin API** with Prometheus metrics and live stats
+
+See [Features](general/features.md) for the full list.
