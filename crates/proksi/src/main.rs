@@ -49,6 +49,12 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
     clippy::complexity
 )]
 fn main() -> Result<(), anyhow::Error> {
+    // Transparent huge pages back mimalloc's memory with 2 MiB pages where the system enables
+    // them for every process (`always`, common on servers), more than doubling what a worker
+    // keeps. Turned off for this process and the workers it starts.
+    #[cfg(target_os = "linux")]
+    let _ = nix::sys::prctl::set_thp_disable(true);
+
     // Configuration can be refreshed on file change
     // Loads configuration from command-line, YAML or TOML sources
     let proxy_config = Arc::new(
