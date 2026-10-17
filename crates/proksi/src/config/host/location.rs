@@ -163,6 +163,8 @@ pub struct LocationTimeouts {
     pub read_secs: Option<u64>,
     /// How long each write of a response can wait for the client to read
     pub write_secs: Option<u64>,
+    /// Toward the location's upstreams
+    pub upstream: Option<UpstreamTimeouts>,
 }
 
 impl LocationTimeouts {
@@ -172,6 +174,42 @@ impl LocationTimeouts {
         Self {
             read_secs: self.read_secs.or(defaults.read_secs),
             write_secs: self.write_secs.or(defaults.write_secs),
+            upstream: match self.upstream {
+                Some(upstream) => Some(upstream.or(defaults.upstream)),
+                None => defaults.upstream,
+            },
+        }
+    }
+}
+
+/// Timeouts toward upstreams (`upstream { ... }` in `timeouts`), in seconds
+// Named like `server.timeouts`
+#[allow(clippy::struct_field_names)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpstreamTimeouts {
+    /// How long to wait for an upstream to accept a connection
+    pub connect_secs: Option<u64>,
+    /// How long the TLS handshake with an HTTPS upstream can take, after connecting
+    pub tls_secs: Option<u64>,
+    /// How long each read of a response can wait, including for its headers
+    pub read_secs: Option<u64>,
+    /// How long each write of a request can wait for the upstream to read
+    pub write_secs: Option<u64>,
+    /// How long a connection is kept open between requests, to be reused
+    pub idle_secs: Option<u64>,
+}
+
+impl UpstreamTimeouts {
+    /// These timeouts, with the ones they don't set taken from `defaults`
+    pub fn or(self, defaults: Option<Self>) -> Self {
+        let defaults = defaults.unwrap_or_default();
+        Self {
+            connect_secs: self.connect_secs.or(defaults.connect_secs),
+            tls_secs: self.tls_secs.or(defaults.tls_secs),
+            read_secs: self.read_secs.or(defaults.read_secs),
+            write_secs: self.write_secs.or(defaults.write_secs),
+            idle_secs: self.idle_secs.or(defaults.idle_secs),
         }
     }
 }

@@ -29,6 +29,9 @@ pub struct TcpRoute {
     /// How long connecting to an upstream can take
     #[serde(skip)]
     pub connect_timeout: std::time::Duration,
+    /// How long a connection can go without bytes either way (`None`: forever)
+    #[serde(skip)]
+    pub idle_timeout: Option<std::time::Duration>,
     pub upstreams: Vec<RouteUpstream>,
 }
 
@@ -152,6 +155,7 @@ host "plain.example.com" {
                     tls: TcpTls::None,
                     alpn: vec![],
                     connect_timeout: std::time::Duration::from_secs(5),
+                    idle_timeout: None,
                     upstreams: vec![
                         upstream("game-1", 7777, Some(2)),
                         upstream("game-2", 7777, None)
@@ -164,6 +168,7 @@ host "plain.example.com" {
                     tls: TcpTls::Terminate,
                     alpn: vec![],
                     connect_timeout: std::time::Duration::from_secs(5),
+                    idle_timeout: None,
                     upstreams: vec![upstream("db", 5432, None)],
                 },
                 TcpRoute {
@@ -173,6 +178,7 @@ host "plain.example.com" {
                     tls: TcpTls::Passthrough,
                     alpn: vec![],
                     connect_timeout: std::time::Duration::from_secs(5),
+                    idle_timeout: None,
                     upstreams: vec![upstream("tls-app", 443, None)],
                 },
                 TcpRoute {
@@ -182,6 +188,7 @@ host "plain.example.com" {
                     tls: TcpTls::None,
                     alpn: vec![],
                     connect_timeout: std::time::Duration::from_secs(5),
+                    idle_timeout: None,
                     upstreams: vec![upstream("redis", 6379, None)],
                 },
             ])

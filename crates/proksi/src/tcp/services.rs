@@ -44,6 +44,7 @@ pub fn tcp_targets(routes: &[TcpRoute]) -> Result<Arc<Vec<TcpTarget>>, anyhow::E
             tls: route.tls,
             alpn: route.alpn.clone(),
             connect_timeout: route.connect_timeout,
+            idle_timeout: route.idle_timeout,
             load_balancer: Arc::new(load_balancer),
             metrics: crate::metrics::enabled().then(|| TcpMetrics::new(&route.label())),
         });
