@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.11.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.10.0...proksi-v0.11.0) (2026-10-17)
+
+
+### Features
+
+* admin.metrics_listen, a listener serving only /metrics ([#445](https://github.com/luizfonseca/proksi/issues/445)) ([4d3355e](https://github.com/luizfonseca/proksi/commit/4d3355e1f4eff82ca6455c3ab6b9ea2802125708))
+* body_secs, a limit on how long a request body can take to arrive ([#443](https://github.com/luizfonseca/proksi/issues/443)) ([e8a42f1](https://github.com/luizfonseca/proksi/commit/e8a42f138308e254dcb7ffe6bda6f2a9eeac161a))
+* count tcp upstream errors and failed TLS handshakes ([#447](https://github.com/luizfonseca/proksi/issues/447)) ([aab93ec](https://github.com/luizfonseca/proksi/commit/aab93ece484a4463939f822481feffc1cc72f638))
+* proksi_responses_total, responses by status code ([#446](https://github.com/luizfonseca/proksi/issues/446)) ([d9db3a0](https://github.com/luizfonseca/proksi/commit/d9db3a02d6249b9fb6ee42317520687f6008f984))
+* server.tls sets the TLS versions and ciphers accepted, without DHE by default ([#444](https://github.com/luizfonseca/proksi/issues/444)) ([ab0c38d](https://github.com/luizfonseca/proksi/commit/ab0c38d7291e6460574966df80c66529e0bf59a2))
+
+
+### Bug Fixes
+
+* create the in-memory cache when it's first used ([#451](https://github.com/luizfonseca/proksi/issues/451)) ([263a27f](https://github.com/luizfonseca/proksi/commit/263a27f7ed3a013b2aea9b266d2c5b1c32b63978))
+* don't log clients giving up on TLS handshakes as errors ([#448](https://github.com/luizfonseca/proksi/issues/448)) ([d196958](https://github.com/luizfonseca/proksi/commit/d196958db04cbc3b282390d46690b1b8720201d3))
+* proksi's own responses get the configured headers, and no Server header ([#441](https://github.com/luizfonseca/proksi/issues/441)) ([20e3c3d](https://github.com/luizfonseca/proksi/commit/20e3c3d4a9b88ab7f8eaaa4164ccd11d006f286a))
+* start the supervisor before loading the configuration ([#450](https://github.com/luizfonseca/proksi/issues/450)) ([632ea55](https://github.com/luizfonseca/proksi/commit/632ea55bbeb03ada9f93a73d700a03d4871a7b94))
+* turn off transparent huge pages, which more than doubled memory ([#449](https://github.com/luizfonseca/proksi/issues/449)) ([058ab2f](https://github.com/luizfonseca/proksi/commit/058ab2fb3455d55074bc2ed210de42b4f80fc2f0))
+
 ## [0.10.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.9.0...proksi-v0.10.0) (2026-10-17)
 
 
