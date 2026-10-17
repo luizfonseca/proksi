@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
 use pingora::{
     server::{ListenFds, ShutdownWatch},
@@ -15,11 +17,27 @@ pub fn snapshot_channel() -> (SnapshotSender, Receiver<RouteSnapshot>) {
     tokio::sync::mpsc::channel(SNAPSHOT_QUEUE_CAPACITY)
 }
 
-/// Applies the snapshots of every source until all senders are dropped
+/// How often certificate files are checked for changes
+const CERTIFICATE_FILES_INTERVAL: Duration = Duration::from_secs(10);
+
+/// Applies the snapshots of every source until all senders are dropped, and reloads
+/// certificate files when they change
 pub async fn run_reconciler(mut receiver: Receiver<RouteSnapshot>) {
     let mut reconciler = Reconciler::new();
-    while let Some(snapshot) = receiver.recv().await {
-        reconciler.apply(snapshot).await;
+    let mut certificate_files = tokio::time::interval(CERTIFICATE_FILES_INTERVAL);
+    certificate_files.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        tokio::select! {
+            snapshot = receiver.recv() => match snapshot {
+                Some(snapshot) => {
+                    reconciler.apply(snapshot).await;
+                }
+                None => break,
+            },
+            _ = certificate_files.tick() => {
+                reconciler.reload_certificate_files().await;
+            }
+        }
     }
 }
 

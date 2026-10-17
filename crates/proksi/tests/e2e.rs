@@ -1655,3 +1655,53 @@ host "chain.test" {
     );
     proksi.assert_healthy();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_certificate_files_are_reloaded_when_they_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let (pem, key) = (dir.path().join("cert.pem"), dir.path().join("key.pem"));
+    let write = |name: &str| {
+        let (certificate, private) = harness::signed_certificate(name, None, false);
+        std::fs::write(&pem, certificate.to_pem().unwrap()).unwrap();
+        std::fs::write(&key, private.private_key_to_pem_pkcs8().unwrap()).unwrap();
+        certificate.to_pem().unwrap()
+    };
+    let first = write("files.test");
+
+    let config = format!(
+        r#"
+host "files.test" {{
+  tls {{
+    certificate {{
+      pem = "{}"
+      key = "{}"
+    }}
+  }}
+  location "/" {{
+    upstream "127.0.0.1:{{http_upstream_port}}" {{}}
+  }}
+}}
+"#,
+        pem.display(),
+        key.display()
+    );
+    let mut proksi = Harness::start_with(vec![], &config).await;
+    proksi.resolve("files.test");
+    proksi.wait_for("files.test", "/", 200).await;
+    let served = proksi.served_certificate(proksi.https_port, "files.test").await;
+    assert_eq!(served.to_pem().unwrap(), first);
+
+    // Renewed by another tool, without touching the configuration
+    let renewed = write("files.test");
+    let mut reloaded = false;
+    for _ in 0..30 {
+        let served = proksi.served_certificate(proksi.https_port, "files.test").await;
+        if served.to_pem().unwrap() == renewed {
+            reloaded = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    assert!(reloaded, "the renewed certificate wasn't served");
+    proksi.assert_healthy();
+}
