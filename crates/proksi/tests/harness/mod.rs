@@ -510,6 +510,20 @@ paths {{
         .unwrap()
     }
 
+    /// The certificate proksi serves on `port` for `server_name`
+    pub async fn served_certificate(&self, port: u16, server_name: &str) -> X509 {
+        let server_name = server_name.to_string();
+        tokio::task::spawn_blocking(move || {
+            let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
+            connector.set_verify(openssl::ssl::SslVerifyMode::NONE);
+            let stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            let stream = connector.build().connect(&server_name, stream).unwrap();
+            stream.ssl().peer_certificate().unwrap()
+        })
+        .await
+        .unwrap()
+    }
+
     /// Starts HTTP/2 over TLS (ALPN `h2`) with proksi on `port`, asking for `server_name`,
     /// returning the header of the first frame proksi sends back
     pub async fn h2_first_frame(&self, port: u16, server_name: &str) -> std::io::Result<[u8; 9]> {
@@ -960,7 +974,7 @@ fn write_certificate_chain(dir: &Path) {
 }
 
 /// A certificate for `name`, signed by `issuer` (self-signed without one)
-fn signed_certificate(
+pub fn signed_certificate(
     name: &str,
     issuer: Option<&(X509, PKey<Private>)>,
     ca: bool,
