@@ -1890,3 +1890,44 @@ host "plain.test" {
     let mut upload = slow_body("/upload").await;
     assert!(!closed_within(&mut upload, std::time::Duration::from_secs(3)).await);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_acme_challenge_locations_are_proxied_on_the_http_port() {
+    // As cert-manager's HTTP-01 solver adds one for a host with TLS
+    let proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        r#"
+host "solver.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+  location "/.well-known/acme-challenge/token-123" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#,
+    )
+    .await;
+
+    let res = proksi
+        .get_http_port("solver.test", "/.well-known/acme-challenge/token-123")
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.contains("\"path\":\"/.well-known/acme-challenge/token-123\""), "{res}");
+
+    // Other challenges are proksi's own (none here), other paths redirected to HTTPS
+    let res = proksi
+        .get_http_port("solver.test", "/.well-known/acme-challenge/other")
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 404"), "{res}");
+    let res = proksi.get_http_port("solver.test", "/page").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 308"), "{res}");
+}
