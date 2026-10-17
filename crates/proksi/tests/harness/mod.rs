@@ -157,6 +157,15 @@ impl Harness {
         Self::start_inner(routes, server_config, extra_config, false).await
     }
 
+    /// Like `start_with_server` without routes, checking readiness on the HTTP port: for HTTPS
+    /// settings the harness' client can't connect with (e.g. TLS 1.3 only, on macOS)
+    pub async fn start_with_server_ready_over_http(
+        server_config: &str,
+        extra_config: &str,
+    ) -> Self {
+        Self::start_inner(vec![], server_config, extra_config, true).await
+    }
+
     async fn start_inner(
         routes: Vec<Route>,
         server_config: &str,

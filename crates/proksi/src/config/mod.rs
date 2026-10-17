@@ -21,6 +21,7 @@ pub(crate) mod hcl;
 pub mod host;
 pub mod kubernetes;
 pub mod listeners;
+pub mod server_tls;
 pub mod tcp;
 pub mod validate;
 
@@ -598,6 +599,11 @@ pub struct ServerCfg {
     #[arg(skip)]
     #[serde(default)]
     pub timeouts: ClientTimeouts,
+
+    /// TLS versions and cipher suites accepted from clients
+    #[arg(skip)]
+    #[serde(default)]
+    pub tls: server_tls::ServerTls,
 }
 
 impl ServerCfg {
@@ -779,6 +785,7 @@ impl Default for Config {
                 http_address: Some(Cow::Borrowed("0.0.0.0:80")),
                 trusted_proxies: vec![],
                 timeouts: ClientTimeouts::default(),
+                tls: server_tls::ServerTls::default(),
                 shutdown_timeout_secs: None,
             },
             worker_threads: Some(default_worker_threads()),

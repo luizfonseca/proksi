@@ -238,6 +238,26 @@ The values above are the defaults. An upstream that doesn't connect or answer in
 
 `tcp` blocks have their own: `connect_timeout_secs` and `idle_timeout_secs` (see [TCP](routing/tcp.md)).
 
+### TLS versions and ciphers
+
+Clients connect with TLS 1.2 or 1.3. TLS 1.2 is limited to forward-secret cipher suites (ECDHE) with AES-GCM or ChaCha20, as in Mozilla's "intermediate" configuration; older ones, such as DHE, CBC or RSA key exchange, are refused. `server.tls` changes them for HTTPS and for `tcp` blocks that terminate TLS:
+
+```hcl
+server {
+  tls {
+    min_version = "1.3" # "1.2" by default
+
+    # TLS 1.2 suites, by their OpenSSL names, in order of preference
+    ciphers = [
+      "ECDHE-ECDSA-AES256-GCM-SHA384",
+      "ECDHE-RSA-AES256-GCM-SHA384",
+    ]
+  }
+}
+```
+
+TLS 1.3 suites are always the standard ones, all of them strong. A cipher OpenSSL doesn't know makes the configuration invalid.
+
 ## Migrating from `routes = [...]`
 
 `routes = [...]` still works, but is deprecated and logs a warning. Each route corresponds to a host:

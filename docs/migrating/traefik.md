@@ -145,6 +145,7 @@ TLS is terminated with the host's certificate; `tls = "passthrough"` forwards it
 - **Access logs** are JSON by default, one line per request and per TCP connection.
 - **Client IP**: upstreams get `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host` and `X-Real-IP`. Behind another proxy, list it in `server.trusted_proxies`.
 - **Timeouts**: `server.timeouts` (`idle_secs`, `read_secs`, `write_secs`, 60 each by default), and per host or location `read_secs`/`write_secs`, instead of `respondingTimeouts`. Toward upstreams, `timeouts { upstream { connect_secs, read_secs, ... } }` in the server, a host or a location, instead of `forwardingTimeouts` (see [Timeouts](configuration/hcl/README.md#timeouts)).
+- **TLS options**: `server.tls { min_version, ciphers }` for every host, instead of `tls.options` (`minVersion`, `cipherSuites`). The defaults refuse DHE, as Traefik's do (see [TLS versions and ciphers](configuration/hcl/README.md#tls-versions-and-ciphers)).
 - **Stopping**: open connections get `server.shutdown_timeout_secs` (30) to finish, instead of `lifeCycle.graceTimeOut`. On Linux, settings changes take effect without dropping connections (see [Restarts and upgrades](configuration/upgrades.md)).
 - **Health checks** are TCP connections to each upstream, every 15 seconds by default (`health_check { interval_secs, enabled }`); there are no HTTP health check paths.
 - **Not available**: DNS-01 challenges, wildcard hosts (`*.example.com`), sticky sessions, HTTP/3.
