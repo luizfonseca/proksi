@@ -4,7 +4,7 @@
 use ::pingora::{server::Server, services::ServiceHandle};
 
 use clap::crate_version;
-use config::{load, LogFormat};
+use config::{load, LogFormat, LogLevel};
 use stores::{global::init_store, MemoryStore};
 use tracing_subscriber::EnvFilter;
 
@@ -268,19 +268,29 @@ fn add_listeners(
 
 /// Creates the tracing/logging subscriber based on the configuration provided
 fn init_tracing(proxy_config: &config::Config, appender: services::logger::ProxyLog) {
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+    let level = &proxy_config.logging.level;
+    let handshake_errors = services::logger::handshake_error_filter::HandshakeErrorFilter {
+        debug: matches!(level, LogLevel::Debug | LogLevel::Trace),
+    };
     if proxy_config.logging.format == LogFormat::Json {
         tracing_subscriber::fmt()
             .json()
             .with_env_filter(EnvFilter::from_default_env())
-            .with_max_level(&proxy_config.logging.level)
+            .with_max_level(level)
             .with_writer(appender)
+            .finish()
+            .with(handshake_errors)
             .init();
     } else {
         tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::from_default_env())
-            .with_max_level(&proxy_config.logging.level)
+            .with_max_level(level)
             .with_ansi(proxy_config.logging.path.is_none())
             .with_writer(appender)
+            .finish()
+            .with(handshake_errors)
             .init();
     }
 }
