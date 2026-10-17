@@ -27,7 +27,7 @@ An upstream can be a name instead of an address (`app:3000`, `api.example.com:44
 
 - Every address of a name is an upstream of its own, with the same settings, load balanced and health checked like the others.
 - Names are resolved again every 5 seconds, and right away when connecting to one of their addresses fails, so a recreated container or a moved service is followed without restarting Proksi.
-- When a lookup fails (the resolver doesn't answer), the last addresses are kept. A name that doesn't exist (a container that isn't up yet, or was removed) has no addresses: requests get a `503` right away, and the name is resolved again, so a new container is followed within a second of being up.
+- When a lookup fails (the resolver doesn't answer), the last addresses are kept. A name that doesn't exist (a container that isn't up yet, or was removed) has no addresses: requests get a `503` right away. A request that finds no upstream resolves the name again first (at most every 100 milliseconds), so a new container gets requests as soon as it's up.
 
 ## Rewriting paths
 

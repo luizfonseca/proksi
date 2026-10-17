@@ -19,6 +19,7 @@ use pingora_cache::{
 };
 
 use crate::config::RouteUpstream;
+use crate::routing::build::select_or_resolve;
 use crate::metrics::{LocationMetrics, UpstreamMetrics};
 use crate::stores::{self, routes::RouteStoreContainer};
 
@@ -220,10 +221,9 @@ impl ProxyHttp for Router {
             session.cache.set_max_file_size_bytes(100 * 1024 * 1024);
         }
 
-        let Some(healthy_upstream) = route_container.load_balancer.select(b"", 32) else {
-            // A name without addresses may resolve again (ADR 0006)
-            let load_balancer = route_container.load_balancer.clone();
-            tokio::spawn(async move { load_balancer.update().await });
+        let Some(healthy_upstream) =
+            select_or_resolve(&route_container.load_balancer).await
+        else {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
 
