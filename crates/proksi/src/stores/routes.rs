@@ -4,7 +4,7 @@ use pingora::lb::{discovery::Static, selection::RoundRobin, Backend, Backends, L
 
 use crate::{
     blocks::Blocks,
-    config::{RouteCache, RouteUpstream},
+    config::{host::LocationTimeouts, RouteCache, RouteUpstream},
     metrics::LocationMetrics,
     routing::build::upstream_index,
 };
@@ -24,6 +24,9 @@ pub struct RouteStoreContainer {
 
     pub cache: Option<RouteCache>,
 
+    /// Timeouts of the location's requests, instead of `server.timeouts`
+    pub timeouts: Option<LocationTimeouts>,
+
     /// Requests and upstreams of this location (ADR 0004)
     pub metrics: Option<LocationMetrics>,
 }
@@ -38,6 +41,7 @@ impl Default for RouteStoreContainer {
             blocks: Blocks::default(),
             upstreams: Vec::new(),
             cache: None,
+            timeouts: None,
             metrics: None,
         }
     }
@@ -51,6 +55,7 @@ impl RouteStoreContainer {
             blocks: Blocks::default(),
             upstreams: Vec::with_capacity(5),
             cache: None,
+            timeouts: None,
             metrics: None,
         }
     }

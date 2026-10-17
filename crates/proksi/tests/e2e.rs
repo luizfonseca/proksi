@@ -1769,3 +1769,124 @@ host "files.test" {{
     assert!(reloaded, "the renewed certificate wasn't served");
     proksi.assert_healthy();
 }
+
+const PLAIN_HOST: &str = r#"
+host "plain.test" {
+  tls = false
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+/// Whether proksi closes `stream` within `timeout`
+async fn closed_within(stream: &mut tokio::net::TcpStream, timeout: std::time::Duration) -> bool {
+    use tokio::io::AsyncReadExt;
+    let mut buf = [0u8; 4096];
+    let read_until_closed = async {
+        loop {
+            match stream.read(&mut buf).await {
+                Ok(0) | Err(_) => return,
+                Ok(_) => {}
+            }
+        }
+    };
+    tokio::time::timeout(timeout, read_until_closed).await.is_ok()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_idle_client_connections_are_closed() {
+    use tokio::io::AsyncWriteExt;
+    let proksi = Harness::start_with_server(
+        vec![Route::new("app.test", Upstream::Http)],
+        "timeouts {\n idle_secs = 1\n }",
+        PLAIN_HOST,
+    )
+    .await;
+
+    // A connection that never sends a request
+    let mut silent = tokio::net::TcpStream::connect(("127.0.0.1", proksi.http_port))
+        .await
+        .unwrap();
+    assert!(closed_within(&mut silent, std::time::Duration::from_secs(3)).await);
+
+    // A connection kept alive after its request
+    let mut kept = tokio::net::TcpStream::connect(("127.0.0.1", proksi.http_port))
+        .await
+        .unwrap();
+    kept.write_all(b"GET / HTTP/1.1\r\nHost: plain.test\r\n\r\n")
+        .await
+        .unwrap();
+    assert!(closed_within(&mut kept, std::time::Duration::from_secs(3)).await);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_slow_request_bodies_are_closed() {
+    use tokio::io::AsyncWriteExt;
+    let proksi = Harness::start_with_server(
+        vec![Route::new("app.test", Upstream::Http)],
+        "timeouts {\n read_secs = 1\n }",
+        PLAIN_HOST,
+    )
+    .await;
+
+    // A body that stops arriving
+    let mut slow = tokio::net::TcpStream::connect(("127.0.0.1", proksi.http_port))
+        .await
+        .unwrap();
+    slow.write_all(b"POST / HTTP/1.1\r\nHost: plain.test\r\nContent-Length: 100\r\n\r\nab")
+        .await
+        .unwrap();
+    assert!(closed_within(&mut slow, std::time::Duration::from_secs(3)).await);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_locations_set_their_own_timeouts() {
+    use tokio::io::AsyncWriteExt;
+    let proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        r#"
+host "plain.test" {
+  tls = false
+  timeouts {
+    read_secs = 1
+  }
+  location "/upload" {
+    timeouts {
+      read_secs = 30
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#,
+    )
+    .await;
+
+    let slow_body = |path: &'static str| {
+        let port = proksi.http_port;
+        async move {
+            let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .unwrap();
+            stream
+                .write_all(
+                    format!("POST {path} HTTP/1.1\r\nHost: plain.test\r\nContent-Length: 100\r\n\r\nab")
+                        .as_bytes(),
+                )
+                .await
+                .unwrap();
+            stream
+        }
+    };
+
+    // The host's timeout, shorter than the server's
+    let mut root = slow_body("/").await;
+    assert!(closed_within(&mut root, std::time::Duration::from_secs(3)).await);
+
+    // The location's, longer than the host's
+    let mut upload = slow_body("/upload").await;
+    assert!(!closed_within(&mut upload, std::time::Duration::from_secs(3)).await);
+}

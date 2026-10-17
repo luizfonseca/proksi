@@ -130,6 +130,7 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
                 headers: blocks.as_ref().and_then(|blocks| blocks.headers.clone()),
                 plugins: blocks.as_ref().and_then(|blocks| blocks.plugins.clone()),
                 cache: blocks.as_ref().and_then(|blocks| blocks.cache.clone()),
+                timeouts: blocks.as_ref().and_then(|blocks| blocks.timeouts),
             };
             locations.insert((path, exact), (location, id.clone()));
         }
@@ -252,7 +253,7 @@ fn blocks(cluster: &Cluster, ingress: &Ingress, namespace: &str) -> Result<Optio
         ));
     }
     let mut location = block
-        .to_location("/", None)
+        .to_location("/", None, None)
         .map_err(|err| format!("invalid {BLOCKS}: {err}"))?;
 
     if let Some(name) = annotation(ingress, AUTH_SECRET) {

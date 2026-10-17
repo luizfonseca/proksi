@@ -144,6 +144,16 @@ impl ProxyHttp for Router {
         // Set first, so requests answered by a block are counted in the location's metrics
         ctx.route_container = Some(route_container.clone());
 
+        // The location's timeouts, instead of `server.timeouts`
+        if let Some(timeouts) = route_container.timeouts {
+            if let Some(read) = timeouts.read_secs {
+                session.set_read_timeout(Some(Duration::from_secs(read)));
+            }
+            if let Some(write) = timeouts.write_secs {
+                session.set_write_timeout(Some(Duration::from_secs(write)));
+            }
+        }
+
         // The location's building blocks, in order: a block can answer the request (e.g. a `401`)
         if let Some(block) = route_container.blocks.request(session, ctx).await {
             if let Some(metrics) = &route_container.metrics {

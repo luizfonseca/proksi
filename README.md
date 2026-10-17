@@ -128,6 +128,13 @@ server {
   # have). Give docker or kubernetes a little longer before they kill it, e.g.
   # `stop_grace_period: 35s` in compose, or `terminationGracePeriodSeconds: 35`.
   # shutdown_timeout_secs = 30
+
+  # Timeouts toward clients, in seconds (these are the defaults)
+  # timeouts {
+  #   idle_secs  = 60 # waiting for a request's headers, and between requests of a connection
+  #   read_secs  = 60 # waiting for each read of a request body, and for websocket messages
+  #   write_secs = 60 # waiting for a client to read each write of a response
+  # }
 }
 
 logging {

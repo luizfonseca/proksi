@@ -12,6 +12,7 @@ pub mod http_proxy;
 pub mod https_proxy;
 pub mod listener;
 pub mod services;
+pub mod timeouts;
 
 /// Default peer options to be used on every upstream connection
 pub fn default_peer_opts() -> PeerOptions {

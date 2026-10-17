@@ -151,6 +151,7 @@ fn main() -> Result<(), anyhow::Error> {
         &proxy_config,
     ));
 
+    proxy_server::timeouts::set_client_timeouts(proxy_config.server.timeouts);
     add_listeners(
         &mut pingora_server,
         &proxy_config,

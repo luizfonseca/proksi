@@ -166,6 +166,44 @@ Unknown attributes are rejected, so a typo fails when the configuration is loade
 
 To keep hosts in separate files, see [`import`](configuration/hcl/functions.md#import).
 
+### Timeouts
+
+`server.timeouts` sets how long proksi waits for clients (60 seconds each by default):
+
+```hcl
+server {
+  timeouts {
+    idle_secs  = 60 # for a request's headers, and between requests of a connection
+    read_secs  = 60 # for each read of a request body, and websocket messages
+    write_secs = 60 # for a client to read each write of a response
+  }
+}
+```
+
+A host or a location can change `read_secs` and `write_secs` for its requests (a location's override its host's). `idle_secs` only applies to the server: it's used before a request, so before its host is known.
+
+```hcl
+host "app.example.com" {
+  timeouts {
+    read_secs = 10
+  }
+
+  location "/upload" {
+    timeouts {
+      read_secs = 300  # large uploads from slow connections
+    }
+    upstream "app:8080" {}
+  }
+
+  location "/ws" {
+    timeouts {
+      read_secs = 120  # longer than the websocket clients' ping interval
+    }
+    upstream "app:8080" {}
+  }
+}
+```
+
 ## Migrating from `routes = [...]`
 
 `routes = [...]` still works, but is deprecated and logs a warning. Each route corresponds to a host:
