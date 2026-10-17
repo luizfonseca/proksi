@@ -21,6 +21,7 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
 
     crate::proxy_server::client::TrustedProxies::parse(&config.server.trusted_proxies)
         .map_err(|err| anyhow!("server.{err}"))?;
+    config.server.tls.validate().map_err(|err| anyhow!("server.tls.{err}"))?;
 
     let publish = config.kubernetes.publish_service.as_deref();
     if publish.is_some_and(|service| {
@@ -138,6 +139,20 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "kubernetes.publish_service must be namespace/name, not \"proksi\""
+        );
+    }
+
+    #[test]
+    fn test_check_config_tls_ciphers() {
+        let mut config = Config::default();
+        config.server.tls.ciphers = vec![
+            "ECDHE-RSA-AES128-GCM-SHA256".to_string(),
+            "ECDHE-RSA-AES128-GCM-SHA257".to_string(),
+        ];
+
+        assert_eq!(
+            check_config(&config).unwrap_err().to_string(),
+            "server.tls.ciphers: \"ECDHE-RSA-AES128-GCM-SHA257\" is not a TLS 1.2 cipher suite known to OpenSSL"
         );
     }
 

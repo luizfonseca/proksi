@@ -57,11 +57,31 @@ pub enum Answer {
 pub struct AdminApi {
     token: Option<String>,
     instance: status::Instance,
+    /// Serves `/metrics` only (`admin.metrics_listen`)
+    metrics_only: bool,
 }
 
 impl AdminApi {
     pub fn new(token: Option<String>, instance: status::Instance) -> Self {
-        Self { token, instance }
+        Self {
+            token,
+            instance,
+            metrics_only: false,
+        }
+    }
+
+    /// The API with `/metrics` only, for scrapers that mustn't change routes
+    pub fn metrics_only(token: Option<String>) -> Self {
+        let instance = status::Instance {
+            started: std::time::Instant::now(),
+            store_type: String::new(),
+            listeners: serde_json::Value::Null,
+        };
+        Self {
+            token,
+            instance,
+            metrics_only: true,
+        }
     }
 
     /// Answers a request, given its `Authorization` header
@@ -80,6 +100,9 @@ impl AdminApi {
             ));
         }
 
+        if self.metrics_only && path != "/metrics" {
+            return Answer::Reply(Reply::error(StatusCode::NOT_FOUND, "not found"));
+        }
         if path == "/api/v1/routes" || path.starts_with("/api/v1/routes/") {
             return Answer::Reply(routes_reply(request).await);
         }
@@ -371,6 +394,14 @@ async fn stream_stats(mut session: ServerSession, window: Duration, mut shutdown
 }
 
 /// The admin API's service, on `address`
+/// The metrics-only listener (`admin.metrics_listen`)
+pub fn metrics_service(address: SocketAddr, token: Option<String>) -> Service<AdminApi> {
+    let mut service = Service::new("metrics".to_string(), AdminApi::metrics_only(token));
+    service.add_tcp(&address.to_string());
+    service.threads = Some(1);
+    service
+}
+
 pub fn admin_service(
     address: SocketAddr,
     token: Option<String>,
@@ -432,6 +463,39 @@ mod tests {
         assert_eq!(reply.status, StatusCode::OK);
         assert_eq!(reply.content_type, "text/plain; version=0.0.4");
         assert!(reply.body.contains("proksi_requests_total"), "{}", reply.body);
+    }
+
+    #[tokio::test]
+    async fn test_metrics_only() {
+        crate::metrics::enable();
+        let api = AdminApi::metrics_only(None);
+
+        assert_eq!(
+            reply(api.handle(request(&Method::GET, "/metrics", None, None)).await).status,
+            StatusCode::OK
+        );
+        for (method, path) in [
+            (Method::GET, "/api/v1/status"),
+            (Method::GET, "/api/v1/stats"),
+            (Method::GET, "/api/v1/routes"),
+            (Method::PUT, "/api/v1/routes/a.test"),
+            (Method::DELETE, "/api/v1/routes/a.test"),
+        ] {
+            let reply = reply(api.handle(request(&method, path, None, None)).await);
+            assert_eq!(reply.status, StatusCode::NOT_FOUND, "{method} {path}");
+        }
+
+        // With its own token
+        let api = AdminApi::metrics_only(Some("scraper".to_string()));
+        for (authorization, status) in [
+            (None, StatusCode::UNAUTHORIZED),
+            (Some("Bearer scraper"), StatusCode::OK),
+        ] {
+            let answer = api
+                .handle(request(&Method::GET, "/metrics", None, authorization))
+                .await;
+            assert_eq!(reply(answer).status, status, "{authorization:?}");
+        }
     }
 
     #[tokio::test]

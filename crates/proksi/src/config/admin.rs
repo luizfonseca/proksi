@@ -17,6 +17,13 @@ pub struct AdminConfig {
     /// Record metrics (`/metrics` and live stats). Off, requests don't record anything.
     #[serde(default = "enabled_by_default")]
     pub metrics: bool,
+    /// Another address serving only `/metrics` (`ip:port`), for scrapers that mustn't reach
+    /// the rest of the API
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metrics_listen: Option<String>,
+    /// Required in `Authorization: Bearer <token>` on `metrics_listen`, if set
+    #[serde(default, skip_serializing)]
+    pub metrics_token: Option<String>,
 }
 
 fn enabled_by_default() -> bool {
@@ -43,6 +50,24 @@ impl AdminConfig {
     /// The token, if set (an empty one is none)
     pub fn token(&self) -> Option<&str> {
         self.token.as_deref().filter(|token| !token.is_empty())
+    }
+
+    /// The address of the metrics-only listener, if any
+    pub fn metrics_address(&self) -> Result<Option<SocketAddr>, String> {
+        let Some(listen) = &self.metrics_listen else {
+            return Ok(None);
+        };
+        if !self.metrics {
+            return Err("admin: metrics_listen needs metrics (metrics = false)".to_string());
+        }
+        listen.parse::<SocketAddr>().map(Some).map_err(|_| {
+            format!("admin: `metrics_listen` must be an ip:port address, not {listen:?}")
+        })
+    }
+
+    /// The token of the metrics-only listener, if set (an empty one is none)
+    pub fn metrics_token(&self) -> Option<&str> {
+        self.metrics_token.as_deref().filter(|token| !token.is_empty())
     }
 }
 
