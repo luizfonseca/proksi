@@ -55,7 +55,7 @@ http = "1.2.0"
 ipnet = "2.11.0"
 itertools = "0.14.0"
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto"] }
-nix = { version = "0.30.1", features = ["signal", "hostname"] }
+nix = { version = "0.30.1", features = ["signal", "hostname", "process"] }
 notify = { version = "8.0.0", default-features = false, features = [
     "fsevent-sys",
 ] }
