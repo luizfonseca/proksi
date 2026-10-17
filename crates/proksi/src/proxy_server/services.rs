@@ -3,6 +3,7 @@
 use std::{collections::BTreeSet, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
+use once_cell::sync::OnceCell;
 use pingora::{
     apps::ServerApp,
     tls::ssl::{AlpnError, NameType, SslAcceptor, SslAcceptorBuilder, SslMethod},
@@ -13,6 +14,7 @@ use pingora::{
     services::listening::Service,
 };
 
+use crate::config::server_tls::ServerTls;
 use crate::tcp::{
     alpn::{select_protocols, AlpnProtocols},
     on_address,
@@ -141,14 +143,20 @@ pub fn tls_acceptor(protocols: AlpnProtocols) -> Result<SslAcceptor, anyhow::Err
     Ok(builder.build())
 }
 
+static SERVER_TLS: OnceCell<ServerTls> = OnceCell::new();
+
+/// Sets `server.tls`, for the listeners built from now on
+pub fn set_server_tls(tls: ServerTls) {
+    let _ = SERVER_TLS.set(tls);
+}
+
 fn configure_tls(builder: &mut SslAcceptorBuilder) -> Result<(), anyhow::Error> {
     // tls_settings.set_session_cache_mode(SslSessionCacheMode::SERVER);
     builder.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
 
-    // For now this is a hardcoded recommendation based on
-    // https://developers.cloudflare.com/ssl/reference/protocols/
-    // but will be made configurable in the future
-    builder.set_min_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_2))?;
+    let tls = SERVER_TLS.get().cloned().unwrap_or_default();
+    builder.set_min_proto_version(Some(tls.min_version.ssl_version()))?;
     builder.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
+    builder.set_cipher_list(&tls.cipher_list())?;
     Ok(())
 }
