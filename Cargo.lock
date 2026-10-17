@@ -3698,6 +3698,7 @@ dependencies = [
  "prometheus",
  "r2d2",
  "redis",
+ "regex",
  "reqwest",
  "seize 0.5.1",
  "serde",

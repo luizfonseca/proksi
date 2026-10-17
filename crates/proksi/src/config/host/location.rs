@@ -33,47 +33,122 @@ pub struct PathRewrite {
     pub strip_prefix: Option<String>,
     /// Added to the start of the path, after `strip_prefix`
     pub add_prefix: Option<String>,
+    /// A regular expression the path is matched against, replaced by `replace`
+    #[serde(rename = "match")]
+    pub pattern: Option<String>,
+    /// What a path matching `match` becomes (`$1`, `${name}` for its groups)
+    pub replace: Option<String>,
 }
 
+/// Compiled patterns are limited, as they can come from a store anyone with access writes to
+const PATTERN_SIZE_LIMIT: usize = 1 << 20;
+
 impl PathRewrite {
-    /// Whether the settings are valid: prefixes are paths, and at least one is set
-    pub fn validate(&self) -> Result<(), String> {
-        if self.strip_prefix.is_none() && self.add_prefix.is_none() {
-            return Err("`rewrite` needs `strip_prefix` or `add_prefix`".to_string());
-        }
-        for (name, prefix) in [("strip_prefix", &self.strip_prefix), ("add_prefix", &self.add_prefix)] {
+    /// Checks the settings and compiles the pattern, once (when the location is built)
+    pub fn compile(&self) -> Result<CompiledRewrite, String> {
+        for (name, prefix) in [
+            ("strip_prefix", &self.strip_prefix),
+            ("add_prefix", &self.add_prefix),
+        ] {
             if let Some(prefix) = prefix {
                 if !prefix.starts_with('/') || prefix.contains(['?', '#']) {
-                    return Err(format!("`{name}` must be a path starting with `/`, not {prefix:?}"));
+                    return Err(format!(
+                        "`{name}` must be a path starting with `/`, not {prefix:?}"
+                    ));
                 }
             }
         }
-        Ok(())
+        let prefixes = self.strip_prefix.is_some() || self.add_prefix.is_some();
+        let pattern = match (&self.pattern, &self.replace) {
+            (None, None) if !prefixes => {
+                return Err(
+                    "`rewrite` needs `strip_prefix` or `add_prefix`, or `match` and `replace`"
+                        .to_string(),
+                );
+            }
+            (None, None) => None,
+            (Some(_), None) | (None, Some(_)) => {
+                return Err("`match` and `replace` go together".to_string());
+            }
+            (Some(_), Some(_)) if prefixes => {
+                return Err(
+                    "`match` and `replace` can't be combined with `strip_prefix` or `add_prefix`"
+                        .to_string(),
+                );
+            }
+            (Some(pattern), Some(_)) => Some(
+                regex::RegexBuilder::new(pattern)
+                    .size_limit(PATTERN_SIZE_LIMIT)
+                    .build()
+                    .map_err(|err| format!("invalid `match`: {err}"))?,
+            ),
+        };
+        Ok(CompiledRewrite {
+            settings: self.clone(),
+            pattern,
+        })
     }
+}
 
+/// A location's [`PathRewrite`], with its pattern compiled
+#[derive(Debug, Clone)]
+pub struct CompiledRewrite {
+    settings: PathRewrite,
+    pattern: Option<regex::Regex>,
+}
+
+impl CompiledRewrite {
     /// The path (and query) sent to upstreams for `path` and `query`
     pub fn apply(&self, path: &str, query: Option<&str>) -> String {
-        let mut path = path;
-        if let Some(prefix) = self.strip_prefix.as_deref().map(|p| p.trim_end_matches('/')) {
-            if let Some(rest) = path.strip_prefix(prefix) {
-                if rest.is_empty() || rest.starts_with('/') {
-                    path = rest;
+        let mut rewritten = match (&self.pattern, &self.settings.replace) {
+            (Some(pattern), Some(replace)) => {
+                let replaced = pattern.replace(path, replace.as_str());
+                if replaced.starts_with('/') {
+                    replaced.into_owned()
+                } else {
+                    format!("/{replaced}")
                 }
             }
-        }
-        let mut rewritten = match self.add_prefix.as_deref().map(|p| p.trim_end_matches('/')) {
-            Some(prefix) if path.is_empty() || path == "/" => {
-                if prefix.is_empty() { "/".to_string() } else { prefix.to_string() }
-            }
-            Some(prefix) => format!("{prefix}{path}"),
-            None if path.is_empty() => "/".to_string(),
-            None => path.to_string(),
+            _ => self.prefixes(path),
         };
         if let Some(query) = query {
             rewritten.push('?');
             rewritten.push_str(query);
         }
         rewritten
+    }
+
+    fn prefixes(&self, path: &str) -> String {
+        let mut path = path;
+        if let Some(prefix) = self
+            .settings
+            .strip_prefix
+            .as_deref()
+            .map(|p| p.trim_end_matches('/'))
+        {
+            if let Some(rest) = path.strip_prefix(prefix) {
+                if rest.is_empty() || rest.starts_with('/') {
+                    path = rest;
+                }
+            }
+        }
+        match self
+            .settings
+            .add_prefix
+            .as_deref()
+            .map(|p| p.trim_end_matches('/'))
+        {
+            Some(prefix) if path.is_empty() || path == "/" => {
+                if prefix.is_empty() {
+                    "/".to_string()
+                } else {
+                    prefix.to_string()
+                }
+            }
+            Some(prefix) => format!("{prefix}{path}"),
+            None if path.is_empty() => "/".to_string(),
+            None => path.to_string(),
+        }
     }
 }
 
@@ -156,9 +231,14 @@ mod tests {
 
     #[test]
     fn test_rewrites_the_path() {
-        let rewrite = |strip: Option<&str>, add: Option<&str>| super::PathRewrite {
-            strip_prefix: strip.map(ToString::to_string),
-            add_prefix: add.map(ToString::to_string),
+        let rewrite = |strip: Option<&str>, add: Option<&str>| {
+            super::PathRewrite {
+                strip_prefix: strip.map(ToString::to_string),
+                add_prefix: add.map(ToString::to_string),
+                ..Default::default()
+            }
+            .compile()
+            .unwrap()
         };
         let strip = rewrite(Some("/api"), None);
         assert_eq!(strip.apply("/api/users", Some("page=2")), "/users?page=2");
@@ -168,12 +248,18 @@ mod tests {
         assert_eq!(strip.apply("/apis", None), "/apis");
         assert_eq!(strip.apply("/other", None), "/other");
         // A trailing slash in the prefix is the same prefix
-        assert_eq!(rewrite(Some("/api/"), None).apply("/api/users", None), "/users");
+        assert_eq!(
+            rewrite(Some("/api/"), None).apply("/api/users", None),
+            "/users"
+        );
 
         let both = rewrite(Some("/api"), Some("/v2"));
         assert_eq!(both.apply("/api/users", None), "/v2/users");
         assert_eq!(both.apply("/api", Some("x=1")), "/v2?x=1");
-        assert_eq!(rewrite(None, Some("/v2/")).apply("/users", None), "/v2/users");
+        assert_eq!(
+            rewrite(None, Some("/v2/")).apply("/users", None),
+            "/v2/users"
+        );
         assert_eq!(rewrite(None, Some("/")).apply("/users", None), "/users");
     }
 
@@ -182,10 +268,102 @@ mod tests {
         let rewrite = |strip: Option<&str>, add: Option<&str>| super::PathRewrite {
             strip_prefix: strip.map(ToString::to_string),
             add_prefix: add.map(ToString::to_string),
+            ..Default::default()
         };
-        assert!(rewrite(None, None).validate().is_err());
-        assert!(rewrite(Some("api"), None).validate().is_err());
-        assert!(rewrite(None, Some("/v2?x=1")).validate().is_err());
-        assert!(rewrite(Some("/api"), Some("/v2")).validate().is_ok());
+        assert!(rewrite(None, None).compile().is_err());
+        assert!(rewrite(Some("api"), None).compile().is_err());
+        assert!(rewrite(None, Some("/v2?x=1")).compile().is_err());
+        assert!(rewrite(Some("/api"), Some("/v2")).compile().is_ok());
+
+        let regex = |pattern: Option<&str>, replace: Option<&str>| super::PathRewrite {
+            pattern: pattern.map(ToString::to_string),
+            replace: replace.map(ToString::to_string),
+            ..Default::default()
+        };
+        assert!(regex(Some("^/a/(\\d+)$"), None).compile().is_err());
+        assert!(regex(Some("^/a/(\\d+"), Some("/b/$1"))
+            .compile()
+            .err()
+            .unwrap()
+            .starts_with("invalid `match`"));
+        // Too large once compiled
+        assert!(regex(Some("\\w{1000}{1000}"), Some("/")).compile().is_err());
+        let mut combined = regex(Some("^/a$"), Some("/b"));
+        combined.strip_prefix = Some("/a".to_string());
+        assert!(combined.compile().is_err());
+    }
+
+    #[test]
+    fn test_rewrites_with_regular_expressions() {
+        let rewrite = super::PathRewrite {
+            pattern: Some("^/users/(?P<id>\\d+)/profile$".to_string()),
+            replace: Some("/profiles/${id}".to_string()),
+            ..Default::default()
+        }
+        .compile()
+        .unwrap();
+        assert_eq!(
+            rewrite.apply("/users/42/profile", Some("tab=posts")),
+            "/profiles/42?tab=posts"
+        );
+        assert_eq!(rewrite.apply("/users/42", None), "/users/42");
+
+        // Paths become absolute
+        let relative = super::PathRewrite {
+            pattern: Some("^/old/(.*)$".to_string()),
+            replace: Some("$1".to_string()),
+            ..Default::default()
+        }
+        .compile()
+        .unwrap();
+        assert_eq!(relative.apply("/old/page", None), "/page");
+    }
+
+    /// Cost of rewriting a path, per request: `cargo test --release -- --ignored rewrite_overhead
+    /// --nocapture`
+    #[test]
+    #[ignore = "measures time"]
+    fn rewrite_overhead() {
+        let iterations = 1_000_000;
+        let measure = |name: &str, rewrite: Option<super::CompiledRewrite>| {
+            let started = std::time::Instant::now();
+            for i in 0..iterations {
+                let path = if i % 2 == 0 { "/users/42/profile" } else { "/users/42/posts" };
+                let rewritten = match &rewrite {
+                    Some(rewrite) => rewrite.apply(path, Some("tab=1")),
+                    None => path.to_string(),
+                };
+                std::hint::black_box(rewritten);
+            }
+            let per = started.elapsed() / iterations;
+            println!("{name}: {per:?} per request");
+        };
+        let compile = |rewrite: super::PathRewrite| Some(rewrite.compile().unwrap());
+
+        measure("no rewrite", None);
+        measure(
+            "prefixes",
+            compile(super::PathRewrite {
+                strip_prefix: Some("/users".to_string()),
+                add_prefix: Some("/v2".to_string()),
+                ..Default::default()
+            }),
+        );
+        measure(
+            "regex",
+            compile(super::PathRewrite {
+                pattern: Some("^/users/(\\d+)/profile$".to_string()),
+                replace: Some("/profiles/$1".to_string()),
+                ..Default::default()
+            }),
+        );
+        measure(
+            "regex, named groups",
+            compile(super::PathRewrite {
+                pattern: Some("^/(?P<kind>[a-z]+)/(?P<id>\\d+)/(?P<rest>.*)$".to_string()),
+                replace: Some("/api/${kind}/${rest}/${id}".to_string()),
+                ..Default::default()
+            }),
+        );
     }
 }

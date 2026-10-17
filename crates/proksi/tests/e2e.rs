@@ -2193,3 +2193,41 @@ host "rewrite.test" {
         assert_eq!(res.upstream_request()["path"], upstream_path, "{path}");
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_locations_rewrite_paths_with_regular_expressions() {
+    let mut proksi = Harness::start_with(
+        vec![],
+        r#"
+host "regex.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+  location "/users" {
+    rewrite {
+      match   = "^/users/(?P<id>\\d+)/profile$"
+      replace = "/profiles/$${id}"
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#,
+    )
+    .await;
+    proksi.resolve("regex.test");
+    proksi.wait_for("regex.test", "/users", 200).await;
+
+    for (path, upstream_path) in [
+        ("/users/42/profile?tab=posts", "/profiles/42?tab=posts"),
+        // Not matching: unchanged
+        ("/users/42", "/users/42"),
+        ("/users/abc/profile", "/users/abc/profile"),
+    ] {
+        let res = proksi.get("regex.test", path).await.unwrap();
+        assert_eq!(res.status, 200, "{path}");
+        assert_eq!(res.upstream_request()["path"], upstream_path, "{path}");
+    }
+}

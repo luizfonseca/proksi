@@ -57,7 +57,40 @@ host "example.com" {
 - `strip_prefix` is removed from the start of the path, only at a segment boundary: `/api` is removed from `/api` and `/api/users`, not from `/apis`. Stripping the whole path leaves `/`.
 - `add_prefix` is added to the start of the path, after `strip_prefix`.
 - The query string is kept. Access logs show the path the client asked for.
-- Prefixes are fixed paths; regular expressions aren't supported.
+
+### Regular expressions
+
+To change paths in any other way, `match` is a regular expression the path is matched against, and `replace` what a matching path becomes:
+
+```hcl
+location "/users" {
+  # /users/42/profile?tab=posts is sent as /profiles/42?tab=posts
+  rewrite {
+    match   = "^/users/(\\d+)/profile$"
+    replace = "/profiles/$1"
+  }
+  upstream "app:8080" {}
+}
+```
+
+- `$1`, `$2`... are the groups of `match`. Named groups (`(?P<id>\\d+)`) are `$${id}` in HCL: `${...}` alone is HCL's own interpolation.
+- A path that doesn't match is sent unchanged. The first match is replaced, so anchor the expression (`^...$`) to replace the whole path.
+- `match` and `replace` can't be combined with `strip_prefix` or `add_prefix`.
+- The syntax is Rust's [`regex`](https://docs.rs/regex/latest/regex/#syntax).
+
+### Performance
+
+A rewrite is only set up for the locations that have one: other requests don't run any of it. Patterns are compiled once, when the location is loaded (from the configuration, docker labels, Kubernetes or the store), never per request.
+
+Measured per request: a prefix rewrite takes around 50 ns, a regular expression around 50 to 150 ns depending on its groups. A proxied request takes tens of microseconds, so either is negligible.
+
+### Limitations
+
+- Only the path is rewritten, not the query string or the host.
+- Rust's regular expressions run in linear time, so a pattern can't make a request hang: in exchange, look-around (`(?=...)`, `(?!...)`) and backreferences (`\\1` in `match`) aren't supported.
+- A compiled pattern is limited to 1 MB, as patterns can come from a shared store. Larger ones are refused.
+- An invalid rewrite is refused when the configuration is loaded, or written through the admin API. One written to the store directly makes its host invalid: it's skipped and logged (and listed by the admin API), and the host's definition from another source, if any (the configuration file, docker labels), is served instead.
+- Locations are still chosen by the client's path, before it's rewritten, and there are no redirects (`3xx`) based on a rewrite.
 
 ## Health checks
 

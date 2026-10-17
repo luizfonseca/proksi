@@ -3,7 +3,9 @@ use std::time::Duration;
 use pingora::lb::health_check::TcpHealthCheck;
 
 use crate::{
-    blocks::Blocks, config::host::Location, metrics::LocationMetrics,
+    blocks::Blocks,
+    config::host::{Location, PathRewrite},
+    metrics::LocationMetrics,
     stores::routes::RouteStoreContainer,
 };
 
@@ -25,7 +27,18 @@ pub(super) fn build_location_container(
     container.set_upstreams(location.upstreams.clone());
     container.cache.clone_from(&location.cache);
     container.timeouts = location.timeouts;
-    container.rewrite.clone_from(&location.rewrite);
+    container.rewrite = match location
+        .rewrite
+        .as_ref()
+        .map(PathRewrite::compile)
+        .transpose()
+    {
+        Ok(rewrite) => rewrite,
+        Err(err) => {
+            tracing::warn!("invalid location {} of host {host}: {err}", location.path);
+            return None;
+        }
+    };
     let upstreams = location
         .upstreams
         .iter()
@@ -39,12 +52,14 @@ pub(super) fn build_location_container(
             return None;
         }
     };
-    container.metrics = crate::metrics::enabled().then(|| LocationMetrics::with_blocks(
-        host,
-        &location.path,
-        &upstreams,
-        &container.blocks.answering(),
-    ));
+    container.metrics = crate::metrics::enabled().then(|| {
+        LocationMetrics::with_blocks(
+            host,
+            &location.path,
+            &upstreams,
+            &container.blocks.answering(),
+        )
+    });
 
     Some(container)
 }
