@@ -5,7 +5,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::{host::Location, RouteCache, RoutePlugin};
+use crate::config::{
+    host::{Location, LocationTimeouts},
+    RouteCache, RoutePlugin,
+};
 
 use super::{
     headers::{response_headers, HeadersBlock},
@@ -28,14 +31,16 @@ pub struct LocationBlock {
     pub request_id: Option<PluginConfig>,
     pub rate_limit: Option<PluginConfig>,
     pub body_limit: Option<PluginConfig>,
+    pub timeouts: Option<LocationTimeouts>,
 }
 
 impl LocationBlock {
-    /// Converts the block of location `path`, adding the host's headers
+    /// Converts the block of location `path`, adding the host's headers and timeouts
     pub(crate) fn to_location(
         &self,
         path: &str,
         host_headers: Option<&HeadersBlock>,
+        host_timeouts: Option<LocationTimeouts>,
     ) -> Result<Location, String> {
         let upstreams = self
             .upstream
@@ -50,6 +55,10 @@ impl LocationBlock {
             headers: Some(response_headers([host_headers, self.headers.as_ref()])),
             plugins: Some(self.plugins()),
             cache: self.cache.clone(),
+            timeouts: match self.timeouts {
+                Some(timeouts) => Some(timeouts.or(host_timeouts)),
+                None => host_timeouts,
+            },
         })
     }
 

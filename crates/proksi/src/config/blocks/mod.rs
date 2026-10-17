@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::host::Host;
+use super::host::{Host, LocationTimeouts};
 
 mod headers;
 mod location;
@@ -29,6 +29,8 @@ pub struct HostBlock {
     pub tls: Option<TlsSetting>,
     /// Headers for every location of the host
     pub headers: Option<HeadersBlock>,
+    /// Timeouts for every location of the host (a location can set its own)
+    pub timeouts: Option<LocationTimeouts>,
     #[serde(default)]
     pub location: BTreeMap<String, LocationBlock>,
     /// TCP proxying with the host's certificate (or its TLS forwarded, or plain TCP)
@@ -44,7 +46,7 @@ impl HostBlock {
             .iter()
             .map(|(path, location)| {
                 location
-                    .to_location(path, self.headers.as_ref())
+                    .to_location(path, self.headers.as_ref(), self.timeouts)
                     .map_err(|err| format!("location \"{path}\": {err}"))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -196,6 +198,7 @@ host:
                         config: Some(std::collections::HashMap::new()),
                     }]),
                     cache: None,
+                    timeouts: None,
                 },
                 Location {
                     path: "/v1/session".to_string(),
@@ -211,6 +214,7 @@ host:
                     headers: host_headers(&[]),
                     plugins: Some(vec![]),
                     cache: None,
+                    timeouts: None,
                 },
             ],
         }
@@ -308,5 +312,47 @@ host:
         let host = doc.host.get("a.test").unwrap().to_host("a.test").unwrap();
 
         assert_eq!(host.listen, vec!["0.0.0.0:8080", "[::]:8080"]);
+    }
+
+    #[test]
+    fn test_locations_inherit_the_timeouts_of_their_host() {
+        let doc = HclFormat::from_str::<Doc>(
+            r#"
+host "app.test" {
+  timeouts {
+    read_secs  = 10
+    write_secs = 20
+  }
+  location "/upload" {
+    timeouts {
+      read_secs = 300
+    }
+  }
+  location "/" {}
+}
+"#,
+        )
+        .unwrap();
+        let host = doc.host["app.test"].to_host("app.test").unwrap();
+        let timeouts = |path: &str| {
+            host.locations
+                .iter()
+                .find(|location| location.path == path)
+                .and_then(|location| location.timeouts)
+                .map(|t| (t.read_secs, t.write_secs))
+        };
+
+        assert_eq!(timeouts("/upload"), Some((Some(300), Some(20))));
+        assert_eq!(timeouts("/"), Some((Some(10), Some(20))));
+    }
+
+    #[test]
+    fn test_idle_timeouts_are_only_for_the_server() {
+        let err = HclFormat::from_str::<Doc>(
+            "host \"app.test\" {\n  timeouts {\n    idle_secs = 5\n  }\n}\n",
+        )
+        .err()
+        .unwrap();
+        assert!(err.to_string().contains("idle_secs"), "{err}");
     }
 }

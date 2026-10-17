@@ -16,6 +16,33 @@ pub struct Location {
     pub headers: Option<RouteHeader>,
     pub plugins: Option<Vec<RoutePlugin>>,
     pub cache: Option<RouteCache>,
+    /// Timeouts of the location's requests, instead of `server.timeouts`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeouts: Option<LocationTimeouts>,
+}
+
+/// Timeouts of a location's requests (`timeouts { ... }` in a host or location), in seconds,
+/// overriding the ones of `server.timeouts`
+// Named like `server.timeouts`
+#[allow(clippy::struct_field_names)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LocationTimeouts {
+    /// How long each read of a request body (or websocket message) can wait
+    pub read_secs: Option<u64>,
+    /// How long each write of a response can wait for the client to read
+    pub write_secs: Option<u64>,
+}
+
+impl LocationTimeouts {
+    /// These timeouts, with the ones they don't set taken from `defaults` (the host's)
+    pub fn or(self, defaults: Option<Self>) -> Self {
+        let defaults = defaults.unwrap_or_default();
+        Self {
+            read_secs: self.read_secs.or(defaults.read_secs),
+            write_secs: self.write_secs.or(defaults.write_secs),
+        }
+    }
 }
 
 impl Location {
@@ -42,6 +69,7 @@ mod tests {
             headers: None,
             plugins: None,
             cache: None,
+            timeouts: None,
         }
     }
 
