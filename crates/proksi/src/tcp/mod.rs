@@ -25,6 +25,8 @@ pub struct TcpTarget {
     pub tls: TcpTls,
     /// Protocols (ALPN) the block is chosen by, if any
     pub alpn: Vec<String>,
+    /// How long connecting to an upstream can take
+    pub connect_timeout: std::time::Duration,
     pub load_balancer: Arc<LoadBalancer<RoundRobin>>,
     /// None when metrics are disabled
     pub metrics: Option<TcpMetrics>,
@@ -129,6 +131,7 @@ mod tests {
             listen: listen.parse().unwrap(),
             tls,
             alpn: vec![],
+            connect_timeout: std::time::Duration::from_secs(5),
             load_balancer: Arc::new(LoadBalancer::try_from_iter(["127.0.0.1:1"]).unwrap()),
             metrics: None,
         }

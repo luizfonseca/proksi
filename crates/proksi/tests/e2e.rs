@@ -2119,3 +2119,32 @@ tcp "web" {
         assert_eq!(proksi.get("app.test", "/").await.unwrap().status, 200);
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_tcp_connections_to_an_unreachable_upstream_are_closed() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    // Nothing answers on this address (reserved for documentation): connecting waits
+    let proksi = Harness::start_with(
+        vec![],
+        r#"
+tcp "gone" {
+  listen = "127.0.0.1:{tcp_port_0}"
+  connect_timeout_secs = 1
+  upstream "192.0.2.1:7878" {}
+}
+"#,
+    )
+    .await;
+
+    let started = std::time::Instant::now();
+    let mut client = tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[0]))
+        .await
+        .unwrap();
+    client.write_all(b"ping\n").await.unwrap();
+    let mut buf = [0u8; 16];
+    let read = tokio::time::timeout(std::time::Duration::from_secs(5), client.read(&mut buf)).await;
+
+    // Closed by proksi (no data), soon after the connect timeout
+    assert!(matches!(read, Ok(Ok(0) | Err(_))), "{read:?}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(3), "{:?}", started.elapsed());
+}

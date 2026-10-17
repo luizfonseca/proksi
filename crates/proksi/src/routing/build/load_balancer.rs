@@ -4,7 +4,7 @@
 use std::{
     collections::BTreeSet,
     future::Future,
-    net::{IpAddr, SocketAddr, ToSocketAddrs},
+    net::{IpAddr, SocketAddr},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex, PoisonError,
@@ -28,7 +28,8 @@ pub const MIN_RESOLVE_INTERVAL: Duration = Duration::from_secs(1);
 /// How long a lookup can take before its last addresses are kept
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Resolves a name and a port into addresses
+/// Resolves a name and a port into addresses. A name that doesn't exist (an authoritative answer,
+/// unlike a timeout) is an error of kind [`std::io::ErrorKind::NotFound`].
 pub type Lookup = Arc<dyn Fn(&str, u16) -> std::io::Result<Vec<SocketAddr>> + Send + Sync>;
 
 /// The upstream a load balancer's backend came from (an index into the location's or `tcp`
@@ -46,7 +47,7 @@ pub fn upstream_index(backend: &Backend) -> Option<usize> {
 pub fn load_balancer(upstreams: &[RouteUpstream]) -> LoadBalancer<RoundRobin> {
     load_balancer_with(
         upstreams,
-        Arc::new(|name: &str, port: u16| Ok((name, port).to_socket_addrs()?.collect())),
+        Arc::new(system_lookup),
     )
 }
 
@@ -60,6 +61,26 @@ pub fn load_balancer_with(upstreams: &[RouteUpstream], lookup: Lookup) -> LoadBa
         let _ = update.poll(&mut Context::from_waker(Waker::noop()));
     }
     load_balancer
+}
+
+/// Resolves `name` with the system's resolver (`getaddrinfo`, as `ToSocketAddrs` does), telling
+/// names that don't exist apart from lookups that failed
+fn system_lookup(name: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
+    use dns_lookup::LookupErrorKind;
+    match dns_lookup::lookup_host(name) {
+        Ok(ips) => {
+            let mut addresses = ips.map(|ip| SocketAddr::new(ip, port)).collect::<Vec<_>>();
+            addresses.dedup();
+            Ok(addresses)
+        }
+        Err(err) if matches!(err.kind(), LookupErrorKind::NoName | LookupErrorKind::NoData) => {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("{name} doesn't exist"),
+            ))
+        }
+        Err(err) => Err(std::io::Error::other(format!("{err:?}"))),
+    }
 }
 
 /// An upstream to resolve
@@ -138,6 +159,9 @@ impl Resolver {
             let resolved = match tokio::time::timeout(LOOKUP_TIMEOUT, lookup).await {
                 Ok(Ok(Ok(resolved))) if !resolved.is_empty() => resolved,
                 Ok(Ok(Ok(_))) => continue,
+                // The name no longer exists (e.g. its container was removed): connections fail
+                // right away instead of going to its last addresses
+                Ok(Ok(Err(err))) if err.kind() == std::io::ErrorKind::NotFound => vec![],
                 Ok(Ok(Err(err))) => {
                     tracing::debug!("could not resolve upstream {}: {err}", target.name);
                     continue;
@@ -150,11 +174,19 @@ impl Resolver {
             let mut addresses = self.addresses.lock().unwrap_or_else(PoisonError::into_inner);
             if let Some(slot) = addresses.get_mut(index) {
                 if *slot != resolved {
-                    tracing::info!(
-                        "upstream {}:{} now resolves to {resolved:?}",
-                        target.name,
-                        target.port
-                    );
+                    if resolved.is_empty() {
+                        tracing::info!(
+                            "upstream {}:{} no longer exists",
+                            target.name,
+                            target.port
+                        );
+                    } else {
+                        tracing::info!(
+                            "upstream {}:{} now resolves to {resolved:?}",
+                            target.name,
+                            target.port
+                        );
+                    }
                     *slot = resolved;
                 }
             }
@@ -220,24 +252,29 @@ mod tests {
                 .insert(name.to_string(), addresses.to_vec());
         }
 
+        /// The lookup fails (a DNS outage)
         fn fail(&self, name: &str) {
+            self.0.lock().unwrap().insert(name.to_string(), vec!["fail"]);
+        }
+
+        /// The name no longer exists (e.g. its container was removed)
+        fn remove(&self, name: &str) {
             self.0.lock().unwrap().remove(name);
         }
 
         fn lookup(&self) -> Lookup {
             let answers = self.0.clone();
             Arc::new(move |name: &str, port: u16| {
-                answers
-                    .lock()
-                    .unwrap()
-                    .get(name)
-                    .map(|addresses| {
-                        addresses
-                            .iter()
-                            .map(|ip| SocketAddr::new(ip.parse().unwrap(), port))
-                            .collect()
-                    })
-                    .ok_or_else(|| std::io::Error::other("no answer"))
+                match answers.lock().unwrap().get(name) {
+                    None => Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
+                    Some(addresses) if addresses == &["fail"] => {
+                        Err(std::io::Error::other("no answer"))
+                    }
+                    Some(addresses) => Ok(addresses
+                        .iter()
+                        .map(|ip| SocketAddr::new(ip.parse().unwrap(), port))
+                        .collect()),
+                }
             })
         }
     }
@@ -302,6 +339,20 @@ mod tests {
         load_balancer.update().await.unwrap();
 
         assert_eq!(addresses(&load_balancer), vec![("10.0.0.2:8080".to_string(), Some(0))]);
+    }
+
+    #[tokio::test]
+    async fn test_names_that_no_longer_exist_lose_their_addresses() {
+        let dns = Dns::default();
+        dns.answer("app", &["10.0.0.2"]);
+        let load_balancer = load_balancer_with(&[upstream("app", 8080)], dns.lookup());
+
+        // The container was removed: connections fail right away instead of going to it
+        dns.remove("app");
+        tokio::time::sleep(super::MIN_RESOLVE_INTERVAL).await;
+        load_balancer.update().await.unwrap();
+
+        assert!(addresses(&load_balancer).is_empty());
     }
 
     #[tokio::test]

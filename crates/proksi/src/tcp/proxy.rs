@@ -118,17 +118,28 @@ impl TcpProxy {
             .and_then(|backend| backend.addr.as_inet().copied())
             .ok_or_else(|| {
                 tracing::warn!("{}: no healthy upstream", target.label);
+                // A name without addresses may resolve again (ADR 0006)
+                let load_balancer = target.load_balancer.clone();
+                tokio::spawn(async move { load_balancer.update().await });
                 "no healthy upstream".to_string()
             })?;
         forwarded.upstream = Some(addr);
 
-        let mut upstream = TcpStream::connect(addr).await.map_err(|err| {
-            tracing::warn!("{}: could not connect to upstream {addr}: {err}", target.label);
-            // The upstream's name may point elsewhere now (ADR 0006)
-            let load_balancer = target.load_balancer.clone();
-            tokio::spawn(async move { load_balancer.update().await });
-            format!("could not connect to the upstream: {err}")
-        })?;
+        let connect = tokio::time::timeout(target.connect_timeout, TcpStream::connect(addr)).await;
+        let mut upstream = match connect {
+            Ok(Ok(upstream)) => upstream,
+            failed => {
+                let err = match failed {
+                    Ok(Err(err)) => err.to_string(),
+                    _ => format!("no answer within {:?}", target.connect_timeout),
+                };
+                tracing::warn!("{}: could not connect to upstream {addr}: {err}", target.label);
+                // The upstream's name may point elsewhere now (ADR 0006)
+                let load_balancer = target.load_balancer.clone();
+                tokio::spawn(async move { load_balancer.update().await });
+                return Err(format!("could not connect to the upstream: {err}"));
+            }
+        };
 
         // Bytes are counted as they're read, so long connections show up while they're open
         let mut downstream = Counted {

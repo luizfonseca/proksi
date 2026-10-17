@@ -10,6 +10,10 @@ use crate::config::{
     RouteUpstream,
 };
 
+/// How long connecting to a `tcp` block's upstream can take by default: a connection to an
+/// address nobody answers (a container that's gone) would otherwise wait for the system's limit
+const DEFAULT_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// `tcp "<name>" { ... }`
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -21,6 +25,8 @@ pub struct TcpBlock {
     /// Protocols (ALPN) the block is chosen by, so a host can be HTTPS and TCP on one address
     #[serde(default)]
     pub alpn: Vec<String>,
+    /// How long connecting to an upstream can take (default: 5)
+    pub connect_timeout_secs: Option<u64>,
     #[serde(default)]
     pub upstream: BTreeMap<String, TcpUpstreamBlock>,
 }
@@ -85,6 +91,9 @@ impl TcpBlock {
             listen: self.listen.clone(),
             tls,
             alpn: self.alpn.clone(),
+            connect_timeout: self
+                .connect_timeout_secs
+                .map_or(DEFAULT_CONNECT_TIMEOUT, std::time::Duration::from_secs),
             upstreams,
         })
     }

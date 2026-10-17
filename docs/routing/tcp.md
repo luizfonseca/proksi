@@ -15,6 +15,16 @@ tcp "game" {
 }
 ```
 
+Connecting to an upstream can take up to `connect_timeout_secs` (5 by default). After that, or when no upstream is available, the client's connection is closed, so it can retry. Upstreams can be names, followed as their addresses change (see [Upstreams](routing/upstreams.md#names)).
+
+```hcl
+tcp "game" {
+  listen               = "0.0.0.0:7777"
+  connect_timeout_secs = 2
+  upstream "game:7777" {}
+}
+```
+
 ## TLS with the certificate of a host
 
 A `tcp` block inside a host terminates TLS with the host's certificate (Let's Encrypt, certificate files or self-signed, as for HTTPS), and the upstream receives plain TCP. Clients connect with TLS and the name of the host:
