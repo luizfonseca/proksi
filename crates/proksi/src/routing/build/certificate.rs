@@ -32,6 +32,14 @@ pub(super) async fn load_certificate(
     let leaf = certificates
         .next()
         .ok_or_else(|| anyhow!("no certificate in {:?}", files.pem))?;
+    // Files being replaced may hold a certificate and the previous key for a moment
+    if !leaf.public_key().is_ok_and(|public| public.public_eq(&key)) {
+        return Err(anyhow!(
+            "the key in {:?} doesn't match the certificate in {:?}",
+            files.key,
+            files.pem
+        ));
+    }
 
     stores::global::get_store()
         .set_certificate(
@@ -44,6 +52,15 @@ pub(super) async fn load_certificate(
         )
         .await
         .map_err(|err| anyhow!("failed to store certificate for {name}: {err}"))
+}
+
+/// The contents of a host's certificate files, to know when they change
+pub fn certificate_files_fingerprint(host: &Host) -> Option<u64> {
+    let files = host.tls.certificate.as_ref()?;
+    let mut hasher = std::hash::DefaultHasher::new();
+    std::hash::Hash::hash(&std::fs::read(&files.pem).ok()?, &mut hasher);
+    std::hash::Hash::hash(&std::fs::read(&files.key).ok()?, &mut hasher);
+    Some(std::hash::Hasher::finish(&hasher))
 }
 
 #[cfg(test)]

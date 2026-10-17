@@ -21,6 +21,14 @@ location "/" {
 }
 ```
 
+## Names
+
+An upstream can be a name instead of an address (`app:3000`, `api.example.com:443`), resolved by the system's resolver (`/etc/hosts`, Docker's DNS, the cluster's DNS):
+
+- Every address of a name is an upstream of its own, with the same settings, load balanced and health checked like the others.
+- Names are resolved again every 5 seconds, and right away when connecting to one of their addresses fails, so a recreated container or a moved service is followed without restarting Proksi.
+- When a lookup fails, the last addresses are kept. A name that doesn't resolve yet (a container that isn't up) answers `503` until it does.
+
 ## Health checks
 
 Every upstream is checked in the background (a TCP connection every 15 seconds). Upstreams that fail the check stop receiving requests until they are healthy again. If none of the upstreams of a location are healthy, the request gets a `503`.

@@ -1,7 +1,8 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use pingora::{
+    lb::{selection::RoundRobin, LoadBalancer},
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
@@ -19,6 +20,25 @@ impl HealthService {
     }
 }
 
+/// How often upstream names are resolved again (ADR 0006)
+const RESOLVE_INTERVAL: Duration = Duration::from_secs(5);
+
+/// The load balancers of every location and `tcp` block, shared with the route table: health
+/// checks and new addresses apply to the routes being served
+fn load_balancers() -> Vec<(String, Arc<LoadBalancer<RoundRobin>>)> {
+    stores::get_routes()
+        .iter()
+        .flat_map(|(host, container)| {
+            container
+                .locations
+                .iter()
+                .map(|location| (host.clone(), location.load_balancer.clone()))
+                .collect::<Vec<_>>()
+        })
+        .chain(crate::tcp::load_balancers().iter().cloned())
+        .collect()
+}
+
 async fn run_health_check_loop() {
     let mut interval = tokio::time::interval(Duration::from_secs(30));
     interval.tick().await;
@@ -26,27 +46,26 @@ async fn run_health_check_loop() {
     loop {
         interval.tick().await;
 
-        // The load balancers are shared with the route table, so health checks
-        // update the routes being served
-        let load_balancers = stores::get_routes()
-            .iter()
-            .flat_map(|(host, container)| {
-                container
-                    .locations
-                    .iter()
-                    .map(|location| (host.clone(), location.load_balancer.clone()))
-                    .collect::<Vec<_>>()
-            })
-            .chain(crate::tcp::load_balancers().iter().cloned())
-            .collect::<Vec<_>>();
-
-        for (host, load_balancer) in load_balancers {
+        for (host, load_balancer) in load_balancers() {
             tracing::trace!("Running health check for host {}", host);
-            load_balancer.update().await.ok();
             load_balancer.backends().run_health_check(false).await;
         }
 
         record_health();
+    }
+}
+
+/// Resolves upstream names again, replacing their addresses when they changed
+async fn run_resolve_loop() {
+    let mut interval = tokio::time::interval(RESOLVE_INTERVAL);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    interval.tick().await;
+
+    loop {
+        interval.tick().await;
+        for (_, load_balancer) in load_balancers() {
+            load_balancer.update().await.ok();
+        }
     }
 }
 
@@ -77,7 +96,7 @@ impl Service for HealthService {
     ) {
         tracing::info!("Starting health check service");
 
-        run_health_check_loop().await;
+        tokio::join!(run_health_check_loop(), run_resolve_loop());
     }
 
     fn name(&self) -> &'static str {

@@ -35,7 +35,7 @@ use super::{
 pub fn tcp_targets(routes: &[TcpRoute]) -> Result<Arc<Vec<TcpTarget>>, anyhow::Error> {
     let mut targets = vec![];
     for route in routes {
-        let mut load_balancer = load_balancer(&route.upstreams)?;
+        let mut load_balancer = load_balancer(&route.upstreams);
         load_balancer.set_health_check(TcpHealthCheck::new());
         targets.push(TcpTarget {
             label: route.label(),

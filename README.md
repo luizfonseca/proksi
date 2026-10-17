@@ -269,7 +269,7 @@ host "example.com" {
 }
 ```
 
-The `pem` file holds the certificate followed by its intermediates (a "fullchain"), which proksi sends to clients along with it.
+The `pem` file holds the certificate followed by its intermediates (a "fullchain"), which proksi sends to clients along with it. Both files are checked every 10 seconds: a renewed certificate is served without restarting proksi (a certificate and a key that don't match yet, while they're being replaced, are skipped until they do).
 
 ## Headers
 
