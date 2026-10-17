@@ -5,6 +5,6 @@ mod host;
 mod load_balancer;
 mod location;
 
-pub use certificate::load_host_certificate;
+pub use certificate::{certificate_files_fingerprint, load_host_certificate};
 pub use host::build_host_container;
 pub use load_balancer::{load_balancer, upstream_index};

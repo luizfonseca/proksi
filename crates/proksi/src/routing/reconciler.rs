@@ -10,7 +10,7 @@ use serde::Serialize;
 use crate::{config::host::Host, stores};
 
 use super::{
-    build::{build_host_container, load_host_certificate},
+    build::{build_host_container, certificate_files_fingerprint, load_host_certificate},
     merge::{merge, Conflict, InvalidRoute, MergeResult},
     RouteSnapshot, RouteSourceKind,
 };
@@ -49,6 +49,8 @@ pub struct Reconciler {
     snapshots: BTreeMap<RouteSourceKind, Vec<Host>>,
     /// Hosts currently in the route table, by name
     applied: HashMap<String, (RouteSourceKind, Host)>,
+    /// Contents of the certificate files loaded for each host, to reload them when they change
+    certificate_files: HashMap<String, u64>,
     store_revision: Option<u64>,
     conflicts: Vec<Conflict>,
     invalid: Vec<InvalidRoute>,
@@ -89,9 +91,7 @@ impl Reconciler {
                 continue;
             };
 
-            if let Err(err) = load_host_certificate(definition).await {
-                tracing::error!("failed to load the certificate for host {host}: {err}");
-            }
+            self.load_certificate(host, definition).await;
 
             built.push((host, *source, definition, container, is_new));
         }
@@ -115,6 +115,7 @@ impl Reconciler {
         for host in removed_hosts {
             stores::remove_route(&host);
             self.applied.remove(&host);
+            self.certificate_files.remove(&host);
             report.removed.push(host);
         }
 
@@ -133,6 +134,50 @@ impl Reconciler {
         ROUTING_STATUS.store(Arc::new(self.status()));
 
         report
+    }
+
+    /// Loads the certificate files of a host, remembering their contents
+    async fn load_certificate(&mut self, host: &str, definition: &Host) -> bool {
+        let Some(fingerprint) = certificate_files_fingerprint(definition) else {
+            self.certificate_files.remove(host);
+            if let Err(err) = load_host_certificate(definition).await {
+                tracing::error!("failed to load the certificate for host {host}: {err}");
+            }
+            return false;
+        };
+        // Files that failed to load are tried again once they change
+        self.certificate_files.insert(host.to_string(), fingerprint);
+        match load_host_certificate(definition).await {
+            Ok(()) => true,
+            Err(err) => {
+                tracing::error!("failed to load the certificate for host {host}: {err}");
+                false
+            }
+        }
+    }
+
+    /// Loads the certificate files of the hosts whose files changed since they were loaded,
+    /// returning those hosts
+    pub async fn reload_certificate_files(&mut self) -> Vec<String> {
+        let changed = self
+            .applied
+            .iter()
+            .filter(|(host, (_, definition))| {
+                definition.tls.certificate.is_some()
+                    && certificate_files_fingerprint(definition)
+                        .is_some_and(|f| self.certificate_files.get(*host) != Some(&f))
+            })
+            .map(|(host, (_, definition))| (host.clone(), definition.clone()))
+            .collect::<Vec<_>>();
+
+        let mut reloaded = vec![];
+        for (host, definition) in changed {
+            if self.load_certificate(&host, &definition).await {
+                tracing::info!("reloaded the certificate files of host {host}");
+                reloaded.push(host);
+            }
+        }
+        reloaded
     }
 
     /// Status of the routes applied by this reconciler
@@ -361,5 +406,73 @@ mod tests {
         };
         assert_eq!(served("/v1/session"), "10.0.0.2");
         assert_eq!(served("/"), "10.0.0.1");
+    }
+
+    /// Writes a new certificate for `name` and its key to `pem` and `key`
+    fn write_certificate(name: &str, pem: &std::path::Path, key: &std::path::Path) -> Vec<u8> {
+        let (certificate, private) = crate::stores::certificates::tests::signed(name, None);
+        std::fs::write(pem, certificate.to_pem().unwrap()).unwrap();
+        std::fs::write(key, private.private_key_to_pem_pkcs8().unwrap()).unwrap();
+        certificate.to_pem().unwrap()
+    }
+
+    async fn served_certificate(host: &str) -> Vec<u8> {
+        stores::global::get_store()
+            .get_certificate(host)
+            .await
+            .unwrap()
+            .leaf
+            .to_pem()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_changed_certificate_files_are_reloaded() {
+        let dir = tempfile::tempdir().unwrap();
+        let (pem, key) = (dir.path().join("cert.pem"), dir.path().join("key.pem"));
+        let first = write_certificate("rec-files.test", &pem, &key);
+        let mut definition = host("rec-files.test", "10.0.0.1");
+        definition.tls.certificate = Some(crate::config::RouteSslPath {
+            pem: pem.clone(),
+            key: key.clone(),
+        });
+        let mut reconciler = Reconciler::new();
+        reconciler
+            .apply(RouteSnapshot::new(RouteSourceKind::File, vec![definition]))
+            .await;
+        assert_eq!(served_certificate("rec-files.test").await, first);
+
+        // Unchanged files are not loaded again
+        assert!(reconciler.reload_certificate_files().await.is_empty());
+
+        let renewed = write_certificate("rec-files.test", &pem, &key);
+        assert_eq!(
+            reconciler.reload_certificate_files().await,
+            vec!["rec-files.test".to_string()]
+        );
+        assert_eq!(served_certificate("rec-files.test").await, renewed);
+    }
+
+    #[tokio::test]
+    async fn test_certificate_files_with_another_key_are_not_loaded() {
+        let dir = tempfile::tempdir().unwrap();
+        let (pem, key) = (dir.path().join("cert.pem"), dir.path().join("key.pem"));
+        let first = write_certificate("rec-mismatch.test", &pem, &key);
+        let mut definition = host("rec-mismatch.test", "10.0.0.1");
+        definition.tls.certificate = Some(crate::config::RouteSslPath {
+            pem: pem.clone(),
+            key: key.clone(),
+        });
+        let mut reconciler = Reconciler::new();
+        reconciler
+            .apply(RouteSnapshot::new(RouteSourceKind::File, vec![definition]))
+            .await;
+
+        // Only the certificate is written so far: the key is still the previous one
+        let (renewed, _) = crate::stores::certificates::tests::signed("rec-mismatch.test", None);
+        std::fs::write(&pem, renewed.to_pem().unwrap()).unwrap();
+
+        assert!(reconciler.reload_certificate_files().await.is_empty());
+        assert_eq!(served_certificate("rec-mismatch.test").await, first);
     }
 }
