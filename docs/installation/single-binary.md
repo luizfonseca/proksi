@@ -1,6 +1,6 @@
 # Single binary
 
-You can also run Proksi as a standalone binary using rust's `cargo` or downloading it directly from [https://github.com/luizfonseca/proksi/releases](https://github.com/luizfonseca/proksi/releases) for you system.
+You can also run Proksi as a standalone binary using rust's `cargo` or downloading it directly from [https://github.com/luizfonseca/proksi/releases](https://github.com/luizfonseca/proksi/releases) for your system.
 
 ## Cargo
 
@@ -10,7 +10,7 @@ To install (and compile) Proksi for your system, first ensure you have the lates
 
 
 
-### 1. Rust is not installed&#x20;
+### 1. Rust is not installed
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -28,7 +28,7 @@ rustup update
 cargo install proksi
 ```
 
-You can now  run Proksi as a user binary:
+You can now run Proksi as a user binary:
 
 ```bash
 touch proksi.hcl
@@ -41,14 +41,12 @@ proksi -c ./
 
 ## Downloading the binary
 
-Ensure you are download the right one from the [Releases page on Github](https://github.com/luizfonseca/proksi/releases) and once you download it, make sure it has the right permissions to execute, e.g.:
+Download the archive for your system from the [Releases page on GitHub](https://github.com/luizfonseca/proksi/releases): `proksi-linux-musl-x86_64`, `proksi-linux-musl-aarch64` (static, any Linux), `proksi-linux-gnu-*`, `proksi-macos-aarch64` or `proksi-macos-x86_64`. For example:
 
 ```bash
-# Replace {VERSION} with the version you want
-# Replace {PLATFORM} with the one for your system
-curl -O -L https://github.com/luizfonseca/proksi/releases/download/{VERSION}/{PLATFORM}.tar.gz
-tar -czvf {PLATFORM}.tar.gz
-
+# Replace the version and platform with the ones you want
+curl -L -O https://github.com/luizfonseca/proksi/releases/download/proksi-v0.8.0/proksi-linux-musl-x86_64.tar.gz
+tar -xzf proksi-linux-musl-x86_64.tar.gz
 chmod +x ./proksi
 ```
 

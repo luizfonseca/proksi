@@ -1,7 +1,3 @@
----
-description: Protects a route using a provider and the Oauth2 protocol
----
-
 # OAuth2
 
 This plugin protects a given route by authenticating against a provider and a JWT token sent as an HTTP-only cookie for you particular domain.
@@ -17,7 +13,7 @@ This plugin protects a given route by authenticating against a provider and a JW
 
 ### Options
 
-Plugin options are always passed via the `config` key.
+Options are set in the plugin's block, inside a `location`.
 
 <table><thead><tr><th width="310"></th><th></th></tr></thead><tbody><tr><td><code>provider</code></td><td>One of the providers listed above</td></tr><tr><td><code>client_id</code> </td><td>Client ID of your app in the provider of your choosing</td></tr><tr><td><code>client_secret</code></td><td>Client Secret of your app in the provider of your choosing</td></tr><tr><td><code>jwt_secret</code></td><td>The secret for the JWT token used in the generate HTTP-only cookie. Needs to be at least 64 chars.</td></tr><tr><td><code>validations</code></td><td>An list (array) of validations for your provider</td></tr></tbody></table>
 
@@ -36,17 +32,17 @@ To only allow access from specific emails:
 ```hcl
 # ... the rest of the plugin config from above
 validations  = [
-  { key = "email", value = ["email@gmail.com", "valid@yahoo.com"]
+  { key = "email", value = ["email@gmail.com", "valid@yahoo.com"] }
 ]
 ```
 
-#### Username&#x20;
+#### Username
 
 To only allow access from specific usernames (depends on provider)
 
 ```hcl
 validations  = [
-  { key = "username", value = ["user2021", "proksi"]
+  { key = "username", value = ["user2021", "proksi"] }
 ]
 ```
 
@@ -56,8 +52,8 @@ You can combine all validations together
 
 ```hcl
 validations  = [
-  { key = "username", value = ["user2021", "proksi"],
-  { key = "email", value = ["email@gmail.com", "valid@yahoo.com"]
+  { key = "username", value = ["user2021", "proksi"] },
+  { key = "email", value = ["email@gmail.com", "valid@yahoo.com"] }
 ]
 ```
 
@@ -67,7 +63,7 @@ validations  = [
 
 A complete plugin definition looks like the following:
 
-{% code title="proksi.hcl" lineNumbers="true" %}
+**proksi.hcl**
 ```hcl
 lets_encrypt {
     enabled = true
@@ -93,7 +89,6 @@ host "website.com" {
   }
 }
 ```
-{% endcode %}
 
 
 

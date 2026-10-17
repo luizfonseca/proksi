@@ -1,7 +1,3 @@
----
-description: Limits the size of request bodies
----
-
 # Body Limit
 
 Limits the size of the request body a location accepts. Requests with a larger body get a `413 Payload Too Large`.
@@ -14,7 +10,7 @@ By default, `body_limit` runs right after `rate_limit` (priority `10`), before a
 
 ### Usage
 
-{% code title="proksi.hcl" overflow="wrap" lineNumbers="true" %}
+**proksi.hcl**
 ```hcl
 host "mywebsite.com" {
   location "/upload" {
@@ -34,7 +30,6 @@ host "mywebsite.com" {
   }
 }
 ```
-{% endcode %}
 
 ### Good to know
 
