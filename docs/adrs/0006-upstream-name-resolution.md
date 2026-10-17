@@ -21,7 +21,8 @@ Upstream names are resolved again on a schedule, and when connecting to one of t
 - **Every 5 seconds**, every name is resolved again. Record TTLs aren't used to wait longer: Docker's DNS answers with a TTL of 10 minutes, which would keep a recreated container unreachable for as long.
 - **On a failed connection** to an upstream with a name, its names are resolved again right away (at most once a second), so a recreated container is usually followed by the next request.
 - **Every address of a name is an upstream**, with the weight and settings of the upstream it came from, balanced and health checked like the others. Addresses that stay keep their health.
-- **Lookups that fail keep the last addresses.** A DNS outage doesn't empty an upstream. A name that has never resolved has no addresses: the location answers `503` until it does, instead of being invalid.
+- **Lookups that fail keep the last addresses.** A DNS outage (a timeout, a server failure) doesn't empty an upstream.
+- **A name that doesn't exist has no addresses.** The resolver's answer that a name doesn't exist (`NXDOMAIN`, or no address records) is authoritative, as when a container is removed: its last addresses are dropped, so connections fail right away instead of waiting on an address nobody answers. A name without addresses (never resolved, or no longer existing) makes the location answer `503`, instead of being invalid, and is resolved again when a request finds no upstream (at most once a second).
 - Upstreams written as addresses are never resolved.
 - The `Host` header and SNI sent to an upstream are unchanged: they come from the upstream's settings, not from the address chosen.
 

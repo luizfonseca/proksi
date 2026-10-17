@@ -221,6 +221,9 @@ impl ProxyHttp for Router {
         }
 
         let Some(healthy_upstream) = route_container.load_balancer.select(b"", 32) else {
+            // A name without addresses may resolve again (ADR 0006)
+            let load_balancer = route_container.load_balancer.clone();
+            tokio::spawn(async move { load_balancer.update().await });
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
 

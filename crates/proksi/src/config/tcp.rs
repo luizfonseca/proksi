@@ -26,6 +26,9 @@ pub struct TcpRoute {
     pub tls: TcpTls,
     /// Protocols (ALPN) the block is chosen by, next to the host's locations
     pub alpn: Vec<String>,
+    /// How long connecting to an upstream can take
+    #[serde(skip)]
+    pub connect_timeout: std::time::Duration,
     pub upstreams: Vec<RouteUpstream>,
 }
 
@@ -148,6 +151,7 @@ host "plain.example.com" {
                     listen: "0.0.0.0:7777".to_string(),
                     tls: TcpTls::None,
                     alpn: vec![],
+                    connect_timeout: std::time::Duration::from_secs(5),
                     upstreams: vec![
                         upstream("game-1", 7777, Some(2)),
                         upstream("game-2", 7777, None)
@@ -159,6 +163,7 @@ host "plain.example.com" {
                     listen: "0.0.0.0:5433".to_string(),
                     tls: TcpTls::Terminate,
                     alpn: vec![],
+                    connect_timeout: std::time::Duration::from_secs(5),
                     upstreams: vec![upstream("db", 5432, None)],
                 },
                 TcpRoute {
@@ -167,6 +172,7 @@ host "plain.example.com" {
                     listen: "0.0.0.0:6000".to_string(),
                     tls: TcpTls::Passthrough,
                     alpn: vec![],
+                    connect_timeout: std::time::Duration::from_secs(5),
                     upstreams: vec![upstream("tls-app", 443, None)],
                 },
                 TcpRoute {
@@ -175,6 +181,7 @@ host "plain.example.com" {
                     listen: "0.0.0.0:6380".to_string(),
                     tls: TcpTls::None,
                     alpn: vec![],
+                    connect_timeout: std::time::Duration::from_secs(5),
                     upstreams: vec![upstream("redis", 6379, None)],
                 },
             ])
