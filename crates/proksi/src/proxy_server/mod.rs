@@ -5,6 +5,8 @@ use pingora::{
     upstreams::peer::PeerOptions,
 };
 
+use crate::config::host::UpstreamTimeouts;
+
 pub mod cert_store;
 pub mod client;
 pub mod connections;
@@ -14,14 +16,19 @@ pub mod listener;
 pub mod services;
 pub mod timeouts;
 
-/// Default peer options to be used on every upstream connection
-pub fn default_peer_opts() -> PeerOptions {
+/// Peer options of every upstream connection, with `timeouts` (the location's, then the server's)
+/// and the default ones where they aren't set
+pub fn default_peer_opts(timeouts: UpstreamTimeouts) -> PeerOptions {
+    let secs = |secs: Option<u64>, default: u64| Duration::from_secs(secs.unwrap_or(default));
+    let connect = secs(timeouts.connect_secs, 5);
     let mut po = PeerOptions::new();
 
     po.tcp_fast_open = true;
     po.verify_hostname = true;
-    po.read_timeout = Some(Duration::from_secs(360));
-    po.connection_timeout = Some(Duration::from_secs(10));
+    po.read_timeout = Some(secs(timeouts.read_secs, 360));
+    po.connection_timeout = Some(connect);
+    // The TLS handshake of HTTPS upstreams, after connecting
+    po.total_connection_timeout = Some(connect + secs(timeouts.tls_secs, 10));
     po.tcp_recv_buf = Some(1024 * 8);
     po.tcp_keepalive = Some(TcpKeepalive {
         count: 10,
@@ -30,9 +37,8 @@ pub fn default_peer_opts() -> PeerOptions {
         #[cfg(target_os = "linux")]
         user_timeout: Duration::from_secs(0),
     });
-    po.total_connection_timeout = Some(Duration::from_secs(20));
-    po.idle_timeout = Some(Duration::from_secs(360));
-    po.write_timeout = Some(Duration::from_secs(60));
+    po.idle_timeout = Some(secs(timeouts.idle_secs, 360));
+    po.write_timeout = Some(secs(timeouts.write_secs, 60));
     po.verify_cert = false;
     po.alternative_cn = None;
     po.alpn = ALPN::H2H1;

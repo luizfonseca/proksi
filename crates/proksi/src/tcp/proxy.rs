@@ -2,8 +2,12 @@
 
 use std::{
     pin::Pin,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     task::{Context, Poll},
+    time::{Duration, Instant},
 };
 
 use async_trait::async_trait;
@@ -141,23 +145,35 @@ impl TcpProxy {
         };
 
         // Bytes are counted as they're read, so long connections show up while they're open
+        let activity = Activity::new();
         let mut downstream = Counted {
             inner: downstream,
             bytes: target.metrics.as_ref().map(|metrics| &metrics.bytes_in),
             read: &mut forwarded.bytes_in,
+            activity: &activity,
         };
         let mut upstream = Counted {
             inner: &mut upstream,
             bytes: target.metrics.as_ref().map(|metrics| &metrics.bytes_out),
             read: &mut forwarded.bytes_out,
+            activity: &activity,
         };
-        tokio::io::copy_bidirectional(&mut downstream, &mut upstream)
-            .await
-            .map(|_| ())
-            .map_err(|err| {
-                tracing::debug!("{}: connection to {addr} ended: {err}", target.label);
-                err.to_string()
-            })
+        let copy = tokio::io::copy_bidirectional(&mut downstream, &mut upstream);
+        let copied = match target.idle_timeout {
+            Some(idle_timeout) => {
+                tokio::select! {
+                    copied = copy => copied,
+                    () = activity.idle_for(idle_timeout) => {
+                        return Err(format!("idle for {idle_timeout:?}"));
+                    }
+                }
+            }
+            None => copy.await,
+        };
+        copied.map(|_| ()).map_err(|err| {
+            tracing::debug!("{}: connection to {addr} ended: {err}", target.label);
+            err.to_string()
+        })
     }
 }
 
@@ -182,11 +198,45 @@ impl ServerApp for TcpProxy {
     }
 }
 
+/// When a connection last read bytes, from either side
+struct Activity {
+    started: Instant,
+    /// Milliseconds since `started`
+    last_read: AtomicU64,
+}
+
+impl Activity {
+    fn new() -> Self {
+        Self {
+            started: Instant::now(),
+            last_read: AtomicU64::new(0),
+        }
+    }
+
+    fn read(&self) {
+        let elapsed = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        self.last_read.store(elapsed, Ordering::Relaxed);
+    }
+
+    /// Returns once nothing was read for `timeout`
+    async fn idle_for(&self, timeout: Duration) {
+        loop {
+            let last_read = Duration::from_millis(self.last_read.load(Ordering::Relaxed));
+            let last_read = self.started + last_read;
+            if last_read.elapsed() >= timeout {
+                return;
+            }
+            tokio::time::sleep_until((last_read + timeout).into()).await;
+        }
+    }
+}
+
 /// A stream counting the bytes read from it (in its metric, and for its connection)
 struct Counted<'a, S> {
     inner: &'a mut S,
     bytes: Option<&'a IntCounter>,
     read: &'a mut u64,
+    activity: &'a Activity,
 }
 
 impl<S: AsyncRead + Unpin> AsyncRead for Counted<'_, S> {
@@ -203,6 +253,7 @@ impl<S: AsyncRead + Unpin> AsyncRead for Counted<'_, S> {
                 bytes.inc_by(read);
             }
             *self.read += read;
+            self.activity.read();
         }
         poll
     }

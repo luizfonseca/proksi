@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use openssl::base64;
 use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::protocols::Digest;
-use pingora::proxy::{ProxyHttp, Session};
+use pingora::proxy::{FailToProxy, ProxyHttp, Session};
 use pingora::upstreams::peer::Peer;
 use pingora::{upstreams::peer::HttpPeer, ErrorType::HTTPStatus};
 
@@ -246,7 +246,12 @@ impl ProxyHttp for Router {
             healthy_port == 443,
             upstream.sni.clone().unwrap_or(String::new()),
         );
-        peer.options = default_peer_opts();
+        let timeouts = route_container
+            .timeouts
+            .and_then(|timeouts| timeouts.upstream)
+            .unwrap_or_default()
+            .or(Some(super::timeouts::upstream_timeouts()));
+        peer.options = default_peer_opts(timeouts);
         Ok(Box::new(peer))
     }
 
@@ -587,6 +592,26 @@ impl ProxyHttp for Router {
         e
     }
 
+    /// Answers a request that couldn't be proxied: `504` when the upstream didn't answer in time,
+    /// `502` for its other errors (as Pingora does)
+    async fn fail_to_proxy(
+        &self,
+        session: &mut Session,
+        e: &pingora::Error,
+        _ctx: &mut Self::CTX,
+    ) -> FailToProxy {
+        let code = error_status(e);
+        if code > 0 {
+            if let Err(err) = session.respond_error(code).await {
+                tracing::error!("failed to send error response to downstream: {err}");
+            }
+        }
+        FailToProxy {
+            error_code: code,
+            can_reuse_downstream: false,
+        }
+    }
+
     fn error_while_proxy(
         &self,
         peer: &HttpPeer,
@@ -626,6 +651,28 @@ impl ProxyHttp for Router {
         ctx.extensions
             .insert(Cow::Borrowed("peer"), peer.address().to_string());
         Ok(())
+    }
+}
+
+/// The status answered for a request that couldn't be proxied (`0`: the client is gone)
+fn error_status(e: &pingora::Error) -> u16 {
+    use pingora::{ErrorSource, ErrorType};
+    match (e.etype(), e.esource()) {
+        (HTTPStatus(code), _) => *code,
+        (
+            ErrorType::ConnectTimedout
+            | ErrorType::TLSHandshakeTimedout
+            | ErrorType::ReadTimedout
+            | ErrorType::WriteTimedout,
+            ErrorSource::Upstream,
+        ) => 504,
+        (_, ErrorSource::Upstream) => 502,
+        (
+            ErrorType::WriteError | ErrorType::ReadError | ErrorType::ConnectionClosed,
+            ErrorSource::Downstream,
+        ) => 0,
+        (_, ErrorSource::Downstream) => 400,
+        (_, ErrorSource::Internal | ErrorSource::Unset) => 500,
     }
 }
 

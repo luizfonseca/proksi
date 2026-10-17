@@ -2164,6 +2164,120 @@ tcp "gone" {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_locations_set_how_long_to_wait_for_their_upstreams() {
+    // Nothing answers on this address (reserved for documentation): connecting waits
+    let proksi = Harness::start_with(
+        vec![],
+        r#"
+host "gone.test" {
+  tls = false
+  timeouts {
+    upstream {
+      connect_secs = 1
+    }
+  }
+  location "/" {
+    upstream "192.0.2.1:7878" {}
+  }
+}
+"#,
+    )
+    .await;
+
+    let started = std::time::Instant::now();
+    let res = proksi.get_http_port("gone.test", "/").await.unwrap();
+
+    assert!(res.starts_with("HTTP/1.1 504"), "{res}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(3), "{:?}", started.elapsed());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_upstreams_that_dont_answer_in_time_get_a_504() {
+    // Accepts connections, never answers
+    let silent = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let silent_port = silent.local_addr().unwrap().port();
+    // Nothing listens on this port
+    let refused_port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    tokio::spawn(async move {
+        let mut accepted = vec![];
+        while let Ok((stream, _)) = silent.accept().await {
+            accepted.push(stream);
+        }
+    });
+    let proksi = Harness::start_with_server(
+        vec![],
+        "timeouts {\n upstream {\n read_secs = 1\n }\n }",
+        &format!(
+            r#"
+host "silent.test" {{
+  tls = false
+  location "/" {{
+    upstream "127.0.0.1:{silent_port}" {{}}
+  }}
+}}
+
+host "refused.test" {{
+  tls = false
+  location "/" {{
+    upstream "127.0.0.1:{refused_port}" {{}}
+  }}
+}}
+"#
+        ),
+    )
+    .await;
+
+    let started = std::time::Instant::now();
+    let res = proksi.get_http_port("silent.test", "/").await.unwrap();
+
+    assert!(res.starts_with("HTTP/1.1 504"), "{res}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(3), "{:?}", started.elapsed());
+
+    // Other errors of the upstream
+    let res = proksi.get_http_port("refused.test", "/").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 502"), "{res}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_idle_tcp_connections_are_closed() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let proksi = Harness::start_with(
+        vec![],
+        r#"
+tcp "web" {
+  listen = "127.0.0.1:{tcp_port_0}"
+  idle_timeout_secs = 1
+  upstream "127.0.0.1:{http_upstream_port}" {}
+}
+"#,
+    )
+    .await;
+
+    // Connected to the upstream, with nothing sent either way
+    let mut idle = tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[0]))
+        .await
+        .unwrap();
+    assert!(closed_within(&mut idle, std::time::Duration::from_secs(3)).await);
+
+    // Requests every half second keep it open, past the timeout
+    let mut busy = tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[0]))
+        .await
+        .unwrap();
+    for _ in 0..5 {
+        busy.write_all(b"GET /tcp HTTP/1.1\r\nHost: tcp.test\r\n\r\n")
+            .await
+            .unwrap();
+        let mut buf = [0u8; 4096];
+        let read = busy.read(&mut buf).await.unwrap();
+        assert!(buf[..read].starts_with(b"HTTP/1.1 200"));
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_locations_rewrite_the_path_sent_to_upstreams() {
     let mut proksi = Harness::start_with(
         vec![],

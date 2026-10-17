@@ -81,6 +81,7 @@ host "app.example.com" {
 | `cache` (plugin) | [`cache { }`](use-cases/cache.md), built in |
 | `log` | JSON access logs on stdout (see [Logging](configuration/logging.md)) |
 | Timeouts (`servers { timeouts { ... } }`) | `server.timeouts` (`idle_secs`, `read_secs`, `write_secs`) |
+| `transport http { dial_timeout, read_timeout, write_timeout, keepalive }` | `timeouts { upstream { connect_secs, read_secs, write_secs, idle_secs } }`, in the server or per host/location |
 | `grace_period` | `server.shutdown_timeout_secs` |
 | `handle_path /api/*`, `uri strip_prefix`, `uri prefix` | `location "/api"` with [`rewrite`](routing/upstreams.md#rewriting-paths) `{ strip_prefix, add_prefix }` |
 | `rewrite`, `uri path_regexp` | [`rewrite`](routing/upstreams.md#rewriting-paths) `{ match, replace }` |
