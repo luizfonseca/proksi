@@ -8,7 +8,10 @@ use pingora::{
     proxy::Session,
 };
 
-use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
+use crate::{
+    config::RoutePlugin,
+    proxy_server::{https_proxy::RouterContext, respond::respond},
+};
 
 use super::MiddlewarePlugin;
 
@@ -60,9 +63,7 @@ impl MiddlewarePlugin for BasicAuth {
         };
 
         let Some((user, pass)) = Self::get_auth_config(config) else {
-            session
-                .write_response_header(Self::respond_with_authenticate(&ctx.host)?, true)
-                .await?;
+            respond(session, ctx, *Self::respond_with_authenticate(&ctx.host)?).await?;
             return Ok(true);
         };
 
@@ -70,18 +71,14 @@ impl MiddlewarePlugin for BasicAuth {
         let auth_header = if let Some(header) = session.req_header().headers.get("authorization") {
             header.to_str()?
         } else {
-            session
-                .write_response_header(Self::respond_with_authenticate(&ctx.host)?, true)
-                .await?;
+            respond(session, ctx, *Self::respond_with_authenticate(&ctx.host)?).await?;
             return Ok(true);
         };
 
         if !auth_header.starts_with("Basic ")
             || !Self::validate_auth_header(auth_header, &user, &pass)?
         {
-            session
-                .write_response_header(Self::respond_with_authenticate(&ctx.host)?, true)
-                .await?;
+            respond(session, ctx, *Self::respond_with_authenticate(&ctx.host)?).await?;
             return Ok(true);
         }
 

@@ -2278,6 +2278,65 @@ tcp "web" {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_responses_of_proksi_itself_have_the_configured_headers() {
+    // Nothing listens on this port
+    let refused_port = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        &format!(
+            r#"
+host "plain.test" {{
+  tls = false
+  headers {{
+    response {{
+      add = {{ "X-Frame-Options" = "DENY" }}
+    }}
+  }}
+  location "/down" {{
+    upstream "127.0.0.1:{refused_port}" {{}}
+  }}
+  location "/" {{
+    rate_limit {{
+      requests = 1
+      per      = "1m"
+    }}
+    upstream "127.0.0.1:{{http_upstream_port}}" {{}}
+  }}
+}}
+"#
+        ),
+    )
+    .await;
+    let check = |res: &str, status: &str| {
+        assert!(res.starts_with(&format!("HTTP/1.1 {status}")), "{res}");
+        let headers = res.split("\r\n\r\n").next().unwrap_or_default().to_lowercase();
+        assert!(headers.contains("x-frame-options: deny"), "{res}");
+        assert!(!headers.contains("\r\nserver:"), "{res}");
+    };
+
+    // Proxied, then answered by `rate_limit`
+    check(&proksi.get_http_port("plain.test", "/").await.unwrap(), "200");
+    check(&proksi.get_http_port("plain.test", "/").await.unwrap(), "429");
+    // The upstream refused the connection
+    check(&proksi.get_http_port("plain.test", "/down").await.unwrap(), "502");
+
+    // A host proksi doesn't serve: no headers to add, nor a `Server`
+    let res = proksi
+        .tls_request(
+            proksi.https_port,
+            "app.test",
+            "GET / HTTP/1.1\r\nHost: unknown.test\r\nConnection: close\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 404"), "{res}");
+    assert!(!res.to_lowercase().contains("\r\nserver:"), "{res}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_locations_rewrite_the_path_sent_to_upstreams() {
     let mut proksi = Harness::start_with(
         vec![],
