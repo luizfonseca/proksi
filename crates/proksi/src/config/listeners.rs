@@ -21,6 +21,8 @@ pub struct Listeners {
     pub tcp: Vec<TcpRoute>,
     /// The admin API (`admin { ... }`), if enabled
     pub admin: Option<SocketAddr>,
+    /// The metrics-only listener (`admin.metrics_listen`), if any
+    pub metrics: Option<SocketAddr>,
 }
 
 /// The addresses the hosts of the configuration need:
@@ -78,29 +80,64 @@ pub fn listeners(config: &Config) -> Result<Listeners, String> {
         .as_ref()
         .map(|admin| admin_address(admin, &listeners))
         .transpose()?;
+    listeners.metrics = config
+        .admin
+        .as_ref()
+        .map(|admin| metrics_address(admin, &listeners))
+        .transpose()?
+        .flatten();
     Ok(listeners)
 }
 
 /// The admin API's address, on a port of its own
 fn admin_address(admin: &AdminConfig, listeners: &Listeners) -> Result<SocketAddr, String> {
     let address = admin.address()?;
-    // Also an address covering it (`0.0.0.0`, `[::]`) on the same port
-    let overlaps = |other: &str| {
-        other.parse::<SocketAddr>().is_ok_and(|other| {
-            other.port() == address.port()
-                && (other.ip() == address.ip()
-                    || other.ip().is_unspecified()
-                    || address.ip().is_unspecified())
-        })
-    };
-    let used = listeners.https.iter().chain(&listeners.http).any(|a| overlaps(a))
-        || listeners.tcp.iter().any(|route| overlaps(&route.listen));
-    if used {
+    if used(address, listeners) {
         return Err(format!(
             "admin: address {address} is also used by hosts or tcp blocks"
         ));
     }
     Ok(address)
+}
+
+/// The metrics-only listener's address, on a port of its own too
+fn metrics_address(
+    admin: &AdminConfig,
+    listeners: &Listeners,
+) -> Result<Option<SocketAddr>, String> {
+    let Some(address) = admin.metrics_address()? else {
+        return Ok(None);
+    };
+    let admin = listeners.admin.iter().map(ToString::to_string).collect::<Vec<_>>();
+    if used(address, listeners) || admin.iter().any(|other| overlaps(address, other)) {
+        return Err(format!(
+            "admin: metrics_listen {address} is also used by the admin API, hosts or tcp blocks"
+        ));
+    }
+    Ok(Some(address))
+}
+
+/// Whether hosts or `tcp` blocks listen on `address`
+fn used(address: SocketAddr, listeners: &Listeners) -> bool {
+    listeners
+        .https
+        .iter()
+        .chain(&listeners.http)
+        .any(|other| overlaps(address, other))
+        || listeners
+            .tcp
+            .iter()
+            .any(|route| overlaps(address, &route.listen))
+}
+
+/// Whether `other` is `address`, or covers it (`0.0.0.0`, `[::]`, on the same port)
+fn overlaps(address: SocketAddr, other: &str) -> bool {
+    other.parse::<SocketAddr>().is_ok_and(|other| {
+        other.port() == address.port()
+            && (other.ip() == address.ip()
+                || other.ip().is_unspecified()
+                || address.ip().is_unspecified())
+    })
 }
 
 /// The `tcp` blocks, each on an address of its own: blocks of different hosts with TLS can
@@ -239,6 +276,7 @@ mod tests {
                 http: set(&["0.0.0.0:80"]),
                 tcp: vec![],
                 admin: None,
+                metrics: None,
             })
         );
     }
@@ -253,6 +291,7 @@ mod tests {
                 http: set(&["0.0.0.0:80"]),
                 tcp: vec![],
                 admin: None,
+                metrics: None,
             })
         );
     }
@@ -270,6 +309,7 @@ mod tests {
                 http: set(&["0.0.0.0:80", "0.0.0.0:8080"]),
                 tcp: vec![],
                 admin: None,
+                metrics: None,
             })
         );
     }
@@ -285,6 +325,7 @@ mod tests {
                 http: set(&["0.0.0.0:80", "0.0.0.0:8080"]),
                 tcp: vec![],
                 admin: None,
+                metrics: None,
             })
         );
     }
@@ -300,6 +341,7 @@ mod tests {
                 http: set(&["0.0.0.0:80", "0.0.0.0:8080"]),
                 tcp: vec![],
                 admin: None,
+                metrics: None,
             })
         );
     }
@@ -369,12 +411,47 @@ host "b.test" {
     }
 
     #[test]
+    fn test_metrics_address() {
+        let admin = |metrics_listen: &str, metrics| crate::config::admin::AdminConfig {
+            listen: "127.0.0.1:7555".to_string(),
+            token: None,
+            metrics,
+            metrics_listen: Some(metrics_listen.to_string()),
+            metrics_token: None,
+        };
+        let mut config = config("host \"a.test\" {}\n");
+
+        config.admin = Some(admin("0.0.0.0:9100", true));
+        assert_eq!(listeners(&config).unwrap().metrics, Some("0.0.0.0:9100".parse().unwrap()));
+
+        for address in ["127.0.0.1:7555", "0.0.0.0:7555", "0.0.0.0:443"] {
+            config.admin = Some(admin(address, true));
+            assert_eq!(
+                listeners(&config),
+                Err(format!(
+                    "admin: metrics_listen {address} is also used by the admin API, hosts or tcp blocks"
+                )),
+            );
+        }
+
+        config.admin = Some(admin("0.0.0.0:9100", false));
+        assert_eq!(
+            listeners(&config),
+            Err("admin: metrics_listen needs metrics (metrics = false)".to_string()),
+        );
+        config.admin = Some(admin("9100", true));
+        assert!(listeners(&config).unwrap_err().contains("ip:port"));
+    }
+
+    #[test]
     fn test_admin_address() {
         let mut with_admin = config("host \"a.test\" {}\n");
         with_admin.admin = Some(crate::config::admin::AdminConfig {
             listen: "127.0.0.1:7555".to_string(),
             token: None,
             metrics: true,
+            metrics_listen: None,
+            metrics_token: None,
         });
         assert_eq!(
             listeners(&with_admin).unwrap().admin,
@@ -389,6 +466,8 @@ host "b.test" {
                 listen: address.to_string(),
                 token: Some("secret".to_string()),
                 metrics: true,
+                metrics_listen: None,
+                metrics_token: None,
             });
             assert_eq!(
                 listeners(&config),

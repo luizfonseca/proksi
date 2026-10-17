@@ -167,6 +167,7 @@ fn main() -> Result<(), anyhow::Error> {
     ));
 
     proxy_server::timeouts::set_client_timeouts(proxy_config.server.timeouts);
+    proxy_server::services::set_server_tls(proxy_config.server.tls.clone());
     for listening in add_listeners(
         &mut pingora_server,
         &proxy_config,
@@ -227,9 +228,17 @@ fn add_listeners(
                 "http": listeners.http,
                 "tcp": listeners.tcp.iter().map(|route| route.listen.clone()).collect::<std::collections::BTreeSet<_>>(),
                 "admin": address.to_string(),
+                "metrics": listeners.metrics.map(|address| address.to_string()),
             }),
         };
         handles.push(server.add_service(admin::admin_service(address, token, instance)));
+    }
+    if let Some(address) = listeners.metrics {
+        let token = proxy_config
+            .admin
+            .as_ref()
+            .and_then(|admin| admin.metrics_token().map(ToString::to_string));
+        handles.push(server.add_service(admin::metrics_service(address, token)));
     }
     handles.extend(server.add_services(tcp::services::tcp_services(
         &listeners.tcp,

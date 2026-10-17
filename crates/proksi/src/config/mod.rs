@@ -21,6 +21,7 @@ pub(crate) mod hcl;
 pub mod host;
 pub mod kubernetes;
 pub mod listeners;
+pub mod server_tls;
 pub mod tcp;
 pub mod validate;
 
@@ -598,6 +599,11 @@ pub struct ServerCfg {
     #[arg(skip)]
     #[serde(default)]
     pub timeouts: ClientTimeouts,
+
+    /// TLS versions and cipher suites accepted from clients
+    #[arg(skip)]
+    #[serde(default)]
+    pub tls: server_tls::ServerTls,
 }
 
 impl ServerCfg {
@@ -620,6 +626,9 @@ pub struct ClientTimeouts {
     pub read_secs: u64,
     /// How long each write of a response can wait for the client to read
     pub write_secs: u64,
+    /// How long the whole body of a request can take to arrive, after its headers (default: no
+    /// limit)
+    pub body_secs: Option<u64>,
     /// Toward upstreams, unless a host or location sets them
     pub upstream: host::UpstreamTimeouts,
 }
@@ -630,6 +639,7 @@ impl Default for ClientTimeouts {
             idle_secs: 60,
             read_secs: 60,
             write_secs: 60,
+            body_secs: None,
             upstream: host::UpstreamTimeouts::default(),
         }
     }
@@ -779,6 +789,7 @@ impl Default for Config {
                 http_address: Some(Cow::Borrowed("0.0.0.0:80")),
                 trusted_proxies: vec![],
                 timeouts: ClientTimeouts::default(),
+                tls: server_tls::ServerTls::default(),
                 shutdown_timeout_secs: None,
             },
             worker_threads: Some(default_worker_threads()),

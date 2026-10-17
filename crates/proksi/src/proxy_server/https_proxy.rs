@@ -52,6 +52,8 @@ pub struct RouterContext {
     /// The upstream chosen (index in the location's upstreams), and when
     pub upstream_index: Option<usize>,
     pub upstream_start: Option<std::time::Instant>,
+    /// When the request body must have arrived (`body_secs`), and the timeout of each read
+    pub body_deadline: Option<(std::time::Instant, Duration)>,
 
     pub timings: RouterTimings,
 }
@@ -75,6 +77,7 @@ impl ProxyHttp for Router {
             request_body_bytes: 0,
             upstream_index: None,
             upstream_start: None,
+            body_deadline: None,
 
             timings: RouterTimings {
                 request_filter_start: std::time::Instant::now(),
@@ -169,6 +172,15 @@ impl ProxyHttp for Router {
                 session.set_write_timeout(Some(Duration::from_secs(write)));
             }
         }
+        // The whole body, from now: each read waits until then at most
+        let server = super::timeouts::client_timeouts();
+        let timeouts = route_container.timeouts.unwrap_or_default();
+        if let Some(body) = timeouts.body_secs.or(server.body_secs) {
+            let read = Duration::from_secs(timeouts.read_secs.unwrap_or(server.read_secs));
+            let body = Duration::from_secs(body);
+            ctx.body_deadline = Some((std::time::Instant::now() + body, read));
+            session.set_read_timeout(Some(read.min(body)));
+        }
 
         // The location's building blocks, in order: a block can answer the request (e.g. a `401`)
         if let Some(block) = route_container.blocks.request(session, ctx).await {
@@ -184,11 +196,24 @@ impl ProxyHttp for Router {
     /// Each part of the request body, as it's proxied to the upstream
     async fn request_body_filter(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         body: &mut Option<bytes::Bytes>,
-        _end_of_stream: bool,
+        end_of_stream: bool,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
+        // The rest of the body must arrive by the deadline (HTTP/2: checked as parts arrive)
+        if let Some((deadline, read)) = ctx.body_deadline.filter(|_| !end_of_stream) {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                return Err(pingora::Error::explain(
+                    pingora::ErrorType::ReadTimedout,
+                    "the request body didn't arrive in time (body_secs)",
+                )
+                .into_down());
+            }
+            session.set_read_timeout(Some(read.min(remaining)));
+        }
+
         let Some(location) = ctx.route_container.clone() else {
             return Ok(());
         };
@@ -667,6 +692,7 @@ fn error_status(e: &pingora::Error) -> u16 {
             ErrorSource::Upstream,
         ) => 504,
         (_, ErrorSource::Upstream) => 502,
+        (ErrorType::ReadTimedout, ErrorSource::Downstream) => 408,
         (
             ErrorType::WriteError | ErrorType::ReadError | ErrorType::ConnectionClosed,
             ErrorSource::Downstream,

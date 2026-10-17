@@ -1210,6 +1210,8 @@ async fn test_admin_metrics() {
         "proksi_tcp_connections_active{block=\"tcp \\\"web\\\"\"} 0",
         "proksi_blocked_requests_total{block=\"rate_limit\",host=\"limited.test\",location=\"/\"} 1",
         "proksi_requests_total{host=\"limited.test\",location=\"/\",status=\"4xx\"} 1",
+        // By status code too
+        "proksi_responses_total{code=\"429\",host=\"limited.test\",location=\"/\"} 1",
     ];
     let mut res = String::new();
     for _ in 0..20 {
@@ -1223,6 +1225,9 @@ async fn test_admin_metrics() {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    for line in recorded {
+        assert!(res.lines().any(|l| l.trim_end() == line), "{line}\n{res}");
+    }
     let line = |prefix: &str, suffix: &str| {
         res.lines()
             .find(|line| line.starts_with(prefix) && line.contains(suffix))
@@ -1903,6 +1908,186 @@ host "plain.test" {
     // The location's, longer than the host's
     let mut upload = slow_body("/upload").await;
     assert!(!closed_within(&mut upload, std::time::Duration::from_secs(3)).await);
+}
+
+const TLS_HOST: &str = r#"
+host "tls.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+/// The cipher negotiated with proksi on `port`, offering only the TLS 1.2 `ciphers`, or
+/// OpenSSL's defaults without any; or why the handshake failed
+async fn negotiated_cipher(port: u16, ciphers: Option<&'static str>) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode, SslVersion};
+        let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
+        connector.set_verify(SslVerifyMode::NONE);
+        if let Some(ciphers) = ciphers {
+            connector.set_max_proto_version(Some(SslVersion::TLS1_2)).unwrap();
+            connector.set_cipher_list(ciphers).unwrap();
+        }
+        let stream =
+            std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|err| err.to_string())?;
+        let stream = connector
+            .build()
+            .connect("tls.test", stream)
+            .map_err(|err| err.to_string())?;
+        let cipher = stream.ssl().current_cipher();
+        Ok(cipher.map(|cipher| cipher.name().to_string()).unwrap_or_default())
+    })
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_dhe_ciphers_are_refused_by_default() {
+    let proksi = Harness::start_with(vec![], TLS_HOST).await;
+
+    let refused = negotiated_cipher(proksi.https_port, Some("DHE-RSA-AES128-GCM-SHA256")).await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert_eq!(
+        negotiated_cipher(proksi.https_port, Some("ECDHE-RSA-AES128-GCM-SHA256")).await,
+        Ok("ECDHE-RSA-AES128-GCM-SHA256".to_string())
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_tls_ciphers_can_be_chosen() {
+    let proksi = Harness::start_with_server(
+        vec![],
+        "tls {\n ciphers = [\"ECDHE-RSA-AES256-GCM-SHA384\"]\n }",
+        TLS_HOST,
+    )
+    .await;
+
+    let refused = negotiated_cipher(proksi.https_port, Some("ECDHE-RSA-AES128-GCM-SHA256")).await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert_eq!(
+        negotiated_cipher(proksi.https_port, Some("ECDHE-RSA-AES256-GCM-SHA384")).await,
+        Ok("ECDHE-RSA-AES256-GCM-SHA384".to_string())
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_tls_1_2_can_be_refused() {
+    let proksi =
+        Harness::start_with_server_ready_over_http("tls {\n min_version = \"1.3\"\n }", TLS_HOST)
+            .await;
+
+    let refused = negotiated_cipher(proksi.https_port, Some("ECDHE-RSA-AES128-GCM-SHA256")).await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert!(negotiated_cipher(proksi.https_port, None).await.is_ok());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_request_bodies_must_arrive_in_time() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let proksi = Harness::start_with_server(
+        vec![],
+        "timeouts {\n body_secs = 1\n }",
+        r#"
+host "plain.test" {
+  tls = false
+  location "/upload" {
+    timeouts {
+      body_secs = 30
+    }
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#,
+    )
+    .await;
+
+    // A byte every 300 ms: each read is quick, the whole body isn't. Returns how long until
+    // proksi gave up on it, if it did within 3 seconds.
+    let trickle = |path: &'static str| {
+        let port = proksi.http_port;
+        async move {
+            let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .unwrap();
+            stream
+                .write_all(
+                    format!("POST {path} HTTP/1.1\r\nHost: plain.test\r\nContent-Length: 100\r\n\r\n")
+                        .as_bytes(),
+                )
+                .await
+                .unwrap();
+            let started = std::time::Instant::now();
+            let mut buf = [0u8; 1024];
+            while started.elapsed() < std::time::Duration::from_secs(3) {
+                if stream.write_all(b"a").await.is_err() {
+                    return Some((started.elapsed(), String::new()));
+                }
+                match tokio::time::timeout(
+                    std::time::Duration::from_millis(300),
+                    stream.read(&mut buf),
+                )
+                .await
+                {
+                    Ok(Ok(0) | Err(_)) => return Some((started.elapsed(), String::new())),
+                    Ok(Ok(read)) => {
+                        return Some((
+                            started.elapsed(),
+                            String::from_utf8_lossy(&buf[..read]).to_string(),
+                        ));
+                    }
+                    Err(_) => {}
+                }
+            }
+            None
+        }
+    };
+
+    let (elapsed, res) = trickle("/").await.expect("the body was still accepted after 3 s");
+    assert!(elapsed < std::time::Duration::from_secs(2), "{elapsed:?}");
+    assert!(res.is_empty() || res.starts_with("HTTP/1.1 408"), "{res}");
+
+    // The location's limit, longer
+    assert!(trickle("/upload").await.is_none());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_metrics_on_a_listener_of_their_own() {
+    let proksi = Harness::start_with(
+        vec![Route::new("app.test", Upstream::Http)],
+        r#"
+admin {
+  listen         = "127.0.0.1:{tcp_port_2}"
+  token          = "admin-token"
+  metrics_listen = "127.0.0.1:{tcp_port_1}"
+}
+"#,
+    )
+    .await;
+    let get = |port: u16, path: &str| {
+        let request = format!("GET {path} HTTP/1.1\r\nHost: admin\r\nConnection: close\r\n\r\n");
+        let proksi = &proksi;
+        async move { proksi.raw_http_on(port, request.as_bytes()).await.unwrap() }
+    };
+
+    let metrics = get(proksi.tcp_ports[1], "/metrics").await;
+    assert!(metrics.starts_with("HTTP/1.1 200"), "{metrics}");
+    assert!(metrics.contains("proksi_requests_total"), "{metrics}");
+    // Nothing else, not even with the admin API's token
+    let routes = get(proksi.tcp_ports[1], "/api/v1/routes").await;
+    assert!(routes.starts_with("HTTP/1.1 404"), "{routes}");
+    // The admin API still needs its token
+    let admin = get(proksi.tcp_ports[2], "/metrics").await;
+    assert!(admin.starts_with("HTTP/1.1 401"), "{admin}");
 }
 
 #[tokio::test(flavor = "multi_thread")]

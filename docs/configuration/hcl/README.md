@@ -173,11 +173,14 @@ server {
     idle_secs  = 60 # for a request's headers, and between requests of a connection
     read_secs  = 60 # for each read of a request body, and websocket messages
     write_secs = 60 # for a client to read each write of a response
+    body_secs  = 300 # for a request's whole body, after its headers (no limit by default)
   }
 }
 ```
 
-A host or a location can change `read_secs` and `write_secs` for its requests (a location's override its host's). `idle_secs` only applies to the server: it's used before a request, so before its host is known.
+A host or a location can change `read_secs`, `write_secs` and `body_secs` for its requests (a location's override its host's). `idle_secs` only applies to the server: it's used before a request, so before its host is known.
+
+Request bodies are streamed to the upstream as they arrive, not buffered. A client that sends a body slowly, each part just within `read_secs`, keeps the upstream busy with that request. `body_secs` puts a limit on the whole body: past it, the connection is closed (a `408` if no response was sent yet). Set it to the longest a legitimate upload can take, and longer for upload locations. On HTTP/2 it's checked as each part of the body arrives, as HTTP/2 has no per-read timeout.
 
 ```hcl
 host "app.example.com" {
@@ -237,6 +240,26 @@ host "api.example.com" {
 The values above are the defaults. An upstream that doesn't connect or answer in time gets the client a `504`; other upstream errors (e.g. a refused connection), a `502`.
 
 `tcp` blocks have their own: `connect_timeout_secs` and `idle_timeout_secs` (see [TCP](routing/tcp.md)).
+
+### TLS versions and ciphers
+
+Clients connect with TLS 1.2 or 1.3. TLS 1.2 is limited to forward-secret cipher suites (ECDHE) with AES-GCM or ChaCha20, as in Mozilla's "intermediate" configuration; older ones, such as DHE, CBC or RSA key exchange, are refused. `server.tls` changes them for HTTPS and for `tcp` blocks that terminate TLS:
+
+```hcl
+server {
+  tls {
+    min_version = "1.3" # "1.2" by default
+
+    # TLS 1.2 suites, by their OpenSSL names, in order of preference
+    ciphers = [
+      "ECDHE-ECDSA-AES256-GCM-SHA384",
+      "ECDHE-RSA-AES256-GCM-SHA384",
+    ]
+  }
+}
+```
+
+TLS 1.3 suites are always the standard ones, all of them strong. A cipher OpenSSL doesn't know makes the configuration invalid.
 
 ## Migrating from `routes = [...]`
 
