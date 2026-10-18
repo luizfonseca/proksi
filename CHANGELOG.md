@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.11.0...proksi-v0.11.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* keep mimalloc from reserving an arena in the supervisor ([#452](https://github.com/luizfonseca/proksi/issues/452)) ([e34edc1](https://github.com/luizfonseca/proksi/commit/e34edc1fe2940ac3bbca8863b882316b01aa5270))
+
+
+### Performance Improvements
+
+* fewer allocations per request ([#453](https://github.com/luizfonseca/proksi/issues/453)) ([db23cbf](https://github.com/luizfonseca/proksi/commit/db23cbf3de52b337c5a1b442da0fb73882c0174b))
+
 ## [0.11.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.10.0...proksi-v0.11.0) (2026-10-17)
 
 
