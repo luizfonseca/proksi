@@ -14,6 +14,9 @@ on:
       - "docs/**"
       - "docs.json"
 
+permissions:
+  contents: read
+
 jobs:
   check:
     name: Check
