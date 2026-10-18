@@ -708,14 +708,31 @@ async fn test_access_logs_name_the_upstream_connection() {
         let log: serde_json::Value =
             serde_json::from_str(&log).unwrap_or_else(|_| panic!("{path}: {log}"));
         let fields = log.get("fields").unwrap_or(&log);
-        assert_eq!(fields["peer_addr"], upstream.as_str(), "{log}");
+        assert_eq!(fields["upstream_addr"], upstream.as_str(), "{log}");
         // The connection may come from proksi's readiness checks
         assert!(
             ["true", "false"].contains(&fields["reused_connection"].as_str().unwrap_or("")),
             "{log}"
         );
         assert_eq!(fields["request_id"], request_id.as_str(), "{log}");
+        assert_eq!(fields["forwarded_for"], "", "{log}");
     }
+
+    // X-Forwarded-For is logged as sent, though proksi doesn't trust it
+    let res = proksi
+        .raw_http_on(
+            proksi.http_port,
+            b"GET /forwarded HTTP/1.1\r\nHost: logged.test\r\nX-Forwarded-For: 203.0.113.7, 198.51.100.2\r\nConnection: close\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let log = proksi.access_log("/forwarded");
+    let log: serde_json::Value = serde_json::from_str(&log).unwrap_or_else(|_| panic!("{log}"));
+    let fields = log.get("fields").unwrap_or(&log);
+    assert_eq!(fields["forwarded_for"], "203.0.113.7, 198.51.100.2", "{log}");
+    assert!(fields["client_ip"].as_str().unwrap_or("").starts_with("127.0.0.1:"), "{log}");
 
     proksi.assert_healthy();
 }

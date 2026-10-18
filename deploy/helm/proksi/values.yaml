@@ -12,6 +12,9 @@ ingressClass:
 
 service:
   type: LoadBalancer
+  # Local keeps the client's address (Cluster replaces it with a node's): with it, only nodes
+  # running Proksi receive traffic
+  externalTrafficPolicy: Local
   annotations: {}
 
 # Watched namespaces (all of them when empty)

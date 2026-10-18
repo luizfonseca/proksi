@@ -136,6 +136,8 @@ metadata:
   namespace: proksi
 spec:
   type: LoadBalancer
+  # Keeps the client's address (the default, Cluster, replaces it with a node's)
+  externalTrafficPolicy: Local
   selector:
     app.kubernetes.io/name: proksi
   ports:
