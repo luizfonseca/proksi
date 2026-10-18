@@ -920,6 +920,118 @@ async fn test_ip_filter() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_CORS: &str = r#"
+host "cors.test" {
+  tls = false
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    cors {
+      origins        = ["https://app.example.com", "https://*.preview.example.com"]
+      methods        = ["GET", "POST"]
+      expose_headers = ["X-Total-Count"]
+      credentials    = true
+      max_age_secs   = 600
+    }
+
+    basic_auth {
+      user = "u"
+      pass = "p"
+    }
+  }
+
+  location "/public" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    cors {
+      origins = ["*"]
+    }
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_cors() {
+    let mut proksi = Harness::start_without_https(HOST_WITH_CORS).await;
+    let port = proksi.http_port;
+    let send = |request: String| {
+        let proksi = &proksi;
+        async move { proksi.raw_http_on(port, request.as_bytes()).await.unwrap() }
+    };
+    let header = |res: &str, name: &str| {
+        res.lines()
+            .take_while(|line| !line.is_empty())
+            .find_map(|line| {
+                let (key, value) = line.split_once(": ")?;
+                key.eq_ignore_ascii_case(name).then(|| value.to_string())
+            })
+    };
+    let preflight = |path: &str, origin: &str| {
+        format!(
+            "OPTIONS {path} HTTP/1.1\r\nHost: cors.test\r\nOrigin: {origin}\r\n\
+             Access-Control-Request-Method: POST\r\n\
+             Access-Control-Request-Headers: content-type, x-custom\r\nConnection: close\r\n\r\n"
+        )
+    };
+
+    // Preflights are answered before authentication, without reaching the upstream
+    let res = send(preflight("/items", "https://app.example.com")).await;
+    assert!(res.starts_with("HTTP/1.1 204"), "{res}");
+    assert_eq!(
+        header(&res, "access-control-allow-origin").as_deref(),
+        Some("https://app.example.com")
+    );
+    assert_eq!(header(&res, "access-control-allow-methods").as_deref(), Some("GET, POST"));
+    assert_eq!(
+        header(&res, "access-control-allow-headers").as_deref(),
+        Some("content-type, x-custom")
+    );
+    assert_eq!(header(&res, "access-control-allow-credentials").as_deref(), Some("true"));
+    assert_eq!(header(&res, "access-control-max-age").as_deref(), Some("600"));
+    assert_eq!(proksi.http_upstream.hits("/items"), 0);
+
+    // A subdomain of the pattern
+    let res = send(preflight("/items", "https://pr-12.preview.example.com")).await;
+    assert_eq!(
+        header(&res, "access-control-allow-origin").as_deref(),
+        Some("https://pr-12.preview.example.com")
+    );
+
+    // Other origins get no CORS headers
+    for origin in ["https://evil.test", "https://preview.example.com", "http://app.example.com"] {
+        let res = send(preflight("/items", origin)).await;
+        assert!(res.starts_with("HTTP/1.1 204"), "{origin}: {res}");
+        assert_eq!(header(&res, "access-control-allow-origin"), None, "{origin}: {res}");
+    }
+
+    // Requests get the headers on their response (here, from basic_auth)
+    let res = send(
+        "GET /items HTTP/1.1\r\nHost: cors.test\r\nOrigin: https://app.example.com\r\nConnection: close\r\n\r\n"
+            .to_string(),
+    )
+    .await;
+    assert!(res.starts_with("HTTP/1.1 401"), "{res}");
+    assert_eq!(
+        header(&res, "access-control-allow-origin").as_deref(),
+        Some("https://app.example.com")
+    );
+    assert_eq!(header(&res, "access-control-expose-headers").as_deref(), Some("X-Total-Count"));
+    assert_eq!(header(&res, "vary").as_deref(), Some("Origin"));
+
+    // Any origin, without credentials
+    let res = send(
+        "GET /public HTTP/1.1\r\nHost: cors.test\r\nOrigin: https://evil.test\r\nConnection: close\r\n\r\n"
+            .to_string(),
+    )
+    .await;
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert_eq!(header(&res, "access-control-allow-origin").as_deref(), Some("*"));
+    assert_eq!(header(&res, "access-control-allow-credentials"), None);
+
+    proksi.assert_healthy();
+}
+
 const TCP_BLOCKS: &str = r#"
 tcp "web" {
   listen = "127.0.0.1:{tcp_port_0}"

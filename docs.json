@@ -172,6 +172,10 @@
         {
           "title": "IP filter",
           "href": "/plugins/ip-filter"
+        },
+        {
+          "title": "CORS",
+          "href": "/plugins/cors"
         }
       ]
     },

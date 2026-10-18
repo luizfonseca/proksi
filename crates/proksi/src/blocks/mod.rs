@@ -20,6 +20,7 @@ use basic_auth::BasicAuth;
 use body_limit::BodyLimit;
 use cache::Cache;
 use compress::Compress;
+use cors::Cors;
 use headers::Headers;
 use ip_filter::IpFilter;
 use oauth2::Oauth2;
@@ -32,6 +33,7 @@ mod basic_auth;
 mod body_limit;
 mod cache;
 mod compress;
+mod cors;
 mod headers;
 mod ip_filter;
 mod oauth2;
@@ -91,6 +93,7 @@ pub trait Middleware: Send + Sync {
 pub enum Kind {
     RequestId,
     IpFilter,
+    Cors,
     RateLimit,
     Redirect,
     Respond,
@@ -107,6 +110,7 @@ impl Kind {
         match self {
             Kind::RequestId => "request_id",
             Kind::IpFilter => "ip_filter",
+            Kind::Cors => "cors",
             Kind::RateLimit => "rate_limit",
             Kind::Redirect => "redirect",
             Kind::Respond => "respond",
@@ -122,7 +126,7 @@ impl Kind {
     /// Where the block runs unless it sets `priority`
     pub fn default_priority(self) -> u8 {
         match self {
-            Kind::RequestId | Kind::IpFilter | Kind::RateLimit => 0,
+            Kind::RequestId | Kind::IpFilter | Kind::Cors | Kind::RateLimit => 0,
             Kind::Redirect | Kind::Respond => 5,
             Kind::BodyLimit => 10,
             Kind::BasicAuth | Kind::Oauth2 => 20,
@@ -159,6 +163,7 @@ impl Blocks {
                     }),
                 ),
                 "ip_filter" => (Kind::IpFilter, Arc::new(IpFilter::new(plugin)?)),
+                "cors" => (Kind::Cors, Arc::new(Cors::new(plugin)?)),
                 "rate_limit" => (Kind::RateLimit, Arc::new(RateLimit::new(plugin)?)),
                 "body_limit" => (Kind::BodyLimit, Arc::new(BodyLimit::new(plugin)?)),
                 "redirect" => (Kind::Redirect, Arc::new(Redirect::new(plugin)?)),

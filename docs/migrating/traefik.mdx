@@ -66,6 +66,7 @@ host "app.example.com" {
 | `buffering.maxRequestBodyBytes` | [`body_limit { max = "10MiB" }`](/plugins/body-limit) |
 | `headers.customResponseHeaders` | [`headers { response { add, remove } }`](/routing/headers) |
 | `headers.customRequestHeaders` | `headers { add = { ... } }` in an `upstream` |
+| `headers.accessControl*` (CORS) | [`cors { origins, methods, headers, credentials, max_age_secs }`](/plugins/cors) |
 | `redirectScheme` (to HTTPS) | Built in |
 | `forwardAuth` | [`oauth2`](/plugins/oauth2) covers GitHub and WorkOS sign-in; no generic forward auth |
 | `stripPrefix`, `addPrefix` | [`rewrite`](/routing/upstreams#rewriting-paths) `{ strip_prefix, add_prefix }` in the location |
