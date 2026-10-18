@@ -3,7 +3,9 @@ title: "Performance"
 description: "Proksi is built on Cloudflare Pingora, and most of the work of each request (parsing, connection pooling, I/O) happens there."
 ---
 
-Proksi is built on [Cloudflare Pingora](https://github.com/cloudflare/pingora), and most of the work of each request (parsing, connection pooling, I/O) happens there. Proksi adds the routing, plugins and logging on top of it, which costs around 2µs per request.
+Proksi is built on [Cloudflare Pingora](https://github.com/cloudflare/pingora), and most of the work of each request (parsing, connection pooling, I/O) happens there. Proksi adds the routing, plugins, forwarded headers, metrics and logging on top of it, which costs around 3µs per request: proxying with one thread, Proksi uses 14.2µs of CPU per request where a bare Pingora proxy uses 11µs.
+
+Most of the difference with nginx comes from Pingora: it parses requests into owned headers and runs each step of a request as an async task, where nginx reuses its buffers and barely allocates. Pingora's threads also share one pool of upstream connections, so a connection opened on one thread is often reused from another, which costs more as threads are added.
 
 ### Compared to nginx and Traefik
 
@@ -34,6 +36,16 @@ All proxies forward plain HTTP and HTTPS requests to the same nginx upstream, wi
 On Linux, Proksi commits its memory upfront ([mimalloc](https://github.com/microsoft/mimalloc)), which is ~15MB of the numbers above. Set `MIMALLOC_ARENA_EAGER_COMMIT=0` to commit it as it's used instead (the default in the Docker image), at the same speed.
 
 These numbers come from a single machine, where the proxy, the upstream and the load generator share the same CPUs. Treat them as a comparison, not as the throughput you will get in production.
+
+### Worker threads
+
+Each connection stays on the worker thread that accepted it, which costs about 15% less CPU per request with 4 threads than letting threads take over each other's connections. With a few heavy, long-lived connections (large websockets, streams), threads can be busier than others; `work_stealing = true` lets idle threads take them over:
+
+```hcl
+server {
+  work_stealing = true
+}
+```
 
 ### Every pull request
 

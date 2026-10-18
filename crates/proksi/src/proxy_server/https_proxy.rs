@@ -347,7 +347,7 @@ impl ProxyHttp for Router {
             };
             let forwarded = crate::proxy_server::client::forwarded(
                 peer,
-                crate::proxy_server::client::Incoming {
+                || crate::proxy_server::client::Incoming {
                     forwarded_for: header("x-forwarded-for"),
                     proto: header("x-forwarded-proto"),
                     host: header("x-forwarded-host"),

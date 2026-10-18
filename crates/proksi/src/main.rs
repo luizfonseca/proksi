@@ -151,6 +151,7 @@ fn main() -> Result<(), anyhow::Error> {
     // grace period only applies if that doesn't happen
     let mut server_conf = ServerConf::new_with_opt_override(&pingora_opts)
         .ok_or_else(|| anyhow::anyhow!("invalid server configuration"))?;
+    server_conf.work_stealing = proxy_config.server.work_stealing();
     server_conf.grace_period_seconds = Some(proxy_config.server.shutdown_timeout().as_secs() + 5);
     // Set before the server is created: it's where a new worker waits for the listening sockets
     #[cfg(target_os = "linux")]
