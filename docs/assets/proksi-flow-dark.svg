@@ -1,0 +1,228 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" role="img" aria-labelledby="title desc">
+  <title id="title">Requests going through Proksi</title>
+  <desc id="desc">Clients send requests to Proksi, which handles TLS, chooses a route by host and path, applies rules and plugins, answers from its cache or proxies to upstreams, balancing between them.</desc>
+  <style>
+    text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; fill: #e6edf3; }
+    .label { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; fill: #9198a1; letter-spacing: .06em; text-transform: uppercase; }
+    .title { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 26px; font-weight: 700; fill: #34d399; }
+    .wire { fill: none; stroke: #3d444d; stroke-width: 2; stroke-dasharray: 6 6; animation: flow 1.2s linear infinite; }
+    @keyframes flow { to { stroke-dashoffset: -12; } }
+    @media (prefers-reduced-motion: reduce) { .packet, .glow { display: none; } .wire { animation: none; } }
+  </style>
+  <defs>
+    <path id="c0" d="M200,130 C280,130 270,210 350,210"/>
+    <path id="c1" d="M200,210 C280,210 270,210 350,210"/>
+    <path id="c2" d="M200,290 C280,290 270,210 350,210"/>
+    <path id="u0" d="M610,210 C680,210 670,100 740,100"/>
+    <path id="u1" d="M610,210 C680,210 670,180 740,180"/>
+    <path id="u2" d="M610,210 C680,210 670,240 740,240"/>
+    <path id="u3" d="M610,210 C680,210 670,320 740,320"/>
+  </defs>
+  <text class="label" x="125" y="80" text-anchor="middle">Clients</text>
+  <text class="label" x="835" y="60" text-anchor="middle">Upstreams</text>
+  <use href="#c0" class="wire"/>
+  <use href="#c1" class="wire"/>
+  <use href="#c2" class="wire"/>
+  <use href="#u0" class="wire"/>
+  <use href="#u1" class="wire"/>
+  <use href="#u2" class="wire"/>
+  <use href="#u3" class="wire"/>
+  <rect x="50" y="108" width="150" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="125" y="135" text-anchor="middle">browser</text>
+  <rect x="50" y="188" width="150" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="125" y="215" text-anchor="middle">mobile app</text>
+  <rect x="50" y="268" width="150" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="125" y="295" text-anchor="middle">curl</text>
+  <rect x="740" y="78" width="190" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="835" y="105" text-anchor="middle">app:3000</text>
+  <rect x="740" y="158" width="190" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="835" y="185" text-anchor="middle">api-1:4000</text>
+  <rect x="740" y="218" width="190" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="835" y="245" text-anchor="middle">api-2:4000</text>
+  <rect x="740" y="298" width="190" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="835" y="325" text-anchor="middle">10.0.0.12:8080</text>
+  <path d="M932,158 q14,0 14,22 v60 q0,22 -14,22" fill="none" stroke="#9198a1" stroke-width="1.5"/>
+  <text class="label" x="952" y="214" text-anchor="middle" transform="rotate(90 952 210)" style="font-size:12px">balanced</text>
+  <rect x="350" y="50" width="260" height="320" rx="18" fill="#0b2a22" stroke="#10b981" stroke-width="2"/>
+  <text class="title" x="480" y="92" text-anchor="middle">Proksi</text>
+  <rect x="362" y="120" width="236" height="42" rx="9" fill="#0f1f1a" stroke="#1f5f4a" stroke-width="1.5"/>
+  <rect class="glow" x="362" y="120" width="236" height="42" rx="9" fill="none" stroke="#34d399" stroke-width="2.5" opacity="0">
+    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0" keyTimes="0.0000;0.0778;0.0944;0.1278;0.2333;0.2500;0.2833;0.3889;0.4056;0.4389;0.5444;0.5611;0.5944;0.7000;0.7167;0.7500;0.8556;0.8722;0.9056;1.0000"/>
+  </rect>
+  <text x="480" y="146" text-anchor="middle">TLS · Let's Encrypt</text>
+  <rect x="362" y="178" width="236" height="42" rx="9" fill="#0f1f1a" stroke="#1f5f4a" stroke-width="1.5"/>
+  <rect class="glow" x="362" y="178" width="236" height="42" rx="9" fill="none" stroke="#34d399" stroke-width="2.5" opacity="0">
+    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0" keyTimes="0.0000;0.0911;0.1078;0.1411;0.2467;0.2633;0.2967;0.4022;0.4189;0.4522;0.5578;0.5744;0.6078;0.7133;0.7300;0.7633;0.8689;0.8856;0.9189;1.0000"/>
+  </rect>
+  <text x="480" y="204" text-anchor="middle">routing · host &amp; path</text>
+  <rect x="362" y="236" width="236" height="42" rx="9" fill="#0f1f1a" stroke="#1f5f4a" stroke-width="1.5"/>
+  <rect class="glow" x="362" y="236" width="236" height="42" rx="9" fill="none" stroke="#34d399" stroke-width="2.5" opacity="0">
+    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0" keyTimes="0.0000;0.1044;0.1211;0.1544;0.2600;0.2767;0.3100;0.4156;0.4322;0.4656;0.5711;0.5878;0.6211;0.7267;0.7433;0.7767;0.8822;0.8989;0.9322;1.0000"/>
+  </rect>
+  <text x="480" y="262" text-anchor="middle">rules · plugins</text>
+  <rect x="362" y="294" width="236" height="42" rx="9" fill="#0f1f1a" stroke="#1f5f4a" stroke-width="1.5"/>
+  <rect class="glow" x="362" y="294" width="236" height="42" rx="9" fill="none" stroke="#fbbf24" stroke-width="2.5" opacity="0">
+    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0" keyTimes="0.0000;0.4289;0.4456;0.4789;1.0000"/>
+  </rect>
+  <text x="480" y="320" text-anchor="middle">cache</text>
+
+    <circle class="packet" r="5" fill="#34d399" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="0;0;1;1" keyTimes="0;0.0000;0.0778;1"><mpath href="#c0"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.0000;0.0778"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#34d399" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="0;0;1;1" keyTimes="0;0.1167;0.1944;1"><mpath href="#u0"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.1167;0.1944"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#818cf8" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="1;1;0;0" keyTimes="0;0.2222;0.3000;1"><mpath href="#u0"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.2222;0.3000"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#818cf8" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="1;1;0;0" keyTimes="0;0.3000;0.3778;1"><mpath href="#c0"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.3000;0.3778"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#34d399" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="0;0;1;1" keyTimes="0;0.1556;0.2333;1"><mpath href="#c1"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.1556;0.2333"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#34d399" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="0;0;1;1" keyTimes="0;0.2722;0.3500;1"><mpath href="#u1"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.2722;0.3500"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#818cf8" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="1;1;0;0" keyTimes="0;0.3778;0.4556;1"><mpath href="#u1"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.3778;0.4556"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#818cf8" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="1;1;0;0" keyTimes="0;0.4556;0.5333;1"><mpath href="#c1"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.4556;0.5333"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#34d399" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="0;0;1;1" keyTimes="0;0.3111;0.3889;1"><mpath href="#c2"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.3111;0.3889"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#fbbf24" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="1;1;0;0" keyTimes="0;0.4444;0.5222;1"><mpath href="#c2"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.4444;0.5222"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#34d399" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="0;0;1;1" keyTimes="0;0.4667;0.5444;1"><mpath href="#c0"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.4667;0.5444"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#34d399" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="0;0;1;1" keyTimes="0;0.5833;0.6611;1"><mpath href="#u2"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.5833;0.6611"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#818cf8" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="1;1;0;0" keyTimes="0;0.6889;0.7667;1"><mpath href="#u2"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.6889;0.7667"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#818cf8" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="1;1;0;0" keyTimes="0;0.7667;0.8444;1"><mpath href="#c0"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.7667;0.8444"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#34d399" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="0;0;1;1" keyTimes="0;0.6222;0.7000;1"><mpath href="#c1"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.6222;0.7000"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#34d399" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="0;0;1;1" keyTimes="0;0.7389;0.8167;1"><mpath href="#u3"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.7389;0.8167"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#818cf8" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="1;1;0;0" keyTimes="0;0.8444;0.9222;1"><mpath href="#u3"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.8444;0.9222"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#818cf8" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="1;1;0;0" keyTimes="0;0.9222;1.0000;1"><mpath href="#c1"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.9222;1.0000"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#34d399" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="0;0;1;1" keyTimes="0;0.7778;0.8556;1"><mpath href="#c2"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.7778;0.8556"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#34d399" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="0;0;1;1" keyTimes="0;0.8944;0.9722;1"><mpath href="#u1"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.8944;0.9722"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#818cf8" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="1;1;0;0" keyTimes="0;0.0000;0.0778;1"><mpath href="#u1"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.0000;0.0778"/>
+    </circle>
+
+    <circle class="packet" r="5" fill="#818cf8" opacity="0">
+      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
+        keyPoints="1;1;0;0" keyTimes="0;0.0778;0.1556;1"><mpath href="#c2"/></animateMotion>
+      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
+        values="0;1;0" keyTimes="0;0.0778;0.1556"/>
+    </circle>
+  <circle cx="340" cy="400" r="5" fill="#34d399"/>
+  <text class="label" x="352" y="405" style="text-transform:none;letter-spacing:0;font-size:15px">request</text>
+  <circle cx="470" cy="400" r="5" fill="#818cf8"/>
+  <text class="label" x="482" y="405" style="text-transform:none;letter-spacing:0;font-size:15px">response</text>
+  <circle cx="600" cy="400" r="5" fill="#fbbf24"/>
+  <text class="label" x="612" y="405" style="text-transform:none;letter-spacing:0;font-size:15px">from the cache</text>
+</svg>
