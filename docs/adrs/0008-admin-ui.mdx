@@ -9,7 +9,7 @@ description: "The admin API can change hosts, but only through curl and a token.
 
 ## Context
 
-The admin API (ADR 0004) reports what Proksi serves, and writes hosts to the store: `PUT /api/v1/routes/<host>` takes the body of a `host` block, validated like a configuration file. Using it means writing HCL or JSON by hand, with `curl` and a token.
+The admin API (ADR 0004) reports what Proksi serves, and writes hosts to the store: `PUT /api/v1/routes/<host>` takes a host as JSON (or the body of a `host` block, as HCL), validated like a configuration file. Using it means writing it by hand, with `curl` and a token.
 
 A UI on top of it should let people see what's served (hosts by source, upstream health, certificates, live traffic), and add or change hosts, locations, upstreams, building blocks and rules.
 
@@ -90,13 +90,17 @@ The admin listener itself never serves TLS: Proksi's hosts already do.
 | Certificates | Domains, expiry, issuer, and the instance renewing each |
 | Changes | Who changed which host, when, and what; a previous version can be restored |
 
-Hosts from the configuration file, docker labels or Kubernetes are read-only: Proksi never rewrites those sources. The UI can **override** one: it copies the host to the store, where it takes priority (ADR 0001), and removing the override brings the original back. A host from the store can be **exported** as HCL, to move it into a configuration file.
+Hosts from the configuration file, docker labels or Kubernetes are read-only: Proksi never rewrites those sources. The UI can **override** one: it copies the host to the store, where it takes priority (ADR 0001), and removing the override brings the original back. Any host can be **exported** as HCL, to move it into a configuration file.
 
 ### What the API gains
 
+**The API is JSON only**, in and out, like any other HTTP API. A host is the same tree as in a configuration file, as JSON (the shape ADR 0007 gives rules). HCL is what people write in files: the API only produces it, to export a host. `PUT /api/v1/routes/<host>` stops accepting `text/hcl`.
+
+
 | Endpoint | |
 | --- | --- |
-| `GET /api/v1/routes/<host>` | One host from the store, with its revision in `ETag`. `?format=hcl` returns it as a `host` block |
+| `GET /api/v1/routes/<host>` | One host from the store, with its revision in `ETag` |
+| `GET /api/v1/hosts/<host>/export` | Any host served, as a `host` block in HCL, to paste into a configuration file |
 | `PUT`, `DELETE /api/v1/routes/<host>` | As today, and `If-Match: <revision>` refuses the change (`412`) if the host changed since it was read, so two people editing the same host don't overwrite each other |
 | `POST /api/v1/validate` | Checks a host without writing it: the errors, each with its path (`location "/api": rule "writes": and.method.gt: ...`) |
 | `GET /api/v1/schema` | What the forms are built from: building blocks and their settings (types, defaults, limits), rule fields and the operators each takes |
@@ -126,7 +130,7 @@ Hosts from the configuration file, docker labels or Kubernetes are read-only: Pr
 ## Steps
 
 1. Named read and read-write tokens, sessions, origin checks, security headers, failed sign-in limits, and the change log.
-2. The API: one host with its revision and `If-Match`, `validate`, `schema`, HCL export.
+2. The API: JSON only, one host with its revision and `If-Match`, `validate`, `schema`, HCL export.
 3. Embedding: `ui/` built into the crate, CI, Docker and releases; the UI's overview, hosts (read-only) and certificates.
 4. Editing hosts: locations, upstreams and building blocks; overriding and exporting.
 5. Rules: the editor, `rules/test`, and rule metrics (ADR 0007 step 3).
