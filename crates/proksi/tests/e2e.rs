@@ -734,6 +734,12 @@ async fn test_access_logs_name_the_upstream_connection() {
     assert_eq!(fields["forwarded_for"], "203.0.113.7, 198.51.100.2", "{log}");
     assert!(fields["client_ip"].as_str().unwrap_or("").starts_with("127.0.0.1:"), "{log}");
 
+    // Health checks aren't logged
+    let res = proksi.get_http_on(proksi.http_port, "logged.test", "/ping").await.unwrap();
+    assert!(res.ends_with("pong"), "{res}");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(proksi.access_log("/ping"), "no access log");
+
     proksi.assert_healthy();
 }
 

@@ -57,6 +57,8 @@ Every request gets an access log line (`access_log: true`) with its method, path
 - `forwarded_for` is the request's `X-Forwarded-For`, as sent, whether proksi trusts it or not.
 - `upstream_addr` is the upstream the request was sent to, and `reused_connection` whether its connection was reused.
 
+Health checks (`/ping`) aren't logged, nor counted in [metrics](/configuration/admin).
+
 Every connection of a [`tcp` block](/routing/tcp) gets one too, once it closes:
 
 ```json
