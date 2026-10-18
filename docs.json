@@ -1,6 +1,11 @@
 {
   "$schema": "https://docs.page/schema.json",
   "name": "Proksi",
+  "logo": {
+    "light": "/assets/logo.svg",
+    "dark": "/assets/logo.svg"
+  },
+  "favicon": "/assets/favicon.svg",
   "description": "Batteries-included reverse proxy and load balancer for Docker, Kubernetes or a single binary, built on Cloudflare Pingora.",
   "anchors": [
     {
