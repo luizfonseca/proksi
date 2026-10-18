@@ -1,0 +1,27 @@
+name: Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "docs.json"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "docs.json"
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Broken links, missing images and pages that don't render (docs.page)
+      - run: npx -y @docs.page/cli@2.2.0 check

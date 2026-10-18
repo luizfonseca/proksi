@@ -1,0 +1,43 @@
+---
+title: "Basic Auth"
+description: "Protects a location with a username and password."
+---
+
+<Warning>
+  This is not necessarily a very safe method as anyone can try to brute force the username and password.
+</Warning>
+
+By enabling this, routes can only be accessed if the user (downstream) provides the user & password combination through the `Authorization` header.
+
+In many cases, your browser will prompt for this information.
+
+
+
+## Options
+
+Options are set in the plugin's block, inside a `location`.
+
+<table><thead><tr><th width="205">Name</th><th>Description</th></tr></thead><tbody><tr><td><code>user</code></td><td>username for the basic authentication</td></tr><tr><td><code>pass</code></td><td>password for the basic authentication</td></tr></tbody></table>
+
+
+
+### Usage
+
+**proksi.hcl**
+```hcl
+lets_encrypt {
+  enabled = true
+  email = "test@email.com"
+}
+
+host "mywebsite.com" {
+  location "/" {
+    upstream "localhost:3000" {}
+
+    basic_auth {
+      user = "91hdjashd1y2u"
+      pass = "$17238a81hhasbzh1230%"
+    }
+  }
+}
+```

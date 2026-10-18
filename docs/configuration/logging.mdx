@@ -1,0 +1,120 @@
+---
+title: "Logging"
+description: "The logging configuration can be set using the logging key in the HCL configuration file."
+---
+
+## Logging
+
+### HCL Configuration
+
+The logging configuration can be set using the `logging` key in the HCL configuration file. The default configuration is:
+
+**proksi.hcl**
+```hcl
+logging {
+  level = "info"
+  access_logs_enabled = true
+  error_logs_enabled = true
+  format = "json"
+  # path = "/var/log/proksi" # write to files instead of stdout
+  rotation = "never"
+}
+```
+
+You can customize the logging configuration by adding the following keys to the `logging` block:
+
+| Key                   | Description                                                     |
+| --------------------- | --------------------------------------------------------------- |
+| level                 | The logging level (`debug`, `info`, `warn`, `error`, `trace`)   |
+| access\_logs\_enabled | Whether to enable access logs (default: true)                   |
+| error\_logs\_enabled  | Whether to enable error logs (default: true)                    |
+| format                | The logging format (`json`, `pretty`)                           |
+| path                  | A directory to write log files to (default: none, stdout)       |
+| rotation              | The rotation frequency (`daily`, `hourly`, `minutely`, `never`) |
+
+For example, to set the logging level to `debug`, the format to `pretty`, the path to `/var/log/proksi`, and the rotation to `daily`, you can use the following configuration:
+
+```hcl
+logging {
+  level = "debug"
+  format = "pretty"
+  path = "/var/log/proksi"
+  rotation = "daily"
+}
+```
+
+This will then create a log file named `proksi.<date>.log` in the `/var/log/proksi` directory and rotate it daily.
+
+### Access logs
+
+Every request gets an access log line (`access_log: true`) with its method, path, host, status, duration, client and upstream. Every connection of a [`tcp` block](/routing/tcp) gets one too, once it closes:
+
+```json
+{ "protocol": "tcp", "block": "tcp \"db\" in host \"db.example.com\"", "client_ip": "10.0.0.7:51234", "server_name": "db.example.com", "upstream": "10.0.0.5:5432", "duration_ms": 61234, "bytes_in": 5120, "bytes_out": 81920, "access_log": true }
+```
+
+`server_name` is set when TLS is terminated, `upstream` once one was chosen, and `error` when the connection couldn't be forwarded (no healthy upstream, or the upstream refused it) or ended with an error. `access_logs_enabled = false` turns both off.
+
+### Logging under heavy load
+
+Logs are written in the background, so writing them never slows down requests. Up to 100,000 log lines can be waiting to be written; if the output can't keep up beyond that (e.g. a slow disk or a stalled pipe), new lines are dropped and a warning with the number of dropped lines is logged once it catches up.
+
+### Failed TLS handshakes
+
+Clients that give up on a TLS handshake (scanners, load balancers' TCP health checks, browsers closing connections they opened ahead of time) are common and aren't a problem with Proksi, so they're only logged with `level = "debug"` (or `trace`). They're counted in the `proksi_tls_handshake_failures_total` metric (see [Admin API and metrics](/configuration/admin#metrics)).
+
+### Logging Levels (CLI)
+
+The logging level can be set using the `--log.level` flag. The default level is `info`.
+
+| Level | Description                         |
+| ----- | ----------------------------------- |
+| debug | Shows debug information             |
+| info  | Shows information about the service |
+| warn  | Shows warnings                      |
+| error | Shows errors                        |
+| trace | Shows trace information             |
+
+### Logging Format
+
+The logging format can be set using the `--log.format` flag. The default format is `json`.
+
+| Format | Description                     |
+| ------ | ------------------------------- |
+| json   | Logs in JSON format             |
+| pretty | Logs in a human-readable format |
+
+### Logging Path
+
+The logging path can be set using the `--log.path` flag. By default, logs are written to stdout.
+
+If a path is provided, the logs will be written to a file in the specified path. The file name will be prefixed or named `proksi.log.*`.
+
+### Logging Rotation
+
+The logging rotation is set with `rotation` in the `logging` block (it has no command-line flag), for log files written to `path`. The default rotation is `never`.
+
+| Rotation | Description                   |
+| -------- | ----------------------------- |
+| daily    | Rotates the log file daily    |
+| hourly   | Rotates the log file hourly   |
+| minutely | Rotates the log file minutely |
+| never    | Does not rotate the log file  |
+
+### Logging Examples
+
+Here are some examples of how to set the logging level, format, path, and rotation:
+
+```bash
+# Set the logging level to debug
+proksi --log.level debug
+
+# Set the logging format to pretty
+proksi --log.format pretty
+
+# Set the logging path to /var/log/proksi
+proksi --log.path /var/log/proksi
+
+```
+
+Each flag can also be set in the `logging` block, or with environment variables (`PROKSI_LOGGING__LEVEL`...).

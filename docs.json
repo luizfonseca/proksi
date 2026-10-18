@@ -1,0 +1,211 @@
+{
+  "$schema": "https://docs.page/schema.json",
+  "name": "Proksi",
+  "description": "Batteries-included reverse proxy and load balancer for Docker, Kubernetes or a single binary, built on Cloudflare Pingora.",
+  "anchors": [
+    {
+      "icon": "github",
+      "title": "GitHub",
+      "href": "https://github.com/luizfonseca/proksi"
+    },
+    {
+      "icon": "box",
+      "title": "Crates.io",
+      "href": "https://crates.io/crates/proksi"
+    }
+  ],
+  "sidebar": [
+    {
+      "group": "General",
+      "pages": [
+        {
+          "title": "Getting started",
+          "href": "/"
+        },
+        {
+          "title": "Features",
+          "href": "/general/features"
+        },
+        {
+          "title": "Performance",
+          "href": "/general/performance"
+        },
+        {
+          "title": "Motivations",
+          "href": "/general/motivations"
+        },
+        {
+          "title": "Specifications",
+          "href": "/general/specifications"
+        }
+      ]
+    },
+    {
+      "group": "Installation",
+      "pages": [
+        {
+          "title": "Docker",
+          "href": "/installation/docker"
+        },
+        {
+          "title": "Single binary",
+          "href": "/installation/single-binary"
+        },
+        {
+          "title": "Kubernetes",
+          "href": "/installation/kubernetes"
+        }
+      ]
+    },
+    {
+      "group": "Configuration",
+      "pages": [
+        {
+          "group": "HCL",
+          "href": "/configuration/hcl",
+          "pages": [
+            {
+              "title": "HCL",
+              "href": "/configuration/hcl"
+            },
+            {
+              "title": "Functions",
+              "href": "/configuration/hcl/functions"
+            }
+          ]
+        },
+        {
+          "title": "YAML",
+          "href": "/configuration/yaml"
+        },
+        {
+          "title": "Environment variables",
+          "href": "/configuration/environment-variables"
+        },
+        {
+          "title": "Logging",
+          "href": "/configuration/logging"
+        },
+        {
+          "title": "Auto reload",
+          "href": "/configuration/auto-reload"
+        },
+        {
+          "title": "Restarts and upgrades",
+          "href": "/configuration/upgrades"
+        },
+        {
+          "title": "Daemon",
+          "href": "/configuration/daemon"
+        },
+        {
+          "title": "Admin API and metrics",
+          "href": "/configuration/admin"
+        }
+      ]
+    },
+    {
+      "group": "Storage",
+      "pages": [
+        {
+          "title": "Redis",
+          "href": "/configuration/redis"
+        },
+        {
+          "title": "SQLite / Postgres",
+          "href": "/configuration/sql"
+        }
+      ]
+    },
+    {
+      "group": "Routing",
+      "pages": [
+        {
+          "title": "Upstreams",
+          "href": "/routing/upstreams"
+        },
+        {
+          "title": "Headers",
+          "href": "/routing/headers"
+        },
+        {
+          "title": "TCP",
+          "href": "/routing/tcp"
+        }
+      ]
+    },
+    {
+      "group": "Plugins",
+      "pages": [
+        {
+          "title": "Request ID",
+          "href": "/plugins/request-id"
+        },
+        {
+          "title": "Basic auth",
+          "href": "/plugins/basic-auth"
+        },
+        {
+          "title": "OAuth2",
+          "href": "/plugins/oauth2"
+        },
+        {
+          "title": "Rate limit",
+          "href": "/plugins/rate-limit"
+        },
+        {
+          "title": "Body limit",
+          "href": "/plugins/body-limit"
+        }
+      ]
+    },
+    {
+      "group": "Migrating",
+      "pages": [
+        {
+          "title": "From Traefik",
+          "href": "/migrating/traefik"
+        },
+        {
+          "title": "From nginx",
+          "href": "/migrating/nginx"
+        },
+        {
+          "title": "From Caddy",
+          "href": "/migrating/caddy"
+        }
+      ]
+    },
+    {
+      "group": "Use cases",
+      "pages": [
+        {
+          "title": "Cache",
+          "href": "/use-cases/cache"
+        },
+        {
+          "title": "Docker swarm",
+          "href": "/use-cases/docker-swarm"
+        }
+      ]
+    },
+    {
+      "group": "Project",
+      "pages": [
+        {
+          "title": "Architecture decisions",
+          "href": "/adrs"
+        },
+        {
+          "title": "Contributing",
+          "href": "/contributing/repository"
+        }
+      ]
+    }
+  ],
+  "check": {
+    "ignoreExternalHosts": [
+      "crates.io"
+    ]
+  }
+}
