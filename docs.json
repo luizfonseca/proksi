@@ -156,6 +156,10 @@
         {
           "title": "Body limit",
           "href": "/plugins/body-limit"
+        },
+        {
+          "title": "Compress",
+          "href": "/plugins/compress"
         }
       ]
     },

@@ -106,7 +106,8 @@ Mind the defaults that differ:
 | `max_fails`, `fail_timeout` | [`health_check { interval_secs }`](/routing/upstreams#health-checks): a TCP connection to each upstream, unhealthy after 2 failures |
 | `least_conn`, `ip_hash`, `hash` | Not available (weighted round robin only) |
 | `rewrite ^/old/(.*)$ /new/$1 break;` | [`rewrite`](/routing/upstreams#rewriting-paths) `{ match = "^/old/(.*)$", replace = "/new/$1" }` (redirecting rewrites, `last`/`redirect`/`permanent`, aren't supported) |
-| `root`, `try_files`, `return`, `gzip`, `allow`/`deny` | Not available: Proksi only proxies |
+| `gzip on`, `brotli on` | [`compress { }`](/plugins/compress), with `level` for `gzip_comp_level` (`gzip_types`: text, JSON, JavaScript, fonts and SVG are compressed) |
+| `root`, `try_files`, `return`, `allow`/`deny` | Not available: Proksi only proxies |
 
 ## TCP (`stream`)
 

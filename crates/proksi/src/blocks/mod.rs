@@ -19,6 +19,7 @@ use crate::{config::host::Location, proxy_server::https_proxy::RouterContext};
 use basic_auth::BasicAuth;
 use body_limit::BodyLimit;
 use cache::Cache;
+use compress::Compress;
 use headers::Headers;
 use oauth2::Oauth2;
 use priority::{plugin_priority, priority};
@@ -28,6 +29,7 @@ use request_id::RequestId;
 mod basic_auth;
 mod body_limit;
 mod cache;
+mod compress;
 mod headers;
 mod oauth2;
 mod priority;
@@ -88,6 +90,7 @@ pub enum Kind {
     BodyLimit,
     BasicAuth,
     Oauth2,
+    Compress,
     Headers,
     Cache,
 }
@@ -100,6 +103,7 @@ impl Kind {
             Kind::BodyLimit => "body_limit",
             Kind::BasicAuth => "basic_auth",
             Kind::Oauth2 => "oauth2",
+            Kind::Compress => "compress",
             Kind::Headers => "headers",
             Kind::Cache => "cache",
         }
@@ -111,6 +115,7 @@ impl Kind {
             Kind::RequestId | Kind::RateLimit => 0,
             Kind::BodyLimit => 10,
             Kind::BasicAuth | Kind::Oauth2 => 20,
+            Kind::Compress => 40,
             Kind::Headers => 50,
             Kind::Cache => 60,
         }
@@ -146,6 +151,7 @@ impl Blocks {
                 "body_limit" => (Kind::BodyLimit, Arc::new(BodyLimit::new(plugin)?)),
                 "basic_auth" => (Kind::BasicAuth, Arc::new(BasicAuth::new(plugin)?)),
                 "oauth2" => (Kind::Oauth2, Arc::new(Oauth2::new(plugin)?)),
+                "compress" => (Kind::Compress, Arc::new(Compress::new(plugin)?)),
                 // Other plugins of `routes = [...]` and docker labels are ignored, as before
                 _ => continue,
             };

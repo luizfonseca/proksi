@@ -717,6 +717,74 @@ async fn test_access_logs_name_the_upstream_connection() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_COMPRESSION: &str = r#"
+host "compressed.test" {
+  tls = false
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    compress {}
+  }
+
+  location "/zstd-only" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    compress {
+      algorithms = ["zstd"]
+    }
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_compress() {
+    let mut proksi = Harness::start_without_https(HOST_WITH_COMPRESSION).await;
+    let get = |path: &str, accept: &str| {
+        format!(
+            "GET {path} HTTP/1.1\r\nHost: compressed.test\r\nAccept-Encoding: {accept}\r\nConnection: close\r\n\r\n"
+        )
+    };
+    let encoding = |res: &str| {
+        res.lines()
+            .take_while(|line| !line.is_empty())
+            .find_map(|line| {
+                let line = line.to_lowercase();
+                line.strip_prefix("content-encoding: ").map(str::to_string)
+            })
+    };
+
+    for (path, accept, expected) in [
+        ("/", "gzip", Some("gzip")),
+        ("/", "br", Some("br")),
+        ("/", "zstd, gzip", Some("zstd")),
+        // The best one the client accepts, whatever its order (as browsers send it)
+        ("/", "gzip, deflate, br, zstd", Some("zstd")),
+        ("/", "gzip, br", Some("br")),
+        ("/", "zstd;q=0, gzip", Some("gzip")),
+        ("/", "identity", None),
+        // Only the algorithms the block allows
+        ("/zstd-only", "gzip", None),
+        ("/zstd-only", "gzip, zstd", Some("zstd")),
+    ] {
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", proksi.http_port))
+            .await
+            .unwrap();
+        tokio::io::AsyncWriteExt::write_all(&mut stream, get(path, accept).as_bytes())
+            .await
+            .unwrap();
+        let mut response = vec![];
+        tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut response)
+            .await
+            .unwrap();
+        let res = String::from_utf8_lossy(&response);
+        assert!(res.starts_with("HTTP/1.1 200"), "{path} {accept}: {res}");
+        assert_eq!(encoding(&res).as_deref(), expected, "{path} {accept}: {res}");
+    }
+
+    proksi.assert_healthy();
+}
+
 const TCP_BLOCKS: &str = r#"
 tcp "web" {
   listen = "127.0.0.1:{tcp_port_0}"

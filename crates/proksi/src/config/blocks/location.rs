@@ -31,6 +31,7 @@ pub struct LocationBlock {
     pub request_id: Option<PluginConfig>,
     pub rate_limit: Option<PluginConfig>,
     pub body_limit: Option<PluginConfig>,
+    pub compress: Option<PluginConfig>,
     pub timeouts: Option<LocationTimeouts>,
     pub rewrite: Option<PathRewrite>,
     pub health_check: Option<HealthCheck>,
@@ -83,6 +84,7 @@ impl LocationBlock {
             ("request_id", &self.request_id),
             ("rate_limit", &self.rate_limit),
             ("body_limit", &self.body_limit),
+            ("compress", &self.compress),
         ]
         .into_iter()
         .filter_map(|(name, config)| {

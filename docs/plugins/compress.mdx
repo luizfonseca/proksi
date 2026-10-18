@@ -1,0 +1,43 @@
+---
+title: "Compress"
+description: "Compresses responses with zstd, brotli or gzip, as the client accepts."
+---
+
+Compresses the responses of a location with zstd, brotli or gzip. Of the algorithms the client accepts (`Accept-Encoding`), the best one is used: zstd, then brotli, then gzip, whatever order the client lists them in. `Vary: Accept-Encoding` is added, so caches keep one copy per encoding.
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `algorithms` | The algorithms the location uses, among `"zstd"`, `"br"` and `"gzip"` (default: all three) |
+| `level` | The compression level of every algorithm (default: `3` for zstd, `4` for brotli, `6` for gzip, a balance of speed and size). Up to `22` for zstd, `11` for brotli and `9` for gzip. |
+| `priority` | When it runs among the blocks of the location (default: `40`) |
+
+### Usage
+
+**proksi.hcl**
+```hcl
+host "mywebsite.com" {
+  location "/" {
+    upstream "localhost:3000" {}
+
+    compress {}
+  }
+
+  location "/api" {
+    upstream "localhost:4000" {}
+
+    compress {
+      algorithms = ["zstd", "gzip"]
+    }
+  }
+}
+```
+
+### Good to know
+
+- Responses are compressed as they are proxied, without waiting for the whole body.
+- Text, JSON, JavaScript, fonts, SVG and similar types are compressed. Responses smaller than 20 bytes, images, video and archives are sent as they are.
+- Responses the upstream already compressed are sent as they are.
+- Responses from the [cache](/use-cases/cache) are compressed as they are sent, so the cache keeps a single copy.
+- Higher levels make responses smaller but cost more CPU per response: the defaults suit responses compressed as they are sent.

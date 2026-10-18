@@ -71,7 +71,8 @@ host "app.example.com" {
 | `stripPrefix`, `addPrefix` | [`rewrite`](/routing/upstreams#rewriting-paths) `{ strip_prefix, add_prefix }` in the location |
 | `replacePath`, `replacePathRegex` | [`rewrite`](/routing/upstreams#rewriting-paths) `{ match, replace }` |
 | `redirectRegex` | Not available |
-| `ipAllowList`, `compress`, `retry`, `circuitBreaker` | Not available |
+| `compress` | [`compress { }`](/plugins/compress) |
+| `ipAllowList`, `retry`, `circuitBreaker` | Not available |
 
 ## Docker labels
 
