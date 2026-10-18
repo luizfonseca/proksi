@@ -859,6 +859,67 @@ async fn test_redirect_and_respond() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_IP_FILTERS: &str = r#"
+host "filtered.test" {
+  tls = false
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+
+  location "/admin" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    ip_filter {
+      allow = ["10.0.0.0/8", "203.0.113.9"]
+      deny  = ["10.0.0.13"]
+    }
+  }
+
+  location "/public" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    ip_filter {
+      deny = ["198.51.100.0/24"]
+    }
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_ip_filter() {
+    // Clients are found behind the trusted proxy (the test itself, on 127.0.0.1)
+    let mut proksi = Harness::start_with_server_ready_over_http(
+        "trusted_proxies = [\"127.0.0.1\"]",
+        HOST_WITH_IP_FILTERS,
+    )
+    .await;
+    let port = proksi.http_port;
+
+    for (path, client, expected) in [
+        ("/admin", "10.1.2.3", "200"),
+        ("/admin", "203.0.113.9", "200"),
+        // Denied, although its network is allowed
+        ("/admin", "10.0.0.13", "403"),
+        // Not allowed
+        ("/admin", "198.51.100.7", "403"),
+        ("/admin/users", "198.51.100.7", "403"),
+        // Only a deny list: everyone else is allowed
+        ("/public", "203.0.113.50", "200"),
+        ("/public", "198.51.100.7", "403"),
+        ("/other", "198.51.100.7", "200"),
+    ] {
+        let request = format!(
+            "GET {path} HTTP/1.1\r\nHost: filtered.test\r\nX-Forwarded-For: {client}\r\nConnection: close\r\n\r\n"
+        );
+        let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+        assert_eq!(res.split(' ').nth(1), Some(expected), "{path} from {client}: {res}");
+    }
+    assert_eq!(proksi.http_upstream.hits("/admin/users"), 0);
+
+    proksi.assert_healthy();
+}
+
 const TCP_BLOCKS: &str = r#"
 tcp "web" {
   listen = "127.0.0.1:{tcp_port_0}"

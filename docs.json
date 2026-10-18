@@ -168,6 +168,10 @@
         {
           "title": "Respond",
           "href": "/plugins/respond"
+        },
+        {
+          "title": "IP filter",
+          "href": "/plugins/ip-filter"
         }
       ]
     },

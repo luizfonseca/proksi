@@ -304,6 +304,11 @@ location "/" {
   # Adds an X-Request-Id header to requests and responses
   request_id {}
 
+  # Only these clients (addresses or networks), the others get a 403
+  ip_filter {
+    allow = ["10.0.0.0/8"]
+  }
+
   # 120 requests per minute for each client (IP address), then a 429
   rate_limit {
     requests = 120

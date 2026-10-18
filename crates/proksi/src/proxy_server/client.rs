@@ -159,6 +159,18 @@ pub fn init(proxies: TrustedProxies) {
     let _ = TRUSTED.set(proxies);
 }
 
+/// The client of the request of `session` (`None` for a connection over a unix socket), see
+/// [`TrustedProxies::client`]
+pub fn of_session(session: &pingora::proxy::Session) -> Option<IpAddr> {
+    let peer = session.client_addr()?.as_inet()?.ip();
+    let forwarded_for = session
+        .req_header()
+        .headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok());
+    Some(client_ip(peer, forwarded_for))
+}
+
 /// The client of a request, see [`TrustedProxies::client`]
 pub fn client_ip(peer: IpAddr, forwarded_for: Option<&str>) -> IpAddr {
     match TRUSTED.get() {
