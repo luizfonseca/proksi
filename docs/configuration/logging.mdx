@@ -50,11 +50,11 @@ This will then create a log file named `proksi.<date>.log` in the `/var/log/prok
 Every request gets an access log line (`access_log: true`) with its method, path, host, status, duration, client and upstream:
 
 ```json
-{ "method": "GET", "path": "/", "host": "example.com", "status_code": 200, "duration_ms": "1", "client_ip": "203.0.113.7", "forwarded_for": "203.0.113.7", "upstream_addr": "10.0.0.5:8080", "reused_connection": "true", "http_version": "http/2", "access_log": true }
+{ "method": "GET", "path": "/", "host": "example.com", "status_code": 200, "duration_ms": "1", "client_ip": "203.0.113.7", "x_forwarded_for": "203.0.113.7", "upstream_addr": "10.0.0.5:8080", "reused_connection": "true", "http_version": "http/2", "access_log": true }
 ```
 
 - `client_ip` is the address of the connection, or behind [`server.trusted_proxies`](/routing/headers), the client they forwarded.
-- `forwarded_for` is the request's `X-Forwarded-For`, as sent, whether proksi trusts it or not.
+- `x_forwarded_for` is the request's `X-Forwarded-For`, as sent, whether proksi trusts it or not.
 - `upstream_addr` is the upstream the request was sent to, and `reused_connection` whether its connection was reused.
 
 Health checks (`/ping`) aren't logged, nor counted in [metrics](/configuration/admin).

@@ -715,7 +715,7 @@ async fn test_access_logs_name_the_upstream_connection() {
             "{log}"
         );
         assert_eq!(fields["request_id"], request_id.as_str(), "{log}");
-        assert_eq!(fields["forwarded_for"], "", "{log}");
+        assert_eq!(fields["x_forwarded_for"], "", "{log}");
     }
 
     // X-Forwarded-For is logged as sent, though proksi doesn't trust it
@@ -731,7 +731,7 @@ async fn test_access_logs_name_the_upstream_connection() {
     let log = proksi.access_log("/forwarded");
     let log: serde_json::Value = serde_json::from_str(&log).unwrap_or_else(|_| panic!("{log}"));
     let fields = log.get("fields").unwrap_or(&log);
-    assert_eq!(fields["forwarded_for"], "203.0.113.7, 198.51.100.2", "{log}");
+    assert_eq!(fields["x_forwarded_for"], "203.0.113.7, 198.51.100.2", "{log}");
     assert!(fields["client_ip"].as_str().unwrap_or("").starts_with("127.0.0.1:"), "{log}");
 
     // Health checks aren't logged

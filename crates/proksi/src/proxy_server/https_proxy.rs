@@ -546,7 +546,7 @@ impl ProxyHttp for Router {
             referer = referer.to_str().unwrap_or(""),
             client_ip,
             // As sent, trusted or not (`client_ip` uses it only from trusted proxies)
-            forwarded_for = forwarded_for.unwrap_or(""),
+            x_forwarded_for = forwarded_for.unwrap_or(""),
             status_code,
             http_version,
             reused_connection = reused,
