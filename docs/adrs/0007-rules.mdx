@@ -55,7 +55,7 @@ rule "legacy clients" {
 }
 ```
 
-- The condition is one field test, or one `and`, `or` or `not` block. Nothing is combined implicitly: two conditions side by side are an error, which names `and { }` and `or { }`.
+- The condition is one `and`, `or` or `not` block, even for a single test (`and { method { eq = "GET" } }`), so every rule says how its tests combine. Nothing is combined implicitly: a test outside a block, or two conditions side by side, is an error that names `and { }`.
 - `and { }`: everything inside matches. `or { }`: at least one thing inside matches. `not { }`: what's inside doesn't match. They nest, and a field can appear several times in one of them (blocks repeat in HCL, attributes don't).
 - Every field test is a block with one operator. A range is two tests in an `and` (`status { gte = 500 }` and `status { lt = 600 }`), so operators never combine implicitly either.
 - A rule without a condition isn't valid: a rule for every request is a block of its location or host instead.
@@ -70,7 +70,9 @@ Each of these is a complete rule, as written in a configuration.
 ```hcl
 server {
   rule "old domain" {
-    host { eq = "old-shop.example.com" }
+    and {
+      host { eq = "old-shop.example.com" }
+    }
     then {
       redirect {
         to     = "https://shop.example.com{uri}"
@@ -88,7 +90,9 @@ location "/api" {
   upstream "api:4000" {}
 
   rule "writes" {
-    method { not_in = ["GET", "HEAD", "OPTIONS"] }
+    and {
+      method { not_in = ["GET", "HEAD", "OPTIONS"] }
+    }
     then {
       rate_limit {
         requests = 60
@@ -151,7 +155,9 @@ location "/search" {
   upstream "app:3000" {}
 
   rule "crawlers" {
-    header "user-agent" { matches = "(?i)(bytespider|petalbot|ahrefsbot)" }
+    and {
+      header "user-agent" { matches = "(?i)(bytespider|petalbot|ahrefsbot)" }
+    }
     then {
       respond { status = 403 }
     }
@@ -233,7 +239,9 @@ location "/" {
   upstream "app:3000" {}
 
   rule "app down" {
-    status { in = [502, 503, 504] }
+    and {
+      status { in = [502, 503, 504] }
+    }
     then {
       respond {
         status       = 503
@@ -314,7 +322,7 @@ Rules are compiled when the configuration loads (and when hosts are reloaded), n
 1. **Nothing without rules.** A scope (the server, a host, a location) without rules has no rule set, and requests skip the step. Response rules are only wired where some exist.
 2. **Compiled tests.** Each test is turned into a typed comparison with its value prepared: methods as values, header names parsed, values lowercased where the comparison ignores case, networks as a prefix and a mask (one comparison), regular expressions compiled. Evaluation builds no strings and allocates nothing for scopes of up to 64 tests (cookies are parsed once per request, and only when a rule tests one).
 3. **Every test once per request.** The tests of a scope's rules are collected and deduplicated. Headers, cookies and query parameters are read once, and all their tests run together on the value (their `matches` tests as one regex set, which most values reject in one pass). The method, host, path and client are cheap to read again: when a scope has many tests on one of them, each test runs only when a rule needs it, so a request doesn't pay for hundreds of path tests it never reaches. The results are bits.
-4. **Rules over bits.** `and`, `or` and `not` read those bits (one 64-bit word for up to 64 tests in a scope, a few words beyond), and a rule that is one test is read without recursion.
+4. **Rules over bits.** `and`, `or` and `not` read those bits (one 64-bit word for up to 64 tests in a scope, a few words beyond), and an `and` or `or` of one test compiles to that test, read without recursion.
 5. **Candidates first.** In scopes of 16 rules or more, the tests a rule can't match without (a method, a host's `eq` or `in`, a path under a given first segment) index it: a request only evaluates the rules it can match, in their order. Rules without such a test (an `or` of different fields, a `not`) are always candidates.
 6. **Cheap tests first.** Tests have no side effects, so `and` and `or` are reordered when compiled (numbers, then fixed text, then header lookups, then regular expressions) and stop as soon as their result is known.
 

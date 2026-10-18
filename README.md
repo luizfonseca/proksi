@@ -361,8 +361,10 @@ location "/api" {
 
   # Reads stay unlimited; writes are limited per client
   rule "writes" {
-    method {
-      not_in = ["GET", "HEAD", "OPTIONS"]
+    and {
+      method {
+        not_in = ["GET", "HEAD", "OPTIONS"]
+      }
     }
     then {
       rate_limit {

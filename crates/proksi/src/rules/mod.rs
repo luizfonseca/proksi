@@ -283,6 +283,16 @@ mod tests {
         ),
     ];
 
+    /// Other pages with rules among their examples
+    const OTHER_PAGES: [(&str, &str); 1] = [("README", include_str!("../../../../README.md"))];
+
+    /// The HCL examples of a page
+    fn examples(text: &str) -> impl Iterator<Item = &str> {
+        text.split("```hcl\n")
+            .skip(1)
+            .map(|example| example.split("```").next().unwrap_or_default())
+    }
+
     /// Every `rule` of a configuration, wherever it is
     fn rules(value: &serde_json::Value, found: &mut Vec<Vec<super::Rule>>) {
         match value {
@@ -300,28 +310,38 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_the_examples_of_the_documentation_load() {
-        let mut examples = 0;
-        for (page, text) in PAGES {
-            for example in text.split("```hcl\n").skip(1) {
-                let example = example.split("```").next().unwrap_or_default();
-                let value: serde_json::Value = HclFormat::from_str(example)
-                    .unwrap_or_else(|err| panic!("{page}: {err}\n{example}"));
-                let mut found = vec![];
-                rules(&value, &mut found);
-                assert!(
-                    !found.is_empty(),
-                    "{page}: an example without rules\n{example}"
-                );
-                for scope in found {
-                    if let Err(err) = Rules::compile(&scope) {
-                        panic!("{page}: {err}\n{example}");
-                    }
-                }
-                examples += 1;
+    /// Compiles the rules of an HCL example: how many scopes have rules
+    fn load(page: &str, example: &str) -> usize {
+        let value: serde_json::Value =
+            HclFormat::from_str(example).unwrap_or_else(|err| panic!("{page}: {err}\n{example}"));
+        let mut found = vec![];
+        rules(&value, &mut found);
+        for scope in &found {
+            if let Err(err) = Rules::compile(scope) {
+                panic!("{page}: {err}\n{example}");
             }
         }
-        assert!(examples >= 10, "{examples} examples");
+        found.len()
+    }
+
+    #[test]
+    fn test_the_examples_of_the_documentation_load() {
+        let mut count = 0;
+        for (page, text) in PAGES {
+            for example in examples(text) {
+                assert!(
+                    load(page, example) > 0,
+                    "{page}: an example without rules\n{example}"
+                );
+                count += 1;
+            }
+        }
+        assert!(count >= 10, "{count} examples");
+
+        for (page, text) in OTHER_PAGES {
+            for example in examples(text).filter(|example| example.contains("rule \"")) {
+                load(page, example);
+            }
+        }
     }
 }

@@ -184,10 +184,10 @@
       ]
     },
     {
-      "group": "Rules",
+      "group": "Request/Response rules",
       "pages": [
         {
-          "title": "Rules",
+          "title": "Overview",
           "href": "/rules"
         },
         {

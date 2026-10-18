@@ -20,7 +20,7 @@ fn request_line_rules(count: usize) -> Vec<Rule> {
                     "host": { "eq": format!("app-{i}.example.com") },
                     "not": { "path": { "eq": "/health" } },
                 } }),
-                2 => json!({ "path": { "wildcard": format!("/admin/{i}/*") } }),
+                2 => json!({ "and": { "path": { "wildcard": format!("/admin/{i}/*") } } }),
                 _ => json!({ "and": {
                     "client": { "in": [format!("10.{}.0.0/16", i % 256)] },
                     "method": { "neq": "GET" },
@@ -60,7 +60,9 @@ fn rules(count: usize) -> Vec<Rule> {
                     "client": { "in": [format!("10.{}.0.0/16", i % 256)] },
                     "path": { "wildcard": format!("/admin/{i}/*") },
                 } }),
-                _ => json!({ "header": { "user-agent": { "matches": format!("(?i)bot-{i}") } } }),
+                _ => json!({ "and": {
+                    "header": { "user-agent": { "matches": format!("(?i)bot-{i}") } },
+                } }),
             };
             named(condition, i)
         })

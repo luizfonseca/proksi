@@ -325,6 +325,16 @@ struct Builder {
     patterns: HashMap<u16, Vec<(String, u32)>>,
 }
 
+/// The node of a single condition, or `combine` of several
+fn one_or(mut nodes: Vec<Node>, combine: fn(Box<[Node]>) -> Node) -> Node {
+    if nodes.len() == 1 {
+        if let Some(node) = nodes.pop() {
+            return node;
+        }
+    }
+    combine(nodes.into_boxed_slice())
+}
+
 impl Builder {
     fn rule(&mut self, rule: &Value) -> Result<CompiledRule, String> {
         let Value::Object(map) = rule else {
@@ -361,6 +371,12 @@ impl Builder {
                 ))
             }
         };
+        if let Written::Field { .. } = condition {
+            return Err(format!(
+                "{}: wrap it in `and {{ }}`: a rule's condition is an `and`, `or` or `not` block",
+                condition.path()
+            ));
+        }
         let path = condition.path();
         let condition = self
             .node(&condition, 1)
@@ -394,8 +410,9 @@ impl Builder {
             Ok(nodes)
         };
         match written {
-            Written::And(value) => Ok(Node::All(children(self, value)?.into_boxed_slice())),
-            Written::Or(value) => Ok(Node::Any(children(self, value)?.into_boxed_slice())),
+            // `and` and `or` of one condition are that condition: a rule of one test is read as one
+            Written::And(value) => Ok(one_or(children(self, value)?, Node::All)),
+            Written::Or(value) => Ok(one_or(children(self, value)?, Node::Any)),
             Written::Not(value) => {
                 let mut found = conditions(value).map_err(|err| format!(": {err}"))?;
                 if found.len() != 1 {
@@ -647,7 +664,7 @@ pub(super) fn written(map: &serde_json::Map<String, Value>) -> usize {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use serde_json::json;
 
     use super::{compile, Field, Node};
@@ -662,6 +679,19 @@ mod tests {
     }
 
     const THEN: fn() -> serde_json::Value = || json!({ "respond": { "status": 403 } });
+
+    /// `condition` in an `and` when it's a field test, as a rule's condition must be
+    pub(in crate::rules) fn in_and(condition: serde_json::Value) -> serde_json::Value {
+        let combined = condition.as_object().is_some_and(|map| {
+            map.keys()
+                .all(|key| ["and", "or", "not"].contains(&key.as_str()))
+        });
+        if combined {
+            condition
+        } else {
+            json!({ "and": condition })
+        }
+    }
 
     #[test]
     fn test_a_rule_compiles() {
@@ -697,7 +727,7 @@ mod tests {
 
     #[test]
     fn test_tests_are_shared_across_rules() {
-        let rule = |name: &str| json!({ "name": name, "method": { "eq": "GET" }, "then": THEN() });
+        let rule = |name: &str| json!({ "name": name, "and": { "method": { "eq": "GET" } }, "then": THEN() });
         let compiled = rules(&[rule("a"), rule("b"), rule("c")]).unwrap();
         assert_eq!(compiled.test_at.len(), 1);
     }
@@ -725,6 +755,11 @@ mod tests {
     #[test]
     fn test_nothing_is_implicit() {
         assert_eq!(
+            err(json!({ "name": "a", "method": { "eq": "GET" }, "then": THEN() })),
+            "rule \"a\": method: wrap it in `and { }`: a rule's condition is an `and`, `or` or \
+             `not` block"
+        );
+        assert_eq!(
             err(json!({
                 "name": "a",
                 "method": { "eq": "GET" },
@@ -734,12 +769,16 @@ mod tests {
             "rule \"a\": has 2 conditions side by side: combine them with `and { }` or `or { }`"
         );
         assert_eq!(
-            err(json!({ "name": "a", "status": { "gte": 500, "lt": 600 }, "then": THEN() })),
-            "rule \"a\": `status` is a field of responses: response rules aren't supported yet"
+            err(json!({ "name": "a", "and": { "status": { "gte": 500 } }, "then": THEN() })),
+            "rule \"a\": and: `status` is a field of responses: response rules aren't supported yet"
         );
         assert_eq!(
-            err(json!({ "name": "a", "path": { "prefix": "/a", "suffix": "b" }, "then": THEN() })),
-            "rule \"a\": path: has 2 operators, a test has one (combine tests with `and { }`)"
+            err(json!({
+                "name": "a",
+                "and": { "path": { "prefix": "/a", "suffix": "b" } },
+                "then": THEN(),
+            })),
+            "rule \"a\": and.path: has 2 operators, a test has one (combine tests with `and { }`)"
         );
         assert_eq!(
             err(json!({
@@ -767,21 +806,21 @@ mod tests {
              `in` and `not_in`)"
         );
         assert_eq!(
-            err(json!({ "name": "a", "client": { "in": ["10.0.0"] }, "then": THEN() })),
-            "rule \"a\": client.in: \"10.0.0\" isn't an address or a network (\"10.0.0.0/8\")"
+            err(json!({ "name": "a", "and": { "client": { "in": ["10.0.0"] } }, "then": THEN() })),
+            "rule \"a\": and.client.in: \"10.0.0\" isn't an address or a network (\"10.0.0.0/8\")"
         );
         assert!(
-            err(json!({ "name": "a", "path": { "matches": "(" }, "then": THEN() }))
-                .starts_with("rule \"a\": path.matches: regex parse error")
+            err(json!({ "name": "a", "and": { "path": { "matches": "(" } }, "then": THEN() }))
+                .starts_with("rule \"a\": and.path.matches: regex parse error")
         );
         assert_eq!(
-            err(json!({ "name": "a", "path": { "exists": true }, "then": THEN() })),
-            "rule \"a\": path.exists: isn't an operator of host and path (it takes all but \
+            err(json!({ "name": "a", "and": { "path": { "exists": true } }, "then": THEN() })),
+            "rule \"a\": and.path.exists: isn't an operator of host and path (it takes all but \
              `exists`: they're always there)"
         );
         assert_eq!(
-            err(json!({ "name": "a", "verb": { "eq": "GET" }, "then": THEN() })),
-            "rule \"a\": `verb` isn't a condition (`and`, `or`, `not`, `method`, `host`, `path`, \
+            err(json!({ "name": "a", "and": { "verb": { "eq": "GET" } }, "then": THEN() })),
+            "rule \"a\": and: `verb` isn't a condition (`and`, `or`, `not`, `method`, `host`, `path`, \
              `query`, `header`, `cookie`, `client`)"
         );
     }
@@ -800,7 +839,7 @@ mod tests {
             err(json!({ "name": "a", "method": { "eq": "GET" } })),
             "rule \"a\": needs a `then` block"
         );
-        let rule = json!({ "name": "a", "method": { "eq": "GET" }, "then": THEN() });
+        let rule = json!({ "name": "a", "and": { "method": { "eq": "GET" } }, "then": THEN() });
         assert_eq!(
             rules(&[rule.clone(), rule]).err().as_deref(),
             Some("rule \"a\": another rule has the same name")

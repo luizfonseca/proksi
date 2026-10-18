@@ -1,5 +1,5 @@
 ---
-title: "Rules"
+title: "Request/Response rules"
 description: "Questions about a request, and what to do when the answer is yes."
 ---
 
@@ -11,7 +11,9 @@ host "shop.example.com" {
     upstream "api:4000" {}
 
     rule "limit writes" {
-      method { not_in = ["GET", "HEAD", "OPTIONS"] }
+      and {
+        method { not_in = ["GET", "HEAD", "OPTIONS"] }
+      }
       then {
         rate_limit {
           requests = 60
@@ -54,7 +56,7 @@ host "example.com" {
 }
 ```
 
-- **The condition** is one test (`method { eq = "GET" }`), or one `and`, `or` or `not` block holding tests and other blocks. Nothing is combined implicitly: two conditions side by side are an error, so a rule always says whether it means *and* or *or*. See [conditions](/rules/conditions).
+- **The condition** is one `and`, `or` or `not` block holding tests and other blocks, even for a single test (`and { method { eq = "GET" } }`). Nothing is combined implicitly: a test outside a block, or two conditions side by side, is an error, so a rule always says whether it means *and* or *or*. See [conditions](/rules/conditions).
 - **`then`** holds what to do: the blocks a location takes (`redirect`, `respond`, `rate_limit`, `basic_auth`...), and changes to the request (its method, its headers). See [actions](/rules/actions).
 - **The name** shows up in errors, and later in metrics.
 
@@ -63,8 +65,10 @@ host "example.com" {
 ```hcl
 server {
   rule "old domain" {
-    host {
-      eq = "old-shop.example.com"
+    and {
+      host {
+        eq = "old-shop.example.com"
+      }
     }
     then {
       redirect {
@@ -77,8 +81,10 @@ server {
 
 host "shop.example.com" {
   rule "maintenance" {
-    path {
-      prefix = "/checkout"
+    and {
+      path {
+        prefix = "/checkout"
+      }
     }
     then {
       respond {

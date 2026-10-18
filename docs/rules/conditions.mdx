@@ -43,6 +43,7 @@ host "example.com" {
 | `or { ... }` | at least one condition inside holds |
 | `not { ... }` | the one condition inside doesn't hold |
 
+- A rule's condition is always one of these blocks, even when it's a single test: `and { method { eq = "GET" } }`.
 - They nest: an `or` can hold `and` blocks, which can hold a `not`...
 - A field can appear several times in the same block: `status { gte = 500 }` and `status { lt = 600 }`, or two `header "x-client"` tests in an `or`.
 - `not` holds exactly one condition. To negate several, put an `and` or `or` inside it.
@@ -103,7 +104,7 @@ host "example.com" {
 
 ## Errors
 
-Rules are checked when the configuration loads: an unknown field or operator, a value of the wrong type, an invalid regular expression or network, or two conditions side by side stop it from loading, with the rule's name and the path to the problem:
+Rules are checked when the configuration loads: an unknown field or operator, a value of the wrong type, an invalid regular expression or network, a test outside an `and`, `or` or `not` block, or two conditions side by side stop it from loading, with the rule's name and the path to the problem:
 
 ```text
 host "example.com": rule "api writes": and.method.gt: isn't an operator of method (it takes `eq`, `neq`, `in` and `not_in`)
