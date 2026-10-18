@@ -39,11 +39,14 @@ These numbers come from a single machine, where the proxy, the upstream and the 
 
 ### Worker threads
 
-Each connection stays on the worker thread that accepted it, which costs about 15% less CPU per request with 4 threads than letting threads take over each other's connections. With a few heavy, long-lived connections (large websockets, streams), threads can be busier than others; `work_stealing = true` lets idle threads take them over:
+By default, worker threads take over each other's connections when they're idle. With `work_stealing = false`, each connection stays on the thread that accepted it instead:
+
+- With cores to spare (Proksi's threads each get a CPU), it uses about 15% less CPU per request with 4 threads.
+- When Proksi gets less CPU than it has threads (a container with a CPU limit below `worker_threads`, or a machine busy with other work), requests wait for their thread, and throughput drops (about 5% in the benchmark of pull requests).
 
 ```hcl
 server {
-  work_stealing = true
+  work_stealing = false
 }
 ```
 
