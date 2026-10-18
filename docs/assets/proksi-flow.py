@@ -77,9 +77,9 @@ def svg(t):
   <title id="title">Requests going through Proksi</title>
   <desc id="desc">Clients send requests to Proksi, which handles TLS, chooses a route by host and path, applies rules and plugins, answers from its cache or proxies to upstreams, balancing between them.</desc>
   <style>
-    text {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; fill: {t['text']}; }}
-    .label {{ font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; fill: {t['muted']}; letter-spacing: .06em; text-transform: uppercase; }}
-    .title {{ font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 22px; font-weight: 700; fill: {t['accent']}; }}
+    text {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; fill: {t['text']}; }}
+    .label {{ font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; fill: {t['muted']}; letter-spacing: .06em; text-transform: uppercase; }}
+    .title {{ font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 26px; font-weight: 700; fill: {t['accent']}; }}
     .wire {{ fill: none; stroke: {t['line']}; stroke-width: 2; stroke-dasharray: 6 6; animation: flow 1.2s linear infinite; }}
     @keyframes flow {{ to {{ stroke-dashoffset: -12; }} }}
     @media (prefers-reduced-motion: reduce) {{ .packet, .glow {{ display: none; }} .wire {{ animation: none; }} }}
@@ -105,16 +105,16 @@ def svg(t):
         out.append(f'  <rect x="740" y="{y - 22}" width="190" height="44" rx="10" fill="{t["box"]}" stroke="{t["box_line"]}" stroke-width="1.5"/>')
         out.append(f'  <text x="835" y="{y + 5}" text-anchor="middle">{name}</text>')
     out.append(f'  <path d="M932,158 q14,0 14,22 v60 q0,22 -14,22" fill="none" stroke="{t["muted"]}" stroke-width="1.5"/>')
-    out.append(f'  <text class="label" x="952" y="214" text-anchor="middle" transform="rotate(90 952 210)" style="font-size:11px">balanced</text>')
+    out.append(f'  <text class="label" x="952" y="214" text-anchor="middle" transform="rotate(90 952 210)" style="font-size:12px">balanced</text>')
 
     # proksi
     out.append(f'  <rect x="350" y="50" width="260" height="320" rx="18" fill="{t["proksi"]}" stroke="{t["proksi_line"]}" stroke-width="2"/>')
     out.append(f'  <text class="title" x="480" y="92" text-anchor="middle">Proksi</text>')
     for r, name in enumerate(ROWS):
         y = 120 + r * 58
-        out.append(f'  <rect x="372" y="{y}" width="216" height="42" rx="9" fill="{t["row"]}" stroke="{t["row_line"]}" stroke-width="1.5"/>')
+        out.append(f'  <rect x="362" y="{y}" width="236" height="42" rx="9" fill="{t["row"]}" stroke="{t["row_line"]}" stroke-width="1.5"/>')
         color = t["cache"] if name == "cache" else t["accent"]
-        out.append(f'  <rect class="glow" x="372" y="{y}" width="216" height="42" rx="9" fill="none" stroke="{color}" stroke-width="2.5" opacity="0">')
+        out.append(f'  <rect class="glow" x="362" y="{y}" width="236" height="42" rx="9" fill="none" stroke="{color}" stroke-width="2.5" opacity="0">')
         if name == "cache":
             starts = [s + LEG + 0.36 for c, u, s in REQUESTS if u is None]
         else:
@@ -135,9 +135,9 @@ def svg(t):
 
     # legend
     for k, (color, name) in enumerate([(t["request"], "request"), (t["response"], "response"), (t["cache"], "from the cache")]):
-        x = 360 + k * 120
+        x = 340 + k * 130
         out.append(f'  <circle cx="{x}" cy="400" r="5" fill="{color}"/>')
-        out.append(f'  <text class="label" x="{x + 12}" y="404" style="text-transform:none;letter-spacing:0">{name}</text>')
+        out.append(f'  <text class="label" x="{x + 12}" y="405" style="text-transform:none;letter-spacing:0;font-size:15px">{name}</text>')
     out.append("</svg>\n")
     return "\n".join(out)
 
