@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="./docs/assets/logo.svg" alt="Proksi" width="140">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/logo-wordmark-dark.svg">
+    <img src="./docs/assets/logo-wordmark-light.svg" alt="Proksi" width="320">
+  </picture>
 </p>
 
 ![GitHub Release](https://img.shields.io/github/v/release/luizfonseca/proksi?style=for-the-badge)
