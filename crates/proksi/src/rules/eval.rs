@@ -209,8 +209,9 @@ pub(super) mod tests {
             .collect()
     }
 
+    /// A rule whose condition is `condition`, in an `and` when it's a field test
     fn rule(name: &str, condition: serde_json::Value) -> serde_json::Value {
-        let mut rule = condition;
+        let mut rule = crate::rules::compile::tests::in_and(condition);
         rule["name"] = json!(name);
         rule["then"] = json!({ "respond": { "status": 403 } });
         rule

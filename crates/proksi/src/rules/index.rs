@@ -318,7 +318,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, condition)| {
-                let mut rule = condition.clone();
+                let mut rule = crate::rules::compile::tests::in_and(condition.clone());
                 rule["name"] = json!(format!("r{i}"));
                 rule["then"] = json!({ "respond": { "status": 403 } });
                 Rule(rule)

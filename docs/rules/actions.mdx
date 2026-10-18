@@ -11,8 +11,10 @@ host "example.com" {
     upstream "api:4000" {}
 
     rule "partners" {
-      header "x-partner-key" {
-        exists = true
+      and {
+        header "x-partner-key" {
+          exists = true
+        }
       }
       then {
         rate_limit {

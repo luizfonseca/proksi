@@ -12,8 +12,10 @@ Every request to the old domain goes to the new one, permanently. In `server`, s
 ```hcl
 server {
   rule "old domain" {
-    host {
-      eq = "old-shop.example.com"
+    and {
+      host {
+        eq = "old-shop.example.com"
+      }
     }
     then {
       redirect {
@@ -35,8 +37,10 @@ host "api.example.com" {
     upstream "api:4000" {}
 
     rule "writes" {
-      method {
-        not_in = ["GET", "HEAD", "OPTIONS"]
+      and {
+        method {
+          not_in = ["GET", "HEAD", "OPTIONS"]
+        }
       }
       then {
         rate_limit {
@@ -116,8 +120,10 @@ host "shop.example.com" {
     upstream "shop:3000" {}
 
     rule "crawlers" {
-      header "user-agent" {
-        matches = "(?i)(bytespider|petalbot|ahrefsbot)"
+      and {
+        header "user-agent" {
+          matches = "(?i)(bytespider|petalbot|ahrefsbot)"
+        }
       }
       then {
         respond {
@@ -200,8 +206,10 @@ host "app.example.com" {
     upstream "app:3000" {}
 
     rule "internal" {
-      client {
-        in = ["10.0.0.0/8", "192.168.0.0/16"]
+      and {
+        client {
+          in = ["10.0.0.0/8", "192.168.0.0/16"]
+        }
       }
       then {
         headers {

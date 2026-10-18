@@ -1174,7 +1174,9 @@ const SERVER_RULES: &str = r#"
 trusted_proxies = ["127.0.0.1"]
 
 rule "old domain" {
-  host { eq = "old.rules.test" }
+  and {
+    host { eq = "old.rules.test" }
+  }
   then {
     redirect {
       to     = "https://rules.test{uri}"
@@ -1207,7 +1209,9 @@ host "rules.test" {
     upstream "127.0.0.1:{http_upstream_port}" {}
 
     rule "crawlers" {
-      header "user-agent" { matches = "(?i)(bytespider|petalbot)" }
+      and {
+        header "user-agent" { matches = "(?i)(bytespider|petalbot)" }
+      }
       then {
         respond { status = 403 }
       }
@@ -1241,7 +1245,9 @@ host "rules.test" {
 
     # Sees the request as the rule above changed it
     rule "deletes" {
-      method { eq = "DELETE" }
+      and {
+        method { eq = "DELETE" }
+      }
       then {
         request_id {}
         headers {
