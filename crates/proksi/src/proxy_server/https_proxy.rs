@@ -59,6 +59,8 @@ pub struct RouterContext {
     pub upstream_start: Option<std::time::Instant>,
     /// When the request body must have arrived (`body_secs`), and the timeout of each read
     pub body_deadline: Option<(std::time::Instant, Duration)>,
+    /// A health check (`/ping`): neither logged nor counted
+    pub health_check: bool,
 
     pub timings: RouterTimings,
 }
@@ -85,6 +87,7 @@ impl ProxyHttp for Router {
             upstream_index: None,
             upstream_start: None,
             body_deadline: None,
+            health_check: false,
 
             timings: RouterTimings {
                 request_filter_start: std::time::Instant::now(),
@@ -135,6 +138,7 @@ impl ProxyHttp for Router {
             }
             // `/ping` is proksi's own health check, whatever the host
             if http_proxy::serve_ping(session).await? {
+                ctx.health_check = true;
                 return Ok(true);
             }
             // Hosts with TLS (and unknown hosts): ACME challenges, then redirect to HTTPS.
@@ -461,6 +465,9 @@ impl ProxyHttp for Router {
         _: Option<&pingora::Error>,
         ctx: &mut Self::CTX,
     ) {
+        if ctx.health_check {
+            return;
+        }
         let duration = ctx.timings.request_filter_start.elapsed();
         let status_code = session
             .response_written()
@@ -525,7 +532,7 @@ impl ProxyHttp for Router {
             None => peer.map(ToString::to_string).unwrap_or_default(),
         };
 
-        let (reused, peer_addr) = match &ctx.upstream_connection {
+        let (reused, upstream_addr) = match &ctx.upstream_connection {
             Some((reused, peer)) => (if *reused { "true" } else { "false" }, Some(peer)),
             None => ("", None),
         };
@@ -538,10 +545,14 @@ impl ProxyHttp for Router {
             user_agent = user_agent.to_str().unwrap_or(""),
             referer = referer.to_str().unwrap_or(""),
             client_ip,
+            // The connection's address: behind trusted proxies, the last of them
+            remote_addr = %OrEmpty(peer),
+            // As sent, trusted or not (`client_ip` uses it only from trusted proxies)
+            x_forwarded_for = forwarded_for.unwrap_or(""),
             status_code,
             http_version,
             reused_connection = reused,
-            peer_addr = %OrEmpty(peer_addr),
+            upstream_addr = %OrEmpty(upstream_addr),
             request_id = ctx.request_id.as_deref(),
             access_log = true
         );

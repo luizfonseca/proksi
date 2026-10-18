@@ -12,6 +12,10 @@ ingressClass:
 
 service:
   type: LoadBalancer
+  # Local keeps the client's address (Cluster replaces it with a node's). Cloud load balancers
+  # then send traffic only to nodes running Proksi; with k3s' ServiceLB or DNS pointing at a
+  # node, that node must run Proksi
+  externalTrafficPolicy: Local
   annotations: {}
 
 # Watched namespaces (all of them when empty)
