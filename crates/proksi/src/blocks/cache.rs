@@ -30,6 +30,8 @@ fn storage(cache_type: &RouteCacheType) -> &'static (dyn pingora_cache::Storage 
 
 pub(super) struct Cache {
     cache: RouteCache,
+    /// Where the disk cache is stored
+    path: String,
 }
 
 impl Cache {
@@ -37,6 +39,7 @@ impl Cache {
     pub(super) fn new(cache: &RouteCache) -> Option<Self> {
         cache.enabled.unwrap_or(false).then(|| Self {
             cache: cache.clone(),
+            path: cache.path.to_string_lossy().into_owned(),
         })
     }
 }
@@ -44,11 +47,7 @@ impl Cache {
 #[async_trait]
 impl Middleware for Cache {
     async fn request(&self, session: &mut Session, ctx: &mut RouterContext) -> Result<bool> {
-        stores::insert_cache_routing(
-            &ctx.host,
-            self.cache.path.to_string_lossy().to_string(),
-            false,
-        );
+        stores::insert_cache_routing(&ctx.host, &self.path);
         session.cache.enable(
             storage(&self.cache.cache_type),
             None,

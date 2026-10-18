@@ -98,17 +98,10 @@ pub fn get_cache_routing_by_key(key: &str) -> Option<String> {
     CACHE_ROUTING_STORE.pin().get(key).cloned()
 }
 
-/// Insert given cache routing into the store if it does not exist
-pub fn insert_cache_routing(key: &str, new_value: String, should_override: bool) {
-    if CACHE_ROUTING_STORE.pin().get(key).is_some() {
-        if should_override {
-            CACHE_ROUTING_STORE.pin().insert(key.to_string(), new_value);
-
-            return;
-        }
-
-        return;
+/// Where the cache of `key` is stored, unless it's known already
+pub fn insert_cache_routing(key: &str, value: &str) {
+    let store = CACHE_ROUTING_STORE.pin();
+    if store.get(key).is_none() {
+        store.insert(key.to_string(), value.to_string());
     }
-
-    CACHE_ROUTING_STORE.pin().insert(key.to_string(), new_value);
 }

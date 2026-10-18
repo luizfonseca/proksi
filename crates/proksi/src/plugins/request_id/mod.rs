@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -27,9 +25,7 @@ impl MiddlewarePlugin for RequestId {
         ctx: &mut RouterContext,
         _: &RoutePlugin,
     ) -> Result<bool> {
-        let request_id = uuid::Uuid::new_v4().to_string();
-        ctx.extensions
-            .insert(Cow::Borrowed("request_id_header"), request_id);
+        ctx.request_id = Some(uuid::Uuid::new_v4().to_string());
 
         Ok(false)
     }
@@ -40,7 +36,7 @@ impl MiddlewarePlugin for RequestId {
         upstream_request: &mut pingora::http::RequestHeader,
         ctx: &mut RouterContext,
     ) -> Result<()> {
-        if let Some(request_id) = ctx.extensions.get("request_id_header") {
+        if let Some(request_id) = &ctx.request_id {
             upstream_request.insert_header("x-request-id", request_id)?;
         }
         Ok(())
@@ -52,7 +48,7 @@ impl MiddlewarePlugin for RequestId {
         upstream_response: &mut pingora::http::ResponseHeader,
         ctx: &mut RouterContext,
     ) -> Result<()> {
-        if let Some(request_id) = ctx.extensions.get("request_id_header") {
+        if let Some(request_id) = &ctx.request_id {
             upstream_response.insert_header("x-request-id", request_id)?;
         }
         Ok(())
@@ -64,7 +60,7 @@ impl MiddlewarePlugin for RequestId {
         ctx: &mut RouterContext,
         _: &RoutePlugin,
     ) -> Result<bool> {
-        ctx.extensions.clear();
+        ctx.request_id = None;
 
         Ok(false)
     }

@@ -668,6 +668,55 @@ async fn test_body_limit() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_REQUEST_ID: &str = r#"
+host "logged.test" {
+  tls = false
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    request_id {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_access_logs_name_the_upstream_connection() {
+    let mut proksi = Harness::start_without_https(HOST_WITH_REQUEST_ID).await;
+
+    let mut request_ids = vec![];
+    for path in ["/first", "/second"] {
+        let res = proksi
+            .get_http_on(proksi.http_port, "logged.test", path)
+            .await
+            .unwrap();
+        assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+        let request_id = res
+            .lines()
+            .find_map(|line| line.to_lowercase().strip_prefix("x-request-id: ").map(str::to_string))
+            .unwrap_or_else(|| panic!("no request id: {res}"));
+        request_ids.push(request_id);
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let upstream = format!("127.0.0.1:{}", proksi.http_upstream.port);
+    for (path, request_id) in [("/first", &request_ids[0]), ("/second", &request_ids[1])] {
+        let log = proksi.access_log(path);
+        let log: serde_json::Value =
+            serde_json::from_str(&log).unwrap_or_else(|_| panic!("{path}: {log}"));
+        let fields = log.get("fields").unwrap_or(&log);
+        assert_eq!(fields["peer_addr"], upstream.as_str(), "{log}");
+        // The connection may come from proksi's readiness checks
+        assert!(
+            ["true", "false"].contains(&fields["reused_connection"].as_str().unwrap_or("")),
+            "{log}"
+        );
+        assert_eq!(fields["request_id"], request_id.as_str(), "{log}");
+    }
+
+    proksi.assert_healthy();
+}
+
 const TCP_BLOCKS: &str = r#"
 tcp "web" {
   listen = "127.0.0.1:{tcp_port_0}"

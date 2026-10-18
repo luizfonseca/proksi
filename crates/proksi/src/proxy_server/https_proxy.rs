@@ -1,10 +1,10 @@
 use std::time::{Duration, SystemTime};
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 
 use http::uri::PathAndQuery;
-use http::{HeaderName, HeaderValue, Uri};
+use http::{HeaderName, HeaderValue};
 use once_cell::sync::Lazy;
 
 use openssl::base64;
@@ -18,7 +18,6 @@ use pingora_cache::{
     CacheKey, CacheMeta, ForcedFreshness, HitHandler, NoCacheReason, RespCacheable,
 };
 
-use crate::config::RouteUpstream;
 use crate::routing::build::select_or_resolve;
 use crate::metrics::{LocationMetrics, UpstreamMetrics};
 use crate::stores::{self, routes::RouteStoreContainer};
@@ -45,8 +44,12 @@ pub struct RouterContext {
     pub host: String,
     /// The location serving the request, once found
     pub route_container: Option<Arc<RouteStoreContainer>>,
-    pub upstream: RouteUpstream,
-    pub extensions: HashMap<Cow<'static, str>, String>,
+    /// The request's id (`request_id` block)
+    pub request_id: Option<String>,
+    /// Whether the response came from the cache (`cache-status`)
+    pub cache_state: Option<&'static str>,
+    /// The connection to the upstream: whether it was reused, and its address
+    pub upstream_connection: Option<(bool, pingora::protocols::l4::socket::SocketAddr)>,
     /// Bytes of the request body proxied so far
     pub request_body_bytes: u64,
     /// The upstream chosen (index in the location's upstreams), and when
@@ -72,8 +75,9 @@ impl ProxyHttp for Router {
         RouterContext {
             host: String::new(),
             route_container: None,
-            upstream: RouteUpstream::default(),
-            extensions: HashMap::with_capacity(2),
+            request_id: None,
+            cache_state: None,
+            upstream_connection: None,
             request_body_bytes: 0,
             upstream_index: None,
             upstream_start: None,
@@ -93,9 +97,12 @@ impl ProxyHttp for Router {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
-        let req_host = get_host(session).to_string();
-        let host_without_port = req_host.split(':').next().unwrap_or_default();
-        host_without_port.clone_into(&mut ctx.host);
+        get_host(session)
+            .split(':')
+            .next()
+            .unwrap_or_default()
+            .clone_into(&mut ctx.host);
+        let host_without_port = ctx.host.as_str();
 
         // The host with that name (case-insensitive), or `*`, among the hosts served
         // on the address the request came in on
@@ -113,7 +120,7 @@ impl ProxyHttp for Router {
         let mut host_container = stores::lookup::find_host(host_without_port, serves_host);
 
         if self.listener == Listener::Http {
-            if req_host.is_empty() {
+            if get_host(session).is_empty() {
                 return Err(pingora::Error::new(HTTPStatus(400)));
             }
             // `/ping` is proksi's own health check, whatever the host
@@ -124,6 +131,7 @@ impl ProxyHttp for Router {
             // Hosts without TLS get no certificates, so all their paths are proxied.
             if host_container.is_none() {
                 let path = session.req_header().uri.path().to_string();
+                let req_host = get_host(session).to_string();
                 if path.starts_with(http_proxy::ACME_CHALLENGES) {
                     if http_proxy::serve_acme_challenge(session, &req_host).await? {
                         return Ok(true);
@@ -154,8 +162,8 @@ impl ProxyHttp for Router {
         };
 
         // The most specific location of the host for the path, or a 404
-        let uri = get_uri(session);
-        let Some(route_container) = host_container.location_for(uri.path()) else {
+        let Some(route_container) = host_container.location_for(session.req_header().uri.path())
+        else {
             respond_error(session, ctx, 404).await?;
             return Ok(true);
         };
@@ -261,7 +269,6 @@ impl ProxyHttp for Router {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
 
-        ctx.upstream = upstream.clone();
         ctx.upstream_index = Some(index);
         ctx.upstream_start = Some(std::time::Instant::now());
 
@@ -297,13 +304,9 @@ impl ProxyHttp for Router {
                 .await;
         }
 
-        let cache_state = ctx.extensions.get("cache_state").cloned();
-        if let Some(cache_state) = cache_state.filter(|_| session.cache.enabled()) {
+        if let Some(cache_state) = ctx.cache_state.filter(|_| session.cache.enabled()) {
             // indicates whether it was HIT or MISS in the cache
-            upstream_response.insert_header(
-                HeaderName::from_static("cache-status"),
-                cache_state.as_str(),
-            )?;
+            upstream_response.insert_header(HeaderName::from_static("cache-status"), cache_state)?;
 
             let elapsed = ctx.timings.request_filter_start.elapsed();
             upstream_response.insert_header(
@@ -360,17 +363,17 @@ impl ProxyHttp for Router {
             upstream_request.insert_header("x-real-ip", forwarded.real_ip)?;
         }
 
-        let upstream = &ctx.upstream;
-
-        // TODO: refactor
-        if let Some(headers) = upstream.headers.as_ref() {
-            if let Some(add) = headers.add.as_ref() {
-                for header_add in add {
-                    upstream_request
-                        .insert_header(header_add.name.to_string(), header_add.value.to_string())
-                        .ok();
-                }
-            }
+        // The headers of the upstream chosen
+        let added = ctx
+            .route_container
+            .as_ref()
+            .zip(ctx.upstream_index)
+            .and_then(|(location, index)| location.upstreams.get(index))
+            .and_then(|upstream| upstream.headers.as_ref()?.add.as_ref());
+        for header in added.into_iter().flatten() {
+            upstream_request
+                .insert_header(header.name.to_string(), header.value.as_ref())
+                .ok();
         }
 
         if let Some(location) = ctx.route_container.clone() {
@@ -432,6 +435,25 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) {
         let duration = ctx.timings.request_filter_start.elapsed();
+        let status_code = session
+            .response_written()
+            .map(|v| v.status.as_u16())
+            .unwrap_or_default();
+
+        // Requests no location served (unknown hosts, redirects to HTTPS...) are `_unknown`
+        if crate::metrics::enabled() {
+            ctx.route_container
+                .as_ref()
+                .and_then(|location| location.metrics.as_ref())
+                .unwrap_or_else(|| LocationMetrics::unknown())
+                .record(status_code, duration);
+        }
+
+        // Nothing to build when access logs aren't written
+        let info = tracing::enabled!(tracing::Level::INFO);
+        if !info || !crate::services::logger::access_logs_enabled() {
+            return;
+        }
         let duration_ms = duration.as_millis();
 
         let http_version = if session.is_http2() {
@@ -440,7 +462,7 @@ impl ProxyHttp for Router {
             "http/1.1"
         };
 
-        let method = session.req_header().method.to_string();
+        let method = session.req_header().method.as_str();
         let query = session.req_header().uri.query().unwrap_or_default();
         let path = session.req_header().uri.path();
         let empty_header = HeaderValue::from_static("");
@@ -476,20 +498,10 @@ impl ProxyHttp for Router {
             None => peer.map(ToString::to_string).unwrap_or_default(),
         };
 
-        let status_code = session
-            .response_written()
-            .map(|v| v.status.as_u16())
-            .unwrap_or_default();
-
-        // Requests no location served (unknown hosts, redirects to HTTPS...) are `_unknown`
-        if crate::metrics::enabled() {
-            ctx.route_container
-                .as_ref()
-                .and_then(|location| location.metrics.as_ref())
-                .unwrap_or_else(|| LocationMetrics::unknown())
-                .record(status_code, duration);
-        }
-
+        let (reused, peer_addr) = match &ctx.upstream_connection {
+            Some((reused, peer)) => (if *reused { "true" } else { "false" }, Some(peer)),
+            None => ("", None),
+        };
         tracing::info!(
             method,
             path,
@@ -501,9 +513,9 @@ impl ProxyHttp for Router {
             client_ip,
             status_code,
             http_version,
-            reused_connection = ctx.extensions.get("reused").unwrap_or(&String::new()),
-            peer_addr = ctx.extensions.get("peer").unwrap_or(&String::new()),
-            request_id = ctx.extensions.get("request_id_header"),
+            reused_connection = reused,
+            peer_addr = %OrEmpty(peer_addr),
+            request_id = ctx.request_id.as_deref(),
             access_log = true
         );
     }
@@ -529,8 +541,7 @@ impl ProxyHttp for Router {
 
     /// This callback is invoked when a cacheable response is ready to be admitted to cache
     fn cache_miss(&self, session: &mut Session, ctx: &mut Self::CTX) {
-        ctx.extensions
-            .insert(Cow::Borrowed("cache_state"), "fwd=miss".into());
+        ctx.cache_state = Some("fwd=miss");
         session.cache.cache_miss();
     }
 
@@ -548,8 +559,7 @@ impl ProxyHttp for Router {
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Option<ForcedFreshness>> {
         if !meta.is_fresh(SystemTime::now()) {
-            ctx.extensions
-                .insert(Cow::Borrowed("cache_state"), "expired".into());
+            ctx.cache_state = Some("expired");
             // Keeps the asset's stale-while-revalidate/stale-if-error windows open,
             // matching the pre-0.9 `ForceExpired` behavior
             return Ok(Some(ForcedFreshness::ForceExpiredServeStale {
@@ -557,8 +567,7 @@ impl ProxyHttp for Router {
             }));
         }
 
-        ctx.extensions
-            .insert(Cow::Borrowed("cache_state"), "hit".into());
+        ctx.cache_state = Some("hit");
         Ok(None)
     }
 
@@ -671,10 +680,7 @@ impl ProxyHttp for Router {
     where
         Self::CTX: Send + Sync,
     {
-        ctx.extensions
-            .insert(Cow::Borrowed("reused"), reused.to_string());
-        ctx.extensions
-            .insert(Cow::Borrowed("peer"), peer.address().to_string());
+        ctx.upstream_connection = Some((reused, peer.address().clone()));
         Ok(())
     }
 }
@@ -719,8 +725,16 @@ fn cache_key_for(host: &str, path_and_query: &str) -> CacheKey {
     CacheKey::new(primary, host)
 }
 
-fn get_uri(session: &mut Session) -> Uri {
-    session.req_header().uri.clone()
+/// Shows nothing for `None`: access log fields are there for every request
+struct OrEmpty<T>(Option<T>);
+
+impl<T: std::fmt::Display> std::fmt::Display for OrEmpty<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Some(value) => value.fmt(f),
+            None => Ok(()),
+        }
+    }
 }
 
 /// Retrieves the host from the request headers based on

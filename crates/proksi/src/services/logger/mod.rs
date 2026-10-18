@@ -1,7 +1,7 @@
 use std::{
     io::{self, Write},
     sync::{
-        atomic::{AtomicI64, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering},
         Arc,
     },
 };
@@ -32,6 +32,17 @@ const WRITE_BUFFER_SIZE: usize = 64 * 1024;
 
 /// Maximum amount of queued logs written at once
 const MAX_BATCH_SIZE: usize = 1024 * 1024;
+
+/// Whether access logs are written: without them, requests skip building theirs
+static ACCESS_LOGS: AtomicBool = AtomicBool::new(true);
+
+pub fn access_logs_enabled() -> bool {
+    ACCESS_LOGS.load(Ordering::Relaxed)
+}
+
+pub fn set_access_logs(enabled: bool) {
+    ACCESS_LOGS.store(enabled, Ordering::Relaxed);
+}
 
 /// Creates the queue between `ProxyLog` and `ProxyLoggerReceiver`
 pub fn log_queue() -> (Sender<Vec<u8>>, Receiver<Vec<u8>>) {

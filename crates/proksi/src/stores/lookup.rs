@@ -23,7 +23,15 @@ fn find_host_in<T>(
     get: impl Fn(&str) -> Option<T>,
     serves: impl Fn(&T) -> bool,
 ) -> Option<T> {
-    get(&name.to_lowercase())
+    // Names are lowercase already, as clients send them
+    let lowercase;
+    let name = if name.chars().any(char::is_uppercase) {
+        lowercase = name.to_lowercase();
+        &lowercase
+    } else {
+        name
+    };
+    get(name)
         .or_else(|| get("*"))
         .filter(|host| serves(host))
 }

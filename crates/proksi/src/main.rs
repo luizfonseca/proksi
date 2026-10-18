@@ -108,6 +108,9 @@ fn main() -> Result<(), anyhow::Error> {
         proxy_config.logging.error_logs_enabled,
     );
 
+    services::logger::set_access_logs(
+        proxy_config.logging.enabled && proxy_config.logging.access_logs_enabled,
+    );
     init_tracing(&proxy_config, appender);
     for warning in config::deprecations::deprecation_warnings(&proxy_config) {
         tracing::warn!("{warning}");
