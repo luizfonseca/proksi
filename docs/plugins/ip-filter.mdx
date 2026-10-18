@@ -1,0 +1,52 @@
+---
+title: "IP Filter"
+description: "Accepts or refuses the clients of a location by IP address."
+---
+
+Accepts or refuses the clients of a location by their IP address: an admin area only reachable from the office or a VPN, or networks that shouldn't reach a site. Refused clients get a `403 Forbidden`.
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `allow` | Addresses and networks accepted (`"203.0.113.9"`, `"10.0.0.0/8"`, `"2001:db8::/32"`). When set, every other client is refused. |
+| `deny` | Addresses and networks refused, even when `allow` includes them |
+| `priority` | When it runs among the blocks of the location (default: `0`, first) |
+
+At least one of `allow` and `deny` is required.
+
+### Usage
+
+**proksi.hcl**
+```hcl
+host "example.com" {
+  location "/" {
+    upstream "localhost:3000" {}
+  }
+
+  # Only from the office and the VPN, except one address
+  location "/admin" {
+    upstream "localhost:3000" {}
+
+    ip_filter {
+      allow = ["203.0.113.0/24", "10.8.0.0/16"]
+      deny  = ["10.8.0.13"]
+    }
+  }
+
+  # Everyone but one network
+  location "/api" {
+    upstream "localhost:4000" {}
+
+    ip_filter {
+      deny = ["198.51.100.0/24"]
+    }
+  }
+}
+```
+
+### Good to know
+
+- Behind a load balancer or CDN, list it in `server.trusted_proxies`: the client is then the address it forwarded (`X-Forwarded-For`), as for [rate limits](/plugins/rate-limit) and access logs. Otherwise every request comes from the load balancer's address.
+- IPv4 clients connected over IPv6 (`::ffff:203.0.113.9`) are matched as IPv4.
+- Refused requests are counted in `proksi_blocked_requests_total` with `block="ip_filter"` (see [metrics](/configuration/admin#metrics)).

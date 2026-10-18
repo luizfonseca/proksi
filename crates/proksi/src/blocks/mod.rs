@@ -21,6 +21,7 @@ use body_limit::BodyLimit;
 use cache::Cache;
 use compress::Compress;
 use headers::Headers;
+use ip_filter::IpFilter;
 use oauth2::Oauth2;
 use priority::{plugin_priority, priority};
 use rate_limit::RateLimit;
@@ -32,6 +33,7 @@ mod body_limit;
 mod cache;
 mod compress;
 mod headers;
+mod ip_filter;
 mod oauth2;
 mod priority;
 mod rate_limit;
@@ -88,6 +90,7 @@ pub trait Middleware: Send + Sync {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Kind {
     RequestId,
+    IpFilter,
     RateLimit,
     Redirect,
     Respond,
@@ -103,6 +106,7 @@ impl Kind {
     pub fn name(self) -> &'static str {
         match self {
             Kind::RequestId => "request_id",
+            Kind::IpFilter => "ip_filter",
             Kind::RateLimit => "rate_limit",
             Kind::Redirect => "redirect",
             Kind::Respond => "respond",
@@ -118,7 +122,7 @@ impl Kind {
     /// Where the block runs unless it sets `priority`
     pub fn default_priority(self) -> u8 {
         match self {
-            Kind::RequestId | Kind::RateLimit => 0,
+            Kind::RequestId | Kind::IpFilter | Kind::RateLimit => 0,
             Kind::Redirect | Kind::Respond => 5,
             Kind::BodyLimit => 10,
             Kind::BasicAuth | Kind::Oauth2 => 20,
@@ -154,6 +158,7 @@ impl Blocks {
                         plugin: plugin.clone(),
                     }),
                 ),
+                "ip_filter" => (Kind::IpFilter, Arc::new(IpFilter::new(plugin)?)),
                 "rate_limit" => (Kind::RateLimit, Arc::new(RateLimit::new(plugin)?)),
                 "body_limit" => (Kind::BodyLimit, Arc::new(BodyLimit::new(plugin)?)),
                 "redirect" => (Kind::Redirect, Arc::new(Redirect::new(plugin)?)),
@@ -229,7 +234,11 @@ impl Blocks {
             .filter(|kind| {
                 matches!(
                     kind,
-                    Kind::RateLimit | Kind::BodyLimit | Kind::BasicAuth | Kind::Oauth2
+                    Kind::IpFilter
+                        | Kind::RateLimit
+                        | Kind::BodyLimit
+                        | Kind::BasicAuth
+                        | Kind::Oauth2
                 )
             })
             .map(Kind::name)

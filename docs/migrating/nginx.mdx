@@ -109,7 +109,8 @@ Mind the defaults that differ:
 | `gzip on`, `brotli on` | [`compress { }`](/plugins/compress), with `level` for `gzip_comp_level` (`gzip_types`: text, JSON, JavaScript, fonts and SVG are compressed) |
 | `return 301 https://example.com$request_uri;` | [`redirect { to = "https://example.com{uri}", status = 301 }`](/plugins/redirect) |
 | `return 503 "Back soon";` | [`respond { status = 503, body = "Back soon" }`](/plugins/respond) |
-| `root`, `try_files`, `allow`/`deny` | Not available: Proksi only proxies |
+| `allow`/`deny` | [`ip_filter { allow, deny }`](/plugins/ip-filter): `deny` wins, whatever the order |
+| `root`, `try_files` | Not available: Proksi only proxies |
 
 ## TCP (`stream`)
 

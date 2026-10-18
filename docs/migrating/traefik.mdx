@@ -72,7 +72,8 @@ host "app.example.com" {
 | `replacePath`, `replacePathRegex` | [`rewrite`](/routing/upstreams#rewriting-paths) `{ match, replace }` |
 | `redirectRegex` | [`redirect { to }`](/plugins/redirect) in a location, with `{uri}`, `{path}`, `{query}` and `{host}` |
 | `compress` | [`compress { }`](/plugins/compress) |
-| `ipAllowList`, `retry`, `circuitBreaker` | Not available |
+| `ipAllowList` | [`ip_filter { allow }`](/plugins/ip-filter) (`ipStrategy`: `server.trusted_proxies`) |
+| `retry`, `circuitBreaker` | Not available |
 
 ## Docker labels
 
