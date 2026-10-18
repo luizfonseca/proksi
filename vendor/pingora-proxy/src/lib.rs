@@ -183,7 +183,8 @@ where
     C: custom::Connector, // Upstream custom connector
 {
     inner: SV, // TODO: name it better than inner
-    client_upstream: Connector<C>,
+    // proksi: shared, see `HttpProxy::new`
+    client_upstream: Arc<Connector<C>>,
     shutdown: ShardedNotify,
     shutdown_flag: Arc<AtomicBool>,
     pub server_options: Option<HttpServerOptions>,
@@ -217,9 +218,20 @@ impl<SV> HttpProxy<SV, ()> {
     /// // Use proxy.process_new_http() in your custom accept loop
     /// ```
     pub fn new(inner: SV, conf: Arc<ServerConf>) -> Self {
+        // proksi: one connector for every proxy. Each connector keeps its own copy of the
+        // system's trusted certificates (about 1 MB each, twice: for HTTP/1 and HTTP/2), and
+        // proksi creates a proxy per listening service. All of them use the same `ServerConf`.
+        static CLIENT_UPSTREAM: std::sync::OnceLock<Arc<Connector>> = std::sync::OnceLock::new();
+        let client_upstream = CLIENT_UPSTREAM
+            .get_or_init(|| {
+                Arc::new(Connector::new(Some(ConnectorOptions::from_server_conf(
+                    &conf,
+                ))))
+            })
+            .clone();
         HttpProxy {
             inner,
-            client_upstream: Connector::new(Some(ConnectorOptions::from_server_conf(&conf))),
+            client_upstream,
             shutdown: ShardedNotify::new(conf.threads),
             shutdown_flag: Arc::new(AtomicBool::new(false)),
             server_options: None,
@@ -251,7 +263,7 @@ where
     {
         let client_options =
             client_options.unwrap_or_else(|| ConnectorOptions::from_server_conf(&conf));
-        let client_upstream = Connector::new_custom(Some(client_options), connector);
+        let client_upstream = Arc::new(Connector::new_custom(Some(client_options), connector));
 
         HttpProxy {
             inner,
