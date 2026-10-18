@@ -28,6 +28,7 @@ pub struct LocationBlock {
     pub cache: Option<RouteCache>,
     pub basic_auth: Option<PluginConfig>,
     pub oauth2: Option<PluginConfig>,
+    pub forward_auth: Option<PluginConfig>,
     pub request_id: Option<PluginConfig>,
     pub ip_filter: Option<PluginConfig>,
     pub cors: Option<PluginConfig>,
@@ -85,6 +86,7 @@ impl LocationBlock {
         [
             ("basic_auth", &self.basic_auth),
             ("oauth2", &self.oauth2),
+            ("forward_auth", &self.forward_auth),
             ("request_id", &self.request_id),
             ("ip_filter", &self.ip_filter),
             ("cors", &self.cors),

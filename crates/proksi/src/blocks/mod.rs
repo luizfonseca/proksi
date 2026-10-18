@@ -21,6 +21,7 @@ use body_limit::BodyLimit;
 use cache::Cache;
 use compress::Compress;
 use cors::Cors;
+use forward_auth::ForwardAuth;
 use headers::Headers;
 use ip_filter::IpFilter;
 use oauth2::Oauth2;
@@ -34,6 +35,7 @@ mod body_limit;
 mod cache;
 mod compress;
 mod cors;
+mod forward_auth;
 mod headers;
 mod ip_filter;
 mod oauth2;
@@ -100,6 +102,7 @@ pub enum Kind {
     BodyLimit,
     BasicAuth,
     Oauth2,
+    ForwardAuth,
     Compress,
     Headers,
     Cache,
@@ -117,6 +120,7 @@ impl Kind {
             Kind::BodyLimit => "body_limit",
             Kind::BasicAuth => "basic_auth",
             Kind::Oauth2 => "oauth2",
+            Kind::ForwardAuth => "forward_auth",
             Kind::Compress => "compress",
             Kind::Headers => "headers",
             Kind::Cache => "cache",
@@ -129,7 +133,7 @@ impl Kind {
             Kind::RequestId | Kind::IpFilter | Kind::Cors | Kind::RateLimit => 0,
             Kind::Redirect | Kind::Respond => 5,
             Kind::BodyLimit => 10,
-            Kind::BasicAuth | Kind::Oauth2 => 20,
+            Kind::BasicAuth | Kind::Oauth2 | Kind::ForwardAuth => 20,
             Kind::Compress => 40,
             Kind::Headers => 50,
             Kind::Cache => 60,
@@ -170,6 +174,7 @@ impl Blocks {
                 "respond" => (Kind::Respond, Arc::new(Respond::new(plugin)?)),
                 "basic_auth" => (Kind::BasicAuth, Arc::new(BasicAuth::new(plugin)?)),
                 "oauth2" => (Kind::Oauth2, Arc::new(Oauth2::new(plugin)?)),
+                "forward_auth" => (Kind::ForwardAuth, Arc::new(ForwardAuth::new(plugin)?)),
                 "compress" => (Kind::Compress, Arc::new(Compress::new(plugin)?)),
                 // Other plugins of `routes = [...]` and docker labels are ignored, as before
                 _ => continue,
@@ -244,6 +249,7 @@ impl Blocks {
                         | Kind::BodyLimit
                         | Kind::BasicAuth
                         | Kind::Oauth2
+                        | Kind::ForwardAuth
                 )
             })
             .map(Kind::name)

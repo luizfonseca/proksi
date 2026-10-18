@@ -42,7 +42,7 @@ Like the other listeners, the `admin` block is read when Proksi starts: changing
 | `proksi_upstream_duration_seconds` | `host`, `location`, `upstream` | Time until the upstream's response headers (histogram) |
 | `proksi_upstream_errors_total` | `host`, `location`, `upstream` | Failures to connect to an upstream, or while proxying to it |
 | `proksi_upstream_healthy` | `host`, `location`, `upstream` | `1` while the health checks consider the upstream healthy, `0` otherwise |
-| `proksi_blocked_requests_total` | `host`, `location`, `block` | Requests answered by a plugin instead of the upstream (`ip_filter`, `rate_limit`, `body_limit`, `basic_auth`, `oauth2`) |
+| `proksi_blocked_requests_total` | `host`, `location`, `block` | Requests answered by a plugin instead of the upstream (`ip_filter`, `rate_limit`, `body_limit`, `basic_auth`, `oauth2`, `forward_auth`) |
 | `proksi_tcp_connections_total` | `block` | Connections accepted by a `tcp` block (`block` is how it's named in logs: `tcp "db" in host "a.com"`) |
 | `proksi_tcp_connections_active` | `block` | Connections open right now |
 | `proksi_tcp_bytes_total` | `block`, `direction` | Bytes from the client (`in`) and to it (`out`), counted while the connection is open |

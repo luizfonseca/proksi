@@ -4,7 +4,10 @@
 
 mod harness;
 
-use std::time::Duration;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use futures_util::future::join_all;
 use harness::{websocket_echo, Harness, Route, Upstream, UTF8_CONTENT_DISPOSITION};
@@ -1028,6 +1031,141 @@ async fn test_cors() {
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     assert_eq!(header(&res, "access-control-allow-origin").as_deref(), Some("*"));
     assert_eq!(header(&res, "access-control-allow-credentials"), None);
+
+    proksi.assert_healthy();
+}
+
+const HOST_WITH_FORWARD_AUTH: &str = r#"
+host "forward.test" {
+  tls = false
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    forward_auth {
+      url              = "http://127.0.0.1:{auth_port}/verify"
+      response_headers = ["Remote-User"]
+      timeout_secs     = 1
+    }
+  }
+
+  location "/unreachable" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    forward_auth {
+      url = "http://127.0.0.1:{closed_port}/verify"
+    }
+  }
+}
+"#;
+
+/// An auth service: `200` with `Remote-User` for requests with the `session=ok` cookie, a
+/// redirect to its login page otherwise. Slow for `/slow`. Keeps the requests it gets.
+async fn auth_service() -> (u16, Arc<Mutex<Vec<String>>>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let requests = Arc::new(Mutex::new(vec![]));
+    let seen = requests.clone();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                return;
+            };
+            let seen = seen.clone();
+            tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut request = vec![];
+                let mut buffer = [0u8; 4096];
+                while !request.ends_with(b"\r\n\r\n") {
+                    let Ok(read) = stream.read(&mut buffer).await else {
+                        return;
+                    };
+                    if read == 0 {
+                        return;
+                    }
+                    request.extend_from_slice(&buffer[..read]);
+                }
+                let request = String::from_utf8_lossy(&request).to_lowercase();
+                seen.lock().unwrap().push(request.clone());
+                if request.contains("x-forwarded-uri: /slow") {
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                }
+                let response = if request.contains("cookie: session=ok") {
+                    "HTTP/1.1 200 OK\r\nRemote-User: alice\r\nContent-Length: 0\r\n\r\n"
+                } else {
+                    "HTTP/1.1 302 Found\r\nLocation: https://auth.test/login\r\n\
+                     Set-Cookie: flow=1\r\nContent-Length: 5\r\n\r\nlogin"
+                };
+                let _ = stream.write_all(response.as_bytes()).await;
+            });
+        }
+    });
+    (port, requests)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_forward_auth() {
+    let (auth_port, auth_requests) = auth_service().await;
+    let closed_port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let config = HOST_WITH_FORWARD_AUTH
+        .replace("{auth_port}", &auth_port.to_string())
+        .replace("{closed_port}", &closed_port.to_string());
+    let mut proksi = Harness::start_without_https(&config).await;
+    let port = proksi.http_port;
+    let get = |path: &str, headers: &str| {
+        format!("GET {path} HTTP/1.1\r\nHost: forward.test\r\n{headers}Connection: close\r\n\r\n")
+    };
+    let header = |res: &str, name: &str| {
+        res.lines()
+            .take_while(|line| !line.is_empty())
+            .find_map(|line| {
+                let (key, value) = line.split_once(": ")?;
+                key.eq_ignore_ascii_case(name).then(|| value.to_string())
+            })
+    };
+
+    // Signed in: proxied with the user the auth service answered (not the client's own)
+    let request = get("/private?x=1", "Cookie: session=ok\r\nRemote-User: mallory\r\n");
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    let body = res.split("\r\n\r\n").nth(1).unwrap_or_default();
+    let upstream: serde_json::Value = serde_json::from_str(body).unwrap();
+    assert_eq!(upstream["headers"]["remote-user"], "alice", "{res}");
+    let checked = auth_requests.lock().unwrap().last().cloned().unwrap();
+    for expected in [
+        "get /verify http/1.1",
+        "x-forwarded-method: get",
+        "x-forwarded-proto: http",
+        "x-forwarded-host: forward.test",
+        "x-forwarded-uri: /private?x=1",
+        "x-forwarded-for: 127.0.0.1",
+        "cookie: session=ok",
+    ] {
+        assert!(checked.contains(expected), "{expected}: {checked}");
+    }
+
+    // Not signed in: the auth service's answer
+    let res = proksi.raw_http_on(port, get("/private", "").as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 302"), "{res}");
+    assert_eq!(header(&res, "location").as_deref(), Some("https://auth.test/login"));
+    assert_eq!(header(&res, "set-cookie").as_deref(), Some("flow=1"));
+    assert!(res.ends_with("login"), "{res}");
+    // Only the signed-in request reached the upstream
+    assert_eq!(proksi.http_upstream.hits("/private?x=1"), 1);
+    assert_eq!(proksi.http_upstream.hits("/private"), 0);
+
+    // The auth service doesn't answer in time, or can't be reached
+    let request = get("/slow", "Cookie: session=ok\r\n");
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 502"), "{res}");
+    let request = get("/unreachable", "Cookie: session=ok\r\n");
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 502"), "{res}");
+    assert_eq!(proksi.http_upstream.hits("/slow"), 0);
 
     proksi.assert_healthy();
 }
