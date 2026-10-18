@@ -3,8 +3,8 @@ title: "Getting started"
 description: "A batteries-included reverse proxy and load balancer, built on Cloudflare Pingora."
 ---
 
-<Image theme="light" src="/assets/simple-flow-white-2-light.png" alt="Clients reach upstreams through Proksi" width={563} caption="Proksi can be your reverse proxy or a load balancer in front of your public IPs" />
-<Image theme="dark" src="/assets/simple-flow-white-2.png" alt="Clients reach upstreams through Proksi" width={563} caption="Proksi can be your reverse proxy or a load balancer in front of your public IPs" />
+<Image theme="light" src="/assets/proksi-flow-light.svg" alt="Requests from clients go through Proksi to upstreams; some are answered from its cache" caption="Proksi terminates TLS, routes each request by host and path, applies rules and plugins, and answers from its cache or proxies to your upstreams, balancing between them" />
+<Image theme="dark" src="/assets/proksi-flow-dark.svg" alt="Requests from clients go through Proksi to upstreams; some are answered from its cache" caption="Proksi terminates TLS, routes each request by host and path, applies rules and plugins, and answers from its cache or proxies to your upstreams, balancing between them" />
 
 **Proksi** is a **simple**, **lightweight**, and easy-to-use proxy server that proxies HTTP, HTTPS and TCP, with certificates handled for you (Let's Encrypt, your own files, or Kubernetes secrets). It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in [Rust](https://www.rust-lang.org/) and uses [Cloudflare Pingora](https://blog.cloudflare.com/pingora-open-source) as its core networking library.
 

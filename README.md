@@ -5,9 +5,45 @@
 [![Crates.io Total Downloads](https://img.shields.io/crates/d/proksi?style=for-the-badge)](https://crates.io/crates/proksi)
 
 # Proksi: Automatic SSL, HTTP, and DNS Proxy
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/proksi-flow-dark.svg">
+  <img src="./docs/assets/proksi-flow-light.svg" alt="Requests from clients go through Proksi to upstreams; some are answered from its cache" width="720">
+</picture>
+
 <a href="https://discord.gg/WsuV6QBW">
 <img src="./assets/discord.png" alt="discord-logo" width="200"/>
 </a>
+
+## Contents
+
+- [About](#about)
+- [Features](#features)
+- [Quick start](#quick-start)
+  - [Configuration File Handling](#configuration-file-handling)
+- [Configuration](#configuration)
+  - [Server](#server)
+  - [Hosts and locations](#hosts-and-locations)
+    - [Ports, plain HTTP, and any host](#ports-plain-http-and-any-host)
+  - [TCP](#tcp)
+  - [Upstreams](#upstreams)
+  - [Certificates](#certificates)
+  - [Headers](#headers)
+  - [Plugins](#plugins)
+  - [Rules](#rules)
+  - [Caching](#caching)
+  - [Docker](#docker)
+  - [Kubernetes](#kubernetes)
+  - [Running many servers](#running-many-servers)
+  - [Metrics](#metrics)
+  - [Auto reload](#auto-reload)
+  - [Functions and environment variables](#functions-and-environment-variables)
+  - [YAML](#yaml)
+  - [Migrating from `routes = [...]`](#migrating-from-routes--)
+  - [What's next](#whats-next)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
 # About
 
@@ -68,9 +104,10 @@ host "mysite.localhost" {
 
   # Where to point mysite.localhost to
   location "/" {
-    upstream "docs.proksi.info:443" {
+    upstream "example.com:443" {
+      sni = "example.com"
       headers {
-        add = { "Host" = "docs.proksi.info" }
+        add = { "Host" = "example.com" }
       }
     }
   }
@@ -221,24 +258,30 @@ host "db.example.com" {
 }
 ```
 
-`tcp` blocks can also share the HTTPS port: with `listen = "0.0.0.0:443"`, connections asking for the host's name are forwarded while every other name is still HTTPS. If the host also has locations, `alpn = ["..."]` tells them apart by the protocol the client asks for. See the [TCP documentation](https://docs.proksi.info/#/routing/tcp) for more.
+`tcp` blocks can also share the HTTPS port: with `listen = "0.0.0.0:443"`, connections asking for the host's name are forwarded while every other name is still HTTPS. If the host also has locations, `alpn = ["..."]` tells them apart by the protocol the client asks for. See the [TCP documentation](https://docs.proksi.info/routing/tcp) for more.
 
 ## Upstreams
 
 Upstreams are where requests are sent. They are labelled by their address (`host:port`, or `[ipv6]:port`) and requests are load balanced between them (round-robin, in proportion to their `weight`), with health checks running in the background:
 
 ```hcl
-location "/" {
-  upstream "10.0.0.1:3000" { weight = 2 } # twice the requests of the others
-  upstream "10.0.0.2:3000" {}
+host "app.example.com" {
+  location "/" {
+    upstream "10.0.0.1:3000" {
+      weight = 2 # twice the requests of the others
+    }
+    upstream "10.0.0.2:3000" {}
+  }
 
   # An external service using TLS
-  upstream "example.com:443" {
-    sni = "example.com"
+  location "/docs" {
+    upstream "example.com:443" {
+      sni = "example.com"
 
-    # Headers added to the request sent to the upstream
-    headers {
-      add = { "Host" = "example.com" }
+      # Headers added to the request sent to the upstream
+      headers {
+        add = { "Host" = "example.com" }
+      }
     }
   }
 }
@@ -259,6 +302,12 @@ lets_encrypt {
 paths {
   lets_encrypt = "/etc/proksi/letsencrypt"
 }
+
+host "example.com" {
+  location "/" {
+    upstream "app:8080" {}
+  }
+}
 ```
 
 You can also bring your own certificate, or fall back to a self-signed one (useful for development):
@@ -272,6 +321,10 @@ host "example.com" {
     }
 
     self_signed_on_failure = true
+  }
+
+  location "/" {
+    upstream "app:8080" {}
   }
 }
 ```
@@ -290,93 +343,121 @@ host "example.com" {
       remove = ["Server"]
     }
   }
+
+  location "/" {
+    upstream "app:8080" {}
+  }
 }
 ```
 
 ## Plugins
 
-Built-in plugins are enabled per location, and run in order of their `priority` (see the [HCL documentation](https://docs.proksi.info/#/configuration/hcl/)):
+Built-in plugins are enabled per location, and run in order of their `priority` (see the [HCL documentation](https://docs.proksi.info/configuration/hcl)):
 
 ```hcl
-location "/" {
-  upstream "app:8080" {}
+host "example.com" {
+  location "/" {
+    upstream "app:8080" {}
 
-  # Adds an X-Request-Id header to requests and responses
-  request_id {}
+    # Adds an X-Request-Id header to requests and responses
+    request_id {}
 
-  # Only these clients (addresses or networks), the others get a 403
-  ip_filter {
-    allow = ["10.0.0.0/8"]
-  }
+    # Only these clients (addresses or networks), the others get a 403
+    ip_filter {
+      allow = ["10.0.0.0/8"]
+    }
 
-  # Pages of these origins can call the location from the browser
-  cors {
-    origins = ["https://app.example.com"]
-  }
+    # Pages of these origins can call the location from the browser
+    cors {
+      origins = ["https://app.example.com"]
+    }
 
-  # 120 requests per minute for each client (IP address), then a 429
-  rate_limit {
-    requests = 120
-    per      = "1m"
-  }
+    # 120 requests per minute for each client (IP address), then a 429
+    rate_limit {
+      requests = 120
+      per      = "1m"
+    }
 
-  # Request bodies over 1MiB get a 413
-  body_limit {
-    max = "1MiB"
-  }
+    # Request bodies over 1MiB get a 413
+    body_limit {
+      max = "1MiB"
+    }
 
-  # Responses compressed with zstd, brotli or gzip, as the client accepts
-  compress {}
-
-  basic_auth {
-    user = env("BASIC_AUTH_USER")
-    pass = env("BASIC_AUTH_PASS")
-  }
-
-  # Or ask an auth service (Authelia, Authentik, oauth2-proxy) about each request
-  forward_auth {
-    url              = "http://authelia:9091/api/authz/forward-auth"
-    response_headers = ["Remote-User"]
-  }
-
-  oauth2 {
-    provider = "github"
-    client_id = env("OAUTH_CLIENT_ID")
-    client_secret = env("OAUTH_CLIENT_SECRET")
-    jwt_secret = env("OAUTH_JWT_SECRET")
-    validations = [{ key = "email", value = ["me@example.com"] }]
+    # Responses compressed with zstd, brotli or gzip, as the client accepts
+    compress {}
   }
 }
 ```
 
-Locations can also answer without an upstream, with a [`redirect`](https://docs.proksi.info/#/plugins/redirect) (`to = "https://example.com{uri}"`) or a fixed response ([`respond`](https://docs.proksi.info/#/plugins/respond), such as `status = 503` and `body = "Back soon"`).
+Locations can also require their clients to sign in:
+
+```hcl
+host "example.com" {
+  # A user and password, from environment variables
+  location "/admin" {
+    upstream "app:8080" {}
+
+    basic_auth {
+      user = env("BASIC_AUTH_USER")
+      pass = env("BASIC_AUTH_PASS")
+    }
+  }
+
+  # Or ask an auth service (Authelia, Authentik, oauth2-proxy) about each request
+  location "/internal" {
+    upstream "app:8080" {}
+
+    forward_auth {
+      url              = "http://authelia:9091/api/authz/forward-auth"
+      response_headers = ["Remote-User"]
+    }
+  }
+
+  # Or sign in with GitHub
+  location "/" {
+    upstream "app:8080" {}
+
+    oauth2 {
+      provider      = "github"
+      client_id     = env("OAUTH_CLIENT_ID")
+      client_secret = env("OAUTH_CLIENT_SECRET")
+      jwt_secret    = env("OAUTH_JWT_SECRET")
+      validations   = [{ key = "email", value = ["me@example.com"] }]
+    }
+  }
+}
+```
+
+Locations can also answer without an upstream, with a [`redirect`](https://docs.proksi.info/plugins/redirect) (`to = "https://example.com{uri}"`) or a fixed response ([`respond`](https://docs.proksi.info/plugins/respond), such as `status = 503` and `body = "Back soon"`).
 
 ## Rules
 
 A rule is a condition on a request, and what to do when it holds. Rules go in the `server`, a `host` or a `location`, and run in order:
 
 ```hcl
-location "/api" {
-  upstream "api:4000" {}
+host "shop.example.com" {
+  location "/api" {
+    upstream "api:4000" {}
 
-  # Reads stay unlimited; writes are limited per client
-  rule "writes" {
-    and {
-      method {
-        not_in = ["GET", "HEAD", "OPTIONS"]
+    # Reads stay unlimited; writes are limited per client
+    rule "writes" {
+      and {
+        method {
+          not_in = ["GET", "HEAD", "OPTIONS"]
+        }
       }
-    }
-    then {
-      rate_limit {
-        requests = 60
-        per      = "1m"
+      then {
+        rate_limit {
+          requests = 60
+          per      = "1m"
+        }
       }
     }
   }
 }
 ```
 
-Conditions combine with `and`, `or` and `not`, on the method, host, path, query, headers, cookies or client; `then` takes the blocks a location takes, and can change the request's method and headers. See the [rules documentation](https://docs.proksi.info/#/rules).
+Conditions combine with `and`, `or` and `not`, on the method, host, path, query, headers, cookies or client; `then` takes the blocks a location takes, and can change the request's method and headers. See the [rules documentation](https://docs.proksi.info/rules).
 
 ## Caching
 
@@ -437,7 +518,7 @@ helm install proksi deploy/helm/proksi --namespace proksi --create-namespace
 # or: kubectl apply -f https://raw.githubusercontent.com/luizfonseca/proksi/main/deploy/kubernetes/proksi.yaml
 ```
 
-See the [Kubernetes documentation](https://docs.proksi.info/#/installation/kubernetes) for paths, TLS and running more than one replica.
+See the [Kubernetes documentation](https://docs.proksi.info/installation/kubernetes) for paths, TLS and running more than one replica.
 
 ## Running many servers
 
@@ -465,7 +546,7 @@ admin {
 }
 ```
 
-Without a `token`, `listen` must be a loopback address. Live numbers (requests per second, p50/p90/p99 latency, errors and upstream health over the last minutes) are at `/api/v1/stats`, or streamed every second from `/api/v1/stats/stream`. See the [admin documentation](https://docs.proksi.info/#/configuration/admin) for the metrics and a Prometheus configuration.
+Without a `token`, `listen` must be a loopback address. Live numbers (requests per second, p50/p90/p99 latency, errors and upstream health over the last minutes) are at `/api/v1/stats`, or streamed every second from `/api/v1/stats/stream`. See the [admin documentation](https://docs.proksi.info/configuration/admin) for the metrics and a Prometheus configuration.
 
 ## Auto reload
 
@@ -487,6 +568,13 @@ HCL configurations can use a few functions:
 - `env("NAME")`: reads an environment variable (fails if it's not set)
 - `import("./sites/example.com.hcl")`: includes another HCL file
 - `num_cpus()`: the number of CPUs available
+
+```hcl
+# file: sites/example.com.hcl
+location "/" {
+  upstream "app:8080" {}
+}
+```
 
 ```hcl
 worker_threads = num_cpus()
@@ -521,12 +609,12 @@ host:
 
 ## Migrating from `routes = [...]`
 
-`routes = [...]` still works but is deprecated (Proksi logs a warning). The [HCL documentation](https://docs.proksi.info/#/configuration/hcl/) shows how each route becomes a `host` block.
+`routes = [...]` still works but is deprecated (Proksi logs a warning). The [HCL documentation](https://docs.proksi.info/configuration/hcl) shows how each route becomes a `host` block.
 
 
 ## What's next
 
-See the [features](https://docs.proksi.info/#/general/features) page for what's available today.
+See the [features](https://docs.proksi.info/general/features) page for what's available today.
 
 
 # Documentation
