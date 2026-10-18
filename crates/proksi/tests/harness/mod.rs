@@ -181,10 +181,8 @@ impl Harness {
         let http_upstream = HttpUpstream::start().await;
         let websocket_upstream = WebSocketUpstream::start().await;
 
-        let https_port = free_port();
-        let http_port = free_port();
-        let extra_port = free_port();
-        let tcp_ports = [free_port(), free_port(), free_port()];
+        let [https_port, http_port, extra_port, tcp_0, tcp_1, tcp_2] = free_ports();
+        let tcp_ports = [tcp_0, tcp_1, tcp_2];
 
         let stdout = std::fs::File::create(dir.path().join("stdout.log")).unwrap();
         let stderr = std::fs::File::create(dir.path().join("stderr.log")).unwrap();
@@ -951,12 +949,11 @@ async fn handle_websocket_connection(
     }
 }
 
-fn free_port() -> u16 {
-    StdTcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
+/// `N` different free ports: each is kept bound until all are found, or the system could give
+/// the same one twice
+fn free_ports<const N: usize>() -> [u16; N] {
+    let listeners = [(); N].map(|()| StdTcpListener::bind("127.0.0.1:0").unwrap());
+    listeners.map(|listener| listener.local_addr().unwrap().port())
 }
 
 /// Raises the soft limit of open files (e.g. macOS defaults to 256),
