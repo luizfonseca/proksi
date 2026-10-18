@@ -70,7 +70,7 @@ host "app.example.com" {
 | `forwardAuth` | [`oauth2`](/plugins/oauth2) covers GitHub and WorkOS sign-in; no generic forward auth |
 | `stripPrefix`, `addPrefix` | [`rewrite`](/routing/upstreams#rewriting-paths) `{ strip_prefix, add_prefix }` in the location |
 | `replacePath`, `replacePathRegex` | [`rewrite`](/routing/upstreams#rewriting-paths) `{ match, replace }` |
-| `redirectRegex` | Not available |
+| `redirectRegex` | [`redirect { to }`](/plugins/redirect) in a location, with `{uri}`, `{path}`, `{query}` and `{host}` |
 | `compress` | [`compress { }`](/plugins/compress) |
 | `ipAllowList`, `retry`, `circuitBreaker` | Not available |
 

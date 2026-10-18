@@ -1,0 +1,51 @@
+---
+title: "Redirect"
+description: "Answers the requests of a location with a redirect."
+---
+
+Answers every request of a location with a redirect, without reaching an upstream: a `www` host to its apex, a section that moved, an old URL to its new one.
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `to` | Where requests are sent (required). `{uri}` (the path and query), `{path}`, `{query}` and `{host}` (without its port) are replaced with those of the request. |
+| `status` | `301`, `302`, `303`, `307` or `308` (default: `302`) |
+| `priority` | When it runs among the blocks of the location (default: `5`) |
+
+### Usage
+
+**proksi.hcl**
+```hcl
+# www.example.com/a?b=1 -> https://example.com/a?b=1
+host "www.example.com" {
+  location "/" {
+    redirect {
+      to     = "https://example.com{uri}"
+      status = 301
+    }
+  }
+}
+
+host "example.com" {
+  location "/" {
+    upstream "localhost:3000" {}
+  }
+
+  # The blog moved to its own host
+  location "/blog" {
+    redirect {
+      to     = "https://blog.example.com{uri}"
+      status = 308
+    }
+  }
+}
+```
+
+### Good to know
+
+- A location with a `redirect` doesn't need an upstream.
+- `302` (temporary) is the default, as in nginx, Caddy and Traefik: browsers keep permanent redirects (`301`, `308`) for a long time, so use them once the redirect is final.
+- `307` and `308` keep the request's method and body (a `POST` stays a `POST`); with `301`, `302` and `303`, browsers follow with a `GET`.
+- Hosts with TLS already redirect HTTP to HTTPS: there's no need for a `redirect` for that.
+- `rate_limit` (priority `0`) runs before it, and authentication (`20`) after it: set `priority` to change that.

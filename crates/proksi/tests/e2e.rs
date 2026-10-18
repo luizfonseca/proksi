@@ -785,6 +785,80 @@ async fn test_compress() {
     proksi.assert_healthy();
 }
 
+const HOSTS_WITH_REDIRECTS: &str = r#"
+host "www.moved.test" {
+  tls = false
+
+  location "/" {
+    redirect {
+      to     = "https://moved.test{uri}"
+      status = 301
+    }
+  }
+}
+
+host "moved.test" {
+  tls = false
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+
+  location "/docs" {
+    redirect {
+      to = "https://docs.moved.test{path}?from={host}"
+    }
+  }
+
+  location "/maintenance" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    respond {
+      status       = 503
+      body         = "Back soon"
+      content_type = "text/plain"
+    }
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_redirect_and_respond() {
+    let mut proksi = Harness::start_without_https(HOSTS_WITH_REDIRECTS).await;
+    let port = proksi.http_port;
+    let header = |res: &str, name: &str| {
+        res.lines()
+            .take_while(|line| !line.is_empty())
+            .find_map(|line| {
+                let (key, value) = line.split_once(": ")?;
+                key.eq_ignore_ascii_case(name).then(|| value.to_string())
+            })
+    };
+
+    let res = proksi.get_http_on(port, "www.moved.test", "/a/b?c=d").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 301"), "{res}");
+    assert_eq!(header(&res, "location").as_deref(), Some("https://moved.test/a/b?c=d"));
+
+    let res = proksi.get_http_on(port, "moved.test", "/docs/intro?x=1").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 302"), "{res}");
+    assert_eq!(
+        header(&res, "location").as_deref(),
+        Some("https://docs.moved.test/docs/intro?from=moved.test")
+    );
+
+    let res = proksi.get_http_on(port, "moved.test", "/maintenance").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 503"), "{res}");
+    assert_eq!(header(&res, "content-type").as_deref(), Some("text/plain"));
+    assert!(res.ends_with("Back soon"), "{res}");
+    assert_eq!(proksi.http_upstream.hits("/maintenance"), 0);
+
+    // Other locations are proxied
+    let res = proksi.get_http_on(port, "moved.test", "/other").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+
+    proksi.assert_healthy();
+}
+
 const TCP_BLOCKS: &str = r#"
 tcp "web" {
   listen = "127.0.0.1:{tcp_port_0}"

@@ -90,9 +90,10 @@ host "app.example.com" {
 | `grace_period` | `server.shutdown_timeout_secs` |
 | `handle_path /api/*`, `uri strip_prefix`, `uri prefix` | `location "/api"` with [`rewrite`](/routing/upstreams#rewriting-paths) `{ strip_prefix, add_prefix }` |
 | `rewrite`, `uri path_regexp` | [`rewrite`](/routing/upstreams#rewriting-paths) `{ match, replace }` |
-| `redir` | Not available |
+| `redir` | [`redirect { to, status }`](/plugins/redirect), with `{uri}` for `{uri}` |
+| `respond` | [`respond { status, body, content_type }`](/plugins/respond) |
 | `encode` | [`compress { }`](/plugins/compress) in each location (zstd, brotli and gzip) |
-| `file_server`, `php_fastcgi`, `templates`, `respond` | Not available: Proksi only proxies |
+| `file_server`, `php_fastcgi`, `templates` | Not available: Proksi only proxies |
 | On-demand TLS, wildcard sites (`*.example.com`), DNS challenges | Not available |
 
 ## Docker (caddy-docker-proxy)

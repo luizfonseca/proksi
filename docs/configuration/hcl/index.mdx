@@ -121,7 +121,7 @@ host "*" {
 | `headers { response { add = { ... }, remove = [...] } }` | Headers changed in responses, after the host's. |
 | `cache { ... }` | Response caching, as in [caching](/use-cases/cache). |
 | `rewrite { strip_prefix, add_prefix }` or `rewrite { match, replace }` | The path sent to upstreams, by prefix or regular expression, see [rewriting paths](/routing/upstreams#rewriting-paths). |
-| `request_id { }`, `rate_limit { ... }`, `body_limit { ... }`, `basic_auth { ... }`, `oauth2 { ... }`, `compress { }` | Plugins ([request id](/plugins/request-id), [rate limit](/plugins/rate-limit), [body limit](/plugins/body-limit), [basic auth](/plugins/basic-auth), [OAuth2](/plugins/oauth2), [compress](/plugins/compress)), with the same settings as their `config` in `plugins = [...]`. |
+| `request_id { }`, `rate_limit { ... }`, `body_limit { ... }`, `basic_auth { ... }`, `oauth2 { ... }`, `compress { }`, `redirect { ... }`, `respond { ... }` | Plugins ([request id](/plugins/request-id), [rate limit](/plugins/rate-limit), [body limit](/plugins/body-limit), [basic auth](/plugins/basic-auth), [OAuth2](/plugins/oauth2), [compress](/plugins/compress), [redirect](/plugins/redirect), [respond](/plugins/respond)), with the same settings as their `config` in `plugins = [...]`. |
 
 **Order of blocks**
 
@@ -130,6 +130,7 @@ Everything in a location besides upstreams is a building block: plugins, `header
 | Block | Default priority |
 | --- | --- |
 | `request_id`, `rate_limit` | 0 |
+| `redirect`, `respond` | 5 |
 | `body_limit` | 10 |
 | `basic_auth`, `oauth2` | 20 |
 | `compress` | 40 |

@@ -333,6 +333,8 @@ location "/" {
 }
 ```
 
+Locations can also answer without an upstream: `redirect { to = "https://example.com{uri}" }`, or `respond { status = 503, body = "Back soon" }`.
+
 ## Caching
 
 Responses can be cached in memory or on disk:
