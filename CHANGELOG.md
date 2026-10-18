@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.12.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.11.1...proksi-v0.12.0) (2026-10-18)
+
+
+### Features
+
+* cors, to let pages of other origins call a location ([#461](https://github.com/luizfonseca/proksi/issues/461)) ([718ac2a](https://github.com/luizfonseca/proksi/commit/718ac2a129c24d80fb2aa4cd6f7f072f1598447e))
+* forward_auth, to let an auth service decide on each request ([#464](https://github.com/luizfonseca/proksi/issues/464)) ([6800e70](https://github.com/luizfonseca/proksi/commit/6800e70de57133f2ce8d4d25018484f41a2c73db))
+* ip_filter, to accept or refuse clients by address ([#460](https://github.com/luizfonseca/proksi/issues/460)) ([6b78070](https://github.com/luizfonseca/proksi/commit/6b780700b2072121b2adcf91476cafff79d83614))
+* rules, conditions on requests and what to do when they hold ([#466](https://github.com/luizfonseca/proksi/issues/466)) ([9cd815f](https://github.com/luizfonseca/proksi/commit/9cd815f6dae4d0de582b5739e6caf146f60b56b8))
+
+
+### Bug Fixes
+
+* a rule's condition is always an and, or or not block ([#467](https://github.com/luizfonseca/proksi/issues/467)) ([78b4682](https://github.com/luizfonseca/proksi/commit/78b4682d551eb12f479efb9f0a96d8ad48734525))
+* client addresses in kubernetes ([#470](https://github.com/luizfonseca/proksi/issues/470)) ([a7d4ad6](https://github.com/luizfonseca/proksi/commit/a7d4ad68d182743381a08287dff7629cee10e989))
+* give each test proksi different ports ([#463](https://github.com/luizfonseca/proksi/issues/463)) ([ace4f1e](https://github.com/luizfonseca/proksi/commit/ace4f1e87ed4d30d32fcfd6d5ff59d83cc29eb21))
+
 ## [0.11.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.11.0...proksi-v0.11.1) (2026-10-18)
 
 
