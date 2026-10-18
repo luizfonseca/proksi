@@ -315,6 +315,9 @@ location "/" {
     max = "1MiB"
   }
 
+  # Responses compressed with zstd, brotli or gzip, as the client accepts
+  compress {}
+
   basic_auth {
     user = env("BASIC_AUTH_USER")
     pass = env("BASIC_AUTH_PASS")

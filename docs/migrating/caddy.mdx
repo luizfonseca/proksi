@@ -57,10 +57,12 @@ host "app.example.com" {
   location "/api" {
     upstream "api-1:8080" {}
     upstream "api-2:8080" {}
+    compress {}
   }
 
   location "/" {
     upstream "web:3000" {}
+    compress {}
   }
 }
 ```
@@ -89,7 +91,8 @@ host "app.example.com" {
 | `handle_path /api/*`, `uri strip_prefix`, `uri prefix` | `location "/api"` with [`rewrite`](/routing/upstreams#rewriting-paths) `{ strip_prefix, add_prefix }` |
 | `rewrite`, `uri path_regexp` | [`rewrite`](/routing/upstreams#rewriting-paths) `{ match, replace }` |
 | `redir` | Not available |
-| `encode`, `file_server`, `php_fastcgi`, `templates`, `respond` | Not available: Proksi only proxies |
+| `encode` | [`compress { }`](/plugins/compress) in each location (zstd, brotli and gzip) |
+| `file_server`, `php_fastcgi`, `templates`, `respond` | Not available: Proksi only proxies |
 | On-demand TLS, wildcard sites (`*.example.com`), DNS challenges | Not available |
 
 ## Docker (caddy-docker-proxy)
