@@ -42,7 +42,7 @@ Outside a cluster (for development), Proksi uses your kubeconfig.
 
 ## Client addresses
 
-The `Service` of the chart and the manifest has `externalTrafficPolicy: Local`, so Proksi sees the address of each client (the default, `Cluster`, replaces it with a node's address, such as `10.42.0.1`). With it, only nodes running Proksi receive traffic.
+The `Service` of the chart and the manifest has `externalTrafficPolicy: Local`, so Proksi sees the address of each client (the default, `Cluster`, replaces it with a node's address, such as `10.42.0.1`). Cloud load balancers then send traffic only to nodes running Proksi. With k3s' ServiceLB, or DNS pointing at a node, that node must run Proksi (or set `service.externalTrafficPolicy: Cluster`, and lose the client's address).
 
 Behind a CDN or load balancer, requests come from its addresses, and the client is in `X-Forwarded-For`. List its networks in `server.trusted_proxies` so that the client is used for access logs, rate limits and `ip_filter`. For Cloudflare ([its current ranges](https://www.cloudflare.com/ips/)), in the chart's `config`:
 
