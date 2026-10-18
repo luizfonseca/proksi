@@ -733,6 +733,7 @@ async fn test_access_logs_name_the_upstream_connection() {
     let fields = log.get("fields").unwrap_or(&log);
     assert_eq!(fields["x_forwarded_for"], "203.0.113.7, 198.51.100.2", "{log}");
     assert!(fields["client_ip"].as_str().unwrap_or("").starts_with("127.0.0.1:"), "{log}");
+    assert!(fields["remote_addr"].as_str().unwrap_or("").starts_with("127.0.0.1:"), "{log}");
 
     // Health checks aren't logged
     let res = proksi.get_http_on(proksi.http_port, "logged.test", "/ping").await.unwrap();

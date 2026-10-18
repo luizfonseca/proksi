@@ -59,7 +59,7 @@ server {
 }
 ```
 
-Only trust what's in front of Proksi: anyone else can send any `X-Forwarded-For`. Access logs show it as sent (`x_forwarded_for`) either way.
+Only trust what's in front of Proksi: anyone else can send any `X-Forwarded-For`. Access logs show it as sent (`x_forwarded_for`) either way, and the proxy's own address as `remote_addr`.
 
 ## Ingresses
 
