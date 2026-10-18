@@ -1,0 +1,393 @@
+---
+title: "ADR 0007: Rules"
+description: "Requests are matched by host and path only, and every request of a location gets the same blocks."
+---
+
+- Status: accepted
+- Date: 2026-10-18
+- Related: [ADR 0001](/adrs/0001-route-sources) (the store), [ADR 0003](/adrs/0003-configuration-model) (hosts, locations and building blocks), [ADR 0004](/adrs/0004-admin-api-and-metrics) (admin API and metrics)
+
+## Context
+
+Requests are matched by host and path only, and every request of a location gets the same blocks. Common setups need more than that:
+
+- Redirecting only some requests of a path (`GET` requests from an old host, clients sending a given header).
+- Applying a block only to some requests (`rate_limit` on `POST`, authentication except for a health check).
+- Changing requests before they reach the upstream (their method, their headers) depending on what they carry.
+- Changing responses depending on the upstream's answer (no caching of `5xx`, replacing a `502` page).
+
+Edge services offer this as rules: a condition on the request or response, and what to do when it holds. Their conditions are written as expressions in a language of their own, or built in a UI that produces the same tree.
+
+Two constraints shape the design:
+
+- **Cost.** Conditions run on every request. Proksi's own work is around 3µs per request on top of Pingora (see [performance](/general/performance)), and rules must not add to it noticeably, however many there are.
+- **Editing.** Rules are written in the configuration (HCL or YAML) first, and later through the admin API by a UI. Both must describe the same thing, validated the same way.
+
+## Decision
+
+A **rule** is a question about a request (or its response) and what to do when the answer is yes: "is this a `GET` to the old domain? Then redirect it." Rules sit next to hosts and locations, so routing stays as it is: rules refine what happens to the requests a host or location already gets.
+
+### Syntax
+
+A rule has **one condition** and a **`then` block** with what to do when it holds.
+
+```hcl
+rule "legacy clients" {
+  or {
+    and {
+      method { eq = "GET" }
+      host   { eq = "old.example.com" }
+    }
+    and {
+      header "x-client" { eq = "legacy" }
+      not {
+        path { prefix = "/health" }
+      }
+    }
+  }
+
+  then {
+    redirect { to = "https://example.com{uri}", status = 301 }
+  }
+}
+```
+
+- The condition is one field test, or one `and`, `or` or `not` block. Nothing is combined implicitly: two conditions side by side are an error, which names `and { }` and `or { }`.
+- `and { }`: everything inside matches. `or { }`: at least one thing inside matches. `not { }`: what's inside doesn't match. They nest, and a field can appear several times in one of them (blocks repeat in HCL, attributes don't).
+- Every field test is a block with one operator. A range is two tests in an `and` (`status { gte = 500 }` and `status { lt = 600 }`), so operators never combine implicitly either.
+- A rule without a condition isn't valid: a rule for every request is a block of its location or host instead.
+- `else` isn't part of the syntax. It can be added later without changing rules written before.
+
+### Use cases
+
+Each of these is a complete rule, as written in a configuration.
+
+**Move a domain, keeping every path.** Every request to the old domain is sent to the new one, permanently. At the server level, so the old domain needs no host of its own.
+
+```hcl
+server {
+  rule "old domain" {
+    host { eq = "old-shop.example.com" }
+    then {
+      redirect { to = "https://shop.example.com{uri}", status = 301 }
+    }
+  }
+}
+```
+
+**Limit writes, not reads.** Browsing an API stays unlimited; creating, changing and deleting is limited per client.
+
+```hcl
+location "/api" {
+  upstream "api:4000" {}
+
+  rule "writes" {
+    method { not_in = ["GET", "HEAD", "OPTIONS"] }
+    then {
+      rate_limit { requests = 60, per = "1m" }
+    }
+  }
+}
+```
+
+**Protect everything but the health check.** The load balancer's probe reaches the app without signing in; everything else needs it.
+
+```hcl
+location "/" {
+  upstream "app:3000" {}
+
+  rule "sign in" {
+    not {
+      path { eq = "/healthz" }
+    }
+    then {
+      forward_auth { url = "http://authelia:9091/api/authz/forward-auth" }
+    }
+  }
+}
+```
+
+**Maintenance, except for the team.** Everyone gets the maintenance page, except the office network, which keeps testing the app behind it.
+
+```hcl
+host "app.example.com" {
+  rule "maintenance" {
+    not {
+      client { in = ["203.0.113.0/24"] }
+    }
+    then {
+      respond {
+        status       = 503
+        body         = "Back in a few minutes"
+        content_type = "text/plain"
+      }
+      headers { response { add = { "retry-after" = "600" } } }
+    }
+  }
+
+  location "/" {
+    upstream "app:3000" {}
+  }
+}
+```
+
+**Keep crawlers off expensive pages.** Search pages are refused to bots that ignore `robots.txt`.
+
+```hcl
+location "/search" {
+  upstream "app:3000" {}
+
+  rule "crawlers" {
+    header "user-agent" { matches = "(?i)(bytespider|petalbot|ahrefsbot)" }
+    then {
+      respond { status = 403 }
+    }
+  }
+}
+```
+
+**Beta users see the new frontend.** A cookie set by the app sends its users to the beta host.
+
+```hcl
+host "app.example.com" {
+  rule "beta" {
+    and {
+      cookie "beta" { eq = "1" }
+      method { eq = "GET" }
+    }
+    then {
+      redirect { to = "https://beta.example.com{uri}" }
+    }
+  }
+
+  location "/" {
+    upstream "app:3000" {}
+  }
+}
+```
+
+**Clients that can only send `GET` and `POST`.** Older clients ask for the real method in a header; the upstream gets it as the method.
+
+```hcl
+location "/api" {
+  upstream "api:4000" {}
+
+  rule "method override" {
+    and {
+      method { eq = "POST" }
+      header "x-http-method-override" { eq = "DELETE" }
+    }
+    then {
+      method { set = "DELETE" }
+      headers { request { remove = ["x-http-method-override"] } }
+    }
+  }
+}
+```
+
+**Don't let errors be cached.** Responses that failed get `Cache-Control: no-store`, so a CDN in front doesn't keep a `5xx` for its whole TTL. A response rule: it runs on the upstream's answer.
+
+```hcl
+host "example.com" {
+  rule "errors aren't cached" {
+    and {
+      status { gte = 500 }
+      status { lt = 600 }
+    }
+    then {
+      headers { response { add = { "cache-control" = "no-store" } } }
+    }
+  }
+
+  location "/" {
+    upstream "app:3000" {}
+  }
+}
+```
+
+**A friendlier page when the app is down.** When the upstream can't be reached, proksi's own `502` is replaced with a page.
+
+```hcl
+location "/" {
+  upstream "app:3000" {}
+
+  rule "app down" {
+    status { in = [502, 503, 504] }
+    then {
+      respond {
+        status       = 503
+        body         = "<h1>We'll be right back</h1>"
+        content_type = "text/html; charset=utf-8"
+      }
+    }
+  }
+}
+```
+
+### Fields
+
+| Field | Phase | Value |
+| --- | --- | --- |
+| `method` | request | text, compared ignoring case |
+| `host` | request | text (without the port), compared ignoring case |
+| `path` | request | text, as normalized for routing (repeated slashes collapsed, `.` and `..` resolved) |
+| `query "<name>"` | request | text: the value of a query parameter |
+| `header "<name>"` | request | text: the value of a request header (all of its values, joined with commas) |
+| `cookie "<name>"` | request | text: the value of a cookie |
+| `client` | request | address: the client, behind `server.trusted_proxies` the one they forwarded |
+| `status` | response | number: the status of the response (the upstream's, or proksi's own) |
+| `response_header "<name>"` | response | text: the value of a response header |
+
+Header names are compared ignoring case. A rule that tests a response field runs on the response (see [Order](#order)); the request's fields can still be tested there.
+
+### Operators
+
+| Operator | Meaning | Fields |
+| --- | --- | --- |
+| `eq`, `neq` | equal, not equal | all |
+| `in`, `not_in` | equal to one of a list, to none of it | all (`client`: addresses and networks, `["10.0.0.0/8", "203.0.113.9"]`) |
+| `gt`, `gte`, `lt`, `lte` | numeric comparison | `status` |
+| `prefix`, `suffix`, `contains` | text | `host`, `path`, named fields |
+| `wildcard` | `*` matches anything | `host`, `path`, named fields |
+| `matches` | regular expression (linear time, no backreferences) | `host`, `path`, named fields |
+| `exists` | `true`: the value is there; `false`: it isn't | `query`, `header`, `cookie`, `response_header` |
+
+An operator a field doesn't take, a value of the wrong type, an invalid regular expression or network: the configuration doesn't load, and the error names the rule and the path to the test (`rule "legacy clients": or[1].and[0].header "x-client".eq: …`).
+
+### Where rules go
+
+```hcl
+server {
+  rule "old domain" { ... }        # every request, before its host is chosen
+}
+
+host "example.com" {
+  rule "api reads" { ... }         # every request of the host, before its location is chosen
+
+  location "/api" {
+    rule "writes" { ... }          # the requests of the location
+    upstream "api:4000" {}
+  }
+}
+```
+
+### Order
+
+1. **Request rules**, outermost first: the server's, then the host's, then the location's, each in the order they are written. A rule whose `then` answers (`redirect`, `respond`, a refusal of `ip_filter`, `rate_limit` or authentication) ends the request. The others make their changes, and the next rules see the changed request.
+2. The location's own blocks, by priority, as before.
+3. **Response rules**, innermost first, as the response goes back: the location's, the host's, the server's. Proksi's own answers (a `404`, a `502`, a `429`) are responses too.
+
+### Actions
+
+`then` takes the location's blocks that make sense per request:
+
+- **Request rules**: `redirect`, `respond`, `ip_filter`, `rate_limit`, `body_limit`, `basic_auth`, `oauth2`, `forward_auth`, `cors`, `compress`, `request_id`, `headers` (request and response), `rewrite`, and a new one: `method { set = "POST" }`, the method sent to the upstream.
+- **Response rules**: `headers { response { ... } }`, and `respond` to replace the response.
+
+Blocks in `then` run in their usual priority order. Each block of a rule keeps its own state: `rate_limit` in a rule counts that rule's requests only.
+
+### Evaluation
+
+Rules are compiled when the configuration loads (and when hosts are reloaded), never interpreted per request:
+
+1. **Nothing without rules.** A scope (the server, a host, a location) without rules has no rule set, and requests skip the step. Response rules are only wired where some exist.
+2. **Compiled tests.** Each test is turned into a typed comparison with its value prepared: methods and statuses as numbers, header names parsed, values lowercased where the comparison ignores case, networks as prefix tables, regular expressions compiled. Evaluation builds no strings and allocates nothing (cookies are parsed once per request, and only when a rule tests one).
+3. **Every test once per request.** The tests of a scope's rules are collected and deduplicated, and the tests of one field run together: the `eq`, `prefix` and `wildcard` tests of `path` as one prefix tree, its `matches` tests as one regex set, the same for `host` and each named field. Each field is read once, and the results are bits.
+4. **Rules as bit operations.** `and`, `or` and `not` compile to operations on those bits (one 64-bit word for up to 64 tests in a scope, a few words beyond), so a rule costs a few instructions.
+5. **Candidates first.** The tests a rule can't match without (in its top `and`) index it by method, status class, host and path prefix: a request only evaluates the rules it can match. Rules without such a test (an `or` or a `not` at the top) are always evaluated. Built once a benchmark shows it's needed (a few hundred rules); the other points shape the data structures and come first.
+6. **Cheap tests first.** Tests have no side effects, so `and` and `or` are reordered when compiled (numbers, then fixed text, then header lookups, then regular expressions) and stop as soon as their result is known.
+
+#### Budget
+
+Performance comes first: a step isn't done until it meets these, measured on the CI runner by a benchmark of rule evaluation alone (a typical mix of fields and operators):
+
+| Rules in a scope | Cost per request |
+| --- | --- |
+| 0 | nothing: no rule set, no call |
+| 10 | under 50ns |
+| 100 | under 250ns |
+| 1,000 | under 1µs (with the candidates index) |
+
+For scale, proksi's whole work per request is ~3µs, and a request through Pingora and proksi ~14µs of CPU. A configuration with rules is also part of the benchmark of every pull request, so its cost shows in each pull request's comment.
+
+Limits, whatever the source of the rules: rules per scope, depth of `and`/`or`/`not`, and size of regular expressions, so that no configuration makes evaluation expensive by accident.
+
+### Code
+
+Everything about rules lives in one module, `rules`, with the rest of proksi calling it in a few named places. Nothing about conditions or their evaluation is spread through the proxy or the blocks.
+
+| File | What it holds |
+| --- | --- |
+| `rules/mod.rs` | The module's API: `RuleSet` (a scope's compiled rules), `RuleSet::compile`, and the two calls the proxy makes |
+| `rules/model.rs` | The tree as written (HCL, YAML and JSON share it through serde): `Rule`, `Condition`, `FieldTest`, `Operator` |
+| `rules/compile.rs` | From the tree to a `RuleSet`: validation, errors with their path, limits, deduplicated tests, reordering |
+| `rules/fields.rs` | Reading each field of a request or response once, and the tests of each field together (prefix tree, regex set, networks) |
+| `rules/eval.rs` | The bit set of a request, and `and`/`or`/`not` on it |
+| `rules/actions.rs` | `then`: the blocks it holds (built with the existing `Blocks`), and the `method` action |
+| `rules/index.rs` | The candidates index (step 5) |
+| `rules/admin.rs` | `schema`, `validate`, `test` and `rules` for the admin API, on top of `compile` and `eval` |
+| `benches/rules.rs` | The evaluation benchmark (Criterion, next to the existing benches) |
+
+Where the rest of proksi meets it:
+
+- **Configuration**: `rule` blocks in `server`, `host` and `location` deserialize into `rules::model`, and the scope's `RuleSet` is built where hosts and locations are built.
+- **Proxy**: one call where requests are handled (`rules.request(session, ctx)`, before the location's blocks) and one where responses are (`rules.response(...)`, next to the response blocks). Each checks whether the scope has rules at all before doing anything.
+- **Blocks**: rules reuse them as they are. A block doesn't know whether a rule or a location holds it.
+- **Admin API**: its routes call `rules::admin`.
+
+Each part is tested on its own: the compiler on the trees it accepts and the errors it gives, `eval` on bit sets, fields on requests built in tests, and end to end on a running proksi.
+
+### One model, for files and the admin API
+
+The blocks above are the HCL form of a tree that is also JSON, field for field:
+
+```json
+{
+  "name": "server errors",
+  "when": { "and": [{ "status": { "gte": 500 } }, { "not": { "path": { "prefix": "/health" } } }] },
+  "then": { "headers": { "response": { "add": { "cache-control": "no-store" } } } }
+}
+```
+
+A UI edits this tree directly, the way edge services' rule builders do, with no expression language to parse or print. The admin API (ADR 0004) gets:
+
+- `GET /api/v1/rules/schema`: the fields (their phase and value type), the operators each takes, and the actions `then` takes per phase, so a UI builds its menus from what proksi supports.
+- `POST /api/v1/rules/validate`: the compiler the configuration loads with, with each error's path in the tree (`rules[2].when.and[1].status.gt: must be a number`).
+- `POST /api/v1/rules/test`: a sample request (method, host, path, headers, client, and a status for response rules) against a set of rules: which rules match, which tests passed, and what their `then` does.
+- `GET /api/v1/rules`: the rules applied, by scope, with where each comes from.
+
+Every rule has a stable id besides its name, and rules matched are counted in `proksi_rule_matches_total{host, rule}` (only when they match), so a UI shows which rules are used.
+
+### Store-backed rules (a later step)
+
+Rules written through the admin API are kept in the store (ADR 0001), so every instance applies them:
+
+- Rules from files are read-only through the API. In a scope, they run before the store's.
+- A scope's rules in the store carry a version: a write based on an older one is refused, so two people editing at once don't overwrite each other.
+- Each write keeps the previous version and who made it, to roll back.
+- Only the scope that changed is compiled again, away from the request path, and swapped in at once: requests in progress finish with the rules they started with.
+
+Rules apply to proxied requests only: the admin listener can't be locked out by a rule.
+
+## Consequences
+
+- Redirects, refusals and changes depending on the method, headers, query, cookies, client or the upstream's answer need no separate locations or upstream code.
+- Blocks keep working as before: a block outside a rule applies to every request of its location.
+- Proksi without rules pays nothing for them. With rules, the cost grows with the number of distinct fields tested, not with the number of rules.
+- The configuration and the admin API share one model and one compiler: a UI can't produce a rule the configuration couldn't, and the other way around.
+- Rules are verbose for simple cases (`method { eq = "GET" }` instead of `method = "GET"`). That's the price of nothing being implicit, and a UI hides it.
+
+### Not part of this decision
+
+- **Changing bodies** (replacing text as it streams, editing JSON fields): they buffer or scan the bodies of matching requests or responses, a cost of another kind. `then` is a block, so they can be added as actions without changing the rest.
+- **Choosing another upstream** in a rule (a canary, an old API): it changes how routing, health checks and metrics see upstreams, and needs its own decision.
+- **Expression strings** (`when = "method == 'GET' and ..."`): they can be added later as another way to write the same tree.
+- **Rules in docker labels and Kubernetes annotations.**
+
+## Steps
+
+1. The `rules` module: the model (HCL, YAML and JSON), its compiler and its errors, request rules in the server, hosts and locations, the `method` action, the benchmark, its budget and its limits. A **Rules** section in the documentation: what rules are for, conditions, fields and operators, actions, order, cost, and the use cases above.
+2. Response rules.
+3. `schema`, `validate`, `test` and `rules` in the admin API, and the rule metrics.
+4. Store-backed rules, with versions and history.
+5. The candidates index, when the benchmark calls for it.
