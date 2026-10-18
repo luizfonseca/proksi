@@ -1,3 +1,9 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/logo-wordmark-dark.svg">
+    <img src="./docs/assets/logo-wordmark-light.svg" alt="Proksi" width="320">
+  </picture>
+</p>
 
 ![GitHub Release](https://img.shields.io/github/v/release/luizfonseca/proksi?style=for-the-badge)
 ![Crates.io MSRV](https://img.shields.io/crates/msrv/proksi?style=for-the-badge)
@@ -11,7 +17,7 @@
   <img src="./docs/assets/proksi-flow-light.svg" alt="Requests from clients go through Proksi to upstreams; some are answered from its cache" width="720">
 </picture>
 
-<a href="https://discord.gg/WsuV6QBW">
+<a href="https://discord.gg/b22TRMew2m">
 <img src="./assets/discord.png" alt="discord-logo" width="200"/>
 </a>
 
