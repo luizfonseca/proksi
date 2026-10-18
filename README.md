@@ -333,6 +333,12 @@ location "/" {
     pass = env("BASIC_AUTH_PASS")
   }
 
+  # Or ask an auth service (Authelia, Authentik, oauth2-proxy) about each request
+  forward_auth {
+    url              = "http://authelia:9091/api/authz/forward-auth"
+    response_headers = ["Remote-User"]
+  }
+
   oauth2 {
     provider = "github"
     client_id = env("OAUTH_CLIENT_ID")

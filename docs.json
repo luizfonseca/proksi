@@ -176,6 +176,10 @@
         {
           "title": "CORS",
           "href": "/plugins/cors"
+        },
+        {
+          "title": "Forward auth",
+          "href": "/plugins/forward-auth"
         }
       ]
     },

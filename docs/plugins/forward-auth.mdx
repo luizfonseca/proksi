@@ -1,0 +1,61 @@
+---
+title: "Forward Auth"
+description: "Asks an auth service whether each request may go through."
+---
+
+Asks an auth service whether each request of a location may go through, as nginx's `auth_request` and Traefik's `forwardAuth` do. It's how [Authelia](https://www.authelia.com), [Authentik](https://goauthentik.io), [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) and similar services protect apps that have no sign-in of their own.
+
+Each request is first sent to the auth service, as a `GET` with the request's headers (its cookies, `Authorization`) and:
+
+| Header | Value |
+| --- | --- |
+| `X-Forwarded-Method` | The request's method |
+| `X-Forwarded-Proto` | `http` or `https` |
+| `X-Forwarded-Host` | The request's `Host` |
+| `X-Forwarded-Uri` | Its path and query |
+| `X-Forwarded-For` | The client's address (behind `server.trusted_proxies`, the one they forwarded) |
+
+If the auth service answers with a `2xx`, the request is proxied, with the `response_headers` of its answer (who the user is). Any other answer is sent back to the client as it is: a redirect to the sign-in page, a `401`, its cookies.
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `url` | The auth service's endpoint (required) |
+| `response_headers` | Headers of the auth service's answer added to the request sent to the upstream, such as `["Remote-User", "Remote-Groups", "Remote-Email"]`. The client's own headers with these names are removed, so they can't be forged. |
+| `request_headers` | Only these headers of the request are sent to the auth service (default: all of them) |
+| `timeout_secs` | How long the auth service has to answer (default: `5`) |
+| `priority` | When it runs among the blocks of the location (default: `20`, as the other authentication blocks) |
+
+### Usage
+
+**proksi.hcl**
+```hcl
+host "app.example.com" {
+  location "/" {
+    upstream "app:3000" {}
+
+    forward_auth {
+      url              = "http://authelia:9091/api/authz/forward-auth"
+      response_headers = ["Remote-User", "Remote-Groups", "Remote-Email", "Remote-Name"]
+    }
+  }
+}
+
+# The auth service's own pages
+host "auth.example.com" {
+  location "/" {
+    upstream "authelia:9091" {}
+  }
+}
+```
+
+For oauth2-proxy, the endpoint is `http://oauth2-proxy:4180/oauth2/auth`, and its `/oauth2/` paths are served by a location of their own, without `forward_auth`.
+
+### Good to know
+
+- When the auth service can't be reached or doesn't answer within `timeout_secs`, the client gets a `502`, and the error is logged.
+- The auth service's redirects aren't followed: they're for the client (to the sign-in page).
+- The request body isn't sent to the auth service, and its answers over 1MiB aren't passed on (`502`).
+- Requests it refuses are counted in `proksi_blocked_requests_total` with `block="forward_auth"` (see [metrics](/configuration/admin#metrics)).
+- [CORS](/plugins/cors) preflights are answered before it, as browsers send them without cookies.
