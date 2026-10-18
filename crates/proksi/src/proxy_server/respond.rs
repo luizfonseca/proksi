@@ -43,3 +43,22 @@ fn error_response(code: u16) -> pingora::Result<ResponseHeader> {
     response.insert_header(header::CACHE_CONTROL, "private, no-store")?;
     Ok(response)
 }
+
+/// Writes `response` with `body` (its `Content-Length` is set)
+pub async fn respond_with_body(
+    session: &mut Session,
+    ctx: &mut RouterContext,
+    mut response: ResponseHeader,
+    body: bytes::Bytes,
+) -> pingora::Result<()> {
+    if let Some(location) = ctx.route_container.clone() {
+        location.blocks.response(session, &mut response, ctx).await;
+    }
+    response.insert_header(header::CONTENT_LENGTH, body.len())?;
+    let end = body.is_empty();
+    session.write_response_header(Box::new(response), end).await?;
+    if !end {
+        session.write_response_body(Some(body), true).await?;
+    }
+    Ok(())
+}

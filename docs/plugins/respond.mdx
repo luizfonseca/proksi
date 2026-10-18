@@ -1,0 +1,46 @@
+---
+title: "Respond"
+description: "Answers the requests of a location with a fixed response."
+---
+
+Answers every request of a location with a fixed response, without reaching an upstream: a maintenance page, a `robots.txt`, a health check, or a `404`/`410` for paths that shouldn't be served.
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `status` | The status of the response, from `200` to `599` (default: `200`) |
+| `body` | The body of the response (default: none) |
+| `content_type` | Its `Content-Type`, such as `"text/plain"` or `"text/html; charset=utf-8"` (default: none) |
+| `priority` | When it runs among the blocks of the location (default: `5`) |
+
+### Usage
+
+**proksi.hcl**
+```hcl
+host "example.com" {
+  # Maintenance: every request gets a 503
+  location "/" {
+    upstream "localhost:3000" {}
+
+    respond {
+      status       = 503
+      body         = "Back soon"
+      content_type = "text/plain"
+    }
+  }
+
+  location "/robots.txt" {
+    respond {
+      body         = "User-agent: *\nDisallow: /admin\n"
+      content_type = "text/plain"
+    }
+  }
+}
+```
+
+### Good to know
+
+- A location with `respond` doesn't need an upstream. Keep the upstream (as above) to switch a maintenance page on and off by adding or removing `respond`: hosts are reloaded live.
+- The location's [`headers`](/routing/headers) are added to the response, for example a `Retry-After` during maintenance.
+- `rate_limit` (priority `0`) runs before it, and authentication (`20`) after it: set `priority` to change that.

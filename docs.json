@@ -160,6 +160,14 @@
         {
           "title": "Compress",
           "href": "/plugins/compress"
+        },
+        {
+          "title": "Redirect",
+          "href": "/plugins/redirect"
+        },
+        {
+          "title": "Respond",
+          "href": "/plugins/respond"
         }
       ]
     },

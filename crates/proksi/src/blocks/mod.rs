@@ -24,6 +24,7 @@ use headers::Headers;
 use oauth2::Oauth2;
 use priority::{plugin_priority, priority};
 use rate_limit::RateLimit;
+use redirect::{Redirect, Respond};
 use request_id::RequestId;
 
 mod basic_auth;
@@ -34,6 +35,7 @@ mod headers;
 mod oauth2;
 mod priority;
 mod rate_limit;
+mod redirect;
 mod request_id;
 
 /// The stages of a request a block can take part in
@@ -87,6 +89,8 @@ pub trait Middleware: Send + Sync {
 pub enum Kind {
     RequestId,
     RateLimit,
+    Redirect,
+    Respond,
     BodyLimit,
     BasicAuth,
     Oauth2,
@@ -100,6 +104,8 @@ impl Kind {
         match self {
             Kind::RequestId => "request_id",
             Kind::RateLimit => "rate_limit",
+            Kind::Redirect => "redirect",
+            Kind::Respond => "respond",
             Kind::BodyLimit => "body_limit",
             Kind::BasicAuth => "basic_auth",
             Kind::Oauth2 => "oauth2",
@@ -113,6 +119,7 @@ impl Kind {
     pub fn default_priority(self) -> u8 {
         match self {
             Kind::RequestId | Kind::RateLimit => 0,
+            Kind::Redirect | Kind::Respond => 5,
             Kind::BodyLimit => 10,
             Kind::BasicAuth | Kind::Oauth2 => 20,
             Kind::Compress => 40,
@@ -149,6 +156,8 @@ impl Blocks {
                 ),
                 "rate_limit" => (Kind::RateLimit, Arc::new(RateLimit::new(plugin)?)),
                 "body_limit" => (Kind::BodyLimit, Arc::new(BodyLimit::new(plugin)?)),
+                "redirect" => (Kind::Redirect, Arc::new(Redirect::new(plugin)?)),
+                "respond" => (Kind::Respond, Arc::new(Respond::new(plugin)?)),
                 "basic_auth" => (Kind::BasicAuth, Arc::new(BasicAuth::new(plugin)?)),
                 "oauth2" => (Kind::Oauth2, Arc::new(Oauth2::new(plugin)?)),
                 "compress" => (Kind::Compress, Arc::new(Compress::new(plugin)?)),
