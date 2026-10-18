@@ -309,6 +309,11 @@ location "/" {
     allow = ["10.0.0.0/8"]
   }
 
+  # Pages of these origins can call the location from the browser
+  cors {
+    origins = ["https://app.example.com"]
+  }
+
   # 120 requests per minute for each client (IP address), then a 429
   rate_limit {
     requests = 120

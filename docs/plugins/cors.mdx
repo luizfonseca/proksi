@@ -1,0 +1,52 @@
+---
+title: "CORS"
+description: "Lets web pages of other origins call a location, from the browser."
+---
+
+Lets web pages of other origins (`https://app.example.com` calling `https://api.example.com`) call a location from the browser. Proksi answers the browser's preflight requests itself, and adds the CORS headers to the responses of accepted origins.
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `origins` | The origins accepted (required): exact ones (`"https://app.example.com"`), subdomains (`"https://*.example.com"`), or any (`"*"`). `allowed_origins` works too. |
+| `methods` | The methods allowed (default: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`) |
+| `headers` | The request headers allowed (default: those the browser asks for) |
+| `expose_headers` | Response headers the page can read, besides the basic ones (e.g. `X-Total-Count`) |
+| `credentials` | Whether the browser sends cookies and `Authorization` (default: `false`) |
+| `max_age_secs` | How long browsers keep a preflight's answer |
+| `priority` | When it runs among the blocks of the location (default: `0`, first) |
+
+### Usage
+
+**proksi.hcl**
+```hcl
+host "api.example.com" {
+  location "/" {
+    upstream "localhost:4000" {}
+
+    cors {
+      origins      = ["https://app.example.com", "https://*.preview.example.com"]
+      credentials  = true
+      max_age_secs = 600
+    }
+  }
+
+  # A public API, for any page
+  location "/public" {
+    upstream "localhost:4000" {}
+
+    cors {
+      origins = ["*"]
+    }
+  }
+}
+```
+
+### Good to know
+
+- Preflight requests (`OPTIONS` with `Access-Control-Request-Method`) are answered with a `204` without reaching the upstream, and before [authentication](/plugins/basic-auth): browsers send them without credentials.
+- The upstream's own `Access-Control-Allow-Origin` is replaced, so browsers never get two.
+- Requests from origins that aren't accepted get no CORS headers: the browser then refuses to give the response to the page. The request still reaches the upstream: CORS protects browsers' users, not the API (use [authentication](/plugins/basic-auth) or an [IP filter](/plugins/ip-filter) for that).
+- `"https://*.example.com"` accepts `https://app.example.com` and `https://a.b.example.com`, but not `https://example.com` itself: list it too.
+- With `credentials = true`, the origin is sent back instead of `*`, as browsers require. `Vary: Origin` is added so caches keep one copy per origin.
