@@ -22,6 +22,7 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
     crate::proxy_server::client::TrustedProxies::parse(&config.server.trusted_proxies)
         .map_err(|err| anyhow!("server.{err}"))?;
     config.server.tls.validate().map_err(|err| anyhow!("server.tls.{err}"))?;
+    crate::rules::Rules::compile(&config.server.rule).map_err(|err| anyhow!("server: {err}"))?;
 
     let publish = config.kubernetes.publish_service.as_deref();
     if publish.is_some_and(|service| {

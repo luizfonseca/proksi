@@ -1170,6 +1170,157 @@ async fn test_forward_auth() {
     proksi.assert_healthy();
 }
 
+const SERVER_RULES: &str = r#"
+trusted_proxies = ["127.0.0.1"]
+
+rule "old domain" {
+  host { eq = "old.rules.test" }
+  then {
+    redirect {
+      to     = "https://rules.test{uri}"
+      status = 301
+    }
+  }
+}
+"#;
+
+const HOST_WITH_RULES: &str = r#"
+host "rules.test" {
+  tls = false
+
+  rule "maintenance" {
+    and {
+      path { prefix = "/shop" }
+      not {
+        client { in = ["203.0.113.0/24"] }
+      }
+    }
+    then {
+      respond {
+        status = 503
+        body   = "Back soon"
+      }
+    }
+  }
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    rule "crawlers" {
+      header "user-agent" { matches = "(?i)(bytespider|petalbot)" }
+      then {
+        respond { status = 403 }
+      }
+    }
+
+    rule "beta" {
+      and {
+        cookie "beta" { eq = "1" }
+        method { eq = "GET" }
+      }
+      then {
+        redirect { to = "https://beta.rules.test{uri}" }
+      }
+    }
+
+    rule "method override" {
+      and {
+        method { eq = "POST" }
+        header "x-http-method-override" { eq = "DELETE" }
+      }
+      then {
+        method { set = "DELETE" }
+        headers {
+          request {
+            remove = ["x-http-method-override"]
+            add    = { "x-overridden" = "1" }
+          }
+        }
+      }
+    }
+
+    # Sees the request as the rule above changed it
+    rule "deletes" {
+      method { eq = "DELETE" }
+      then {
+        request_id {}
+        headers {
+          response {
+            add = { "x-rule" = "deletes" }
+          }
+        }
+      }
+    }
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rules() {
+    let mut proksi =
+        Harness::start_with_server_ready_over_http(SERVER_RULES, HOST_WITH_RULES).await;
+    let port = proksi.http_port;
+    let send = |request: String| {
+        let proksi = &proksi;
+        async move { proksi.raw_http_on(port, request.as_bytes()).await.unwrap() }
+    };
+    let request = |method: &str, host: &str, path: &str, headers: &str| {
+        format!(
+            "{method} {path} HTTP/1.1\r\nHost: {host}\r\n{headers}Content-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+    };
+    let header = |res: &str, name: &str| {
+        res.lines()
+            .take_while(|line| !line.is_empty())
+            .find_map(|line| {
+                let (key, value) = line.split_once(": ")?;
+                key.eq_ignore_ascii_case(name).then(|| value.to_string())
+            })
+    };
+    let upstream = |res: &str| -> serde_json::Value {
+        serde_json::from_str(res.split("\r\n\r\n").nth(1).unwrap_or_default()).unwrap_or_default()
+    };
+
+    // The server's rule, before any host: the old domain has no host of its own
+    let res = send(request("GET", "old.rules.test", "/a?b=1", "")).await;
+    assert!(res.starts_with("HTTP/1.1 301"), "{res}");
+    assert_eq!(header(&res, "location").as_deref(), Some("https://rules.test/a?b=1"));
+
+    // The host's rule: maintenance, except for the office network
+    let res = send(request("GET", "rules.test", "/shop/cart", "X-Forwarded-For: 198.51.100.7\r\n")).await;
+    assert!(res.starts_with("HTTP/1.1 503"), "{res}");
+    assert!(res.ends_with("Back soon"), "{res}");
+    let res = send(request("GET", "rules.test", "/shop/cart", "X-Forwarded-For: 203.0.113.9\r\n")).await;
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+
+    // The location's rules, in order: the first that answers ends the request
+    let both = "User-Agent: Mozilla/5.0 (compatible; Bytespider)\r\nCookie: beta=1\r\n";
+    let res = send(request("GET", "rules.test", "/", both)).await;
+    assert!(res.starts_with("HTTP/1.1 403"), "{res}");
+    let res = send(request("GET", "rules.test", "/page", "Cookie: a=b; beta=1\r\n")).await;
+    assert!(res.starts_with("HTTP/1.1 302"), "{res}");
+    assert_eq!(header(&res, "location").as_deref(), Some("https://beta.rules.test/page"));
+
+    // The method and headers changed for the upstream, and for the next rule
+    let res = send(request("POST", "rules.test", "/items/1", "X-HTTP-Method-Override: DELETE\r\n")).await;
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    let seen = upstream(&res);
+    assert_eq!(seen["method"], "DELETE", "{res}");
+    assert_eq!(seen["headers"]["x-overridden"], "1", "{res}");
+    assert!(seen["headers"].get("x-http-method-override").is_none(), "{res}");
+    // The blocks of a matched rule take part in the later stages: its request id, its headers
+    assert!(seen["headers"]["x-request-id"].as_str().is_some_and(|id| !id.is_empty()), "{res}");
+    assert_eq!(header(&res, "x-rule").as_deref(), Some("deletes"));
+    assert!(header(&res, "x-request-id").is_some(), "{res}");
+
+    // No rule matches: proxied as it is
+    let res = send(request("GET", "rules.test", "/page", "")).await;
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert_eq!(header(&res, "x-rule"), None);
+
+    proksi.assert_healthy();
+}
+
 const TCP_BLOCKS: &str = r#"
 tcp "web" {
   listen = "127.0.0.1:{tcp_port_0}"

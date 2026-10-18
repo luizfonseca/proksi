@@ -40,6 +40,9 @@ pub struct LocationBlock {
     pub timeouts: Option<LocationTimeouts>,
     pub rewrite: Option<PathRewrite>,
     pub health_check: Option<HealthCheck>,
+    /// `rule "<name>" { ... }`, in order
+    #[serde(default, deserialize_with = "crate::rules::one_or_many")]
+    pub rule: Vec<crate::rules::Rule>,
 }
 
 impl LocationBlock {
@@ -78,6 +81,7 @@ impl LocationBlock {
                 Some(health_check) => Some(health_check.or(host.health_check)),
                 None => host.health_check,
             },
+            rules: self.rule.clone(),
         })
     }
 

@@ -1,0 +1,135 @@
+---
+title: "Rules"
+description: "Questions about a request, and what to do when the answer is yes."
+---
+
+A rule is a question about a request and what to do when the answer is yes: *is this a `GET` to the old domain? Then redirect it.* *Is this a write to the API? Then limit it.* Rules sit next to hosts and locations: routing stays as it is, and rules refine what happens to the requests a host or location already gets.
+
+```hcl
+host "shop.example.com" {
+  location "/api" {
+    upstream "api:4000" {}
+
+    rule "limit writes" {
+      method { not_in = ["GET", "HEAD", "OPTIONS"] }
+      then {
+        rate_limit {
+          requests = 60
+          per      = "1m"
+        }
+      }
+    }
+  }
+}
+```
+
+Reading, browsing and searching the API stays unlimited; creating, changing and deleting is limited to 60 requests a minute per client.
+
+## A rule
+
+Every rule has a **name**, **one condition**, and a **`then`** block:
+
+```hcl
+host "example.com" {
+  rule "legacy clients" {
+    or {
+      header "x-client" {
+        eq = "legacy-ios"
+      }
+      header "x-client" {
+        eq = "legacy-android"
+      }
+    }
+
+    then {
+      redirect {
+        to = "https://legacy.example.com{uri}"
+      }
+    }
+  }
+
+  location "/" {
+    upstream "app:3000" {}
+  }
+}
+```
+
+- **The condition** is one test (`method { eq = "GET" }`), or one `and`, `or` or `not` block holding tests and other blocks. Nothing is combined implicitly: two conditions side by side are an error, so a rule always says whether it means *and* or *or*. See [conditions](/rules/conditions).
+- **`then`** holds what to do: the blocks a location takes (`redirect`, `respond`, `rate_limit`, `basic_auth`...), and changes to the request (its method, its headers). See [actions](/rules/actions).
+- **The name** shows up in errors, and later in metrics.
+
+## Where rules go
+
+```hcl
+server {
+  rule "old domain" {
+    host {
+      eq = "old-shop.example.com"
+    }
+    then {
+      redirect {
+        to     = "https://shop.example.com{uri}"
+        status = 301
+      }
+    }
+  }
+}
+
+host "shop.example.com" {
+  rule "maintenance" {
+    path {
+      prefix = "/checkout"
+    }
+    then {
+      respond {
+        status = 503
+        body   = "Checkout is back in a few minutes"
+      }
+    }
+  }
+
+  location "/" {
+    upstream "shop:3000" {}
+
+    rule "no crawlers on search" {
+      and {
+        path {
+          prefix = "/search"
+        }
+        header "user-agent" {
+          matches = "(?i)(bytespider|petalbot)"
+        }
+      }
+      then {
+        respond {
+          status = 403
+        }
+      }
+    }
+  }
+}
+```
+
+| In | Runs for | Typical use |
+| --- | --- | --- |
+| `server` | every request, before its host is chosen | domains without a host of their own, networks blocked everywhere |
+| `host` | every request of the host, before its location is chosen | maintenance, a whole site's redirects |
+| `location` | the location's requests, before its blocks | anything specific to that part of the site |
+
+## Order
+
+1. The server's rules, then the host's, then the location's, each in the order they're written.
+2. A rule that **answers** (a redirect, a fixed response, a refusal from `ip_filter`, `rate_limit` or authentication) ends the request: the next rules and the upstream never see it.
+3. A rule that **changes** the request (its method, its headers) changes it for the rules after it, and for the upstream.
+4. Then the location's own blocks run, as without rules.
+
+The blocks of a matched rule also take part in the rest of the request: a `headers { response { ... } }` changes the response, a `cors` block adds its headers, a `request_id` is sent to the upstream and back.
+
+## Next
+
+- [Conditions](/rules/conditions): fields, operators, `and`, `or`, `not`.
+- [Actions](/rules/actions): what `then` can do.
+- [Examples](/rules/examples): complete rules for common needs.
+- [Performance](/rules/performance): what rules cost, and how they're evaluated.
+
+Rules are written in HCL or YAML (`rule:` as a list). See [ADR 0007](/adrs/0007-rules) for the design.

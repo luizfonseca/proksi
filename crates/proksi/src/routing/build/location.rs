@@ -45,6 +45,13 @@ pub(super) fn build_location_container(
             return None;
         }
     };
+    container.rules = match crate::rules::Rules::compile(&location.rules) {
+        Ok(rules) => rules,
+        Err(err) => {
+            tracing::warn!("invalid location {} of host {host}: {err}", location.path);
+            return None;
+        }
+    };
     container.metrics = crate::metrics::enabled().then(|| {
         LocationMetrics::with_blocks(
             host,

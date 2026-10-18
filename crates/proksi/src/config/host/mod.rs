@@ -25,6 +25,9 @@ pub struct Host {
     pub tls: HostTls,
     #[serde(default)]
     pub locations: Vec<Location>,
+    /// Rules of every request of the host, before its location is chosen (ADR 0007)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rules: Vec<crate::rules::Rule>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

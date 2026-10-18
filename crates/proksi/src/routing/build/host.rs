@@ -15,6 +15,13 @@ pub fn build_host_container(host: &Host) -> Option<HostContainer> {
         .collect::<Option<Vec<_>>>()?;
 
     let mut container = HostContainer::new(locations, &host.tls);
+    container.rules = match crate::rules::Rules::compile(&host.rules) {
+        Ok(rules) => rules,
+        Err(err) => {
+            tracing::warn!("invalid host {}: {err}", host.name);
+            return None;
+        }
+    };
     // Validated as `ip:port` when the host is merged
     container.listen = host
         .listen

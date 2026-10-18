@@ -349,7 +349,32 @@ location "/" {
 }
 ```
 
-Locations can also answer without an upstream: `redirect { to = "https://example.com{uri}" }`, or `respond { status = 503, body = "Back soon" }`.
+Locations can also answer without an upstream, with a [`redirect`](https://docs.proksi.info/#/plugins/redirect) (`to = "https://example.com{uri}"`) or a fixed response ([`respond`](https://docs.proksi.info/#/plugins/respond), such as `status = 503` and `body = "Back soon"`).
+
+## Rules
+
+A rule is a condition on a request, and what to do when it holds. Rules go in the `server`, a `host` or a `location`, and run in order:
+
+```hcl
+location "/api" {
+  upstream "api:4000" {}
+
+  # Reads stay unlimited; writes are limited per client
+  rule "writes" {
+    method {
+      not_in = ["GET", "HEAD", "OPTIONS"]
+    }
+    then {
+      rate_limit {
+        requests = 60
+        per      = "1m"
+      }
+    }
+  }
+}
+```
+
+Conditions combine with `and`, `or` and `not`, on the method, host, path, query, headers, cookies or client; `then` takes the blocks a location takes, and can change the request's method and headers. See the [rules documentation](https://docs.proksi.info/#/rules).
 
 ## Caching
 

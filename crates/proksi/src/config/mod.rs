@@ -611,6 +611,15 @@ pub struct ServerCfg {
     #[arg(skip)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub work_stealing: Option<bool>,
+
+    /// `rule "<name>" { ... }`, in order: every request, before its host is chosen (ADR 0007)
+    #[arg(skip)]
+    #[serde(
+        default,
+        deserialize_with = "crate::rules::one_or_many",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub rule: Vec<crate::rules::Rule>,
 }
 
 impl ServerCfg {
@@ -804,6 +813,7 @@ impl Default for Config {
                 tls: server_tls::ServerTls::default(),
                 shutdown_timeout_secs: None,
                 work_stealing: None,
+                rule: vec![],
             },
             worker_threads: Some(default_worker_threads()),
             upgrade: false,

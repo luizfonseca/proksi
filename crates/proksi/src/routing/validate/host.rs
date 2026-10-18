@@ -32,7 +32,9 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
         if let Some(rewrite) = &location.rewrite {
             rewrite.compile().map_err(in_location)?;
         }
+        crate::rules::Rules::compile(&location.rules).map_err(in_location)?;
     }
+    crate::rules::Rules::compile(&host.rules)?;
 
     Ok(())
 }

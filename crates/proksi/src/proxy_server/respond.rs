@@ -13,10 +13,20 @@ pub async fn respond(
     ctx: &mut RouterContext,
     mut response: ResponseHeader,
 ) -> pingora::Result<()> {
-    if let Some(location) = ctx.route_container.clone() {
-        location.blocks.response(session, &mut response, ctx).await;
-    }
+    response_blocks(session, &mut response, ctx).await;
     session.write_response_header(Box::new(response), true).await
+}
+
+/// The response blocks of the location and of the rules the request matched
+async fn response_blocks(
+    session: &mut Session,
+    response: &mut ResponseHeader,
+    ctx: &mut RouterContext,
+) {
+    if let Some(location) = ctx.route_container.clone() {
+        location.blocks.response(session, response, ctx).await;
+    }
+    crate::rules::response(session, response, ctx).await;
 }
 
 /// Writes an error response (`code`, with no body), unless a response was already written. The
@@ -51,9 +61,7 @@ pub async fn respond_with_body(
     mut response: ResponseHeader,
     body: bytes::Bytes,
 ) -> pingora::Result<()> {
-    if let Some(location) = ctx.route_container.clone() {
-        location.blocks.response(session, &mut response, ctx).await;
-    }
+    response_blocks(session, &mut response, ctx).await;
     response.insert_header(header::CONTENT_LENGTH, body.len())?;
     let end = body.is_empty();
     session.write_response_header(Box::new(response), end).await?;

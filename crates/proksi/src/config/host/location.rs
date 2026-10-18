@@ -25,6 +25,9 @@ pub struct Location {
     /// How the upstreams are checked, instead of the default
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub health_check: Option<HealthCheck>,
+    /// Rules of the location's requests (ADR 0007), in order
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rules: Vec<crate::rules::Rule>,
 }
 
 /// `rewrite { ... }` in a location: the path sent to upstreams, instead of the request's
@@ -278,6 +281,7 @@ mod tests {
             timeouts: None,
             rewrite: None,
             health_check: None,
+            rules: vec![],
         }
     }
 
