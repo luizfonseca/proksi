@@ -1,0 +1,104 @@
+---
+title: "ADR 0004: Admin API and metrics"
+description: "Proksi only reports what it does through access logs."
+---
+
+- Status: accepted
+- Date: 2026-10-16
+- Related: [#49](https://github.com/luizfonseca/proksi/issues/49) (admin API/UI), [ADR 0001](/adrs/0001-route-sources) (route sources, store and replicas), [ADR 0002](/adrs/0002-certificate-issuance) (certificate leases)
+
+## Context
+
+Proksi only reports what it does through access logs. There is no way to see, while it runs, how fast each host or upstream answers, which upstreams are unhealthy, which routes are applied (and from which source), or when certificates expire. ADR 0001 made the store the place an admin API writes routes to, and left the API itself for later.
+
+Two kinds of consumers need this data:
+
+- **Monitoring** (Prometheus, Grafana, alerting): scrapes counters and histograms, and computes rates and percentiles itself.
+- **People and tools looking at it live** (a dashboard, a CLI, a frontend built on the API): want current numbers (requests per second, latency percentiles over the last minute) without running a metrics stack.
+
+Collecting this must not slow down the request path, which ADR 0003's benchmarks measure on every change.
+
+## Decision
+
+### An admin listener, off by default
+
+```hcl
+admin {
+  listen = "127.0.0.1:7555"
+  token  = env("PROKSI_ADMIN_TOKEN")
+}
+```
+
+- Without an `admin` block, nothing is opened and no metrics are recorded. `metrics = false` keeps the API without recording metrics.
+- Every endpoint needs `Authorization: Bearer <token>`. Without a `token`, `listen` must be a loopback address, so an admin API without a token is never reachable from another machine.
+- The listener is plain HTTP. To expose it publicly, route a host to it, with `basic_auth`, `oauth2` or any other building block in front.
+- Like other listeners, it's set up at startup: changing the `admin` block restarts proksi.
+
+### Metrics
+
+Recorded for every request and TCP connection, exposed in the Prometheus text format at `GET /metrics`:
+
+| Metric | Type | Labels |
+| --- | --- | --- |
+| `proksi_requests_total` | counter | `host`, `location`, `status` (`1xx`…`5xx`, `none` without a response) |
+| `proksi_request_duration_seconds` | histogram | `host`, `location` |
+| `proksi_upstream_duration_seconds` | histogram (time to the upstream's response headers) | `host`, `location`, `upstream` |
+| `proksi_upstream_errors_total` | counter (connection failures, timeouts) | `host`, `location`, `upstream` |
+| `proksi_upstream_healthy` | gauge (1 or 0, from the health checks) | `host`, `location`, `upstream` |
+| `proksi_blocked_requests_total` | counter (answered by a building block: `rate_limit`, `body_limit`, auth) | `host`, `location`, `block` |
+| `proksi_tcp_connections_total`, `proksi_tcp_connections_active` | counter, gauge | `block` |
+| `proksi_tcp_bytes_total` | counter | `block`, `direction` (`in`, `out`) |
+| `proksi_tcp_connection_duration_seconds` | histogram | `block` |
+| `proksi_certificate_expiry_timestamp_seconds` | gauge | `domain` |
+| `proksi_routes` | gauge (hosts applied) | `source` |
+
+- **Labels come from the configuration, not from requests.** `host` is the name of the host that matched (`*` for the catch-all), `location` its path pattern, `upstream` its address. Requests no location served (unknown hosts, redirects to HTTPS, ACME challenges) are counted under `host="_unknown"`. A client can't create new series by sending new `Host` headers or paths.
+- **No lookups in the request path.** A location's metrics (one counter per status class, its histograms, one set per upstream) are created when the location is built, and kept with it. A request only increments atomics it already holds. When a location is replaced (a route change), its new metrics continue the same series.
+- Histogram buckets cover 0.5 ms to 10 s, fine enough to read percentiles from.
+
+### Live stats
+
+`GET /api/v1/stats?window=<seconds>` returns, per host, location, upstream and `tcp` block, over the last `window` seconds (1 to 300, default 60): requests per second, responses by status class, and p50/p90/p99 of request and upstream durations. TCP blocks report connections per second, active connections, bytes per second and connection duration percentiles.
+
+`GET /api/v1/stats/stream` sends the same data every second as server-sent events, for dashboards.
+
+These are computed from the same metrics, not recorded separately: once a second, a background task snapshots the counters and histogram buckets, keeping the last 300 snapshots. A window is the difference between the latest snapshot and the one `window` seconds earlier, and percentiles are interpolated within its histogram buckets. The request path does no extra work for live stats.
+
+### Status and routes
+
+| Endpoint | |
+| --- | --- |
+| `GET /api/v1/status` | Version, replica id, uptime, listeners, the store's revision and the revision this instance applied, and the replicas reporting to the store (ADR 0001) |
+| `GET /api/v1/hosts` | The hosts applied, with their source, locations, building blocks and upstreams (with their health) |
+| `GET /api/v1/certificates` | Domains, issuer, expiry, and who holds their lease (ADR 0002) |
+| `PUT /api/v1/routes/<host>`, `DELETE /api/v1/routes/<host>` | Write a host to the store, in the same format as stored routes. Validated like every other route; an invalid one is refused with the reason. Returns the new revision |
+| `GET /api/v1/routes` | The routes in the store |
+
+- Writes go to the store and reach every replica through the store sync (ADR 0001), including the one that received the request. With the memory store, the store sync runs too, so the routes API works with a single instance.
+- Hosts from the configuration file and docker labels can't be changed through the API; a route written to the store for the same host takes priority, as ADR 0001 defines.
+
+### Responses
+
+JSON, with errors as `{ "error": "<reason>" }` and the usual status codes (`400` invalid input, `401` missing or wrong token, `404`). The API is versioned by its path (`/api/v1`), and only gains fields within a version.
+
+## Consequences
+
+- Monitoring works with a Prometheus scrape config, and live numbers are available without one.
+- The request path gains a few atomic increments per request. The benchmarks on every change are the check.
+- Metrics for hosts that are removed stay until proksi restarts (Prometheus' usual behaviour for vanished series), so a long-running instance with many short-lived docker hosts keeps their series. They're cheap, and a restart clears them.
+- Live stats are per instance. Aggregating several replicas is what Prometheus is for.
+
+### Implementation
+
+1. The `admin` block, the listener with its token, and `GET /metrics` with the request and upstream metrics.
+2. TCP, building block, health, certificate and route metrics.
+3. Live stats and the stream.
+4. Status, hosts and certificates.
+5. The routes API.
+
+### Not part of this decision
+
+- A web UI. The API is meant for one to be built on, served by proksi later or by anything else.
+- Traces (OpenTelemetry) and exporting metrics over OTLP.
+- Reloading or restarting through the API.
+- Per-path or per-client metrics, which would need sampling to keep cardinality bounded.

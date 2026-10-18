@@ -1,4 +1,4 @@
-# Proksi as a Kubernetes ingress controller (see docs/kubernetes.md and ADR 0005)
+# Proksi as a Kubernetes ingress controller (see docs/installation/kubernetes.mdx and ADR 0005)
 #
 #   kubectl apply -f https://raw.githubusercontent.com/luizfonseca/proksi/main/deploy/kubernetes/proksi.yaml
 #

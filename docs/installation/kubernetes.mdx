@@ -1,0 +1,145 @@
+---
+title: "Kubernetes"
+description: "Proksi can run as an ingress controller"
+---
+
+Proksi can run as an ingress controller: it serves the `Ingress` resources of its class, sending requests straight to the ready pods of each backend service. See [ADR 0005](/adrs/0005-kubernetes-ingress) for the design.
+
+## Installing
+
+With Helm, from a clone of the repository:
+
+```bash
+helm install proksi deploy/helm/proksi --namespace proksi --create-namespace
+```
+
+The chart's [values](https://github.com/luizfonseca/proksi/blob/main/deploy/helm/proksi/values.yaml) set the image, replicas, the `Service` type, the `IngressClass` (and whether it's the default one), the watched namespaces, and the rest of Proksi's configuration (`config`).
+
+Or with a single manifest:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/luizfonseca/proksi/main/deploy/kubernetes/proksi.yaml
+```
+
+This creates the `proksi` namespace with Proksi's `Deployment`, a `LoadBalancer` `Service` for ports 80 and 443, its permissions (read `Ingress`es, `IngressClass`es, `Service`s, `EndpointSlice`s and TLS `Secret`s), the `proksi` `IngressClass`, and a `ConfigMap` with Proksi's configuration:
+
+```hcl
+kubernetes {
+  enabled = true
+}
+```
+
+The `kubernetes` block takes:
+
+| Attribute | Default | |
+| --- | --- | --- |
+| `enabled` | `false` | Watch the cluster |
+| `ingress_class` | `"proksi"` | The class of the `Ingress`es to serve |
+| `namespaces` | `[]` | Namespaces to watch (all of them by default) |
+| `publish_service` | | `namespace/name` of Proksi's `Service`: its address (load balancer, external IPs, or cluster IP) is written to the status of each `Ingress`, for tools waiting for one (`kubectl wait`, external-dns, Argo CD). The manifest sets `proksi/proksi` |
+
+Outside a cluster (for development), Proksi uses your kubeconfig.
+
+## Ingresses
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+spec:
+  ingressClassName: proksi
+  rules:
+    - host: web.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  name: http
+```
+
+- Each `host` is a host in Proksi, and each path a location. `Prefix` matches the path and everything below it (`/api` matches `/api` and `/api/users`, not `/apis`), `Exact` only the path, and `ImplementationSpecific` uses Proksi's patterns (`/users/:id`, `/static/*`).
+- Upstreams are the ready pods of the backend service, for the port it targets. They follow the pods as they scale or restart. A service without ready pods answers `503`.
+- Rules of several `Ingress`es for the same host are merged. When two define the same path, the oldest `Ingress` keeps it and the other is logged.
+- A rule without a `host`, and `defaultBackend`, are served for any other name (`host "*"`).
+- The class is `spec.ingressClassName`, or the older annotation `kubernetes.io/ingress.class` without it. `Ingress`es with neither are served when the `proksi` `IngressClass` has the annotation `ingressclass.kubernetes.io/is-default-class: "true"`; ones for another class never are.
+- With the annotation `proksi.ingress/upstream: service`, the upstream is the service's own address (its cluster IP) instead of its pods, and Kubernetes balances the requests.
+
+## TLS
+
+Hosts are served over HTTPS. Hosts listed in an `Ingress`' `tls` use the certificate of its `Secret` (of type `kubernetes.io/tls`, in the same namespace), and pick up changes to it, e.g. renewals by cert-manager:
+
+```yaml
+spec:
+  tls:
+    - hosts: ["web.example.com"]
+      secretName: web-example-com
+```
+
+Other hosts get certificates from Let's Encrypt (enable `lets_encrypt` in the `ConfigMap`). With the annotation `proksi.ingress/tls: "false"`, the hosts of an `Ingress` are plain HTTP.
+
+With a shared store, a certificate from a `Secret` reaches every replica through the store.
+
+### cert-manager
+
+cert-manager's certificates are `Secret`s like any other, renewed in place. With an HTTP-01 solver, use proksi's class:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+spec:
+  acme:
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: proksi   # or `class: proksi`, which sets the annotation
+```
+
+To prove a domain, cert-manager adds a temporary `Ingress` for `/.well-known/acme-challenge/<token>`, which Let's Encrypt requests over plain HTTP. On the HTTP port, Proksi proxies the challenges of locations of their own (under `/.well-known/acme-challenge/`) to their upstream, even for hosts with TLS, whose other paths are still redirected to HTTPS. Proksi's own Let's Encrypt challenges, when it orders a certificate itself, are answered first.
+
+## Plugins
+
+The annotation `proksi.ingress/blocks` adds plugins, headers and cache to every path of an `Ingress`, written like the inside of a `location` block of the [configuration](/configuration/hcl):
+
+```yaml
+metadata:
+  annotations:
+    proksi.ingress/blocks: |
+      rate_limit {
+        requests = 100
+        per      = "1m"
+      }
+      request_id {}
+      headers {
+        response {
+          add = { "x-served-by" = "proksi" }
+        }
+      }
+```
+
+The settings of `basic_auth` (`user`, `pass`) and `oauth2` (`client_id`, `client_secret`, `jwt_secret`) are better kept out of annotations: put them in a `Secret` of the same namespace, labelled `proksi.ingress/auth`, and name it in `proksi.ingress/auth-secret`. Its keys fill the settings the block leaves out:
+
+```bash
+kubectl create secret generic web-auth --from-literal=user=admin --from-literal=pass=...
+kubectl label secret web-auth proksi.ingress/auth=true
+```
+
+```yaml
+metadata:
+  annotations:
+    proksi.ingress/blocks: |
+      basic_auth {}
+    proksi.ingress/auth-secret: web-auth
+```
+
+Only labelled `Secret`s (and TLS ones) are watched. An `Ingress` with invalid blocks, or whose auth secret is missing, isn't served, and the reason is logged and recorded as a warning `Event` on it (`kubectl describe ingress`).
+
+Hosts can still come from Proksi's configuration file, docker labels or the store. When the same host comes from several places, the store wins over Kubernetes, which wins over docker labels and the configuration file.
+
+## More than one replica
+
+With more than one replica, use a shared store (Redis or Postgres) so certificates are ordered once and every replica serves them. With the memory store, Proksi logs a warning. The status of `Ingress`es is written by one replica at a time (through a lease in the store).

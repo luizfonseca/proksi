@@ -1,0 +1,49 @@
+---
+title: "Docker swarm"
+description: "Proksi can be used in conjunction with Docker to automatically discover services and route traffic to them."
+---
+
+Proksi can be used in conjunction with Docker to automatically discover **services** and route traffic to them.
+
+To enable this, you need to add labels to your Docker **services** (_swarm_ or not). The following labels are supported:
+
+```yaml
+# docker-compose.yml
+services:
+  my_service:
+    image: your-service:latest
+    deploy:
+      # Swarm services: labels of the service (`deploy.labels`).
+      # Containers (docker.mode = "container"): `labels` of the container.
+      labels:
+        # Whether the service should be proxied or not.
+        # By default, Proksi won't discover any services where the value is not explicitly `true`
+        proksi.enabled: "true"
+
+        # The hostname that the service should be available at. E.g. `example.com`.
+        proksi.host: "example.com"
+
+        # The port that your service is running on. E.g. `3000`.
+        proksi.port: "3000"
+
+        # (Optional) Only requests matching these path patterns go to the service
+        # (as `location` paths: `/api/*`, `/users/:id`). Any suffix after `pattern.` works.
+        proksi.match_with.path.pattern.api: "/api/*"
+
+        # (Optional) Headers to add to responses, as JSON
+        proksi.headers.add: '[{"name": "X-Api-Version", "value": "1.0"}]'
+
+        # (Optional) Headers to remove from responses, as JSON
+        proksi.headers.remove: '[{"name": "Server"}, {"name": "X-User-Id"}]'
+```
+
+Other labels (the plugin labels are read for swarm services only):
+
+| Label | |
+| --- | --- |
+| `proksi.ssl_certificate.self_signed_on_failure` | `"true"`: a self-signed certificate when Let's Encrypt can't issue one |
+| `proksi.plugins.request_id.enabled` | `"true"`: the [request ID](/plugins/request-id) plugin |
+| `proksi.plugins.basic_auth.user`, `proksi.plugins.basic_auth.password` | [Basic auth](/plugins/basic-auth) |
+| `proksi.plugins.oauth2.provider`, `.client_id`, `.client_secret`, `.jwt_secret`, `.validations` (JSON) | [OAuth2](/plugins/oauth2) |
+
+Services or containers with the same `proksi.host` are load balanced as upstreams of one host. Swarm services are reached through Docker's DNS (`tasks.<service>`), followed as their tasks change (see [Upstreams](/routing/upstreams#names)); containers by their address, updated every `docker.interval_secs`.

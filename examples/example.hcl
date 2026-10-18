@@ -208,7 +208,7 @@ host "example.com" {
 }
 
 # TCP connections forwarded as they are, for services that don't speak HTTP.
-# Inside a host, `tcp` blocks use the host's certificate (see docs/routing/tcp.md).
+# Inside a host, `tcp` blocks use the host's certificate (see docs/routing/tcp.mdx).
 tcp "game" {
   listen = "0.0.0.0:7777"
 
