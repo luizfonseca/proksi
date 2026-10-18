@@ -23,5 +23,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # Broken links, missing images and pages that don't render (docs.page)
-      - run: npx -y @docs.page/cli@2.2.0 check
+      # Broken links, missing images and pages that don't render (docs.page). Other sites
+      # can be down for a moment: their links are only warnings.
+      - run: npx -y @docs.page/cli@2.2.0 check --external-links warn
