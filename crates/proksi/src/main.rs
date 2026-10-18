@@ -62,6 +62,8 @@ fn main() -> Result<(), anyhow::Error> {
     if supervisor::should_supervise() {
         std::process::exit(supervisor::run()?);
     }
+    #[cfg(target_os = "linux")]
+    supervisor::restore_reservations();
 
     // Configuration can be refreshed on file change
     // Loads configuration from command-line, YAML or TOML sources

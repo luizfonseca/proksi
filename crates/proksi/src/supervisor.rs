@@ -13,11 +13,11 @@
 //! - `SIGTERM`, `SIGINT`: passed to the workers, which stop once their connections are closed.
 
 use std::{
-    ffi::OsString,
+    ffi::{c_int, c_long, OsString},
     hash::Hasher,
     path::Path,
     process::ExitStatus,
-    sync::atomic::Ordering,
+    sync::atomic::{AtomicI64, Ordering},
 };
 
 use nix::{sys::signal::Signal, unistd::Pid};
@@ -31,6 +31,39 @@ use crate::config::Config;
 
 /// Set for workers: the supervisor's process id
 const SUPERVISOR_ENV: &str = "PROKSI_SUPERVISOR_PID";
+
+/// mimalloc's `arena_reserve` option: its position in `mi_option_t` (mimalloc.h)
+const MI_OPTION_ARENA_RESERVE: c_int = 23;
+
+/// The space mimalloc reserves at a time (in KiB), before `limit_reservations` turned it off
+static ARENA_RESERVE: AtomicI64 = AtomicI64::new(0);
+
+extern "C" {
+    fn mi_option_get(option: c_int) -> c_long;
+    fn mi_option_set(option: c_int, value: c_long);
+}
+
+/// mimalloc reserves 1 GiB of address space up front, and the bookkeeping for it costs about
+/// 4 MiB, more than the supervisor needs in all. Run before mimalloc starts (its own constructor
+/// has priority 101), so the first reservation doesn't happen: workers turn it back on
+/// (`restore_reservations`).
+#[used]
+#[link_section = ".init_array.00100"]
+static LIMIT_RESERVATIONS: extern "C" fn() = limit_reservations;
+
+extern "C" fn limit_reservations() {
+    // SAFETY: sets a value in mimalloc's options table, before any other thread exists
+    unsafe {
+        ARENA_RESERVE.store(mi_option_get(MI_OPTION_ARENA_RESERVE), Ordering::Relaxed);
+        mi_option_set(MI_OPTION_ARENA_RESERVE, 0);
+    }
+}
+
+/// Not a supervisor: mimalloc reserves space as usual from here on
+pub fn restore_reservations() {
+    // SAFETY: sets a value in mimalloc's options table
+    unsafe { mi_option_set(MI_OPTION_ARENA_RESERVE, ARENA_RESERVE.load(Ordering::Relaxed)) };
+}
 
 /// Set by a worker that runs on its own instead (see `detach`)
 static DETACHED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -277,12 +310,11 @@ fn log(message: &str) {
     eprintln!("proksi supervisor: {message}");
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
 
-    use super::daemon_requested;
+    use super::{daemon_requested, ARENA_RESERVE};
 
     fn requested(args: &[&str], env: Option<&str>) -> bool {
         daemon_requested(args.iter().map(OsString::from), env.map(std::ffi::OsStr::new))
@@ -303,5 +335,16 @@ mod tests {
         assert!(requested(&[], Some("true")));
         assert!(requested(&[], Some("1")));
         assert!(!requested(&[], Some("false")));
+    }
+
+    #[test]
+    fn test_arena_reserve_is_mimallocs_option() {
+        // Its default, 1 GiB in KiB: another value means `mi_option_t` changed with mimalloc
+        if std::env::var_os("MIMALLOC_ARENA_RESERVE").is_none() {
+            assert_eq!(
+                ARENA_RESERVE.load(std::sync::atomic::Ordering::Relaxed),
+                1024 * 1024
+            );
+        }
     }
 }
