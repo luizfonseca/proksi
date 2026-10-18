@@ -108,9 +108,6 @@ fn main() -> Result<(), anyhow::Error> {
         proxy_config.logging.error_logs_enabled,
     );
 
-    services::logger::set_access_logs(
-        proxy_config.logging.enabled && proxy_config.logging.access_logs_enabled,
-    );
     init_tracing(&proxy_config, appender);
     for warning in config::deprecations::deprecation_warnings(&proxy_config) {
         tracing::warn!("{warning}");
@@ -288,6 +285,9 @@ fn add_listeners(
 fn init_tracing(proxy_config: &config::Config, appender: services::logger::ProxyLog) {
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+    services::logger::set_access_logs(
+        proxy_config.logging.enabled && proxy_config.logging.access_logs_enabled,
+    );
     let level = &proxy_config.logging.level;
     let handshake_errors = services::logger::handshake_error_filter::HandshakeErrorFilter {
         debug: matches!(level, LogLevel::Debug | LogLevel::Trace),
