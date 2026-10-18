@@ -1,0 +1,133 @@
+---
+title: "Conditions"
+description: "Fields, operators, and how conditions combine."
+---
+
+A condition tests a **field** of the request with one **operator**, or combines conditions with `and`, `or` and `not`.
+
+```hcl
+host "example.com" {
+  rule "api writes from outside" {
+    and {
+      path {
+        prefix = "/api/"
+      }
+      method {
+        in = ["POST", "PUT", "PATCH", "DELETE"]
+      }
+      not {
+        client {
+          in = ["10.0.0.0/8"]
+        }
+      }
+    }
+    then {
+      rate_limit {
+        requests = 30
+        per      = "1m"
+      }
+    }
+  }
+
+  location "/" {
+    upstream "app:3000" {}
+  }
+}
+```
+
+## Combining
+
+| Block | Holds when |
+| --- | --- |
+| `and { ... }` | every condition inside holds |
+| `or { ... }` | at least one condition inside holds |
+| `not { ... }` | the one condition inside doesn't hold |
+
+- They nest: an `or` can hold `and` blocks, which can hold a `not`...
+- A field can appear several times in the same block: `status { gte = 500 }` and `status { lt = 600 }`, or two `header "x-client"` tests in an `or`.
+- `not` holds exactly one condition. To negate several, put an `and` or `or` inside it.
+- The order of conditions inside a block doesn't matter: proksi tests cheap fields first and stops as soon as the answer is known.
+
+## Fields
+
+| Field | What it reads |
+| --- | --- |
+| `method` | the method (`GET`, `POST`...), ignoring case |
+| `host` | the host the request is for, without its port, ignoring case |
+| `path` | the path, as used to choose locations: `//a/./b` is `/a/b` |
+| `query "<name>"` | the value of a query parameter, decoded (`a+b` and `a%20b` are `a b`) |
+| `header "<name>"` | the value of a request header (several values joined with `, `); names ignore case |
+| `cookie "<name>"` | the value of a cookie |
+| `client` | the client's address; behind `server.trusted_proxies`, the one they forwarded |
+
+## Operators
+
+Each test has exactly one operator.
+
+| Operator | Holds when the value... | Fields |
+| --- | --- | --- |
+| `eq`, `neq` | is, isn't, this value | all |
+| `in`, `not_in` | is one of, none of, a list | all; for `client`, addresses and networks (`["10.0.0.0/8", "203.0.113.9"]`) |
+| `prefix`, `suffix`, `contains` | starts with, ends with, contains this text | text fields |
+| `wildcard` | matches a pattern where `*` is any text (`"/api/*/items"`, `"*.example.com"`) | text fields |
+| `matches` | matches a regular expression (`"(?i)bot"` ignores case) | text fields |
+| `exists` | is there (`exists = true`), or isn't (`exists = false`) | `query`, `header`, `cookie` |
+
+Text fields are `host`, `path`, `query`, `header` and `cookie`.
+
+**When a value isn't there** (no such header, cookie or query parameter): `eq`, `in`, `prefix`, `suffix`, `contains`, `wildcard` and `matches` don't hold, and `neq` and `not_in` do.
+
+```hcl
+host "example.com" {
+  location "/" {
+    upstream "app:3000" {}
+
+    rule "debug only with a token" {
+      and {
+        query "debug" {
+          exists = true
+        }
+        header "x-debug-token" {
+          neq = "s3cr3t"
+        }
+      }
+      then {
+        respond {
+          status = 403
+        }
+      }
+    }
+  }
+}
+```
+
+## Errors
+
+Rules are checked when the configuration loads: an unknown field or operator, a value of the wrong type, an invalid regular expression or network, or two conditions side by side stop it from loading, with the rule's name and the path to the problem:
+
+```text
+host "example.com": rule "api writes": and.method.gt: isn't an operator of method (it takes `eq`, `neq`, `in` and `not_in`)
+```
+
+## In YAML
+
+The same tree, with `rule` as a list:
+
+```yaml
+host:
+  example.com:
+    rule:
+      - name: api writes
+        and:
+          path: { prefix: /api/ }
+          method: { in: [POST, PUT, PATCH, DELETE] }
+        then:
+          rate_limit: { requests: 30, per: 1m }
+    location:
+      /:
+        upstream: { "app:3000": {} }
+```
+
+A field repeated inside a block is a list: `and: { status: [{ gte: 500 }, { lt: 600 }] }`.
+
+Response fields (`status`, `response_header`) are coming next: rules on the upstream's answer.

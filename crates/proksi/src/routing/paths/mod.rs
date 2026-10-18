@@ -4,3 +4,4 @@ mod matcher;
 mod normalize;
 
 pub use matcher::LocationMatcher;
+pub(crate) use normalize::normalize_path;

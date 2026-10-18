@@ -1,0 +1,91 @@
+---
+title: "Actions"
+description: "What `then` can do when a rule's condition holds."
+---
+
+`then` holds what a rule does. It takes the blocks a location takes, with the same settings, and two changes to the request.
+
+```hcl
+host "example.com" {
+  location "/api" {
+    upstream "api:4000" {}
+
+    rule "partners" {
+      header "x-partner-key" {
+        exists = true
+      }
+      then {
+        rate_limit {
+          requests = 6000
+          per      = "1m"
+        }
+        headers {
+          request {
+            add = { "x-partner" = "1" }
+          }
+          response {
+            add = { "x-rate-tier" = "partner" }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## Blocks
+
+| Block | In a rule |
+| --- | --- |
+| [`redirect`](/plugins/redirect), [`respond`](/plugins/respond) | answer the request |
+| [`ip_filter`](/plugins/ip-filter), [`rate_limit`](/plugins/rate-limit), [`body_limit`](/plugins/body-limit) | refuse some requests |
+| [`basic_auth`](/plugins/basic-auth), [`oauth2`](/plugins/oauth2), [`forward_auth`](/plugins/forward-auth) | ask for authentication |
+| [`cors`](/plugins/cors), [`compress`](/plugins/compress), [`request_id`](/plugins/request-id) | as in a location |
+| `headers { response { ... } }` | change the response's headers |
+
+Each block of a rule is its own: a `rate_limit` in a rule counts that rule's requests only, separately from the location's.
+
+## Changing the request
+
+| Action | Does |
+| --- | --- |
+| `method { set = "DELETE" }` | changes the method sent to the upstream |
+| `headers { request { add = { ... }, remove = [...] } }` | adds (replacing) and removes request headers |
+
+The change applies when the rule matches, so the rules after it see the changed request, and so does the upstream.
+
+```hcl
+host "example.com" {
+  location "/api" {
+    upstream "api:4000" {}
+
+    rule "method override" {
+      and {
+        method {
+          eq = "POST"
+        }
+        header "x-http-method-override" {
+          eq = "DELETE"
+        }
+      }
+      then {
+        method {
+          set = "DELETE"
+        }
+        headers {
+          request {
+            remove = ["x-http-method-override"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## Not supported
+
+- `upstream`, `cache`, `rewrite` and `timeouts`: they stay in the location.
+- Changing the body of requests or responses.
+
+A `then` with something else, or with nothing, stops the configuration from loading.

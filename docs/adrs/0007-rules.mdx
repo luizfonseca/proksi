@@ -47,7 +47,10 @@ rule "legacy clients" {
   }
 
   then {
-    redirect { to = "https://example.com{uri}", status = 301 }
+    redirect {
+      to     = "https://example.com{uri}"
+      status = 301
+    }
   }
 }
 ```
@@ -69,7 +72,10 @@ server {
   rule "old domain" {
     host { eq = "old-shop.example.com" }
     then {
-      redirect { to = "https://shop.example.com{uri}", status = 301 }
+      redirect {
+        to     = "https://shop.example.com{uri}"
+        status = 301
+      }
     }
   }
 }
@@ -84,7 +90,10 @@ location "/api" {
   rule "writes" {
     method { not_in = ["GET", "HEAD", "OPTIONS"] }
     then {
-      rate_limit { requests = 60, per = "1m" }
+      rate_limit {
+        requests = 60
+        per      = "1m"
+      }
     }
   }
 }
@@ -121,7 +130,11 @@ host "app.example.com" {
         body         = "Back in a few minutes"
         content_type = "text/plain"
       }
-      headers { response { add = { "retry-after" = "600" } } }
+      headers {
+        response {
+          add = { "retry-after" = "600" }
+        }
+      }
     }
   }
 
@@ -179,7 +192,11 @@ location "/api" {
     }
     then {
       method { set = "DELETE" }
-      headers { request { remove = ["x-http-method-override"] } }
+      headers {
+        request {
+          remove = ["x-http-method-override"]
+        }
+      }
     }
   }
 }
@@ -195,7 +212,11 @@ host "example.com" {
       status { lt = 600 }
     }
     then {
-      headers { response { add = { "cache-control" = "no-store" } } }
+      headers {
+        response {
+          add = { "cache-control" = "no-store" }
+        }
+      }
     }
   }
 
@@ -281,7 +302,7 @@ host "example.com" {
 
 `then` takes the location's blocks that make sense per request:
 
-- **Request rules**: `redirect`, `respond`, `ip_filter`, `rate_limit`, `body_limit`, `basic_auth`, `oauth2`, `forward_auth`, `cors`, `compress`, `request_id`, `headers` (request and response), `rewrite`, and a new one: `method { set = "POST" }`, the method sent to the upstream.
+- **Request rules**: `redirect`, `respond`, `ip_filter`, `rate_limit`, `body_limit`, `basic_auth`, `oauth2`, `forward_auth`, `cors`, `compress`, `request_id`, `headers` (request and response), and a new one: `method { set = "POST" }`, the method sent to the upstream. Changes to the request (method, headers) apply when the rule matches, so the next rules see them. `rewrite` stays in locations for now: in a host's rules it would change which location is chosen, which needs its own decision.
 - **Response rules**: `headers { response { ... } }`, and `respond` to replace the response.
 
 Blocks in `then` run in their usual priority order. Each block of a rule keeps its own state: `rate_limit` in a rule counts that rule's requests only.
@@ -291,24 +312,24 @@ Blocks in `then` run in their usual priority order. Each block of a rule keeps i
 Rules are compiled when the configuration loads (and when hosts are reloaded), never interpreted per request:
 
 1. **Nothing without rules.** A scope (the server, a host, a location) without rules has no rule set, and requests skip the step. Response rules are only wired where some exist.
-2. **Compiled tests.** Each test is turned into a typed comparison with its value prepared: methods and statuses as numbers, header names parsed, values lowercased where the comparison ignores case, networks as prefix tables, regular expressions compiled. Evaluation builds no strings and allocates nothing (cookies are parsed once per request, and only when a rule tests one).
-3. **Every test once per request.** The tests of a scope's rules are collected and deduplicated, and the tests of one field run together: the `eq`, `prefix` and `wildcard` tests of `path` as one prefix tree, its `matches` tests as one regex set, the same for `host` and each named field. Each field is read once, and the results are bits.
-4. **Rules as bit operations.** `and`, `or` and `not` compile to operations on those bits (one 64-bit word for up to 64 tests in a scope, a few words beyond), so a rule costs a few instructions.
-5. **Candidates first.** The tests a rule can't match without (in its top `and`) index it by method, status class, host and path prefix: a request only evaluates the rules it can match. Rules without such a test (an `or` or a `not` at the top) are always evaluated. Built once a benchmark shows it's needed (a few hundred rules); the other points shape the data structures and come first.
+2. **Compiled tests.** Each test is turned into a typed comparison with its value prepared: methods as values, header names parsed, values lowercased where the comparison ignores case, networks as a prefix and a mask (one comparison), regular expressions compiled. Evaluation builds no strings and allocates nothing for scopes of up to 64 tests (cookies are parsed once per request, and only when a rule tests one).
+3. **Every test once per request.** The tests of a scope's rules are collected and deduplicated. Headers, cookies and query parameters are read once, and all their tests run together on the value (their `matches` tests as one regex set, which most values reject in one pass). The method, host, path and client are cheap to read again: when a scope has many tests on one of them, each test runs only when a rule needs it, so a request doesn't pay for hundreds of path tests it never reaches. The results are bits.
+4. **Rules over bits.** `and`, `or` and `not` read those bits (one 64-bit word for up to 64 tests in a scope, a few words beyond), and a rule that is one test is read without recursion.
+5. **Candidates first.** In scopes of 16 rules or more, the tests a rule can't match without (a method, a host's `eq` or `in`, a path under a given first segment) index it: a request only evaluates the rules it can match, in their order. Rules without such a test (an `or` of different fields, a `not`) are always candidates.
 6. **Cheap tests first.** Tests have no side effects, so `and` and `or` are reordered when compiled (numbers, then fixed text, then header lookups, then regular expressions) and stop as soon as their result is known.
 
 #### Budget
 
-Performance comes first: a step isn't done until it meets these, measured on the CI runner by a benchmark of rule evaluation alone (a typical mix of fields and operators):
+Performance comes first: rules aren't done until they meet these, measured by a benchmark of rule evaluation alone (`rules/bench.rs`), for a request that matches none of the rules (every candidate is evaluated):
 
-| Rules in a scope | Cost per request |
-| --- | --- |
-| 0 | nothing: no rule set, no call |
-| 10 | under 50ns |
-| 100 | under 250ns |
-| 1,000 | under 1µs (with the candidates index) |
+| Rules in a scope | Testing method, host, path, client | Also headers, a cookie, regular expressions |
+| ---: | ---: | ---: |
+| 0 | nothing: no rule set, no call | nothing |
+| 10 | under 150ns (measured ~100ns) | under 250ns (~170ns) |
+| 100 | under 300ns (~170ns) | under 600ns (~430ns) |
+| 1,000 | under 1.5µs (~1.2µs) | under 4µs (~2.7µs) |
 
-For scale, proksi's whole work per request is ~3µs, and a request through Pingora and proksi ~14µs of CPU. A configuration with rules is also part of the benchmark of every pull request, so its cost shows in each pull request's comment.
+Measured on one core of an ARM server. The cost comes from reading fields (a header lookup, parsing cookies, a regular expression: 10 to 40ns each, once per request) and from each rule evaluated (2 to 3ns). The first budget written for this ADR (50ns for 10 rules) didn't hold: reading the fields alone costs more, whatever the evaluation. For scale, proksi's whole work per request is ~3µs, and a request through Pingora and proksi ~14µs of CPU.
 
 Limits, whatever the source of the rules: rules per scope, depth of `and`/`or`/`not`, and size of regular expressions, so that no configuration makes evaluation expensive by accident.
 
@@ -318,20 +339,20 @@ Everything about rules lives in one module, `rules`, with the rest of proksi cal
 
 | File | What it holds |
 | --- | --- |
-| `rules/mod.rs` | The module's API: `RuleSet` (a scope's compiled rules), `RuleSet::compile`, and the two calls the proxy makes |
-| `rules/model.rs` | The tree as written (HCL, YAML and JSON share it through serde): `Rule`, `Condition`, `FieldTest`, `Operator` |
-| `rules/compile.rs` | From the tree to a `RuleSet`: validation, errors with their path, limits, deduplicated tests, reordering |
-| `rules/fields.rs` | Reading each field of a request or response once, and the tests of each field together (prefix tree, regex set, networks) |
-| `rules/eval.rs` | The bit set of a request, and `and`/`or`/`not` on it |
-| `rules/actions.rs` | `then`: the blocks it holds (built with the existing `Blocks`), and the `method` action |
-| `rules/index.rs` | The candidates index (step 5) |
-| `rules/admin.rs` | `schema`, `validate`, `test` and `rules` for the admin API, on top of `compile` and `eval` |
-| `benches/rules.rs` | The evaluation benchmark (Criterion, next to the existing benches) |
+| `rules/mod.rs` | The module's API: `Rules` (a scope's compiled rules), `Rules::compile`, `Rules::request`, and the stages the blocks of matched rules take part in |
+| `rules/model.rs` | The tree as written (HCL, YAML and JSON share it), and reading labeled `rule` blocks in order |
+| `rules/compile.rs` | From the tree to compiled rules: validation, errors with their path, limits, deduplicated tests, reordering |
+| `rules/fields.rs` | Reading the fields of a request, and running their tests |
+| `rules/eval.rs` | The results of a request's tests as bits, and `and`/`or`/`not` on them |
+| `rules/index.rs` | The candidates index |
+| `rules/actions.rs` | `then`: the blocks it holds (built with the existing `Blocks`), and changes to the request |
+| `rules/bench.rs` | The evaluation benchmark and its budget (`cargo test --release -p proksi --bin proksi rules::bench -- --ignored`) |
+| `rules/admin.rs` | `schema`, `validate`, `test` and `rules` for the admin API (step 3) |
 
 Where the rest of proksi meets it:
 
 - **Configuration**: `rule` blocks in `server`, `host` and `location` deserialize into `rules::model`, and the scope's `RuleSet` is built where hosts and locations are built.
-- **Proxy**: one call where requests are handled (`rules.request(session, ctx)`, before the location's blocks) and one where responses are (`rules.response(...)`, next to the response blocks). Each checks whether the scope has rules at all before doing anything.
+- **Proxy**: `rules.request(session, ctx)` for the server's, the host's and the location's rules, where each scope is known; and one call per later stage (request body, upstream request and response, response) next to the location's blocks, for the blocks of matched rules. Each checks whether there's anything to do first.
 - **Blocks**: rules reuse them as they are. A block doesn't know whether a rule or a location holds it.
 - **Admin API**: its routes call `rules::admin`.
 
@@ -339,12 +360,15 @@ Each part is tested on its own: the compiler on the trees it accepts and the err
 
 ### One model, for files and the admin API
 
-The blocks above are the HCL form of a tree that is also JSON, field for field:
+The blocks above are the HCL form of a tree that is also JSON, block for block: a block is an object, and blocks repeated side by side (two `status` tests in an `and`, two `and` in an `or`) are a list, as HCL reads them:
 
 ```json
 {
   "name": "server errors",
-  "when": { "and": [{ "status": { "gte": 500 } }, { "not": { "path": { "prefix": "/health" } } }] },
+  "and": {
+    "status": [{ "gte": 500 }, { "lt": 600 }],
+    "not": { "path": { "prefix": "/health" } }
+  },
   "then": { "headers": { "response": { "add": { "cache-control": "no-store" } } } }
 }
 ```
@@ -386,8 +410,7 @@ Rules apply to proxied requests only: the admin listener can't be locked out by 
 
 ## Steps
 
-1. The `rules` module: the model (HCL, YAML and JSON), its compiler and its errors, request rules in the server, hosts and locations, the `method` action, the benchmark, its budget and its limits. A **Rules** section in the documentation: what rules are for, conditions, fields and operators, actions, order, cost, and the use cases above.
+1. The `rules` module: the model (HCL, YAML and JSON), its compiler and its errors, request rules in the server, hosts and locations, the `method` and request header actions, the candidates index, the benchmark, its budget and its limits. A **Rules** section in the documentation (what rules are for, conditions, actions, examples, cost), whose examples are loaded by a test.
 2. Response rules.
 3. `schema`, `validate`, `test` and `rules` in the admin API, and the rule metrics.
 4. Store-backed rules, with versions and history.
-5. The candidates index, when the benchmark calls for it.

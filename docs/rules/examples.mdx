@@ -1,0 +1,231 @@
+---
+title: "Examples"
+description: "Complete rules for common needs."
+---
+
+Each example is a complete configuration you can adapt.
+
+## Move a domain, keeping every path
+
+Every request to the old domain goes to the new one, permanently. In `server`, so the old domain needs no host of its own (its certificate still has to be served by a host, or another proxy, to answer HTTPS).
+
+```hcl
+server {
+  rule "old domain" {
+    host {
+      eq = "old-shop.example.com"
+    }
+    then {
+      redirect {
+        to     = "https://shop.example.com{uri}"
+        status = 301
+      }
+    }
+  }
+}
+```
+
+## Limit writes, not reads
+
+Browsing an API stays unlimited; creating, changing and deleting is limited per client.
+
+```hcl
+host "api.example.com" {
+  location "/" {
+    upstream "api:4000" {}
+
+    rule "writes" {
+      method {
+        not_in = ["GET", "HEAD", "OPTIONS"]
+      }
+      then {
+        rate_limit {
+          requests = 60
+          per      = "1m"
+        }
+      }
+    }
+  }
+}
+```
+
+## Protect everything but the health check
+
+A load balancer's probe reaches the app without signing in; every other request needs it.
+
+```hcl
+host "app.example.com" {
+  location "/" {
+    upstream "app:3000" {}
+
+    rule "sign in" {
+      not {
+        path {
+          eq = "/healthz"
+        }
+      }
+      then {
+        forward_auth {
+          url = "http://authelia:9091/api/authz/forward-auth"
+        }
+      }
+    }
+  }
+}
+```
+
+## Maintenance, except for the team
+
+Everyone gets the maintenance page, except the office network, which keeps testing the app behind it.
+
+```hcl
+host "app.example.com" {
+  rule "maintenance" {
+    not {
+      client {
+        in = ["203.0.113.0/24"]
+      }
+    }
+    then {
+      respond {
+        status       = 503
+        body         = "Back in a few minutes"
+        content_type = "text/plain"
+      }
+      headers {
+        response {
+          add = { "retry-after" = "600" }
+        }
+      }
+    }
+  }
+
+  location "/" {
+    upstream "app:3000" {}
+  }
+}
+```
+
+Behind a load balancer, list it in `server.trusted_proxies`, so `client` is the visitor's address rather than the load balancer's.
+
+## Keep crawlers off expensive pages
+
+```hcl
+host "shop.example.com" {
+  location "/search" {
+    upstream "shop:3000" {}
+
+    rule "crawlers" {
+      header "user-agent" {
+        matches = "(?i)(bytespider|petalbot|ahrefsbot)"
+      }
+      then {
+        respond {
+          status = 403
+        }
+      }
+    }
+  }
+}
+```
+
+## Beta users see the new frontend
+
+A cookie the app sets sends its users to the beta host.
+
+```hcl
+host "app.example.com" {
+  rule "beta" {
+    and {
+      cookie "beta" {
+        eq = "1"
+      }
+      method {
+        eq = "GET"
+      }
+    }
+    then {
+      redirect {
+        to = "https://beta.example.com{uri}"
+      }
+    }
+  }
+
+  location "/" {
+    upstream "app:3000" {}
+  }
+}
+```
+
+## Clients that can only send `GET` and `POST`
+
+Older clients ask for the real method in a header; the upstream gets it as the method.
+
+```hcl
+host "api.example.com" {
+  location "/" {
+    upstream "api:4000" {}
+
+    rule "method override" {
+      and {
+        method {
+          eq = "POST"
+        }
+        header "x-http-method-override" {
+          eq = "DELETE"
+        }
+      }
+      then {
+        method {
+          set = "DELETE"
+        }
+        headers {
+          request {
+            remove = ["x-http-method-override"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## Tell internal traffic apart
+
+Requests from the private network get a header the app can trust, since clients can't set it themselves (rules replace it).
+
+```hcl
+host "app.example.com" {
+  location "/" {
+    upstream "app:3000" {}
+
+    rule "internal" {
+      client {
+        in = ["10.0.0.0/8", "192.168.0.0/16"]
+      }
+      then {
+        headers {
+          request {
+            add = { "x-internal" = "1" }
+          }
+        }
+      }
+    }
+
+    rule "not internal" {
+      not {
+        client {
+          in = ["10.0.0.0/8", "192.168.0.0/16"]
+        }
+      }
+      then {
+        headers {
+          request {
+            remove = ["x-internal"]
+          }
+        }
+      }
+    }
+  }
+}
+```

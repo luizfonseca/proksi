@@ -184,6 +184,31 @@
       ]
     },
     {
+      "group": "Rules",
+      "pages": [
+        {
+          "title": "Rules",
+          "href": "/rules"
+        },
+        {
+          "title": "Conditions",
+          "href": "/rules/conditions"
+        },
+        {
+          "title": "Actions",
+          "href": "/rules/actions"
+        },
+        {
+          "title": "Examples",
+          "href": "/rules/examples"
+        },
+        {
+          "title": "Performance",
+          "href": "/rules/performance"
+        }
+      ]
+    },
+    {
       "group": "Migrating",
       "pages": [
         {

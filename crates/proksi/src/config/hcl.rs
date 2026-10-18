@@ -13,8 +13,10 @@ impl figment::providers::Format for HclFormat {
     const NAME: &'static str = "HCL";
 
     fn from_str<T: serde::de::DeserializeOwned>(string: &str) -> Result<T, Self::Error> {
-        check_duplicate_blocks(&hcl::parse(string)?, "")?;
-        hcl::eval::from_str(string, &get_hcl_context())
+        let mut body = hcl::parse(string)?;
+        check_duplicate_blocks(&body, "")?;
+        crate::rules::unlabel_rules(&mut body);
+        hcl::from_body(hcl::eval::Evaluate::evaluate(&body, &get_hcl_context())?)
     }
 }
 
@@ -42,7 +44,8 @@ fn check_duplicate_blocks(body: &hcl::Body, parent: &str) -> Result<(), hcl::Err
             let _ = write!(name, " \"{}\"", label.as_str());
         }
 
-        if !block.labels().is_empty() && !seen.insert(name.clone()) {
+        let repeatable = matches!(block.identifier(), "header" | "query" | "cookie");
+        if !block.labels().is_empty() && !repeatable && !seen.insert(name.clone()) {
             let parent = if parent.is_empty() {
                 String::new()
             } else {

@@ -107,8 +107,8 @@ Mind the defaults that differ:
 | `least_conn`, `ip_hash`, `hash` | Not available (weighted round robin only) |
 | `rewrite ^/old/(.*)$ /new/$1 break;` | [`rewrite`](/routing/upstreams#rewriting-paths) `{ match = "^/old/(.*)$", replace = "/new/$1" }` (redirecting rewrites, `last`/`redirect`/`permanent`, aren't supported) |
 | `gzip on`, `brotli on` | [`compress { }`](/plugins/compress), with `level` for `gzip_comp_level` (`gzip_types`: text, JSON, JavaScript, fonts and SVG are compressed) |
-| `return 301 https://example.com$request_uri;` | [`redirect { to = "https://example.com{uri}", status = 301 }`](/plugins/redirect) |
-| `return 503 "Back soon";` | [`respond { status = 503, body = "Back soon" }`](/plugins/respond) |
+| `return 301 https://example.com$request_uri;` | [`redirect`](/plugins/redirect) with `to = "https://example.com{uri}"` and `status = 301` |
+| `return 503 "Back soon";` | [`respond`](/plugins/respond) with `status = 503` and `body = "Back soon"` |
 | `auth_request /auth;` with `auth_request_set` | [`forward_auth { url, response_headers }`](/plugins/forward-auth) |
 | `allow`/`deny` | [`ip_filter { allow, deny }`](/plugins/ip-filter): `deny` wins, whatever the order |
 | `root`, `try_files` | Not available: Proksi only proxies |

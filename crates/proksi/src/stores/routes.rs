@@ -35,6 +35,8 @@ pub struct RouteStoreContainer {
 
     /// Requests and upstreams of this location (ADR 0004)
     pub metrics: Option<LocationMetrics>,
+    /// Rules of the location's requests (ADR 0007)
+    pub rules: Option<Arc<crate::rules::Rules>>,
 }
 
 impl Default for RouteStoreContainer {
@@ -50,6 +52,7 @@ impl Default for RouteStoreContainer {
             timeouts: None,
             rewrite: None,
             metrics: None,
+            rules: None,
         }
     }
 }
@@ -65,6 +68,7 @@ impl RouteStoreContainer {
             timeouts: None,
             rewrite: None,
             metrics: None,
+            rules: None,
         }
     }
 

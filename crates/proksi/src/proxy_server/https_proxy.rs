@@ -50,6 +50,8 @@ pub struct RouterContext {
     pub cache_state: Option<&'static str>,
     /// The connection to the upstream: whether it was reused, and its address
     pub upstream_connection: Option<(bool, pingora::protocols::l4::socket::SocketAddr)>,
+    /// The rules the request matched, whose blocks take part in its later stages
+    pub rules: crate::rules::Applied,
     /// Bytes of the request body proxied so far
     pub request_body_bytes: u64,
     /// The upstream chosen (index in the location's upstreams), and when
@@ -78,6 +80,7 @@ impl ProxyHttp for Router {
             request_id: None,
             cache_state: None,
             upstream_connection: None,
+            rules: crate::rules::Applied::default(),
             request_body_bytes: 0,
             upstream_index: None,
             upstream_start: None,
@@ -102,6 +105,13 @@ impl ProxyHttp for Router {
             .next()
             .unwrap_or_default()
             .clone_into(&mut ctx.host);
+
+        // The server's rules, before the host is chosen (ADR 0007)
+        if let Some(rules) = crate::rules::server() {
+            if rules.request(session, ctx).await {
+                return Ok(true);
+            }
+        }
         let host_without_port = ctx.host.as_str();
 
         // The host with that name (case-insensitive), or `*`, among the hosts served
@@ -161,6 +171,13 @@ impl ProxyHttp for Router {
             return Ok(true);
         };
 
+        // The host's rules, before its location is chosen
+        if let Some(rules) = &host_container.rules {
+            if rules.request(session, ctx).await {
+                return Ok(true);
+            }
+        }
+
         // The most specific location of the host for the path, or a 404
         let Some(route_container) = host_container.location_for(session.req_header().uri.path())
         else {
@@ -191,6 +208,12 @@ impl ProxyHttp for Router {
         }
 
         // The location's building blocks, in order: a block can answer the request (e.g. a `401`)
+        // The location's rules, then its blocks
+        if let Some(rules) = &route_container.rules {
+            if rules.request(session, ctx).await {
+                return Ok(true);
+            }
+        }
         if let Some(block) = route_container.blocks.request(session, ctx).await {
             if let Some(metrics) = &route_container.metrics {
                 metrics.blocked(block.name());
@@ -222,6 +245,7 @@ impl ProxyHttp for Router {
             session.set_read_timeout(Some(read.min(remaining)));
         }
 
+        crate::rules::request_body(body.as_ref(), ctx)?;
         let Some(location) = ctx.route_container.clone() else {
             return Ok(());
         };
@@ -303,6 +327,7 @@ impl ProxyHttp for Router {
                 .response(session, upstream_response, ctx)
                 .await;
         }
+        crate::rules::response(session, upstream_response, ctx).await;
 
         if let Some(cache_state) = ctx.cache_state.filter(|_| session.cache.enabled()) {
             // indicates whether it was HIT or MISS in the cache
@@ -391,6 +416,7 @@ impl ProxyHttp for Router {
                 .upstream_request(session, upstream_request, ctx)
                 .await;
         }
+        crate::rules::upstream_request(session, upstream_request, ctx).await;
 
         Ok(())
     }
@@ -419,6 +445,7 @@ impl ProxyHttp for Router {
                 .blocks
                 .upstream_response(session, upstream_response, ctx);
         }
+        crate::rules::upstream_response(session, upstream_response, ctx);
 
         Ok(())
     }

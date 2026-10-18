@@ -38,6 +38,9 @@ pub struct HostBlock {
     /// TCP proxying with the host's certificate (or its TLS forwarded, or plain TCP)
     #[serde(default)]
     pub tcp: BTreeMap<String, TcpBlock>,
+    /// `rule "<name>" { ... }`, in order: before the location is chosen
+    #[serde(default, deserialize_with = "crate::rules::one_or_many")]
+    pub rule: Vec<crate::rules::Rule>,
 }
 
 impl HostBlock {
@@ -62,6 +65,7 @@ impl HostBlock {
                 .map(TlsSetting::to_host_tls)
                 .unwrap_or_default(),
             locations,
+            rules: self.rule.clone(),
         })
     }
 }
@@ -169,6 +173,7 @@ host:
         Host {
             name: "app.test".to_string(),
             listen: vec![],
+            rules: vec![],
             tls: HostTls {
                 enabled: true,
                 certificate: Some(RouteSslPath {
@@ -203,6 +208,7 @@ host:
                     timeouts: None,
                     rewrite: None,
                     health_check: None,
+                    rules: vec![],
                 },
                 Location {
                     path: "/v1/session".to_string(),
@@ -221,6 +227,7 @@ host:
                     timeouts: None,
                     rewrite: None,
                     health_check: None,
+                    rules: vec![],
                 },
             ],
         }

@@ -135,6 +135,8 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
                 timeouts: blocks.as_ref().and_then(|blocks| blocks.timeouts),
                 rewrite: blocks.as_ref().and_then(|blocks| blocks.rewrite.clone()),
                 health_check: blocks.as_ref().and_then(|blocks| blocks.health_check),
+                // Rules aren't read from annotations (ADR 0007)
+                rules: vec![],
             };
             locations.insert((path, exact), (location, id.clone()));
         }
@@ -144,6 +146,7 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
         .into_iter()
         .map(|(name, locations)| Host {
             listen: vec![],
+            rules: vec![],
             tls: HostTls {
                 enabled: tls.get(&name).copied().unwrap_or(true),
                 ..HostTls::default()

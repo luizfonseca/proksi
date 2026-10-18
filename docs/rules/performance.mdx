@@ -1,0 +1,36 @@
+---
+title: "Performance"
+description: "What rules cost, and how they're evaluated."
+---
+
+Rules run on every request of their scope, so they're built to cost close to nothing:
+
+- **Without rules, nothing.** A server, host or location without rules has nothing to evaluate, and requests skip the step.
+- **Compiled when the configuration loads.** Each test becomes a typed comparison with its value prepared: methods as values, header names parsed, hosts lowercased, networks as masks, regular expressions compiled. Evaluating builds no strings.
+- **Each field is read once per request**, whatever the number of rules testing it: a header, a cookie or the query is looked up once, and every test on it runs on that value. Tests that several rules share run once.
+- **Cheap tests first.** Inside `and` and `or`, the method and the client are tested before the path, headers before regular expressions; evaluation stops as soon as the answer is known.
+- **Only the rules a request can match.** In scopes with many rules, rules that require a method, a host or a path under a given first segment are indexed by them: a `GET` never evaluates the rules for `POST`, `/blog` never evaluates the rules for `/api/...`.
+- **Regular expressions together.** The `matches` tests on one field run as one set: most values match none of them, which is found in one pass.
+
+## What it costs
+
+CPU time to evaluate a scope's rules for a request matching none of them (the worst case: a request matching an earlier rule stops there), on one core of an ARM server:
+
+| Rules | Testing method, host, path, client | Also headers, a cookie and regular expressions |
+| ---: | ---: | ---: |
+| 10 | ~100ns | ~170ns |
+| 100 | ~170ns | ~430ns |
+| 1,000 | ~1.2µs | ~2.7µs |
+
+For scale, a request through proksi takes around 14µs of CPU. These numbers come from a benchmark run on every change to rules, which fails if they grow past their budget:
+
+```bash
+cargo test --release -p proksi --bin proksi rules::bench -- --ignored --nocapture
+```
+
+## Writing rules that stay cheap
+
+- **Prefer `eq`, `in` and `prefix`** to `wildcard`, and `wildcard` to `matches`.
+- **Put the selective test where it's cheap**: `method` and `path` let the index skip a rule; a test that only reads a header can't be skipped.
+- **Each extra field read costs once per request**: ten rules on `header "x-client"` cost about the same as one.
+- **Many similar rules** (hundreds of redirects) cost less with `eq` on `path` or `host`, which the index looks up, than with `matches`.

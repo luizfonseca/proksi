@@ -25,6 +25,7 @@ mod metrics;
 mod plugins;
 mod proxy_server;
 mod routing;
+mod rules;
 mod server;
 mod services;
 mod stores;
@@ -182,8 +183,7 @@ fn main() -> Result<(), anyhow::Error> {
         &proxy_config,
     ));
 
-    proxy_server::timeouts::set_client_timeouts(proxy_config.server.timeouts);
-    proxy_server::services::set_server_tls(proxy_config.server.tls.clone());
+    set_server_settings(&proxy_config.server)?;
     for listening in add_listeners(
         &mut pingora_server,
         &proxy_config,
@@ -194,6 +194,14 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     pingora_server.run_forever();
+}
+
+/// The `server` settings requests read: timeouts, TLS, and the rules of every request (validated
+/// with the configuration)
+fn set_server_settings(server: &config::ServerCfg) -> Result<(), anyhow::Error> {
+    proxy_server::timeouts::set_client_timeouts(server.timeouts);
+    proxy_server::services::set_server_tls(server.tls.clone());
+    rules::set_server_rules(&server.rule).map_err(anyhow::Error::msg)
 }
 
 /// Listens on the HTTP, HTTPS and TCP addresses the hosts and `tcp` blocks need
