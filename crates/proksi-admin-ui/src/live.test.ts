@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KEPT, keep, point, type Point, type Stats } from './live';
+import { activeHosts, KEPT, keep, point, type Point, type Stats } from './live';
 
 const stats: Stats = {
   window_seconds: 5,
@@ -36,6 +36,17 @@ describe('the live history', () => {
     });
     const hosts = [{ host: 'a.test', locations: [location(3, 5, 40), location(1, 0, null)] }];
     expect(point({ ...stats, hosts }, 0).hosts['a.test']).toEqual({ requests: 4, errors: 1, p50: 1, p99: 40 });
+  });
+
+  it('lists the hosts with requests, busiest first', () => {
+    const host = (name: string, rate: number) => ({
+      host: name,
+      locations: [
+        { location: '/', requests_per_second: rate, responses: { '2xx': rate * 5 }, duration_ms: { p50: 1, p90: 1, p99: 1 }, blocked: {}, upstreams: [] },
+      ],
+    });
+    const hosts = activeHosts({ ...stats, hosts: [host('quiet.test', 0), host('a.test', 1), host('b.test', 9)] });
+    expect(hosts.map(({ host }) => host)).toEqual(['b.test', 'a.test']);
   });
 
   it('has no errors without requests', () => {

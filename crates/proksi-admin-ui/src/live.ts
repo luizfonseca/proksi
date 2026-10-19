@@ -97,6 +97,14 @@ export function point(stats: Stats, at: number): Point {
   };
 }
 
+/** Hosts with requests in the latest stats, busiest first */
+export function activeHosts(stats: Stats | null): { host: string; point: HostPoint }[] {
+  return (stats?.hosts ?? [])
+    .map((host) => ({ host: host.host, point: hostPoint(host, stats?.window_seconds ?? 1) }))
+    .filter(({ point }) => point.requests > 0)
+    .sort((a, b) => b.point.requests - a.point.requests);
+}
+
 /** `points` with `next`, without the ones beyond `KEPT` */
 export function keep(points: Point[], next: Point): Point[] {
   const kept = points.length >= KEPT ? points.slice(points.length - KEPT + 1) : points.slice();

@@ -348,3 +348,9 @@ svg.flow .edge.bad .flow { stroke: var(--bad); }
 @media (max-width: 720px) { .host-charts { grid-template-columns: 1fr; } }
 h2.section-title { font-size: 14px; font-weight: 600; margin: 20px 0 10px; }
 .locations > .panel:target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.active-hosts .trend { width: 220px; }
+.active-hosts td.trend { position: relative; height: 34px; padding: 0 16px; }
+.active-hosts td.trend .sparkline { position: static; height: 28px; display: block; }
+.active-hosts a { font-weight: 600; color: var(--text); text-decoration: none; }
+.active-hosts a:hover { color: var(--accent-text); }
+section.panel + section.panel, .charts + section.panel { margin-bottom: 12px; }

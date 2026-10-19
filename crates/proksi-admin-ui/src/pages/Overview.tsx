@@ -4,7 +4,8 @@ import { LineChart, Sparkline } from '../components/Chart';
 import { RequestLog } from '../components/RequestLog';
 import { Loaded } from '../components/State';
 import { bytes, ms, percent, rate } from '../format';
-import { type Point, useLive } from '../live';
+import { activeHosts, type Point, type Stats, useLive } from '../live';
+import { onLink } from '../router';
 import { useData } from '../useData';
 
 const SPANS = [
@@ -35,6 +36,62 @@ function Card({ label, value, detail, values, color }: { label: string; value: s
 }
 
 const take = (history: Point[], read: (point: Point) => number | null) => history.map(read);
+
+/** The hosts being accessed now (the last 5 seconds), busiest first */
+function ActiveHosts({ latest, history }: { latest: Stats | null; history: Point[] }) {
+  const hosts = activeHosts(latest);
+  const idle = (latest?.hosts.length ?? 0) - hosts.length;
+  return (
+    <section class="panel">
+      <div class="chart-head">
+        <h3>Hosts right now</h3>
+        <div class="legend">
+          <span>over the last 5 seconds{idle > 0 ? ` · ${idle} idle` : ''}</span>
+        </div>
+      </div>
+      {hosts.length === 0 ? (
+        <div class="empty">
+          <strong>{latest ? 'No requests' : 'Waiting for data…'}</strong>
+          Hosts appear here while they're being accessed.
+        </div>
+      ) : (
+        <table class="active-hosts">
+          <thead>
+            <tr>
+              <th>Host</th>
+              <th>Requests</th>
+              <th>5xx</th>
+              <th>p99</th>
+              <th class="trend">Last 2 minutes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {hosts.map(({ host, point }) => {
+              const errors = point.requests ? point.errors / point.requests : 0;
+              return (
+                <tr>
+                  <td>
+                    <a href={`/hosts/${encodeURIComponent(host)}`} onClick={onLink}>
+                      {host}
+                    </a>
+                  </td>
+                  <td class="mono">{rate(point.requests)}</td>
+                  <td>
+                    <span class={`badge ${errors >= 0.25 ? 'bad' : errors > 0 ? 'warn' : 'ok'}`}>{percent(errors * 100)}</span>
+                  </td>
+                  <td class="mono">{ms(point.p99)}</td>
+                  <td class="trend">
+                    <Sparkline values={history.map((one) => one.hosts[host]?.requests ?? 0)} color={errors > 0 ? 'var(--warn)' : 'var(--ok)'} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
 
 function Instances({ status }: { status: Status }) {
   const replicas = status.store.replicas;
@@ -167,6 +224,7 @@ export function Overview() {
         />
       </div>
 
+      <ActiveHosts latest={latest} history={history} />
       <RequestLog />
       <Loaded data={status}>{(status) => <Instances status={status} />}</Loaded>
     </>
