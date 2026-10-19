@@ -65,7 +65,7 @@ admin {
 **The UI signs in with a token.** `POST /api/v1/session` exchanges it for a session cookie:
 
 - `HttpOnly` (scripts can't read it), `SameSite=Strict` (other sites can't send it), and `Secure` unless the admin listener is reached over plain HTTP on a loopback address.
-- Signed with a key Proksi generates when it starts: sessions end when Proksi restarts, and each instance has its own. A session also ends after 12 hours without a request.
+- A random id, kept in Proksi's memory: sessions end when Proksi restarts, and each instance has its own. A session also ends after 12 hours without a request, or when signing out.
 - The token is never stored by the UI (no `localStorage`, no `sessionStorage`).
 
 **Changes must come from the UI's own origin.** A request that changes something with a session cookie must carry an `Origin` header naming the admin listener's own address, or it's refused. API clients using `Authorization: Bearer` are unaffected.

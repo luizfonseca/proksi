@@ -1816,7 +1816,11 @@ async fn test_hosts_are_only_served_on_their_addresses() {
 const ADMIN: &str = r#"
 admin {
   listen = "127.0.0.1:{tcp_port_2}"
-  token  = "e2e-token"
+
+  token "e2e" {
+    secret = "e2e-token"
+    access = "write"
+  }
 }
 
 host "limited.test" {
@@ -2292,8 +2296,11 @@ async fn test_forwarded_headers() {
 const ADMIN_WITHOUT_METRICS: &str = r#"
 admin {
   listen  = "127.0.0.1:{tcp_port_2}"
-  token   = "e2e-token"
   metrics = false
+
+  token "e2e" {
+    secret = "e2e-token"
+  }
 }
 "#;
 
@@ -2750,8 +2757,11 @@ async fn test_metrics_on_a_listener_of_their_own() {
         r#"
 admin {
   listen         = "127.0.0.1:{tcp_port_2}"
-  token          = "admin-token"
   metrics_listen = "127.0.0.1:{tcp_port_1}"
+
+  token "ops" {
+    secret = "admin-token"
+  }
 }
 "#,
     )
@@ -3305,7 +3315,10 @@ async fn test_upstreams_that_failed_their_health_check_get_requests_when_none_is
             r#"
 admin {{
   listen = "127.0.0.1:{{tcp_port_2}}"
-  token  = "e2e-token"
+
+  token "e2e" {{
+    secret = "e2e-token"
+  }}
 }}
 
 host "starting.test" {{

@@ -1,23 +1,35 @@
-// The admin API. Until sessions exist (ADR 0008 step 2), a token is kept in memory only: it's
-// gone when the page is closed or reloaded.
-
-let token: string | null = null;
-
-export function setToken(value: string | null) {
-  token = value;
-}
+// The admin API. Signing in exchanges a token for a session cookie (HttpOnly): the page never
+// keeps the token.
 
 export class Unauthorized extends Error {}
 
-export async function get<T>(path: string): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { accept: 'application/json' };
-  if (token) headers.authorization = `Bearer ${token}`;
-  const response = await fetch(`/api/v1${path}`, { headers });
+  if (body !== undefined) headers['content-type'] = 'application/json';
+  const response = await fetch(`/api/v1${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    credentials: 'same-origin',
+  });
   if (response.status === 401) throw new Unauthorized();
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error ?? `${response.status} ${response.statusText}`);
-  return body as T;
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(json.error ?? `${response.status} ${response.statusText}`);
+  return json as T;
 }
+
+export function get<T>(path: string): Promise<T> {
+  return request<T>('GET', path);
+}
+
+/** Who's signed in: a token's name (none when Proksi has no tokens) and what it can do */
+export type Session = { name: string | null; access: 'read' | 'write' };
+
+export const session = {
+  get: () => get<Session>('/session'),
+  signIn: (token: string) => request<Session>('POST', '/session', { token }),
+  signOut: () => request<unknown>('DELETE', '/session'),
+};
 
 export type Upstream = { upstream: string; weight: number; healthy: boolean };
 export type Location = { location: string; blocks: string[]; upstreams: Upstream[] };

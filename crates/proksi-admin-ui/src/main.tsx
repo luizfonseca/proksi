@@ -1,6 +1,6 @@
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { get, Unauthorized } from './api';
+import { session, type Session, Unauthorized } from './api';
 import { Layout } from './components/Layout';
 import { Certificates } from './pages/Certificates';
 import { Host } from './pages/Host';
@@ -17,21 +17,25 @@ function Page({ path }: { path: string }) {
 
 function App() {
   const path = usePath();
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  // undefined: checking; null: signed out
+  const [signedIn, setSignedIn] = useState<Session | null | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    get('/status')
-      .then(() => setSignedIn(true))
-      .catch((err) => setSignedIn(!(err instanceof Unauthorized)));
+    session
+      .get()
+      .then(setSignedIn)
+      .catch((err) => (err instanceof Unauthorized ? setSignedIn(null) : setError(String(err))));
   }, []);
   useEffect(() => {
     if (path === '/') navigate('/hosts');
   }, [path]);
 
-  if (signedIn === null) return null;
-  if (!signedIn) return <SignIn onSignedIn={() => setSignedIn(true)} />;
+  if (error) return <div class="signin"><div class="panel error">{error}</div></div>;
+  if (signedIn === undefined) return null;
+  if (signedIn === null) return <SignIn onSignedIn={setSignedIn} />;
   return (
-    <Layout path={path}>
+    <Layout path={path} session={signedIn} onSignOut={() => setSignedIn(null)}>
       <Page path={path} />
     </Layout>
   );

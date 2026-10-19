@@ -83,6 +83,10 @@ code, .mono { font-family: var(--mono); font-size: 12.5px; }
 .nav .soon { margin-left: auto; font-size: 10.5px; color: var(--faint); }
 .sidebar footer { margin-top: auto; padding: 10px; color: var(--faint); font-size: 12px; }
 .sidebar footer .row { display: flex; align-items: center; gap: 6px; }
+.sidebar footer .session { justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); }
+.sidebar footer .session .badge { margin-left: 6px; }
+button.link { font: 500 12px var(--sans); color: var(--accent-text); background: none; border: 0; padding: 0; cursor: pointer; }
+button.link:hover { text-decoration: underline; }
 
 main { min-width: 0; padding: 28px 36px 64px; max-width: 1180px; }
 .page-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 20px; }
@@ -190,7 +194,7 @@ button.primary:disabled { opacity: 0.6; cursor: default; }
   .sidebar { position: static; height: auto; flex-direction: row; align-items: center; overflow-x: auto; padding: 10px 12px; border-right: 0; border-bottom: 1px solid var(--line); }
   .brand { padding: 0 10px 0 0; }
   .nav { display: flex; }
-  .sidebar footer { display: none; }
+  .sidebar footer > :not(.session) { display: none; }
   main { padding: 20px 16px 48px; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .location-body { grid-template-columns: 1fr; }

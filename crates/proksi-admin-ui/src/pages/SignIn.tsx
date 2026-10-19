@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
-import { get, setToken, Unauthorized } from '../api';
+import { session, type Session, Unauthorized } from '../api';
 
-export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
+export function SignIn({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -9,12 +9,9 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   async function submit(event: Event) {
     event.preventDefault();
     setBusy(true);
-    setToken(value.trim());
     try {
-      await get('/status');
-      onSignedIn();
+      onSignedIn(await session.signIn(value.trim()));
     } catch (err) {
-      setToken(null);
       setError(err instanceof Unauthorized ? 'That token is not valid.' : String(err));
     } finally {
       setBusy(false);
@@ -26,7 +23,9 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
       <div class="panel">
         <img src="/logo.svg" alt="" />
         <h1>Sign in to Proksi</h1>
-        <p>Use a token from the <code>admin</code> block of your configuration.</p>
+        <p>
+          Use the <code>secret</code> of a <code>token</code> block in your <code>admin</code> configuration.
+        </p>
         <form onSubmit={submit}>
           <input type="password" autoFocus placeholder="Token" value={value} onInput={(e) => setValue(e.currentTarget.value)} />
           {error && <div class="error">{error}</div>}

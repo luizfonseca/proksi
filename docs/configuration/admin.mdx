@@ -8,11 +8,21 @@ Proksi can serve metrics and an admin API on an address of its own. It's off unl
 ```hcl
 admin {
   listen = "127.0.0.1:7555"
-  token  = env("PROKSI_ADMIN_TOKEN")
+
+  # Can read: stats, metrics, hosts, certificates
+  token "grafana" {
+    secret = env("PROKSI_GRAFANA_TOKEN")
+  }
+
+  # Can also change hosts
+  token "ops" {
+    secret = env("PROKSI_ADMIN_TOKEN")
+    access = "write"
+  }
 }
 ```
 
-Every request needs the token, as `Authorization: Bearer <token>`. Without a `token`, `listen` must be a loopback address (`127.0.0.1`, `::1`), so the admin API is never reachable from another machine without one.
+Every request needs a token's secret, as `Authorization: Bearer <secret>`. A token can only read unless it has `access = "write"` (`access` is `"read"` or `"write"`); a change with a read-only token is refused with `403`. Without a `token` block, `listen` must be a loopback address (`127.0.0.1`, `::1`), so the admin API is never reachable from another machine without one; on loopback, anyone reaching it can read and write.
 
 The admin listener is plain HTTP. To reach it from outside, route a host to it and put `basic_auth`, `oauth2` or another plugin in front:
 
@@ -32,7 +42,7 @@ Like the other listeners, the `admin` block is read when Proksi starts: changing
 
 ## UI
 
-The admin listener also serves a UI, at its address (`http://127.0.0.1:7555`): the hosts Proksi serves, from every source, with their locations, upstreams and their health, and plugins; and certificates. It signs in with the token, which it keeps in memory only.
+The admin listener also serves a UI, at its address (`http://127.0.0.1:7555`): the hosts Proksi serves, from every source, with their locations, upstreams and their health, and plugins; and certificates. It signs in with a token's secret, exchanged for a session cookie (`HttpOnly`, `SameSite=Strict`, and `Secure` unless the address is loopback): the page never keeps the secret. Sessions end after 12 hours without a request, and when Proksi restarts. Changes made with a session must come from the UI's own pages (its `Origin`).
 
 To reach it on a server, use a tunnel: `ssh -L 7555:127.0.0.1:7555 your-server`, or `kubectl port-forward`, then open `http://127.0.0.1:7555`. See [ADR 0008](/adrs/0008-admin-ui) for what comes next.
 
@@ -85,12 +95,16 @@ scrape_configs:
 
 ### A listener for metrics only
 
-The admin API's token also lets its holder change routes. To give a scraper metrics and nothing else, serve them on an address of their own, with `metrics_listen`. It answers `/metrics` only, `404` on every other path, and takes its own `metrics_token`, if any:
+A read-only token can't change anything, but reaches every read endpoint. To give a scraper metrics and nothing else, serve them on an address of their own, with `metrics_listen`. It answers `/metrics` only, `404` on every other path, and takes its own `metrics_token`, if any:
 
 ```hcl
 admin {
   listen = "127.0.0.1:7555"
-  token  = env("PROKSI_ADMIN_TOKEN")
+
+  token "ops" {
+    secret = env("PROKSI_ADMIN_TOKEN")
+    access = "write"
+  }
 
   metrics_listen = "0.0.0.0:9100"
   metrics_token  = env("PROKSI_METRICS_TOKEN") # optional

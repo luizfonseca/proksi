@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import type { Status } from '../api';
+import { session as api, type Session, type Status } from '../api';
 import { onLink } from '../router';
 import { useData } from '../useData';
 import { Branch, Globe, History, Pulse, Shield } from './icons';
@@ -18,7 +18,9 @@ function uptime(seconds: number) {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
-export function Layout({ path, children }: { path: string; children: ComponentChildren }) {
+type Props = { path: string; session: Session; onSignOut: () => void; children: ComponentChildren };
+
+export function Layout({ path, session, onSignOut, children }: Props) {
   const [status] = useData<Status>('/status', 15000);
   const ready = status.state === 'ready' ? status.value : null;
   return (
@@ -53,6 +55,17 @@ export function Layout({ path, children }: { path: string; children: ComponentCh
             <div>
               up {uptime(ready.uptime_seconds)} · {ready.store.type} store
             </div>
+            {session.name && (
+              <div class="row session">
+                <span>
+                  {session.name}
+                  {session.access === 'read' && <span class="badge">read-only</span>}
+                </span>
+                <button class="link" onClick={() => api.signOut().finally(onSignOut)}>
+                  Sign out
+                </button>
+              </div>
+            )}
           </footer>
         )}
       </aside>
