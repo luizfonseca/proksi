@@ -169,6 +169,13 @@ fn loopback(host: &str) -> bool {
             .is_ok_and(|ip| ip.is_loopback())
 }
 
+/// Whether a change with a session comes from the UI's own pages: its `Origin` is the address
+/// the request was sent to (`Host`), or one of `trusted` (behind a proxy that changes `Host`)
+pub fn allowed_origin(origin: Option<&str>, host: Option<&str>, trusted: &[String]) -> bool {
+    same_origin(origin, host)
+        || origin.is_some_and(|origin| trusted.iter().any(|one| one.eq_ignore_ascii_case(origin)))
+}
+
 /// Whether `Origin` names the address the request was sent to (`Host`)
 pub fn same_origin(origin: Option<&str>, host: Option<&str>) -> bool {
     let (Some(origin), Some(host)) = (origin, host) else {
@@ -186,7 +193,7 @@ mod tests {
 
     use crate::config::admin::{Access, Token};
 
-    use super::{same_origin, set_cookie, Tokens};
+    use super::{allowed_origin, same_origin, set_cookie, Tokens};
 
     fn tokens() -> Tokens {
         let token = |secret: &str, access| Token {
@@ -273,6 +280,20 @@ mod tests {
             set_cookie(None, Some("127.0.0.1:7555")),
             "proksi_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
         );
+    }
+
+    #[test]
+    fn test_trusted_origins() {
+        let trusted = vec!["https://host.tailnet.ts.net:9200".to_string()];
+        // Behind a proxy sending its own Host
+        let host = Some("127.0.0.1:7555");
+        assert!(allowed_origin(Some("https://host.tailnet.ts.net:9200"), host, &trusted));
+        assert!(allowed_origin(Some("https://HOST.tailnet.ts.net:9200"), host, &trusted));
+        for origin in [Some("https://host.tailnet.ts.net"), Some("http://host.tailnet.ts.net:9200"), Some("null"), None] {
+            assert!(!allowed_origin(origin, host, &trusted), "{origin:?}");
+        }
+        // The listener's own address still is
+        assert!(allowed_origin(Some("http://127.0.0.1:7555"), host, &[]));
     }
 
     #[test]

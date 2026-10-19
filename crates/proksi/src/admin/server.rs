@@ -107,6 +107,8 @@ pub struct Admin {
     /// Names and access, never secrets
     pub tokens: Vec<TokenInfo>,
     pub metrics_token: bool,
+    /// Origins changes are also accepted from, behind a proxy that changes `Host`
+    pub trusted_origins: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -205,6 +207,7 @@ impl Settings {
                     })
                     .collect(),
                 metrics_token: admin.metrics_token().is_some(),
+                trusted_origins: admin.trusted_origins.clone(),
             }),
         }
     }
@@ -275,6 +278,7 @@ mod tests {
             metrics: true,
             metrics_listen: None,
             metrics_token: Some("metrics-secret".to_string()),
+            trusted_origins: vec![],
         });
 
         let server = serde_json::to_string(&Settings::new(&config)).unwrap();

@@ -418,6 +418,7 @@ host "b.test" {
             metrics,
             metrics_listen: Some(metrics_listen.to_string()),
             metrics_token: None,
+            trusted_origins: vec![],
         };
         let mut config = config("host \"a.test\" {}\n");
 
@@ -452,6 +453,7 @@ host "b.test" {
             metrics: true,
             metrics_listen: None,
             metrics_token: None,
+            trusted_origins: vec![],
         });
         assert_eq!(
             listeners(&with_admin).unwrap().admin,
@@ -474,6 +476,7 @@ host "b.test" {
                 metrics: true,
                 metrics_listen: None,
                 metrics_token: None,
+                trusted_origins: vec![],
             });
             assert_eq!(
                 listeners(&config),

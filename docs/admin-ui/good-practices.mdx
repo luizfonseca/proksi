@@ -45,6 +45,31 @@ host "proksi-admin.example.com" {
 
 The UI's session cookie is then `Secure`, and changes are refused unless they come from the UI's own pages. Its pages allow no scripts but their own, and can't be framed by other sites.
 
+### Behind another proxy
+
+Changes made from the UI must come from its own pages: their `Origin` must be the address the admin listener is reached at, as the `Host` header says. Proksi passes the `Host` on, so the setup above works as it is. A proxy that sends a different `Host` (nginx by default, many load balancers and tunnels, or one that drops the port) makes the UI read-only: changes are refused with `403`, naming the origin and the address seen.
+
+List the address you open the UI at in `trusted_origins`, exactly as the browser shows it (scheme, host and port):
+
+```hcl
+admin {
+  listen          = "127.0.0.1:7555"
+  trusted_origins = ["https://proksi.tailnet-name.ts.net:9200"]
+
+  token "ops" {
+    secret = env("PROKSI_ADMIN_TOKEN")
+    access = "write"
+  }
+}
+```
+
+```bash
+# Tailscale: only devices of your tailnet can reach it, over HTTPS
+tailscale serve --bg --https=9200 http://127.0.0.1:7555
+```
+
+Or keep the `Host` with the proxy (nginx: `proxy_set_header Host $host;`). Only these origins are trusted, and only for signed-in sessions: the token is still required, and the session cookie can't be sent by other sites.
+
 ## The store
 
 - Hosts added from the UI live in the [store](/configuration/redis). With the default memory store they're gone when Proksi restarts: use Redis, SQLite or Postgres to keep them.
