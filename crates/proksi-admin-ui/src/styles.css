@@ -356,8 +356,23 @@ h2.section-title { font-size: 14px; font-weight: 600; margin: 20px 0 10px; }
 section.panel + section.panel, .charts + section.panel { margin-bottom: 12px; }
 
 /* Rule builder */
-select { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 8px; outline: none; }
+/* Dropdowns look like the inputs next to them, with a chevron in the theme's color */
+select {
+  appearance: none; -webkit-appearance: none;
+  font: inherit; font-size: 13px; line-height: 18px; color: inherit;
+  border: 1px solid var(--line-strong); border-radius: 8px;
+  padding: 7px 30px 7px 10px; outline: none; cursor: pointer;
+  background-color: var(--panel);
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%;
+  background-size: 5px 5px; background-repeat: no-repeat;
+}
+select:hover { border-color: var(--faint); }
 select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.rule-card input, .rule-card .list-input { font-size: 13px; line-height: 18px; }
+.rule-card input { padding: 7px 10px; }
+.group-head select { font-weight: 600; background-color: var(--sunken); border-color: transparent; }
+.group-head select:hover { border-color: var(--line-strong); }
 .rules-section { display: grid; gap: 8px; }
 .rules-section-head { font-size: 13px; }
 .rules-editor ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
@@ -387,6 +402,7 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-s
 .test-row select, .test-row input { width: auto; }
 .test-row input.name { width: 130px; }
 .test-row .test-value { flex: 1; min-width: 140px; }
+.test-row > .link.danger { flex: none; width: 20px; text-align: center; }
 .test-row .test-value input, .test-row .test-value select { width: 100%; }
 .list-input { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 3px 4px; background: var(--panel); min-height: 34px; }
 .list-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -408,6 +424,17 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-s
 .nested-form { border-left: 2px solid var(--line); padding-left: 10px; display: grid; gap: 6px; }
 .objects, .map-input { display: grid; gap: 8px; }
 .map-row { display: grid; grid-template-columns: 1fr 1fr 20px; gap: 6px; align-items: center; }
+.map-input > .link, .objects > .link { justify-self: start; }
+.schema-form .setting > .hint { order: 1; }
+.schema-form .setting { display: flex; flex-direction: column; }
+.schema-form .setting > .setting-name { order: 0; }
+.schema-form .setting > :not(.setting-name):not(.hint) { order: 2; }
+.action-menu { position: relative; justify-self: start; }
+.action-menu ul { position: absolute; z-index: 10; top: calc(100% + 6px); left: 0; min-width: 320px; max-height: 340px; overflow: auto; margin: 0; padding: 6px; list-style: none; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.18); }
+.action-menu li button { display: grid; gap: 2px; width: 100%; text-align: left; border: 0; background: none; color: inherit; padding: 7px 10px; border-radius: 7px; cursor: pointer; font: inherit; }
+.action-menu li button:hover, .action-menu li button:focus { background: var(--sunken); outline: none; }
+.action-menu li .mono { font-size: 12.5px; font-weight: 600; }
+.action-menu li small { color: var(--faint); font-size: 12px; }
 .choices { display: flex; gap: 14px; }
 .choices .check { display: flex; align-items: center; gap: 6px; }
 .choices input { width: auto; }
