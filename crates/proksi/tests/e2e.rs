@@ -2090,6 +2090,38 @@ async fn test_admin_live_stats() {
         .unwrap();
     let event: serde_json::Value = serde_json::from_str(event).unwrap();
     assert!(event["hosts"].is_array(), "{event}");
+    assert!(event["total"]["requests_per_second"].is_number(), "{event}");
+    assert!(event["process"]["memory_bytes"].as_u64().unwrap() > 0, "{event}");
+
+    // The requests stream sends each request served while it's open
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", admin_port))
+        .await
+        .unwrap();
+    tokio::io::AsyncWriteExt::write_all(&mut stream, get("/api/v1/requests/stream").as_bytes())
+        .await
+        .unwrap();
+    let mut received = String::new();
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !received.contains("\"path\":\"/watched\"") && tokio::time::Instant::now() < deadline {
+        proksi.get_http_port("app.test", "/watched").await.unwrap();
+        if let Ok(Ok(read)) = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            tokio::io::AsyncReadExt::read(&mut stream, &mut buf),
+        )
+        .await
+        {
+            received.push_str(&String::from_utf8_lossy(&buf[..read]));
+        }
+    }
+    let event = received
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .find(|event| event.contains("/watched"))
+        .unwrap_or_else(|| panic!("{received}"));
+    let event: serde_json::Value = serde_json::from_str(event).unwrap();
+    assert_eq!(event["host"], "app.test", "{event}");
+    assert_eq!(event["method"], "GET", "{event}");
+    assert!(event["status"].is_number(), "{event}");
 
     proksi.assert_healthy();
 }

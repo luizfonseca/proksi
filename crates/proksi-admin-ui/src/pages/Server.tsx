@@ -1,4 +1,5 @@
 import type { ComponentChildren } from 'preact';
+import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { Loaded } from '../components/State';
 import { isSection, label, type Setting, value } from '../settings';
 import { useData } from '../useData';
@@ -54,11 +55,29 @@ function Rows({ settings }: { settings: Settings }) {
   );
 }
 
+/** A card of settings, all of the same height: taller ones can be expanded */
 function Section({ title, children }: { title: string; children: ComponentChildren }) {
+  const body = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  useLayoutEffect(() => {
+    const element = body.current;
+    if (element) setOverflows(element.scrollHeight > element.clientHeight + 1);
+  }, [children]);
   return (
-    <section class="panel settings-section">
+    <section class={`panel settings-section${expanded ? ' expanded' : ''}${overflows ? ' overflows' : ''}`}>
       <h2>{title}</h2>
-      {children}
+      <div class="settings-body" ref={body}>
+        {children}
+      </div>
+      {/* Kept when there's nothing more, so every card has the same height */}
+      <div class="more">
+        {(overflows || expanded) && (
+          <button type="button" class="link" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+            {expanded ? 'Show less' : 'Show all'}
+          </button>
+        )}
+      </div>
     </section>
   );
 }

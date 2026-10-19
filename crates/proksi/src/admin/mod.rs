@@ -24,6 +24,7 @@ mod endpoint;
 pub mod routes;
 pub mod server;
 pub mod status;
+mod stream;
 mod ui;
 
 use endpoint::Endpoint;
@@ -95,6 +96,8 @@ pub enum Answer {
     Reply(Reply),
     /// Server-sent events with the stats over this window, every second
     Stream(Duration),
+    /// Server-sent events with the requests being served
+    Requests,
     /// A file of the UI
     Ui(&'static proksi_admin_ui::Asset, ui::Encoding),
 }
@@ -187,6 +190,7 @@ impl AdminApi {
             },
             Endpoint::Stats(window) => Reply::ok(&stats(window)),
             Endpoint::StatsStream(window) => return Answer::Stream(window),
+            Endpoint::RequestsStream => return Answer::Requests,
             Endpoint::Status => Reply::ok(&status::status(store, &self.instance).await),
             Endpoint::Server => match &self.instance.server {
                 Some(server) => Reply::ok(server),
@@ -310,7 +314,11 @@ impl HttpServerApp for AdminApi {
                 ui::write(&mut session, asset, encoding, method == Method::HEAD).await
             }
             Answer::Stream(window) => {
-                stream_stats(session, window, shutdown.clone()).await;
+                stream::stats(session, window, shutdown.clone()).await;
+                return None;
+            }
+            Answer::Requests => {
+                stream::requests(session, shutdown.clone()).await;
                 return None;
             }
         };
@@ -413,37 +421,6 @@ fn response_header(status: StatusCode, content_type: &str) -> Option<ResponseHea
     Some(header)
 }
 
-/// Sends the stats every second, until the client leaves or proksi shuts down
-async fn stream_stats(mut session: ServerSession, window: Duration, mut shutdown: ShutdownWatch) {
-    let Some(mut header) = response_header(StatusCode::OK, "text/event-stream") else {
-        return;
-    };
-    if header
-        .insert_header(header::TRANSFER_ENCODING, "chunked")
-        .is_err()
-        || session
-            .write_response_header(Box::new(header))
-            .await
-            .is_err()
-    {
-        return;
-    }
-
-    let mut interval = tokio::time::interval(Duration::from_secs(1));
-    loop {
-        tokio::select! {
-            _ = interval.tick() => {
-                let event = format!("data: {}\n\n", stats(window));
-                if session.write_response_body(Bytes::from(event), false).await.is_err() {
-                    return;
-                }
-            }
-            _ = shutdown.changed() => break,
-        }
-    }
-    let _ = session.write_response_body(Bytes::new(), true).await;
-}
-
 /// The admin API's service, on `address`
 /// The metrics-only listener (`admin.metrics_listen`)
 pub fn metrics_service(address: SocketAddr, token: Option<String>) -> Service<AdminApi> {
@@ -524,7 +501,7 @@ mod tests {
     fn reply(answer: Answer) -> Reply {
         match answer {
             Answer::Reply(reply) => reply,
-            Answer::Stream(_) => panic!("a stream"),
+            Answer::Stream(_) | Answer::Requests => panic!("a stream"),
             Answer::Ui(asset, _) => panic!("a file of the UI: {asset:?}"),
         }
     }

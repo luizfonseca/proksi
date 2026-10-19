@@ -62,6 +62,8 @@ pub struct HostStatus {
     pub source: Option<String>,
     pub tls: bool,
     pub listen: Vec<String>,
+    /// Rules of every request of the host, as written (ADR 0007), without secrets
+    pub rules: Vec<Value>,
     pub locations: Vec<LocationStatus>,
 }
 
@@ -69,6 +71,8 @@ pub struct HostStatus {
 pub struct LocationStatus {
     pub location: String,
     pub blocks: Vec<&'static str>,
+    /// Rules of the location's requests, as written, without secrets
+    pub rules: Vec<Value>,
     pub upstreams: Vec<UpstreamStatus>,
 }
 
@@ -176,6 +180,7 @@ pub fn hosts() -> Vec<HostStatus> {
                             .iter()
                             .map(|block| block.kind.name())
                             .collect(),
+                        rules: written_rules(location.rules.as_deref()),
                         upstreams,
                     }
                 })
@@ -185,12 +190,108 @@ pub fn hosts() -> Vec<HostStatus> {
                 source,
                 tls: host.tls_enabled,
                 listen: host.listen.iter().map(ToString::to_string).collect(),
+                rules: written_rules(host.rules.as_deref()),
                 locations,
             }
         })
         .collect::<Vec<_>>();
     hosts.sort_by(|a, b| a.host.cmp(&b.host));
     hosts
+}
+
+/// What's hidden of a rule
+const HIDDEN: &str = "(hidden)";
+
+/// Blocks whose settings are secrets (passwords, client secrets, auth endpoints' headers)
+const SECRET_BLOCKS: [&str; 3] = ["basic_auth", "oauth2", "forward_auth"];
+
+/// Rules as written, without what can be a secret: the values headers, cookies and query
+/// parameters are compared with (API keys), the settings of authentication blocks, and the values of headers they add
+fn written_rules(rules: Option<&crate::rules::Rules>) -> Vec<Value> {
+    rules
+        .map(|rules| rules.source().iter().map(|rule| redact(&rule.0)).collect())
+        .unwrap_or_default()
+}
+
+fn redact(rule: &Value) -> Value {
+    let Value::Object(rule) = rule else {
+        return rule.clone();
+    };
+    rule.iter()
+        .map(|(key, value)| {
+            let value = match key.as_str() {
+                "then" => redact_actions(value),
+                "name" => value.clone(),
+                _ => redact_condition(value),
+            };
+            (key.clone(), value)
+        })
+        .collect::<serde_json::Map<_, _>>()
+        .into()
+}
+
+/// `header "name" { eq = "..." }`, `cookie` and `query`: names and `exists` stay, values are
+/// hidden
+fn redact_condition(condition: &Value) -> Value {
+    match condition {
+        Value::Object(fields) => fields
+            .iter()
+            .map(|(key, value)| {
+                let value = if matches!(key.as_str(), "header" | "cookie" | "query") {
+                    hide_values(value, &["exists"])
+                } else {
+                    redact_condition(value)
+                };
+                (key.clone(), value)
+            })
+            .collect::<serde_json::Map<_, _>>()
+            .into(),
+        Value::Array(conditions) => conditions.iter().map(redact_condition).collect(),
+        other => other.clone(),
+    }
+}
+
+fn redact_actions(actions: &Value) -> Value {
+    let Value::Object(actions) = actions else {
+        return actions.clone();
+    };
+    actions
+        .iter()
+        .map(|(block, settings)| {
+            let settings = if SECRET_BLOCKS.contains(&block.as_str()) {
+                Value::String(HIDDEN.to_string())
+            } else if block == "headers" {
+                hide_values(settings, &["remove"])
+            } else {
+                settings.clone()
+            };
+            (block.clone(), settings)
+        })
+        .collect::<serde_json::Map<_, _>>()
+        .into()
+}
+
+/// Every value below `value` hidden, but keys, and the values of `keep`
+fn hide_values(value: &Value, keep: &[&str]) -> Value {
+    match value {
+        Value::Object(fields) => fields
+            .iter()
+            .map(|(key, value)| {
+                let value = if keep.contains(&key.as_str()) {
+                    value.clone()
+                } else {
+                    hide_values(value, keep)
+                };
+                (key.clone(), value)
+            })
+            .collect::<serde_json::Map<_, _>>()
+            .into(),
+        Value::Array(values) => values
+            .iter()
+            .map(|value| hide_values(value, keep))
+            .collect(),
+        _ => Value::String(HIDDEN.to_string()),
+    }
 }
 
 /// The certificates in the store, by domain
@@ -296,6 +397,7 @@ mod tests {
             json!([{
                 "location": "/*",
                 "blocks": [],
+                "rules": [],
                 "upstreams": [{
                     "upstream": "10.0.0.7:3000",
                     "name": null,
@@ -304,6 +406,57 @@ mod tests {
                     "addresses": [{ "address": "10.0.0.7:3000", "healthy": true }],
                 }],
             }])
+        );
+    }
+
+    #[test]
+    fn test_rules_without_secrets() {
+        let rule = json!({
+            "name": "partners",
+            "and": {
+                "method": { "eq": "POST" },
+                "header": { "x-api-key": { "eq": "key-secret" }, "x-partner": { "exists": true } },
+                "or": [
+                    { "cookie": { "session": { "in": ["cookie-secret"] } } },
+                    { "not": { "query": { "token": { "eq": "query-secret" } } } },
+                ],
+            },
+            "then": {
+                "rate_limit": { "requests": 10, "per": "1m" },
+                "basic_auth": { "user": "admin", "pass": "auth-secret" },
+                "headers": {
+                    "request": { "add": { "authorization": "Bearer header-secret" }, "remove": ["x-debug"] },
+                },
+            },
+        });
+
+        let redacted = super::redact(&rule);
+
+        let text = redacted.to_string();
+        for secret in [
+            "key-secret",
+            "cookie-secret",
+            "query-secret",
+            "auth-secret",
+            "header-secret",
+        ] {
+            assert!(!text.contains(secret), "{text}");
+        }
+        assert_eq!(redacted["name"], "partners");
+        assert_eq!(redacted["and"]["method"], json!({ "eq": "POST" }));
+        assert_eq!(
+            redacted["and"]["header"]["x-partner"],
+            json!({ "exists": true })
+        );
+        assert_eq!(
+            redacted["and"]["header"]["x-api-key"],
+            json!({ "eq": "(hidden)" })
+        );
+        assert_eq!(redacted["then"]["rate_limit"], rule["then"]["rate_limit"]);
+        assert_eq!(redacted["then"]["basic_auth"], "(hidden)");
+        assert_eq!(
+            redacted["then"]["headers"]["request"],
+            json!({ "add": { "authorization": "(hidden)" }, "remove": ["x-debug"] })
         );
     }
 

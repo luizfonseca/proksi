@@ -5,6 +5,8 @@
 //! increments atomics.
 
 pub mod live;
+pub mod process;
+pub mod requests;
 
 use std::time::Duration;
 

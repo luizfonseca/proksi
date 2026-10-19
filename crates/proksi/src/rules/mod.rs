@@ -42,6 +42,8 @@ pub struct Rules {
     compiled: Compiled,
     /// For scopes with many rules
     index: Option<index::Index>,
+    /// As written, for the admin API
+    source: Vec<Rule>,
 }
 
 impl Rules {
@@ -52,7 +54,16 @@ impl Rules {
         }
         let compiled = compile::compile(rules)?;
         let index = index::Index::build(&compiled);
-        Ok(Some(Arc::new(Self { compiled, index })))
+        Ok(Some(Arc::new(Self {
+            compiled,
+            index,
+            source: rules.to_vec(),
+        })))
+    }
+
+    /// The rules as written
+    pub fn source(&self) -> &[Rule] {
+        &self.source
     }
 
     /// The rules `request` can match

@@ -12,6 +12,41 @@ import {
 } from '../hostForm';
 import { navigate, onLink } from '../router';
 
+const EXAMPLE = `[
+  {
+    "name": "writes",
+    "and": { "method": { "not_in": ["GET", "HEAD"] } },
+    "then": { "rate_limit": { "requests": 30, "per": "1m" } }
+  }
+]`;
+
+/** A scope's rules, as JSON (a builder comes with ADR 0008 step 5) */
+function RulesField({ label, hint, value, onInput }: { label: string; hint?: string; value: string; onInput: (value: string) => void }) {
+  const [open, setOpen] = useState(value.trim() !== '');
+  if (!open) {
+    return (
+      <button type="button" class="link" onClick={() => setOpen(true)}>
+        + Add {label.toLowerCase()}
+      </button>
+    );
+  }
+  return (
+    <label>
+      <span>
+        {label} {hint && <small class="hint">{hint}</small>} <a class="hint" href="https://docs.proksi.info/rules" target="_blank" rel="noreferrer">How rules work</a>
+      </span>
+      <textarea
+        class="mono"
+        spellcheck={false}
+        rows={Math.min(16, Math.max(5, value.split('\n').length + 1))}
+        placeholder={EXAMPLE}
+        value={value}
+        onInput={(e) => onInput(e.currentTarget.value)}
+      />
+    </label>
+  );
+}
+
 /** Creates a host in the store (`name` null), or changes one */
 export function EditHost({ name }: { name: string | null }) {
   const [form, setForm] = useState<HostForm | null>(name ? null : emptyHost());
@@ -91,6 +126,12 @@ export function EditHost({ name }: { name: string | null }) {
             <span>Self-signed certificate if none can be obtained</span>
           </label>
         )}
+        <RulesField
+          label="Host rules"
+          hint="Every request, before its location is chosen"
+          value={form.rules}
+          onInput={(rules) => update({ rules })}
+        />
       </div>
 
       <h2>Locations</h2>
@@ -137,6 +178,7 @@ export function EditHost({ name }: { name: string | null }) {
           <button type="button" class="link" onClick={() => updateLocation(index, { upstreams: [...location.upstreams, emptyUpstream()] })}>
             + Add upstream
           </button>
+          <RulesField label="Rules" value={location.rules} onInput={(rules) => updateLocation(index, { rules })} />
           {Object.keys(location.rest).filter((key) => location.rest[key] != null).length > 0 && (
             <p class="kept">
               Kept as they are: {Object.keys(location.rest).filter((key) => location.rest[key] != null).join(', ')}

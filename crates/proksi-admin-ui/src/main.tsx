@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { Certificates } from './pages/Certificates';
 import { EditHost } from './pages/EditHost';
 import { Host } from './pages/Host';
+import { Overview } from './pages/Overview';
 import { Server } from './pages/Server';
 import { Hosts } from './pages/Hosts';
 import { SignIn } from './pages/SignIn';
@@ -20,6 +21,7 @@ function Page({ path }: { path: string }) {
   if (path.startsWith('/hosts/')) return <Host name={decodeURIComponent(path.slice('/hosts/'.length))} />;
   if (path === '/certificates') return <Certificates />;
   if (path === '/server') return <Server />;
+  if (path === '/overview') return <Overview />;
   return <Hosts />;
 }
 
@@ -36,7 +38,7 @@ function App() {
       .catch((err) => (err instanceof Unauthorized ? setSignedIn(null) : setError(String(err))));
   }, []);
   useEffect(() => {
-    if (path === '/') navigate('/hosts');
+    if (path === '/') navigate('/overview');
   }, [path]);
 
   if (error) return <div class="signin"><div class="panel error">{error}</div></div>;

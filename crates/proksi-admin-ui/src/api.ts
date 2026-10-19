@@ -1,3 +1,5 @@
+import type { Rule } from './rules';
+
 // The admin API. Signing in exchanges a token for a session cookie (HttpOnly): the page never
 // keeps the token.
 
@@ -66,12 +68,14 @@ export type Upstream = {
   /** What it resolved to */
   addresses: { address: string; healthy: boolean }[];
 };
-export type Location = { location: string; blocks: string[]; upstreams: Upstream[] };
+export type Location = { location: string; blocks: string[]; rules: Rule[]; upstreams: Upstream[] };
 export type Host = {
   host: string;
   source: string | null;
   tls: boolean;
   listen: string[];
+  /** Without secrets: hidden values read `(hidden)` */
+  rules: Rule[];
   locations: Location[];
 };
 export type Certificate = {
@@ -82,10 +86,18 @@ export type Certificate = {
   days_left: number | null;
   lease_holder: string | null;
 };
+export type Replica = { id: string; revision: number; applied_at: number; version: string; hostname: string };
 export type Status = {
   version: string;
+  replica: string;
   hostname: string;
   uptime_seconds: number;
-  store: { type: string; revision: number | null; applied_revision: number | null; error: string | null };
+  store: {
+    type: string;
+    revision: number | null;
+    applied_revision: number | null;
+    replicas: Replica[];
+    error: string | null;
+  };
   routes: { by_source: Record<string, number>; conflicts: unknown[]; invalid: unknown[] };
 };

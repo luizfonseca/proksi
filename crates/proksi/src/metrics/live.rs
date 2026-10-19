@@ -29,6 +29,8 @@ pub enum Reading {
 pub struct Sample {
     pub at: Instant,
     pub series: HashMap<Key, Reading>,
+    /// The process' CPU time and memory
+    pub process: super::process::Reading,
 }
 
 static HISTORY: Mutex<VecDeque<Arc<Sample>>> = Mutex::new(VecDeque::new());
@@ -71,6 +73,7 @@ pub fn sample() -> Sample {
     Sample {
         at: Instant::now(),
         series,
+        process: super::process::read(),
     }
 }
 
@@ -144,7 +147,32 @@ pub fn quantile(buckets: &[(f64, u64)], q: f64) -> Option<f64> {
 pub fn stats(earlier: &Sample, latest: &Sample) -> Value {
     let window = latest.at.saturating_duration_since(earlier.at).as_secs_f64();
     let (hosts, tcp) = collect(earlier, latest);
-    render(window, hosts, tcp)
+    let mut stats = render(window, hosts, tcp);
+    if let Some(stats) = stats.as_object_mut() {
+        stats.insert(
+            "process".to_string(),
+            process(window, &earlier.process, &latest.process),
+        );
+    }
+    stats
+}
+
+/// CPU used over the window (% of one core), memory now, and the container's limits
+fn process(
+    window: f64,
+    earlier: &super::process::Reading,
+    latest: &super::process::Reading,
+) -> Value {
+    let cpu = (latest.cpu_seconds - earlier.cpu_seconds).max(0.0);
+    let limits = super::process::limits();
+    json!({
+        "cpu_percent": if window > 0.0 { round(cpu / window * 100.0) } else { 0.0 },
+        "cpu_seconds": round(latest.cpu_seconds),
+        "memory_bytes": latest.rss_bytes,
+        "allocator_bytes": latest.allocator_bytes,
+        "memory_limit_bytes": limits.memory_bytes,
+        "cpu_limit": limits.cpus,
+    })
 }
 
 type Hosts = BTreeMap<String, BTreeMap<String, Location>>;
@@ -243,6 +271,21 @@ fn render(window: f64, hosts: Hosts, tcp: BTreeMap<String, Tcp>) -> Value {
         }
     };
 
+    // Every host and location together
+    let mut total = Location::default();
+    for location in hosts.values().flat_map(BTreeMap::values) {
+        total.requests += location.requests;
+        for (status, value) in &location.responses {
+            *total.responses.entry(status.clone()).or_default() += value;
+        }
+        add_buckets(&mut total.duration, &location.duration);
+    }
+    let total = json!({
+        "requests_per_second": per_second(total.requests),
+        "responses": counts(&total.responses),
+        "duration_ms": percentiles(&total.duration),
+    });
+
     let hosts = hosts
         .into_iter()
         .map(|(host, locations)| {
@@ -289,7 +332,21 @@ fn render(window: f64, hosts: Hosts, tcp: BTreeMap<String, Tcp>) -> Value {
         })
         .collect::<Vec<_>>();
 
-    json!({ "window_seconds": round(window), "hosts": hosts, "tcp": tcp })
+    json!({ "window_seconds": round(window), "total": total, "hosts": hosts, "tcp": tcp })
+}
+
+/// Adds histogram buckets to `sum` (every histogram of a metric has the same bounds)
+fn add_buckets(sum: &mut Vec<(f64, u64)>, buckets: &[(f64, u64)]) {
+    if sum.is_empty() {
+        sum.extend_from_slice(buckets);
+        return;
+    }
+    for ((bound, count), (other, add)) in sum.iter_mut().zip(buckets) {
+        // The same bounds, from the same metric
+        if bound.to_bits() == other.to_bits() {
+            *count += add;
+        }
+    }
 }
 
 #[derive(Default)]
@@ -450,6 +507,11 @@ mod tests {
         Sample {
             at,
             series: series.iter().cloned().collect::<HashMap<_, _>>(),
+            process: crate::metrics::process::Reading {
+                cpu_seconds: 0.0,
+                rss_bytes: 2048,
+                allocator_bytes: 1024,
+            },
         }
     }
 
@@ -489,7 +551,7 @@ mod tests {
                 ),
             ],
         );
-        let latest = sample(
+        let mut latest = sample(
             start + Duration::from_secs(10),
             &[
                 // 20 requests in 10 seconds: 18 fast, 2 slow; 2 errors
@@ -514,6 +576,8 @@ mod tests {
                 ),
             ],
         );
+
+        latest.process.cpu_seconds = 1.5;
 
         let stats = stats(&earlier, &latest);
 
@@ -541,6 +605,49 @@ mod tests {
         assert_eq!(tcp["active"], json!(4));
         assert_eq!(tcp["bytes_in_per_second"], json!(500.0));
         assert_eq!(tcp["bytes_out_per_second"], json!(0.0));
+
+        // Every host and location together
+        assert_eq!(stats["total"]["requests_per_second"], json!(2.0));
+        assert_eq!(stats["total"]["responses"], json!({ "2xx": 18, "5xx": 2 }));
+        assert_eq!(stats["total"]["duration_ms"]["p50"], json!(5.556));
+        // 1.5 seconds of CPU in 10 seconds
+        assert_eq!(stats["process"]["cpu_percent"], json!(15.0));
+        assert_eq!(stats["process"]["memory_bytes"], json!(2048));
+        assert_eq!(stats["process"]["allocator_bytes"], json!(1024));
+    }
+
+    #[test]
+    fn test_totals_add_up_locations() {
+        let start = Instant::now();
+        let requests = |location| {
+            key(
+                "proksi_requests_total",
+                &[("host", "a.test"), ("location", location), ("status", "2xx")],
+            )
+        };
+        let duration = |location| {
+            key(
+                "proksi_request_duration_seconds",
+                &[("host", "a.test"), ("location", location)],
+            )
+        };
+        let earlier = sample(start, &[]);
+        let latest = sample(
+            start + Duration::from_secs(1),
+            &[
+                (requests("/a"), Reading::Scalar(3.0)),
+                (requests("/b"), Reading::Scalar(1.0)),
+                (duration("/a"), histogram(3, 3)),
+                (duration("/b"), histogram(0, 1)),
+            ],
+        );
+
+        let stats = stats(&earlier, &latest);
+
+        assert_eq!(stats["total"]["requests_per_second"], json!(4.0));
+        assert_eq!(stats["total"]["responses"], json!({ "2xx": 4 }));
+        // 3 fast and 1 slow: the 90th percentile is in the slow bucket
+        assert!(stats["total"]["duration_ms"]["p90"].as_f64().unwrap() > 10.0, "{stats}");
     }
 
     #[test]

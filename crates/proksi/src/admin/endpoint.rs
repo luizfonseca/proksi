@@ -10,10 +10,11 @@ use super::Reply;
 const WINDOWS: std::ops::RangeInclusive<u64> = 1..=300;
 
 /// Paths answering other methods (`405` rather than `404`)
-const PATHS: [&str; 9] = [
+const PATHS: [&str; 10] = [
     "/metrics",
     "/api/v1/stats",
     "/api/v1/stats/stream",
+    "/api/v1/requests/stream",
     "/api/v1/status",
     "/api/v1/server",
     "/api/v1/hosts",
@@ -31,6 +32,8 @@ pub enum Endpoint<'a> {
     Stats(Duration),
     /// `GET /api/v1/stats/stream?window=<seconds>`: the stats every second
     StatsStream(Duration),
+    /// `GET /api/v1/requests/stream`: the requests being served
+    RequestsStream,
     /// `GET /api/v1/status`: version, store, route sources
     Status,
     /// `GET /api/v1/server`: the settings read at startup, without secrets
@@ -58,8 +61,8 @@ pub enum Endpoint<'a> {
 impl<'a> Endpoint<'a> {
     pub fn parse(method: &Method, path: &'a str, query: Option<&str>) -> Result<Self, Reply> {
         use Endpoint::{
-            Certificates, DeleteRoute, Hosts, Metrics, PutRoute, Route, Routes, Server, Session,
-            SignIn, SignOut, Stats, StatsStream, Status,
+            Certificates, DeleteRoute, Hosts, Metrics, PutRoute, RequestsStream, Route, Routes,
+            Server, Session, SignIn, SignOut, Stats, StatsStream, Status,
         };
 
         if let Some(host) = path.strip_prefix("/api/v1/routes/") {
@@ -77,6 +80,7 @@ impl<'a> Endpoint<'a> {
             ("GET", "/metrics") => Metrics,
             ("GET", "/api/v1/stats") => Stats(window(query, 60)?),
             ("GET", "/api/v1/stats/stream") => StatsStream(window(query, 10)?),
+            ("GET", "/api/v1/requests/stream") => RequestsStream,
             ("GET", "/api/v1/status") => Status,
             ("GET", "/api/v1/server") => Server,
             ("GET", "/api/v1/hosts") => Hosts,
@@ -151,6 +155,10 @@ mod tests {
     #[test]
     fn test_endpoints() {
         assert_eq!(parse(Method::GET, "/metrics", None), Ok(Endpoint::Metrics));
+        assert_eq!(
+            parse(Method::GET, "/api/v1/requests/stream", None),
+            Ok(Endpoint::RequestsStream)
+        );
         assert_eq!(
             parse(Method::GET, "/api/v1/server", None),
             Ok(Endpoint::Server)

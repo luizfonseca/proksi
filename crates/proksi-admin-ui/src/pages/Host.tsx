@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import { type Host as HostData, routes, type Upstream } from '../api';
 import { Lock, Unlock } from '../components/icons';
+import { Rules } from '../components/Rules';
 import { Loaded, SourceBadge } from '../components/State';
 import { navigate, onLink } from '../router';
 import { useCanWrite } from '../session';
@@ -84,6 +85,12 @@ export function Host({ name }: { name: string }) {
               </div>
               {canWrite && host.source === 'store' && <Actions name={host.host} />}
             </div>
+            {host.rules.length > 0 && (
+              <section class="panel host-rules">
+                <h3>Host rules <small>every request, before its location is chosen</small></h3>
+                <Rules rules={host.rules} />
+              </section>
+            )}
             <div class="locations">
               {host.locations.map((location) => (
                 <div class="panel">
@@ -108,6 +115,12 @@ export function Host({ name }: { name: string }) {
                         {location.blocks.length === 0 ? <span class="none">None</span> : location.blocks.map((block) => <span class="chip">{block}</span>)}
                       </div>
                     </section>
+                    {location.rules.length > 0 && (
+                      <section class="location-rules">
+                        <h3>Rules</h3>
+                        <Rules rules={location.rules} />
+                      </section>
+                    )}
                   </div>
                 </div>
               ))}
