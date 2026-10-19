@@ -3,15 +3,23 @@ import { useEffect, useState } from 'preact/hooks';
 import { session, type Session, Unauthorized } from './api';
 import { Layout } from './components/Layout';
 import { Certificates } from './pages/Certificates';
+import { EditHost } from './pages/EditHost';
 import { Host } from './pages/Host';
+import { Server } from './pages/Server';
 import { Hosts } from './pages/Hosts';
 import { SignIn } from './pages/SignIn';
 import { navigate, usePath } from './router';
+import { SessionContext } from './session';
 import './styles.css';
 
 function Page({ path }: { path: string }) {
+  if (path === '/hosts/new') return <EditHost name={null} />;
+  if (path.startsWith('/hosts/') && path.endsWith('/edit')) {
+    return <EditHost name={decodeURIComponent(path.slice('/hosts/'.length, -'/edit'.length))} />;
+  }
   if (path.startsWith('/hosts/')) return <Host name={decodeURIComponent(path.slice('/hosts/'.length))} />;
   if (path === '/certificates') return <Certificates />;
+  if (path === '/server') return <Server />;
   return <Hosts />;
 }
 
@@ -35,9 +43,11 @@ function App() {
   if (signedIn === undefined) return null;
   if (signedIn === null) return <SignIn onSignedIn={setSignedIn} />;
   return (
-    <Layout path={path} session={signedIn} onSignOut={() => setSignedIn(null)}>
-      <Page path={path} />
-    </Layout>
+    <SessionContext.Provider value={signedIn}>
+      <Layout path={path} session={signedIn} onSignOut={() => setSignedIn(null)}>
+        <Page key={path} path={path} />
+      </Layout>
+    </SessionContext.Provider>
   );
 }
 

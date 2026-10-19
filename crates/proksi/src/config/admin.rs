@@ -58,7 +58,11 @@ impl AdminConfig {
                 self.listen
             )
         })?;
-        if let Some((name, _)) = self.tokens.iter().find(|(_, token)| token.secret.is_empty()) {
+        if let Some((name, _)) = self
+            .tokens
+            .iter()
+            .find(|(_, token)| token.secret.is_empty())
+        {
             return Err(format!("admin: token {name:?} has an empty secret"));
         }
         if self.tokens.is_empty() && !address.ip().is_loopback() {
@@ -84,7 +88,9 @@ impl AdminConfig {
 
     /// The token of the metrics-only listener, if set (an empty one is none)
     pub fn metrics_token(&self) -> Option<&str> {
-        self.metrics_token.as_deref().filter(|token| !token.is_empty())
+        self.metrics_token
+            .as_deref()
+            .filter(|token| !token.is_empty())
     }
 }
 
@@ -115,7 +121,9 @@ mod tests {
         assert_eq!(admin.tokens["grafana"].access, Access::Read);
         assert_eq!(admin.tokens["ops"].access, Access::Write);
         assert!(admin.metrics);
-        assert!(!self::admin("admin {\n  listen = \"127.0.0.1:7555\"\n  metrics = false\n}\n").metrics);
+        assert!(
+            !self::admin("admin {\n  listen = \"127.0.0.1:7555\"\n  metrics = false\n}\n").metrics
+        );
         assert_eq!(admin.address(), Ok("0.0.0.0:7555".parse().unwrap()));
     }
 

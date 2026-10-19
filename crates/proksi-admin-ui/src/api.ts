@@ -25,13 +25,47 @@ export function get<T>(path: string): Promise<T> {
 /** Who's signed in: a token's name (none when Proksi has no tokens) and what it can do */
 export type Session = { name: string | null; access: 'read' | 'write' };
 
+/** A host in the store, as the API stores it */
+export type StoredUpstream = {
+  ip: string;
+  port: number;
+  weight?: number | null;
+  sni?: string | null;
+  [key: string]: unknown;
+};
+export type StoredLocation = { path: string; exact?: boolean; upstreams: StoredUpstream[]; [key: string]: unknown };
+export type StoredHost = {
+  name: string;
+  listen?: string[];
+  tls: { enabled: boolean; self_signed_on_failure?: boolean; [key: string]: unknown };
+  locations: StoredLocation[];
+  [key: string]: unknown;
+};
+
+const hostPath = (name: string) => `/routes/${encodeURIComponent(name)}`;
+
+export const routes = {
+  get: (name: string) => get<{ host: StoredHost; revision: number }>(hostPath(name)),
+  put: (host: StoredHost) => request<{ host: string; revision: number }>('PUT', hostPath(host.name), host),
+  delete: (name: string) => request<{ host: string; revision: number }>('DELETE', hostPath(name)),
+};
+
 export const session = {
   get: () => get<Session>('/session'),
   signIn: (token: string) => request<Session>('POST', '/session', { token }),
   signOut: () => request<unknown>('DELETE', '/session'),
 };
 
-export type Upstream = { upstream: string; weight: number; healthy: boolean };
+export type Upstream = {
+  /** As written (`ip:port` or `name:port`) */
+  upstream: string;
+  /** What it came from: a docker label's upstream, or a Kubernetes service */
+  name: string | null;
+  weight: number;
+  healthy: boolean;
+  /** What it resolved to */
+  addresses: { address: string; healthy: boolean }[];
+};
 export type Location = { location: string; blocks: string[]; upstreams: Upstream[] };
 export type Host = {
   host: string;

@@ -92,6 +92,7 @@ The admin listener itself never serves TLS: Proksi's hosts already do.
 | Host | Locations, upstreams, building blocks and rules, as forms. Hosts from the store can be changed; others are read-only |
 | Rules | A host's and its locations' rules, built as a tree of `and`, `or` and `not`, with a request to try them on |
 | Certificates | Domains, expiry, issuer, and the instance renewing each |
+| Server | The settings Proksi started with (addresses, store, cache, Let's Encrypt, logging, workers, sources, admin tokens' names), defaults included, without secrets |
 | Changes | Who changed which host, when, and what; a previous version can be restored |
 
 The overview's charts and requests are kept by the page, in memory, from the time it's opened (up to the last 15 minutes): Proksi doesn't store more than it does today.
@@ -113,6 +114,7 @@ Hosts from the configuration file, docker labels or Kubernetes are read-only: Pr
 | `GET /api/v1/routes/<host>/history` | The host's previous versions: revision, time, token name. `POST .../history/<revision>/restore` writes one back |
 | `GET /api/v1/requests/stream` | The requests being served, as server-sent events, with the fields of access logs (also when access logs are off). At most 100 a second for each stream, with the number skipped |
 | `POST`, `DELETE /api/v1/session` | Sign in and out |
+| `GET /api/v1/server` | The settings read at startup, with their defaults. Each is listed explicitly, so a new setting or a secret is never shown by accident |
 
 - `stats` and `stats/stream` gain the process: CPU (time used, and % of one core over the window), resident memory, memory in use by the allocator, and in a container, its memory limit and CPU quota (cgroups). They're read once a second by the task that already snapshots the stats.
 - `requests/stream` costs nothing while no one watches: the request path checks a count of open streams, and builds nothing when it's zero.

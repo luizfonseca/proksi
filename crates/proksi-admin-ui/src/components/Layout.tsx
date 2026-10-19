@@ -2,11 +2,12 @@ import type { ComponentChildren } from 'preact';
 import { session as api, type Session, type Status } from '../api';
 import { onLink } from '../router';
 import { useData } from '../useData';
-import { Branch, Globe, History, Pulse, Shield } from './icons';
+import { Branch, Globe, History, Pulse, Server, Shield } from './icons';
 
 const NAV = [
   { href: '/hosts', label: 'Hosts', icon: Globe },
   { href: '/certificates', label: 'Certificates', icon: Shield },
+  { href: '/server', label: 'Server', icon: Server },
   { href: '/rules', label: 'Rules', icon: Branch, soon: true },
   { href: '/changes', label: 'Changes', icon: History, soon: true },
   { href: '/overview', label: 'Overview', icon: Pulse, soon: true },

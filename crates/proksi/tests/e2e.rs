@@ -2183,7 +2183,7 @@ async fn test_admin_routes() {
 
     // JSON, in the stored format
     let json = format!(
-        r#"{{ "tls": {{ "enabled": false }}, "locations": [{{ "path": "/", "upstreams": [{{ "ip": "127.0.0.1", "port": {} }}] }}] }}"#,
+        r#"{{ "name": "api.test", "tls": {{ "enabled": false }}, "locations": [{{ "path": "/", "upstreams": [{{ "ip": "127.0.0.1", "port": {} }}] }}] }}"#,
         proksi.http_upstream.port
     );
     let res = proksi
@@ -2198,20 +2198,27 @@ async fn test_admin_routes() {
     let res = served("HTTP/1.1 200").await;
     assert!(res.contains("\"path\":\"/hello\""), "{res}");
 
-    // HCL, like a host block of the configuration file
-    let hcl = format!(
-        "tls = false\nlocation \"/\" {{\n  rate_limit {{\n    requests = 1\n    per = \"1m\"\n  }}\n  upstream \"127.0.0.1:{}\" {{}}\n}}\n",
-        proksi.http_upstream.port
-    );
+    // One host, as stored
     let res = proksi
         .raw_http_on(
             admin_port,
-            request("PUT", "/api/v1/routes/api.test", "text/hcl", &hcl).as_bytes(),
+            request("GET", "/api/v1/routes/api.test", "application/json", "").as_bytes(),
         )
         .await
         .unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
-    served("HTTP/1.1 429").await;
+    assert!(res.contains(r#""revision":"#), "{res}");
+
+    // The API takes JSON only: HCL is for configuration files
+    let hcl = "tls = false\nlocation \"/\" {}\n";
+    let res = proksi
+        .raw_http_on(
+            admin_port,
+            request("PUT", "/api/v1/routes/api.test", "text/hcl", hcl).as_bytes(),
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 400"), "{res}");
 
     // Invalid hosts are refused with the reason
     let res = proksi

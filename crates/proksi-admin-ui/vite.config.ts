@@ -7,5 +7,11 @@ const admin = process.env.PROKSI_ADMIN ?? 'http://127.0.0.1:7555';
 export default defineConfig({
   plugins: [preact()],
   build: { outDir: 'dist', assetsDir: 'assets', modulePreload: { polyfill: false } },
-  server: { proxy: { '/api': admin, '/metrics': admin } },
+  // Host is kept: changes are refused unless their Origin names it (ADR 0008)
+  server: {
+    proxy: {
+      '/api': { target: admin, changeOrigin: false },
+      '/metrics': { target: admin, changeOrigin: false },
+    },
+  },
 });

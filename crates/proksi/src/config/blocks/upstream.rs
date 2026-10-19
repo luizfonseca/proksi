@@ -47,6 +47,7 @@ impl UpstreamBlock {
                 remove: None,
                 priority: None,
             }),
+            name: None,
         })
     }
 }

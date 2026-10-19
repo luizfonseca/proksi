@@ -32,3 +32,6 @@ export const Unlock = () => (
 export const Search = () => (
   <svg {...props}><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
 );
+export const Server = () => (
+  <svg {...props}><rect x="4" y="4" width="16" height="7" rx="2" /><rect x="4" y="13" width="16" height="7" rx="2" /><path d="M8 7.5h.01M8 16.5h.01" /></svg>
+);

@@ -16,20 +16,15 @@ const COOKIE: &str = "proksi_session";
 /// A session ends after this long without a request
 const IDLE: Duration = Duration::from_hours(12);
 
-/// Who made a request
-#[derive(Debug, Clone, PartialEq)]
+/// Who made a request (`GET /api/v1/session`)
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Caller {
     /// The token's name (none without `token` blocks)
     pub name: Option<String>,
     pub access: Access,
     /// Signed in with a session cookie (rather than a bearer token)
+    #[serde(skip)]
     pub session: bool,
-}
-
-impl Caller {
-    pub fn json(&self) -> serde_json::Value {
-        serde_json::json!({ "name": self.name, "access": self.access })
-    }
 }
 
 struct Session {
