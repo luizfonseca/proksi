@@ -1,0 +1,146 @@
+---
+title: "ADR 0008: Admin UI"
+description: "The admin API can change hosts, but only through curl and a token."
+---
+
+- Status: accepted
+- Date: 2026-10-19
+- Related: [ADR 0001](/adrs/0001-route-sources) (route sources and the store), [ADR 0003](/adrs/0003-configuration-model) (hosts, locations and building blocks), [ADR 0004](/adrs/0004-admin-api-and-metrics) (admin API and metrics), [ADR 0007](/adrs/0007-rules) (rules)
+
+## Context
+
+The admin API (ADR 0004) reports what Proksi serves, and writes hosts to the store: `PUT /api/v1/routes/<host>` takes a host as JSON (or the body of a `host` block, as HCL), validated like a configuration file. Using it means writing it by hand, with `curl` and a token.
+
+A UI on top of it should let people see what's served (hosts by source, upstream health, certificates, live traffic), and add or change hosts, locations, upstreams, building blocks and rules.
+
+Three things shape the design:
+
+- **It writes configuration.** Whoever reaches it controls every host. It must be safe by default, and exposing it must not be easier than exposing it safely.
+- **It must match the API it calls.** A UI written for one version of the admin API breaks with another.
+- **It costs nothing when unused.** Proksi without an `admin` block must not open, load or serve anything more than today.
+
+## Decision
+
+### Embedded, always
+
+The UI is a static web application in a crate of its own, `proksi-admin-ui`, built into the Proksi binary. It's served by the admin listener at `/`, next to `/api/v1` and `/metrics`. There is no build option to leave it out: every binary and image has the UI of its own version.
+
+- Without an `admin` block, nothing listens, as today. The UI adds only the size of its files to the binary.
+- Its files are compressed when built (brotli and gzip) and served from memory, with a content hash in their names and long cache lifetimes.
+- `proksi-admin-ui` is released on its own (release-please), so changes to the UI release only it, never Proksi. Proksi carries the version of the UI it depends on.
+- The application is small and has no runtime dependencies beyond its own bundle: [Preact](https://preactjs.com) and TypeScript, built with Vite. Budget: 150 KB compressed.
+
+### Building it
+
+- `crates/proksi-admin-ui` holds the application's source and a small library: the built files, embedded, and a function returning one by its path (with its content type, encodings and hash).
+- The built files are ignored by git, and included when the crate is published: `cargo install` and the published crates don't need Node.
+- A build without them (a clone where the UI was never built) embeds a page saying how to build it. Rust development doesn't need Node.
+- CI, the Docker image and releases build the UI before the crates.
+
+### Access
+
+The admin listener keeps the rules of ADR 0004: off without an `admin` block, a loopback address unless there's a token, plain HTTP.
+
+**Tokens are named, and read-only unless they say otherwise**, so a dashboard can't change anything, writing is always a choice someone made, and every change says who made it:
+
+```hcl
+admin {
+  listen = "127.0.0.1:7555"
+
+  # Read-only: stats, hosts, certificates, rules
+  token "grafana" {
+    secret = env("PROKSI_GRAFANA_TOKEN")
+  }
+
+  # Can also change hosts and rules
+  token "ops" {
+    secret = env("PROKSI_ADMIN_TOKEN")
+    access = "write"
+  }
+}
+```
+
+`access` is `"read"` unless written as `"write"`. `token = "..."` (ADR 0004) keeps working as before, read-write and named `default`, and is deprecated: Proksi logs a warning asking for a `token` block.
+
+**The UI signs in with a token.** `POST /api/v1/session` exchanges it for a session cookie:
+
+- `HttpOnly` (scripts can't read it), `SameSite=Strict` (other sites can't send it), and `Secure` unless the admin listener is reached over plain HTTP on a loopback address.
+- Signed with a key Proksi generates when it starts: sessions end when Proksi restarts, and each instance has its own. A session also ends after 12 hours without a request.
+- The token is never stored by the UI (no `localStorage`, no `sessionStorage`).
+
+**Changes must come from the UI's own origin.** A request that changes something with a session cookie must carry an `Origin` header naming the admin listener's own address, or it's refused. API clients using `Authorization: Bearer` are unaffected.
+
+**The pages allow nothing else.** `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'` (no inline scripts, no other origins, no framing), no CORS headers, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`.
+
+**Failed sign-ins are limited** to 10 a minute per client, and tokens are compared in constant time.
+
+### Reaching it
+
+From the documentation, in this order:
+
+1. **A tunnel.** `ssh -L 7555:127.0.0.1:7555 server`, or `kubectl port-forward`, then `http://127.0.0.1:7555`. The admin listener stays on loopback.
+2. **A host of its own, through Proksi.** A `host` with TLS whose location's upstream is the admin listener, behind `oauth2`, `forward_auth` or `basic_auth`, and `ip_filter`. The admin token is still needed behind them.
+
+The admin listener itself never serves TLS: Proksi's hosts already do.
+
+### What the UI does
+
+| Page | |
+| --- | --- |
+| Overview | Status and instances sharing the store; charts of requests, errors and latency (p50, p90, p99), CPU and memory; the latest requests as they're served |
+| Hosts | Every host served, with its source (`file`, `docker`, `kubernetes`, `store`), locations, upstreams and their health |
+| Host | Locations, upstreams, building blocks and rules, as forms. Hosts from the store can be changed; others are read-only |
+| Rules | A host's and its locations' rules, built as a tree of `and`, `or` and `not`, with a request to try them on |
+| Certificates | Domains, expiry, issuer, and the instance renewing each |
+| Changes | Who changed which host, when, and what; a previous version can be restored |
+
+The overview's charts and requests are kept by the page, in memory, from the time it's opened (up to the last 15 minutes): Proksi doesn't store more than it does today.
+
+Hosts from the configuration file, docker labels or Kubernetes are read-only: Proksi never rewrites those sources. The UI can **override** one: it copies the host to the store, where it takes priority (ADR 0001), and removing the override brings the original back. Any host can be **exported** as HCL, to move it into a configuration file. A UI test checks that exported hosts load back as the same JSON.
+
+### What the API gains
+
+**The API is JSON only**, in and out, like any other HTTP API. A host is the same tree as in a configuration file, as JSON (the shape ADR 0007 gives rules). HCL is what people write in files, and the API doesn't take or produce it: `PUT /api/v1/routes/<host>` stops accepting `text/hcl`. Exporting a host as HCL is done by the UI, from the JSON it already has and the schema (which keys are blocks, and which blocks take a label).
+
+
+| Endpoint | |
+| --- | --- |
+| `GET /api/v1/routes/<host>` | One host from the store, with its revision in `ETag` |
+| `PUT`, `DELETE /api/v1/routes/<host>` | As today, and `If-Match: <revision>` refuses the change (`412`) if the host changed since it was read, so two people editing the same host don't overwrite each other |
+| `POST /api/v1/validate` | Checks a host without writing it: the errors, each with its path (`location "/api": rule "writes": and.method.gt: ...`) |
+| `GET /api/v1/schema` | What the forms (and HCL export) are built from: building blocks and their settings (types, defaults, limits), which keys are blocks and which take a label, rule fields and the operators each takes |
+| `POST /api/v1/rules/test` | Rules and a request (method, host, path, headers, client): which rules match, in order, and what they'd do |
+| `GET /api/v1/routes/<host>/history` | The host's previous versions: revision, time, token name. `POST .../history/<revision>/restore` writes one back |
+| `GET /api/v1/requests/stream` | The requests being served, as server-sent events, with the fields of access logs (also when access logs are off). At most 100 a second for each stream, with the number skipped |
+| `POST`, `DELETE /api/v1/session` | Sign in and out |
+
+- `stats` and `stats/stream` gain the process: CPU (time used, and % of one core over the window), resident memory, memory in use by the allocator, and in a container, its memory limit and CPU quota (cgroups). They're read once a second by the task that already snapshots the stats.
+- `requests/stream` costs nothing while no one watches: the request path checks a count of open streams, and builds nothing when it's zero.
+- `schema` is generated from the code that reads the configuration, so the forms can't offer what Proksi wouldn't accept.
+- Every write is validated as a configuration file is, and logged: `{"admin_change": true, "token": "ops", "host": "api.example.com", "revision": 42}`.
+- The store keeps the last 50 versions of each host. Every store (memory, Redis, SQLite, Postgres) implements history the same way, with the routes they already keep.
+
+## Consequences
+
+- Every Proksi binary has a UI matching its admin API, with nothing to install or deploy.
+- The binary grows by the UI's size (the budget above). The request path doesn't change, and nothing runs without an `admin` block.
+- Exposing the UI safely takes a tunnel or a host with authentication in front, as the documentation shows. Reaching it without either isn't possible: a non-loopback admin listener needs a token.
+- Changes made in the UI live in the store. Proksi's configuration file stays what its owner wrote, and exporting is how a change moves into it.
+- Contributors to the UI need Node; contributors to Proksi don't.
+
+### Not part of this decision
+
+- A UI hosted elsewhere, calling the admin API from the browser.
+- Users and roles beyond named read and read-write tokens, and signing in with an identity provider (use `oauth2` or `forward_auth` in front).
+- Editing the configuration file, docker labels or Kubernetes resources.
+- Changing `listen`, the `server` block or other settings read at startup.
+
+## Steps
+
+1. Embedding: the `proksi-admin-ui` crate, CI, Docker and releases; the UI's hosts (read-only) and certificates.
+2. Named read and read-write tokens, sessions, origin checks, security headers, failed sign-in limits, and the change log.
+3. The API: JSON only, one host with its revision and `If-Match`, `validate`, `schema`.
+4. Editing hosts: locations, upstreams and building blocks; overriding, and exporting as HCL.
+5. Rules: the editor, `rules/test`, and rule metrics (ADR 0007 step 3).
+6. History: versions in every store, the changes page, restoring.
+7. The overview: process stats, `requests/stream`, and its charts.
