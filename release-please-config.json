@@ -1,6 +1,14 @@
 {
   "plugins": [
-    "cargo-workspace"
+    "cargo-workspace",
+    {
+      "type": "linked-versions",
+      "groupName": "proksi",
+      "components": [
+        "proksi",
+        "proksi-admin-ui"
+      ]
+    }
   ],
   "commit-search-depth": 10,
   "packages": {
@@ -13,23 +21,7 @@
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
       "prerelease": false,
-      "extra-files": [
-        {
-          "type": "toml",
-          "path": "/crates/proksi-admin-ui/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "/Cargo.toml",
-          "jsonpath": "$.workspace.dependencies.proksi-admin-ui.version"
-        },
-        {
-          "type": "toml",
-          "path": "/Cargo.lock",
-          "jsonpath": "$.package[?(@.name=='proksi-admin-ui')].version"
-        }
-      ]
+      "component": "proksi"
     },
     "crates/plugins_api": {
       "changelog-path": "/CHANGELOG.md",
@@ -40,6 +32,16 @@
       "draft": false,
       "prerelease": false,
       "separate-pull-requests": true
+    },
+    "crates/proksi-admin-ui": {
+      "component": "proksi-admin-ui",
+      "release-type": "rust",
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": false,
+      "bump-patch-for-minor-pre-major": false,
+      "skip-github-release": true,
+      "draft": false,
+      "prerelease": false
     }
   },
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
