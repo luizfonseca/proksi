@@ -217,6 +217,28 @@ pub struct Jwt {
     pub priority: Priority,
 }
 
+/// `static_files`: answers with the files of a directory, by their path below the location
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct StaticFiles {
+    /// The directory files are served from (an absolute path)
+    pub directory: String,
+    /// Files served for a directory's path (default: `["index.html"]`)
+    pub index: Option<Vec<String>>,
+    /// The file served for paths with none, such as `/index.html` for single-page apps
+    /// (default: `404`)
+    pub fallback: Option<String>,
+    /// The `Cache-Control` of the files, such as `public, max-age=3600`
+    pub cache_control: Option<String>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
 /// `basic_auth`: asks for a user and password
 // Read by its plugin, from the settings as written
 #[allow(dead_code)]
@@ -321,6 +343,7 @@ pub fn schemas() -> serde_json::Map<String, serde_json::Value> {
         ("compress", schema(schemars::schema_for!(Compress))),
         ("forward_auth", schema(schemars::schema_for!(ForwardAuth))),
         ("jwt", schema(schemars::schema_for!(Jwt))),
+        ("static_files", schema(schemars::schema_for!(StaticFiles))),
         ("basic_auth", schema(schemars::schema_for!(BasicAuth))),
         ("oauth2", schema(schemars::schema_for!(Oauth2))),
         ("request_id", schema(schemars::schema_for!(RequestId))),
@@ -394,6 +417,6 @@ mod tests {
         );
         assert_eq!(limit["properties"]["priority"]["maximum"], 100);
         assert_eq!(schemas["jwt"]["additionalProperties"], false);
-        assert_eq!(schemas.len(), 12);
+        assert_eq!(schemas.len(), 13);
     }
 }

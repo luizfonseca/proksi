@@ -3771,3 +3771,134 @@ async fn test_jwt() {
 
     proksi.assert_healthy();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_static_files() {
+    let site = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(site.path().join("app")).unwrap();
+    std::fs::create_dir_all(site.path().join("docs")).unwrap();
+    std::fs::write(site.path().join("app/index.html"), "<h1>app</h1>").unwrap();
+    std::fs::write(site.path().join("app/app.js"), "console.log(1)").unwrap();
+    std::fs::write(site.path().join("app/.env"), "SECRET=1").unwrap();
+    std::fs::write(site.path().join("secret.txt"), "outside").unwrap();
+    // Bigger than a chunk (64 KiB), to be streamed
+    let big = "0123456789".repeat(20_000);
+    std::fs::write(site.path().join("app/big.txt"), &big).unwrap();
+
+    let config = format!(
+        r#"
+host "files.test" {{
+  tls = false
+
+  location "/static" {{
+    static_files {{
+      directory     = "{}"
+      fallback      = "/index.html"
+      cache_control = "public, max-age=60"
+    }}
+
+    rule "no maps" {{
+      and {{
+        path {{
+          suffix = ".map"
+        }}
+      }}
+      then {{
+        respond {{
+          status = 403
+        }}
+      }}
+    }}
+  }}
+
+  location "/private" {{
+    static_files {{
+      directory = "{}"
+    }}
+    basic_auth {{
+      user = "u"
+      pass = "p"
+    }}
+  }}
+}}
+"#,
+        site.path().join("app").display(),
+        site.path().join("app").display()
+    );
+    let mut proksi = Harness::start_without_https(&config).await;
+    let port = proksi.http_port;
+    let send = |method: &str, path: &str, headers: &str| {
+        format!("{method} {path} HTTP/1.1\r\nHost: files.test\r\n{headers}Connection: close\r\n\r\n")
+    };
+    let header = |res: &str, name: &str| {
+        res.lines()
+            .take_while(|line| !line.is_empty())
+            .find_map(|line| {
+                let (key, value) = line.split_once(": ")?;
+                key.eq_ignore_ascii_case(name).then(|| value.to_string())
+            })
+    };
+    let body = |res: &str| res.split_once("\r\n\r\n").map(|(_, body)| body.to_string()).unwrap_or_default();
+
+    // A file, by its path below the location
+    let res = proksi.raw_http_on(port, send("GET", "/static/app.js", "").as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert_eq!(body(&res), "console.log(1)");
+    assert_eq!(header(&res, "content-type").as_deref(), Some("text/javascript; charset=utf-8"));
+    assert_eq!(header(&res, "cache-control").as_deref(), Some("public, max-age=60"));
+    let etag = header(&res, "etag").unwrap();
+
+    // Without its body, and not again while it's unchanged
+    let res = proksi.raw_http_on(port, send("HEAD", "/static/app.js", "").as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert_eq!(header(&res, "content-length").as_deref(), Some("14"));
+    assert_eq!(body(&res), "");
+    let request = send("GET", "/static/app.js", &format!("If-None-Match: {etag}\r\n"));
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 304"), "{res}");
+
+    // A part of it
+    let request = send("GET", "/static/app.js", "Range: bytes=0-6\r\n");
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 206"), "{res}");
+    assert_eq!(body(&res), "console");
+    assert_eq!(header(&res, "content-range").as_deref(), Some("bytes 0-6/14"));
+
+    // The index of a directory, and the fallback for paths with no file
+    for path in ["/static", "/static/", "/static/settings/profile"] {
+        let res = proksi.raw_http_on(port, send("GET", path, "").as_bytes()).await.unwrap();
+        assert!(res.starts_with("HTTP/1.1 200"), "{path}: {res}");
+        assert_eq!(body(&res), "<h1>app</h1>", "{path}");
+    }
+
+    // Streamed, whole
+    let res = proksi.raw_http_on(port, send("GET", "/static/big.txt", "").as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{}", &res[..200]);
+    assert_eq!(body(&res), big);
+
+    // Nothing outside the directory, nor hidden files
+    for path in ["/static/../secret.txt", "/static/%2e%2e/secret.txt", "/static/.env"] {
+        let res = proksi.raw_http_on(port, send("GET", path, "").as_bytes()).await.unwrap();
+        assert!(!res.contains("outside") && !res.contains("SECRET"), "{path}: {res}");
+    }
+    let res = proksi.raw_http_on(port, send("GET", "/static/.env", "").as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 404"), "{res}");
+
+    // Rules and the other blocks apply before files are served
+    std::fs::write(site.path().join("app/app.js.map"), "{}").unwrap();
+    let res = proksi.raw_http_on(port, send("GET", "/static/app.js.map", "").as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 403"), "{res}");
+    let res = proksi.raw_http_on(port, send("GET", "/private/app.js", "").as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 401"), "{res}");
+    let request = send("GET", "/private/app.js", "Authorization: Basic dTpw\r\n");
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert_eq!(body(&res), "console.log(1)");
+
+    // Only read
+    let res = proksi.raw_http_on(port, send("POST", "/static/app.js", "Content-Length: 0\r\n").as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 405"), "{res}");
+    assert_eq!(header(&res, "allow").as_deref(), Some("GET, HEAD"));
+
+    proksi.assert_healthy();
+}

@@ -1,0 +1,54 @@
+---
+title: "Static files"
+description: "Serves the files of a directory."
+---
+
+Answers a location's requests with the files of a directory: a site's build, a single-page app, downloads. Files are found by their path below the location, so with `location "/assets"` and `directory = "/var/www/assets"`, `/assets/app.js` serves `/var/www/assets/app.js`.
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `directory` | The directory files are served from: an absolute path (required) |
+| `index` | Files served for a directory's path (default: `["index.html"]`) |
+| `fallback` | The file served for paths with none, such as `/index.html` for single-page apps (default: a `404`) |
+| `cache_control` | The `Cache-Control` of the files, such as `public, max-age=3600` |
+| `priority` | When it runs among the blocks of the location (default: `90`: last, after authentication, rate limits and the others) |
+
+### Usage
+
+**proksi.hcl**
+```hcl
+host "example.com" {
+  # The API, from its upstream
+  location "/api" {
+    upstream "api:8080" {}
+  }
+
+  # The app: its files, and its index.html for the paths it routes itself
+  location "/" {
+    static_files {
+      directory = "/var/www/app/dist"
+      fallback  = "/index.html"
+    }
+  }
+
+  # Fingerprinted assets, cached for a year
+  location "/assets" {
+    static_files {
+      directory     = "/var/www/app/dist/assets"
+      cache_control = "public, max-age=31536000, immutable"
+    }
+    compress {}
+  }
+}
+```
+
+### Good to know
+
+- Only files inside `directory` are served: `..`, encoded or not, and symlinks leading out of it get a `404`. So do hidden files and directories (`.env`, `.git`), and directories without an index file: there are no directory listings.
+- Only `GET` and `HEAD` are answered; other methods get a `405`.
+- Files are streamed as they're read, never kept in memory. Their type comes from their extension.
+- Responses have an `ETag` and `Last-Modified`, so browsers checking whether a file changed get a `304` when it hasn't. Single byte ranges are served (`206`), for videos and resumed downloads.
+- A location with `static_files` has no upstreams: the block answers all of its requests. Its [rules](/rules) and other blocks still apply first, such as `basic_auth`, `jwt`, `rate_limit`, `headers` and `compress`. It isn't a rule action itself: files are found below a location's path.
+- The directory must exist when the configuration is read.

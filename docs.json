@@ -200,6 +200,10 @@
           "href": "/plugins/respond"
         },
         {
+          "title": "Static files",
+          "href": "/plugins/static-files"
+        },
+        {
           "title": "IP filter",
           "href": "/plugins/ip-filter"
         },

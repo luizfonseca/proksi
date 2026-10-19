@@ -24,6 +24,38 @@ pub async fn respond(
     Ok(())
 }
 
+/// Writes `response`, then `len` bytes of `body` as they're read (64 KiB at a time)
+pub async fn respond_streaming(
+    session: &mut Session,
+    ctx: &mut RouterContext,
+    mut response: ResponseHeader,
+    mut body: impl tokio::io::AsyncRead + Unpin,
+    len: u64,
+) -> pingora::Result<()> {
+    use tokio::io::AsyncReadExt;
+
+    const CHUNK: u64 = 64 * 1024;
+    if len == 0 {
+        return respond(session, ctx, response).await;
+    }
+    response_blocks(session, &mut response, ctx).await;
+    session
+        .write_response_header(Box::new(response), false)
+        .await?;
+    let mut left = len;
+    while left > 0 {
+        let mut chunk = bytes::BytesMut::zeroed(usize::try_from(left.min(CHUNK)).unwrap_or(0));
+        body.read_exact(&mut chunk).await.map_err(|err| {
+            pingora::Error::because(pingora::ErrorType::ReadError, "reading the body", err)
+        })?;
+        left -= chunk.len() as u64;
+        session
+            .write_response_body(Some(chunk.freeze()), left == 0)
+            .await?;
+    }
+    Ok(())
+}
+
 /// The response blocks of the location and of the rules the request matched
 async fn response_blocks(
     session: &mut Session,
