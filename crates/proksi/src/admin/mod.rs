@@ -17,6 +17,7 @@ use crate::metrics::live;
 
 pub mod routes;
 pub mod status;
+mod ui;
 
 /// Stats windows, in seconds
 const WINDOWS: std::ops::RangeInclusive<u64> = 1..=300;
@@ -52,6 +53,8 @@ pub enum Answer {
     Reply(Reply),
     /// Server-sent events with the stats over this window, every second
     Stream(Duration),
+    /// A file of the UI
+    Ui(&'static proksi_admin_ui::Asset, ui::Encoding),
 }
 
 pub struct AdminApi {
@@ -93,6 +96,10 @@ impl AdminApi {
             authorization,
             ..
         } = request;
+        // The UI's files hold no data: its pages sign in to the API
+        if !self.metrics_only && ui::serves(path) {
+            return ui::answer(method, path, request.accept_encoding);
+        }
         if !self.authorized(authorization) {
             return Answer::Reply(Reply::error(
                 StatusCode::UNAUTHORIZED,
@@ -224,6 +231,11 @@ impl HttpServerApp for AdminApi {
             .get(header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
             .map(ToString::to_string);
+        let accept_encoding = request
+            .headers
+            .get(header::ACCEPT_ENCODING)
+            .and_then(|value| value.to_str().ok())
+            .map(ToString::to_string);
 
         let body = if method == Method::PUT {
             match read_body(&mut session).await {
@@ -244,28 +256,31 @@ impl HttpServerApp for AdminApi {
                 query: uri.query(),
                 authorization: authorization.as_deref(),
                 content_type: content_type.as_deref(),
+                accept_encoding: accept_encoding.as_deref(),
                 body: &body,
             })
             .await;
 
-        match answer {
-            Answer::Reply(reply) => {
-                if !write_reply(&mut session, reply).await {
-                    return None;
-                }
-                let persistent_settings = HttpPersistentSettings::for_session(&session);
-                session
-                    .finish()
-                    .await
-                    .ok()
-                    .flatten()
-                    .map(|stream| ReusedHttpStream::from_reusable_stream(stream, persistent_settings))
+        let written = match answer {
+            Answer::Reply(reply) => write_reply(&mut session, reply).await,
+            Answer::Ui(asset, encoding) => {
+                ui::write(&mut session, asset, encoding, method == Method::HEAD).await
             }
             Answer::Stream(window) => {
                 stream_stats(session, window, shutdown.clone()).await;
-                None
+                return None;
             }
+        };
+        if !written {
+            return None;
         }
+        let persistent_settings = HttpPersistentSettings::for_session(&session);
+        session
+            .finish()
+            .await
+            .ok()
+            .flatten()
+            .map(|stream| ReusedHttpStream::from_reusable_stream(stream, persistent_settings))
     }
 }
 
@@ -277,6 +292,7 @@ pub struct Request<'a> {
     pub query: Option<&'a str>,
     pub authorization: Option<&'a str>,
     pub content_type: Option<&'a str>,
+    pub accept_encoding: Option<&'a str>,
     pub body: &'a [u8],
 }
 
@@ -441,6 +457,7 @@ mod tests {
             query,
             authorization,
             content_type: None,
+            accept_encoding: None,
             body: &[],
         }
     }
@@ -449,6 +466,7 @@ mod tests {
         match answer {
             Answer::Reply(reply) => reply,
             Answer::Stream(_) => panic!("a stream"),
+            Answer::Ui(asset, _) => panic!("a file of the UI: {asset:?}"),
         }
     }
 
@@ -512,12 +530,15 @@ mod tests {
                 "/api/v1/certificates",
                 "/api/v1/routes",
                 "/api/v1/routes/a.test",
-                "/nope",
+                "/api/v1/nope",
             ] {
                 let reply = reply(api.handle(request(&Method::GET, path, None, authorization)).await);
                 assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{authorization:?}");
                 assert_eq!(reply.body, r#"{"error":"missing or invalid token"}"#);
             }
+            // The UI's pages hold no data, and sign in to the API themselves
+            let page = api.handle(request(&Method::GET, "/hosts", None, authorization)).await;
+            assert!(matches!(page, Answer::Ui(..)), "{page:?}");
         }
     }
 
@@ -537,7 +558,7 @@ mod tests {
     async fn test_unknown_paths_and_methods() {
         let api = AdminApi::new(None, instance());
 
-        let not_found = reply(api.handle(request(&Method::GET, "/nope", None, None)).await);
+        let not_found = reply(api.handle(request(&Method::GET, "/api/v1/nope", None, None)).await);
         assert_eq!(not_found.status, StatusCode::NOT_FOUND);
         assert_eq!(not_found.body, r#"{"error":"not found"}"#);
         for path in ["/metrics", "/api/v1/stats"] {

@@ -102,6 +102,15 @@ jobs:
           target: ${{ matrix.platform.target }}
           cache: false
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build the admin UI
+        working-directory: crates/proksi-admin-ui
+        run: npm ci && npm run build
+
       - name: Setup Cross
         # TODO: remove workaround once the issue is resolved: https://github.com/cross-rs/cross/issues/1561
         run: RUSTFLAGS="" cargo install cross --git https://github.com/cross-rs/cross
@@ -231,8 +240,20 @@ jobs:
           toolchain: stable
           components: rustfmt,clippy
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build the admin UI
+        working-directory: crates/proksi-admin-ui
+        run: npm ci && npm run build
+
+      # The admin UI first, with Proksi's version: Proksi depends on it
       - name: Publish to crates.io
-        run: cargo publish -p proksi --token ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          cargo publish -p proksi-admin-ui --token ${{ secrets.CRATES_IO_TOKEN }}
+          cargo publish -p proksi --token ${{ secrets.CRATES_IO_TOKEN }}
 
   upload-artifacts:
     continue-on-error: true

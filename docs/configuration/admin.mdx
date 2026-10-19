@@ -30,6 +30,12 @@ host "admin.example.com" {
 
 Like the other listeners, the `admin` block is read when Proksi starts: changing it restarts Proksi.
 
+## UI
+
+The admin listener also serves a UI, at its address (`http://127.0.0.1:7555`): the hosts Proksi serves, from every source, with their locations, upstreams and their health, and plugins; and certificates. It signs in with the token, which it keeps in memory only.
+
+To reach it on a server, use a tunnel: `ssh -L 7555:127.0.0.1:7555 your-server`, or `kubectl port-forward`, then open `http://127.0.0.1:7555`. See [ADR 0008](/adrs/0008-admin-ui) for what comes next.
+
 ## Metrics
 
 `GET /metrics` returns the metrics in the Prometheus text format:

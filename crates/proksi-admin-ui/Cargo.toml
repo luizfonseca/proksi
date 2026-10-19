@@ -1,0 +1,15 @@
+[package]
+name = "proksi-admin-ui"
+description = "The admin UI of Proksi, built and embedded (ADR 0008)"
+# Published with each release of Proksi, with its version (release-please-config.json)
+version = "0.12.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["The Proksi Contributors <toaster.chicory-0b@icloud.com>"]
+homepage = "https://github.com/luizfonseca/proksi"
+repository = "https://github.com/luizfonseca/proksi"
+rust-version.workspace = true
+# The built UI is published with the crate, so building it doesn't need Node
+include = ["Cargo.toml", "build.rs", "src/**/*.rs", "dist/**/*"]
+
+[dependencies]
