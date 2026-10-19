@@ -57,7 +57,10 @@ function TestRow({ test, rules, onChange, onRemove }: { test: Test; rules: Rules
       <div class="test-value">
         {kind === 'list' ? (
           <ListInput value={test.value as string[]} onChange={(value) => onChange({ ...test, value })} />
-        ) : kind === 'bool' ? null : (
+        ) : kind === 'bool' ? (
+          // Nothing more to say: "is there", or "is missing"
+          <span />
+        ) : (
           <input class="mono" aria-label="Value" value={test.value as string} onInput={(e) => onChange({ ...test, value: e.currentTarget.value })} />
         )}
       </div>
@@ -109,6 +112,44 @@ function GroupEditor({ group, rules, onChange, onRemove }: { group: Group; rules
   );
 }
 
+/** "+ Add an action", opening the list of actions with what each does */
+function AddAction({ names, rules, onAdd }: { names: string[]; rules: Rules; onAdd: (name: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const describe = (name: string) => rules.actions[name]?.description?.replace(/`[^`]*`:\s*/, '').replace(/`/g, '');
+  return (
+    <div
+      class="action-menu"
+      onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
+      onFocusOut={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as globalThis.Node | null)) setOpen(false);
+      }}
+    >
+      <button type="button" class="secondary" aria-expanded={open} onClick={() => setOpen(!open)}>
+        + Add an action
+      </button>
+      {open && (
+        <ul role="menu">
+          {names.map((name) => (
+            <li>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onAdd(name);
+                  setOpen(false);
+                }}
+              >
+                <span class="mono">{name}</span>
+                <small>{describe(name)}</small>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Actions({ then, rules, onChange }: { then: Record<string, unknown>; rules: Rules; onChange: (then: Record<string, unknown>) => void }) {
   const available = Object.keys(rules.actions).filter((name) => !(name in then));
   return (
@@ -140,20 +181,7 @@ function Actions({ then, rules, onChange }: { then: Record<string, unknown>; rul
         );
       })}
       {available.length > 0 && (
-        <select
-          class="add-action"
-          aria-label="Add an action"
-          value=""
-          onChange={(e) => {
-            const name = e.currentTarget.value;
-            if (name) onChange({ ...then, [name]: {} });
-          }}
-        >
-          <option value="">+ Add an action…</option>
-          {available.map((name) => (
-            <option value={name}>{name}</option>
-          ))}
-        </select>
+        <AddAction names={available} rules={rules} onAdd={(name) => onChange({ ...then, [name]: {} })} />
       )}
     </div>
   );
