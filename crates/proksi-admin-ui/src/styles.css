@@ -90,7 +90,6 @@ code, .mono { font-family: var(--mono); font-size: 12.5px; }
 .nav a:hover { background: var(--sunken); color: var(--text); }
 .nav a[aria-current='page'] { background: var(--sunken); color: var(--text); }
 .nav svg { width: 16px; height: 16px; flex: none; }
-.nav .soon { margin-left: auto; font-size: 10.5px; color: var(--faint); }
 .sidebar footer { margin-top: auto; padding: 10px; color: var(--faint); font-size: 12px; }
 .sidebar footer .row { display: flex; align-items: center; gap: 6px; }
 .sidebar footer .session { justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); }
@@ -318,3 +317,34 @@ section.panel.requests .chart-head, section.panel:has(> table) .chart-head { pad
   .overview-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .charts { grid-template-columns: 1fr; }
 }
+
+/* A host's traffic */
+.traffic { padding: 14px 16px 10px; margin-bottom: 12px; }
+.flow-scroll { overflow-x: auto; }
+svg.flow { display: block; width: 100%; min-width: 760px; height: auto; font-family: var(--sans); }
+svg.flow .node rect { fill: var(--panel); stroke: var(--line-strong); stroke-width: 1; }
+svg.flow .node .title { font-size: 12.5px; font-weight: 600; fill: var(--text); }
+svg.flow .node .detail { font-size: 11.5px; fill: var(--muted); font-family: var(--mono); }
+svg.flow .node circle { fill: var(--faint); }
+svg.flow .node.ok circle { fill: var(--ok); }
+svg.flow .node.warn circle { fill: var(--warn); }
+svg.flow .node.bad circle { fill: var(--bad); }
+svg.flow .node.bad rect { stroke: var(--bad); }
+svg.flow a .node rect { cursor: pointer; }
+svg.flow a:hover .node rect { stroke: var(--accent); }
+svg.flow .edge path { fill: none; stroke-linecap: round; }
+svg.flow .edge .track { stroke: var(--line-strong); }
+svg.flow .edge.idle .track { stroke-dasharray: 3 5; }
+svg.flow .edge.ok .track { stroke: color-mix(in srgb, var(--ok) 30%, transparent); }
+svg.flow .edge.warn .track { stroke: color-mix(in srgb, var(--warn) 35%, transparent); }
+svg.flow .edge.bad .track { stroke: color-mix(in srgb, var(--bad) 40%, transparent); }
+svg.flow .edge .flow { stroke-dasharray: 2 14; animation: flow linear infinite; }
+svg.flow .edge.ok .flow { stroke: var(--ok); }
+svg.flow .edge.warn .flow { stroke: var(--warn); }
+svg.flow .edge.bad .flow { stroke: var(--bad); }
+@keyframes flow { to { stroke-dashoffset: -16; } }
+@media (prefers-reduced-motion: reduce) { svg.flow .edge .flow { animation: none; stroke-dasharray: none; } }
+.host-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+@media (max-width: 720px) { .host-charts { grid-template-columns: 1fr; } }
+h2.section-title { font-size: 14px; font-weight: 600; margin: 20px 0 10px; }
+.locations > .panel:target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }

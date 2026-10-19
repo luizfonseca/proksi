@@ -32,8 +32,8 @@ pub enum Endpoint<'a> {
     Stats(Duration),
     /// `GET /api/v1/stats/stream?window=<seconds>`: the stats every second
     StatsStream(Duration),
-    /// `GET /api/v1/requests/stream`: the requests being served
-    RequestsStream,
+    /// `GET /api/v1/requests/stream?host=<host>`: the requests being served (of one host)
+    RequestsStream(Option<&'a str>),
     /// `GET /api/v1/status`: version, store, route sources
     Status,
     /// `GET /api/v1/server`: the settings read at startup, without secrets
@@ -59,7 +59,7 @@ pub enum Endpoint<'a> {
 }
 
 impl<'a> Endpoint<'a> {
-    pub fn parse(method: &Method, path: &'a str, query: Option<&str>) -> Result<Self, Reply> {
+    pub fn parse(method: &Method, path: &'a str, query: Option<&'a str>) -> Result<Self, Reply> {
         use Endpoint::{
             Certificates, DeleteRoute, Hosts, Metrics, PutRoute, RequestsStream, Route, Routes,
             Server, Session, SignIn, SignOut, Stats, StatsStream, Status,
@@ -80,7 +80,7 @@ impl<'a> Endpoint<'a> {
             ("GET", "/metrics") => Metrics,
             ("GET", "/api/v1/stats") => Stats(window(query, 60)?),
             ("GET", "/api/v1/stats/stream") => StatsStream(window(query, 10)?),
-            ("GET", "/api/v1/requests/stream") => RequestsStream,
+            ("GET", "/api/v1/requests/stream") => RequestsStream(parameter(query, "host")),
             ("GET", "/api/v1/status") => Status,
             ("GET", "/api/v1/server") => Server,
             ("GET", "/api/v1/hosts") => Hosts,
@@ -118,12 +118,18 @@ fn method_not_allowed() -> Reply {
     Reply::error(StatusCode::METHOD_NOT_ALLOWED, "method not allowed")
 }
 
-/// `?window=<seconds>` (1 to 300), or `default`
-fn window(query: Option<&str>, default: u64) -> Result<Duration, Reply> {
-    let value = query
+/// A query parameter's value, if not empty
+fn parameter<'a>(query: Option<&'a str>, name: &str) -> Option<&'a str> {
+    query
         .unwrap_or_default()
         .split('&')
-        .find_map(|pair| pair.strip_prefix("window="));
+        .find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
+        .filter(|value| !value.is_empty())
+}
+
+/// `?window=<seconds>` (1 to 300), or `default`
+fn window(query: Option<&str>, default: u64) -> Result<Duration, Reply> {
+    let value = parameter(query, "window");
     let Some(value) = value else {
         return Ok(Duration::from_secs(default));
     };
@@ -147,7 +153,7 @@ mod tests {
     fn parse<'a>(
         method: Method,
         path: &'a str,
-        query: Option<&str>,
+        query: Option<&'a str>,
     ) -> Result<Endpoint<'a>, StatusCode> {
         Endpoint::parse(&method, path, query).map_err(|reply| reply.status)
     }
@@ -157,7 +163,11 @@ mod tests {
         assert_eq!(parse(Method::GET, "/metrics", None), Ok(Endpoint::Metrics));
         assert_eq!(
             parse(Method::GET, "/api/v1/requests/stream", None),
-            Ok(Endpoint::RequestsStream)
+            Ok(Endpoint::RequestsStream(None))
+        );
+        assert_eq!(
+            parse(Method::GET, "/api/v1/requests/stream", Some("host=a.test")),
+            Ok(Endpoint::RequestsStream(Some("a.test")))
         );
         assert_eq!(
             parse(Method::GET, "/api/v1/server", None),

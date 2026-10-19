@@ -14,7 +14,7 @@ export function bytes(value: number | null): string {
 export function ms(value: number | null): string {
   if (value === null) return '—';
   if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)} s`;
-  return `${value >= 100 ? Math.round(value) : value.toFixed(1)} ms`;
+  return `${value >= 100 ? Math.round(value) : Number(value.toFixed(1))} ms`;
 }
 
 export function rate(value: number): string {

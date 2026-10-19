@@ -1,7 +1,13 @@
 import { useState } from 'preact/hooks';
 import { type Host as HostData, routes, type Upstream } from '../api';
 import { Lock, Unlock } from '../components/icons';
+import { LineChart } from '../components/Chart';
+import { Flow } from '../components/Flow';
+import { RequestLog } from '../components/RequestLog';
 import { Rules } from '../components/Rules';
+import { layout } from '../flow';
+import { ms, rate } from '../format';
+import { useLive } from '../live';
 import { Loaded, SourceBadge } from '../components/State';
 import { navigate, onLink } from '../router';
 import { useCanWrite } from '../session';
@@ -52,6 +58,52 @@ function Actions({ name }: { name: string }) {
   );
 }
 
+/** The host's traffic now (a graph), and since the page was opened (charts) */
+function Traffic({ host }: { host: HostData }) {
+  const { history, latest } = useLive();
+  const stats = latest?.hosts.find((candidate) => candidate.host === host.host);
+  const points = history.map((point) => point.hosts[host.host]);
+  const read = (value: (point: NonNullable<(typeof points)[number]>) => number | null) =>
+    points.map((point) => (point ? value(point) : null));
+  return (
+    <>
+      <section class="panel traffic">
+        <div class="chart-head">
+          <h3>Traffic</h3>
+          <div class="legend">
+            <span><i style={{ background: 'var(--ok)' }} />flowing</span>
+            <span><i style={{ background: 'var(--warn)' }} />some errors</span>
+            <span><i style={{ background: 'var(--bad)' }} />failing or unhealthy</span>
+            <span>over the last 5 seconds</span>
+          </div>
+        </div>
+        <Flow flow={layout(host, stats, latest?.window_seconds)} />
+      </section>
+      <div class="host-charts">
+        <LineChart
+          title="Requests"
+          span={300}
+          format={rate}
+          series={[
+            { name: 'all', color: 'var(--ok)', values: read((point) => point.requests) },
+            { name: '5xx', color: 'var(--bad)', values: read((point) => point.errors) },
+          ]}
+        />
+        <LineChart
+          title="Latency"
+          span={300}
+          format={ms}
+          series={[
+            { name: 'p50', color: 'var(--chart-1)', values: read((point) => point.p50) },
+            { name: 'p99', color: 'var(--chart-3)', values: read((point) => point.p99) },
+          ]}
+        />
+      </div>
+      <RequestLog host={host.host} />
+    </>
+  );
+}
+
 export function Host({ name }: { name: string }) {
   const [data] = useData<HostData[]>('/hosts');
   const canWrite = useCanWrite();
@@ -85,15 +137,17 @@ export function Host({ name }: { name: string }) {
               </div>
               {canWrite && host.source === 'store' && <Actions name={host.host} />}
             </div>
+            <Traffic host={host} />
             {host.rules.length > 0 && (
               <section class="panel host-rules">
                 <h3>Host rules <small>every request, before its location is chosen</small></h3>
                 <Rules rules={host.rules} />
               </section>
             )}
+            <h2 class="section-title">Locations</h2>
             <div class="locations">
               {host.locations.map((location) => (
-                <div class="panel">
+                <div class="panel" id={encodeURIComponent(`location ${location.location}`)}>
                   <div class="location-head">
                     <span class="path">{location.location}</span>
                     <span class="badge" style={{ marginLeft: 'auto' }}>

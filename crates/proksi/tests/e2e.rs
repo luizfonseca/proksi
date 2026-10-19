@@ -2097,7 +2097,7 @@ async fn test_admin_live_stats() {
     let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", admin_port))
         .await
         .unwrap();
-    tokio::io::AsyncWriteExt::write_all(&mut stream, get("/api/v1/requests/stream").as_bytes())
+    tokio::io::AsyncWriteExt::write_all(&mut stream, get("/api/v1/requests/stream?host=APP.test").as_bytes())
         .await
         .unwrap();
     let mut received = String::new();

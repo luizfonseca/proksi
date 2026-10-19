@@ -53,9 +53,13 @@ pub async fn stats(mut session: ServerSession, window: Duration, mut shutdown: S
     let _ = session.write_response_body(Bytes::new(), true).await;
 }
 
-/// Each request served (`data:`), at most 100 a second; once a second, how many weren't sent
-/// (`event: skipped`)
-pub async fn requests(mut session: ServerSession, mut shutdown: ShutdownWatch) {
+/// Each request served (`data:`), of `host` if given, at most 100 a second; once a second, how
+/// many weren't sent (`event: skipped`)
+pub async fn requests(
+    mut session: ServerSession,
+    host: Option<String>,
+    mut shutdown: ShutdownWatch,
+) {
     if !start(&mut session).await {
         return;
     }
@@ -73,6 +77,9 @@ pub async fn requests(mut session: ServerSession, mut shutdown: ShutdownWatch) {
                     }
                     Err(RecvError::Closed) => break,
                 };
+                if host.as_ref().is_some_and(|host| !served.host.eq_ignore_ascii_case(host)) {
+                    continue;
+                }
                 if sent >= REQUESTS_PER_SECOND {
                     skipped += 1;
                     continue;

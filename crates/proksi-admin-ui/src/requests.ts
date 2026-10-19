@@ -34,7 +34,7 @@ const REFRESH_MS = 1000;
  * The latest requests. `paused` stops watching; `held` (the pointer is on the list) keeps the
  * list still, and what arrives meanwhile is shown when it's let go.
  */
-export function useRequests(paused: boolean, held: boolean): { requests: Served[]; skipped: number } {
+export function useRequests(paused: boolean, held: boolean, host?: string): { requests: Served[]; skipped: number } {
   const [requests, setRequests] = useState<Served[]>([]);
   const [skipped, setSkipped] = useState(0);
   const arrived = useRef<Served[]>([]);
@@ -43,7 +43,7 @@ export function useRequests(paused: boolean, held: boolean): { requests: Served[
 
   useEffect(() => {
     if (paused) return;
-    const source = new EventSource('/api/v1/requests/stream');
+    const source = new EventSource(`/api/v1/requests/stream${host ? `?host=${encodeURIComponent(host)}` : ''}`);
     source.onmessage = (event) => {
       arrived.current.push(JSON.parse(event.data) as Served);
       if (arrived.current.length > SHOWN) arrived.current.splice(0, arrived.current.length - SHOWN);
@@ -59,6 +59,6 @@ export function useRequests(paused: boolean, held: boolean): { requests: Served[
       source.close();
       clearInterval(timer);
     };
-  }, [paused]);
+  }, [paused, host]);
   return { requests, skipped };
 }

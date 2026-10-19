@@ -2,14 +2,13 @@ import type { ComponentChildren } from 'preact';
 import { session as api, type Session, type Status } from '../api';
 import { onLink } from '../router';
 import { useData } from '../useData';
-import { Globe, History, Pulse, Server, Shield } from './icons';
+import { Globe, Pulse, Server, Shield } from './icons';
 
 const NAV = [
   { href: '/overview', label: 'Overview', icon: Pulse },
   { href: '/hosts', label: 'Hosts', icon: Globe },
   { href: '/certificates', label: 'Certificates', icon: Shield },
   { href: '/server', label: 'Server', icon: Server },
-  { href: '/changes', label: 'Changes', icon: History, soon: true },
 ];
 
 function uptime(seconds: number) {
@@ -32,20 +31,12 @@ export function Layout({ path, session, onSignOut, children }: Props) {
           {ready && <small>v{ready.version}</small>}
         </div>
         <nav class="nav">
-          {NAV.map(({ href, label, icon: Icon, soon }) =>
-            soon ? (
-              <a key={href} aria-disabled="true" title="Coming soon">
-                <Icon />
-                {label}
-                <span class="soon">soon</span>
-              </a>
-            ) : (
-              <a key={href} href={href} onClick={onLink} aria-current={path.startsWith(href) ? 'page' : undefined}>
-                <Icon />
-                {label}
-              </a>
-            ),
-          )}
+          {NAV.map(({ href, label, icon: Icon }) => (
+            <a key={href} href={href} onClick={onLink} aria-current={path.startsWith(href) ? 'page' : undefined}>
+              <Icon />
+              {label}
+            </a>
+          ))}
         </nav>
         {ready && (
           <footer>

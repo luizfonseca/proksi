@@ -1,11 +1,10 @@
 import { useState } from 'preact/hooks';
 import type { Status } from '../api';
 import { LineChart, Sparkline } from '../components/Chart';
+import { RequestLog } from '../components/RequestLog';
 import { Loaded } from '../components/State';
 import { bytes, ms, percent, rate } from '../format';
 import { type Point, useLive } from '../live';
-import { useRequests } from '../requests';
-import { navigate } from '../router';
 import { useData } from '../useData';
 
 const SPANS = [
@@ -36,64 +35,6 @@ function Card({ label, value, detail, values, color }: { label: string; value: s
 }
 
 const take = (history: Point[], read: (point: Point) => number | null) => history.map(read);
-
-function Requests() {
-  const [paused, setPaused] = useState(false);
-  const [held, setHeld] = useState(false);
-  const { requests, skipped } = useRequests(paused, held);
-  return (
-    <section class="panel requests">
-      <div class="chart-head">
-        <h3>Latest requests</h3>
-        <div class="legend">
-          {held && !paused && <span>Held while the pointer is on the list</span>}
-          {skipped > 0 && <span>{skipped} not shown last second (more than 100)</span>}
-          <button type="button" class="secondary" onClick={() => setPaused(!paused)}>
-            {paused ? 'Resume' : 'Pause'}
-          </button>
-        </div>
-      </div>
-      {requests.length === 0 ? (
-        <div class="empty">
-          <strong>{paused ? 'Paused' : 'Waiting for requests…'}</strong>
-          Requests appear here as they're served, while this page is open.
-        </div>
-      ) : (
-        <div class="table-scroll" onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)}>
-          <table>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Status</th>
-                <th>Request</th>
-                <th>Duration</th>
-                <th>Client</th>
-                <th>Upstream</th>
-              </tr>
-            </thead>
-            <tbody>
-              {requests.map((served) => (
-                <tr onClick={() => served.host && navigate(`/hosts/${encodeURIComponent(served.host)}`)}>
-                  <td class="mono muted">{new Date(served.time).toLocaleTimeString()}</td>
-                  <td>
-                    <span class={`badge ${served.status >= 500 ? 'bad' : served.status >= 400 ? 'warn' : 'ok'}`}>{served.status}</span>
-                  </td>
-                  <td class="mono">
-                    <b>{served.method}</b> {served.host}
-                    <span class="muted">{served.path}</span>
-                  </td>
-                  <td class="mono">{ms(served.duration_ms)}</td>
-                  <td class="mono muted">{served.client_ip}</td>
-                  <td class="mono muted">{served.upstream ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
-}
 
 function Instances({ status }: { status: Status }) {
   const replicas = status.store.replicas;
@@ -226,7 +167,7 @@ export function Overview() {
         />
       </div>
 
-      <Requests />
+      <RequestLog />
       <Loaded data={status}>{(status) => <Instances status={status} />}</Loaded>
     </>
   );

@@ -89,7 +89,7 @@ The admin listener itself never serves TLS: Proksi's hosts already do.
 | --- | --- |
 | Overview | Status and instances sharing the store; charts of requests, errors and latency (p50, p90, p99), CPU and memory; the latest requests as they're served |
 | Hosts | Every host served, with its source (`file`, `docker`, `kubernetes`, `store`), locations, upstreams and their health |
-| Host | Locations, upstreams, building blocks and rules, as forms. Hosts from the store can be changed; others are read-only. Rules are part of their host and location: shown as a tree of `and`, `or` and `not`, with a request to try them on |
+| Host | Its traffic as a graph (clients, locations, upstreams, each line toned by what flows through it), its requests and latency, and its latest requests. Locations, upstreams, building blocks and rules, as forms. Hosts from the store can be changed; others are read-only. Rules are part of their host and location: shown as a tree of `and`, `or` and `not`, with a request to try them on |
 | Certificates | Domains, expiry, issuer, and the instance renewing each |
 | Server | The settings Proksi started with (addresses, store, cache, Let's Encrypt, logging, workers, sources, admin tokens' names), defaults included, without secrets |
 | Changes | Who changed which host, when, and what; a previous version can be restored |
@@ -111,7 +111,7 @@ Hosts from the configuration file, docker labels or Kubernetes are read-only: Pr
 | `GET /api/v1/schema` | What the forms (and HCL export) are built from: building blocks and their settings (types, defaults, limits), which keys are blocks and which take a label, rule fields and the operators each takes |
 | `POST /api/v1/rules/test` | Rules and a request (method, host, path, headers, client): which rules match, in order, and what they'd do |
 | `GET /api/v1/routes/<host>/history` | The host's previous versions: revision, time, token name. `POST .../history/<revision>/restore` writes one back |
-| `GET /api/v1/requests/stream` | The requests being served, as server-sent events, with the fields of access logs (also when access logs are off). At most 100 a second for each stream, with the number skipped |
+| `GET /api/v1/requests/stream` | The requests being served (`?host=` for one host's), as server-sent events, with the fields of access logs (also when access logs are off). At most 100 a second for each stream, with the number skipped |
 | `POST`, `DELETE /api/v1/session` | Sign in and out |
 | `GET /api/v1/server` | The settings read at startup, with their defaults. Each is listed explicitly, so a new setting or a secret is never shown by accident |
 

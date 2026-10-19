@@ -5,6 +5,7 @@ const stats: Stats = {
   window_seconds: 5,
   total: { requests_per_second: 4, responses: { '2xx': 18, '5xx': 2 }, duration_ms: { p50: 3, p90: 9, p99: 40 } },
   process: { cpu_percent: 12.5, memory_bytes: 2048, allocator_bytes: 1024, memory_limit_bytes: null, cpu_limit: null },
+  hosts: [],
 };
 
 describe('the live history', () => {
@@ -20,7 +21,21 @@ describe('the live history', () => {
       cpu: 12.5,
       memory: 2048,
       allocator: 1024,
+      hosts: {},
     });
+  });
+
+  it("adds up a host's locations", () => {
+    const location = (rate: number, errors: number, p99: number | null) => ({
+      location: '/',
+      requests_per_second: rate,
+      responses: { '2xx': rate * 5 - errors, '5xx': errors },
+      duration_ms: { p50: 1, p90: 2, p99 },
+      blocked: {},
+      upstreams: [],
+    });
+    const hosts = [{ host: 'a.test', locations: [location(3, 5, 40), location(1, 0, null)] }];
+    expect(point({ ...stats, hosts }, 0).hosts['a.test']).toEqual({ requests: 4, errors: 1, p50: 1, p99: 40 });
   });
 
   it('has no errors without requests', () => {

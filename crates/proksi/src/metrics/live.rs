@@ -296,8 +296,13 @@ fn render(window: f64, hosts: Hosts, tcp: BTreeMap<String, Tcp>) -> Value {
                         .upstreams
                         .iter()
                         .map(|(upstream, stats)| {
+                            // A histogram's last bucket (`+Inf`) counts every request
+                            #[allow(clippy::cast_precision_loss)]
+                            let requests =
+                                stats.duration.last().map_or(0.0, |(_, count)| *count as f64);
                             json!({
                                 "upstream": upstream,
+                                "requests_per_second": per_second(requests),
                                 "healthy": stats.healthy,
                                 "errors": count(stats.errors),
                                 "duration_ms": percentiles(&stats.duration),
@@ -597,6 +602,8 @@ mod tests {
         assert_eq!(upstream["upstream"], "10.0.0.1:80");
         assert_eq!(upstream["healthy"], json!(true));
         assert_eq!(upstream["errors"], json!(2));
+        // Requests sent to it: its histogram's count
+        assert_eq!(upstream["requests_per_second"], json!(2.0));
         assert_eq!(upstream["duration_ms"]["p50"], json!(5.556));
 
         let tcp = &stats["tcp"][0];

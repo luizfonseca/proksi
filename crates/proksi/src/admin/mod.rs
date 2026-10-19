@@ -96,8 +96,8 @@ pub enum Answer {
     Reply(Reply),
     /// Server-sent events with the stats over this window, every second
     Stream(Duration),
-    /// Server-sent events with the requests being served
-    Requests,
+    /// Server-sent events with the requests being served (of one host)
+    Requests(Option<String>),
     /// A file of the UI
     Ui(&'static proksi_admin_ui::Asset, ui::Encoding),
 }
@@ -190,7 +190,7 @@ impl AdminApi {
             },
             Endpoint::Stats(window) => Reply::ok(&stats(window)),
             Endpoint::StatsStream(window) => return Answer::Stream(window),
-            Endpoint::RequestsStream => return Answer::Requests,
+            Endpoint::RequestsStream(host) => return Answer::Requests(host.map(str::to_lowercase)),
             Endpoint::Status => Reply::ok(&status::status(store, &self.instance).await),
             Endpoint::Server => match &self.instance.server {
                 Some(server) => Reply::ok(server),
@@ -317,8 +317,8 @@ impl HttpServerApp for AdminApi {
                 stream::stats(session, window, shutdown.clone()).await;
                 return None;
             }
-            Answer::Requests => {
-                stream::requests(session, shutdown.clone()).await;
+            Answer::Requests(host) => {
+                stream::requests(session, host, shutdown.clone()).await;
                 return None;
             }
         };
@@ -501,7 +501,7 @@ mod tests {
     fn reply(answer: Answer) -> Reply {
         match answer {
             Answer::Reply(reply) => reply,
-            Answer::Stream(_) | Answer::Requests => panic!("a stream"),
+            Answer::Stream(_) | Answer::Requests(_) => panic!("a stream"),
             Answer::Ui(asset, _) => panic!("a file of the UI: {asset:?}"),
         }
     }
