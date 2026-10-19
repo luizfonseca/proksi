@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.14.0...proksi-admin-ui-v0.14.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* tcp blocks in the admin UI ([#492](https://github.com/luizfonseca/proksi/issues/492)) ([e608648](https://github.com/luizfonseca/proksi/commit/e6086488e0797e72064ea0bbf3cc89a3088aeae7))
+
 ## [0.14.0](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.13.1...proksi-admin-ui-v0.14.0) (2026-10-19)
 
 
