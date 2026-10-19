@@ -409,7 +409,17 @@ paths {{
     }
 
     /// HTTPS client resolving every configured host to proksi
+    /// A client using HTTP/1.1
     pub fn client(&self) -> reqwest::Client {
+        self.client_builder().http1_only().build().unwrap()
+    }
+
+    /// A client negotiating HTTP/2 (ALPN), as browsers do
+    pub fn client_h2(&self) -> reqwest::Client {
+        self.client_builder().build().unwrap()
+    }
+
+    fn client_builder(&self) -> reqwest::ClientBuilder {
         let addr = SocketAddr::from(([127, 0, 0, 1], self.https_port));
         let mut builder = reqwest::Client::builder()
             .danger_accept_invalid_certs(true)
@@ -419,7 +429,7 @@ paths {{
         for host in &self.hosts {
             builder = builder.resolve(host, addr);
         }
-        builder.build().unwrap()
+        builder
     }
 
     pub async fn get(&self, host: &str, path: &str) -> reqwest::Result<Response> {
