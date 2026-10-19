@@ -60,7 +60,7 @@ The admin listener also serves a UI, at its address (`http://127.0.0.1:7555`):
 
 Rules are shown without what can be a secret: the values headers, cookies and query parameters are compared with, the settings of `basic_auth`, `oauth2` and `forward_auth`, and the values of headers a rule adds.
 
-The UI signs in with a token's secret, exchanged for a session cookie (`HttpOnly`, `SameSite=Strict`, and `Secure` unless the address is loopback): the page never keeps the secret. Sessions end after 12 hours without a request, and when Proksi restarts. Changes made with a session must come from the UI's own pages (its `Origin`).
+The UI signs in with a token's secret, exchanged for a session cookie (`HttpOnly`, `SameSite=Strict`, and `Secure` unless the address is loopback): the page never keeps the secret. Sessions end after 12 hours without a request, and when Proksi restarts. Changes made with a session must come from the UI's own pages: their `Origin` must match the address the admin listener is reached at (`Host`), or be listed in `trusted_origins`, for a proxy in front that changes `Host` ([details](/admin-ui/good-practices#behind-another-proxy)).
 
 To reach it on a server, use a tunnel: `ssh -L 7555:127.0.0.1:7555 your-server`, or `kubectl port-forward`, then open `http://127.0.0.1:7555`. See [ADR 0008](/adrs/0008-admin-ui) for what comes next.
 

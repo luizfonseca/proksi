@@ -50,7 +50,7 @@ ssh -L 7555:127.0.0.1:7555 your-server
 kubectl port-forward deploy/proksi 7555:7555
 ```
 
-Then open `http://127.0.0.1:7555` on your machine. To serve it to a team instead, see [Good practices](/admin-ui/good-practices#exposing-it).
+Then open `http://127.0.0.1:7555` on your machine. To serve it to a team instead (through Proksi itself, or `tailscale serve`), see [Good practices](/admin-ui/good-practices#exposing-it).
 
 ## Changing hosts
 

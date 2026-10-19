@@ -24,6 +24,10 @@ pub struct AdminConfig {
     /// Required in `Authorization: Bearer <token>` on `metrics_listen`, if set
     #[serde(default, skip_serializing)]
     pub metrics_token: Option<String>,
+    /// Origins the UI is served from behind a proxy that changes `Host` (nginx, a tunnel...):
+    /// changes from them are accepted, as from the listener's own address
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trusted_origins: Vec<String>,
 }
 
 /// `token "name" { ... }`: a secret given in `Authorization: Bearer <secret>`, or to sign in
@@ -45,6 +49,16 @@ pub enum Access {
     Write,
 }
 
+/// `http://` or `https://`, a host and maybe a port: what browsers send in `Origin`
+fn is_origin(origin: &str) -> bool {
+    origin
+        .strip_prefix("https://")
+        .or_else(|| origin.strip_prefix("http://"))
+        .is_some_and(|authority| {
+            !authority.is_empty() && !authority.contains(['/', '?', '#', '@', ' '])
+        })
+}
+
 fn enabled_by_default() -> bool {
     true
 }
@@ -64,6 +78,11 @@ impl AdminConfig {
             .find(|(_, token)| token.secret.is_empty())
         {
             return Err(format!("admin: token {name:?} has an empty secret"));
+        }
+        if let Some(origin) = self.trusted_origins.iter().find(|origin| !is_origin(origin)) {
+            return Err(format!(
+                "admin: trusted_origins: {origin:?} must be a scheme and host, like \"https://admin.example.com\" or \"https://admin.example.com:8443\""
+            ));
         }
         if self.tokens.is_empty() && !address.ip().is_loopback() {
             return Err(format!(
@@ -160,6 +179,26 @@ mod tests {
             "admin {\n  listen = \"127.0.0.1:7555\"\n  token \"ops\" {\n    secret = \"a\"\n    access = \"rw\"\n  }\n}\n",
         ] {
             assert!(HclFormat::from_str::<Doc>(hcl).is_err(), "{hcl}");
+        }
+    }
+
+    #[test]
+    fn test_trusted_origins() {
+        let admin = admin(
+            "admin {\n  listen = \"127.0.0.1:7555\"\n  trusted_origins = [\"https://admin.example.com\", \"https://host.tailnet.ts.net:9200\"]\n}\n",
+        );
+        assert!(admin.address().is_ok());
+        assert_eq!(admin.trusted_origins.len(), 2);
+
+        for invalid in ["admin.example.com", "https://admin.example.com/", "https://", "ftp://admin.example.com"] {
+            let admin = AdminConfig {
+                trusted_origins: vec![invalid.to_string()],
+                ..admin.clone()
+            };
+            assert!(
+                admin.address().is_err_and(|err| err.starts_with("admin: trusted_origins: ")),
+                "{invalid}"
+            );
         }
     }
 

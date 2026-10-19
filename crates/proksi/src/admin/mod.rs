@@ -119,6 +119,8 @@ pub struct AdminApi {
     instance: status::Instance,
     /// Serves `/metrics` only (`admin.metrics_listen`)
     metrics_only: bool,
+    /// `admin.trusted_origins`
+    trusted_origins: Vec<String>,
 }
 
 impl AdminApi {
@@ -127,7 +129,15 @@ impl AdminApi {
             tokens: access::Tokens::new(tokens),
             instance,
             metrics_only: false,
+            trusted_origins: vec![],
         }
+    }
+
+    /// Changes with a session are also accepted from these origins (`admin.trusted_origins`)
+    #[must_use]
+    pub fn with_trusted_origins(mut self, origins: Vec<String>) -> Self {
+        self.trusted_origins = origins;
+        self
     }
 
     /// The API with `/metrics` only, for scrapers that mustn't change routes
@@ -146,6 +156,7 @@ impl AdminApi {
             tokens: access::Tokens::new(tokens.into_iter().collect()),
             instance,
             metrics_only: true,
+            trusted_origins: vec![],
         }
     }
 
@@ -171,10 +182,17 @@ impl AdminApi {
         };
         if endpoint.changes() {
             // Other sites can't send the cookie (`SameSite=Strict`), nor make changes with it
-            if caller.session && !access::same_origin(request.origin, request.host) {
+            let trusted = &self.trusted_origins;
+            if caller.session && !access::allowed_origin(request.origin, request.host, trusted) {
+                let origin = request.origin.unwrap_or("none");
+                let host = request.host.unwrap_or("none");
                 return Answer::Reply(Reply::error(
                     StatusCode::FORBIDDEN,
-                    "changes must come from the admin's own pages (Origin)",
+                    &format!(
+                        "changes must come from the admin's own pages: their Origin ({origin}) \
+                         isn't this address ({host}). Behind a proxy that changes Host, add the \
+                         origin to admin.trusted_origins"
+                    ),
                 ));
             }
             if caller.access == Access::Read {
@@ -450,9 +468,11 @@ pub fn metrics_service(address: SocketAddr, token: Option<String>) -> Service<Ad
 pub fn admin_service(
     address: SocketAddr,
     tokens: BTreeMap<String, Token>,
+    trusted_origins: Vec<String>,
     instance: status::Instance,
 ) -> Service<AdminApi> {
-    let mut service = Service::new("admin api".to_string(), AdminApi::new(tokens, instance));
+    let api = AdminApi::new(tokens, instance).with_trusted_origins(trusted_origins);
+    let mut service = Service::new("admin api".to_string(), api);
     service.add_tcp(&address.to_string());
     service.threads = Some(1);
     service
@@ -696,6 +716,17 @@ mod tests {
                 .await,
         );
         assert_ne!(allowed.status, StatusCode::FORBIDDEN);
+
+        // Behind a proxy that changes Host, from a trusted origin
+        let proxied = super::Request {
+            host: Some("127.0.0.1:7555"),
+            ..with_cookie(&Method::DELETE, Some("https://admin.tailnet.ts.net"))
+        };
+        let refused = reply(api.handle(proxied).await);
+        assert_eq!(refused.status, StatusCode::FORBIDDEN);
+        assert!(refused.body.contains("admin.trusted_origins"), "{}", refused.body);
+        let api = api.with_trusted_origins(vec!["https://admin.tailnet.ts.net".to_string()]);
+        assert_ne!(reply(api.handle(proxied).await).status, StatusCode::FORBIDDEN);
 
         let sign_out = super::Request {
             path: "/api/v1/session",

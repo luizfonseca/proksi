@@ -242,10 +242,10 @@ fn add_listeners(
     if let Some(address) = listeners.admin {
         // What only the admin API reads is kept only with it (routes are built after this)
         admin::enable();
-        let tokens = proxy_config
+        let (tokens, trusted_origins) = proxy_config
             .admin
             .as_ref()
-            .map(|admin| admin.tokens.clone())
+            .map(|admin| (admin.tokens.clone(), admin.trusted_origins.clone()))
             .unwrap_or_default();
         let instance = admin::status::Instance {
             started: std::time::Instant::now(),
@@ -259,7 +259,7 @@ fn add_listeners(
             }),
             server: Some(admin::server::Settings::new(proxy_config)),
         };
-        handles.push(server.add_service(admin::admin_service(address, tokens, instance)));
+        handles.push(server.add_service(admin::admin_service(address, tokens, trusted_origins, instance)));
     }
     if let Some(address) = listeners.metrics {
         let token = proxy_config
