@@ -179,11 +179,30 @@ impl TcpProxy {
             }
             None => copy.await,
         };
-        copied.map(|_| ()).map_err(|err| {
-            tracing::debug!("{}: connection to {addr} ended: {err}", target.label);
-            err.to_string()
-        })
+        match copied {
+            Ok(_) => Ok(()),
+            Err(err) if closed_before_bytes(&err, forwarded.bytes_in, forwarded.bytes_out) => {
+                tracing::debug!(
+                    "{}: connection to {addr} closed before any bytes: {err}",
+                    target.label
+                );
+                Ok(())
+            }
+            Err(err) => {
+                tracing::debug!("{}: connection to {addr} ended: {err}", target.label);
+                Err(err.to_string())
+            }
+        }
     }
+}
+
+/// Whether a connection was closed by one side before any bytes flowed (a client checking it
+/// can connect, say): a normal close, not an error
+fn closed_before_bytes(err: &std::io::Error, bytes_in: u64, bytes_out: u64) -> bool {
+    use std::io::ErrorKind::{BrokenPipe, ConnectionAborted, ConnectionReset};
+    bytes_in == 0
+        && bytes_out == 0
+        && matches!(err.kind(), BrokenPipe | ConnectionReset | ConnectionAborted)
 }
 
 /// What a connection forwarded, for its access log
@@ -286,5 +305,41 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for Counted<'_, S> {
         cx: &mut Context<'_>,
     ) -> Poll<std::io::Result<()>> {
         Pin::new(&mut *self.inner).poll_shutdown(cx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Error, ErrorKind};
+
+    use super::closed_before_bytes;
+
+    #[test]
+    fn test_connections_closed_before_any_bytes_are_normal() {
+        // A client checking it can connect, then closing
+        for kind in [
+            ErrorKind::BrokenPipe,
+            ErrorKind::ConnectionReset,
+            ErrorKind::ConnectionAborted,
+        ] {
+            assert!(closed_before_bytes(&Error::from(kind), 0, 0), "{kind:?}");
+        }
+        // Once bytes flowed, it ended early
+        assert!(!closed_before_bytes(
+            &Error::from(ErrorKind::BrokenPipe),
+            10,
+            0
+        ));
+        assert!(!closed_before_bytes(
+            &Error::from(ErrorKind::ConnectionReset),
+            0,
+            10
+        ));
+        // Other errors are errors
+        assert!(!closed_before_bytes(
+            &Error::from(ErrorKind::TimedOut),
+            0,
+            0
+        ));
     }
 }
