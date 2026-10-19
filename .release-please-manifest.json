@@ -1,6 +1,6 @@
 {
   "crates/plugins_api": "0.1.1",
-  "crates/proksi": "0.13.1",
+  "crates/proksi": "0.14.0",
   "crates/plugin_request_id": "0.1.0",
-  "crates/proksi-admin-ui": "0.13.1"
+  "crates/proksi-admin-ui": "0.14.0"
 }

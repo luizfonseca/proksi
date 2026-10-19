@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.14.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.13.1...proksi-v0.14.0) (2026-10-19)
+
+
+### Features
+
+* trusted origins for the admin UI ([#488](https://github.com/luizfonseca/proksi/issues/488)) ([f83ccf7](https://github.com/luizfonseca/proksi/commit/f83ccf7d02cbf8f4783705d6ab03bc2fa9af9304))
+
+
+### Bug Fixes
+
+* release the admin UI crate with proksi ([#491](https://github.com/luizfonseca/proksi/issues/491)) ([90834fd](https://github.com/luizfonseca/proksi/commit/90834fdb4b4862c8d5cc387ca32d6da70cc0ffe0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.13.1 to 0.14.0
+
 ## [0.13.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.13.0...proksi-v0.13.1) (2026-10-19)
 
 
