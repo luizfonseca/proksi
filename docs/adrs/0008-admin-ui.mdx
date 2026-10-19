@@ -23,18 +23,19 @@ Three things shape the design:
 
 ### Embedded, always
 
-The UI is a static web application in `ui/`, built into the Proksi binary. It's served by the admin listener at `/`, next to `/api/v1` and `/metrics`. There is no build option to leave it out: every binary and image has the UI of its own version.
+The UI is a static web application in a crate of its own, `proksi-admin-ui`, built into the Proksi binary. It's served by the admin listener at `/`, next to `/api/v1` and `/metrics`. There is no build option to leave it out: every binary and image has the UI of its own version.
 
 - Without an `admin` block, nothing listens, as today. The UI adds only the size of its files to the binary.
 - Its files are compressed when built (brotli and gzip) and served from memory, with a content hash in their names and long cache lifetimes.
-- Changes to `ui/` alone don't release Proksi: releases follow `crates/`, and the next release carries the UI as it is then.
+- `proksi-admin-ui` is released on its own (release-please), so changes to the UI release only it, never Proksi. Proksi carries the version of the UI it depends on.
 - The application is small and has no runtime dependencies beyond its own bundle: [Preact](https://preactjs.com) and TypeScript, built with Vite. Budget: 150 KB compressed.
 
 ### Building it
 
-- `ui/` builds into `crates/proksi/src/admin/ui/` (ignored by git), which the crate embeds and publishes. `cargo install` and the published crate don't need Node.
-- A build without it (a clone where `ui/` was never built) embeds a page saying how to build the UI. Rust development doesn't need Node.
-- CI, the Docker image and releases build `ui/` before the crate.
+- `crates/proksi-admin-ui` holds the application's source and a small library: the built files, embedded, and a function returning one by its path (with its content type, encodings and hash).
+- The built files are ignored by git, and included when the crate is published: `cargo install` and the published crates don't need Node.
+- A build without them (a clone where the UI was never built) embeds a page saying how to build it. Rust development doesn't need Node.
+- CI, the Docker image and releases build the UI before the crates.
 
 ### Access
 
@@ -133,7 +134,7 @@ Hosts from the configuration file, docker labels or Kubernetes are read-only: Pr
 
 ## Steps
 
-1. Embedding: `ui/` built into the crate, CI, Docker and releases; the UI's hosts (read-only) and certificates.
+1. Embedding: the `proksi-admin-ui` crate, CI, Docker and releases; the UI's hosts (read-only) and certificates.
 2. Named read and read-write tokens, sessions, origin checks, security headers, failed sign-in limits, and the change log.
 3. The API: JSON only, one host with its revision and `If-Match`, `validate`, `schema`.
 4. Editing hosts: locations, upstreams and building blocks; overriding, and exporting as HCL.
