@@ -80,6 +80,7 @@ fn check_hosts(config: &Config) -> Result<(), anyhow::Error> {
             .to_host(name)
             .map_err(|err| anyhow!("host \"{name}\": {err}"))?;
         validate_host(&host).map_err(|err| anyhow!("host \"{name}\": {err}"))?;
+        check_challenge(config, &host).map_err(|err| anyhow!("host \"{name}\": {err}"))?;
     }
 
     // Duplicates within `routes` keep being reported (and skipped) when merging
@@ -99,6 +100,27 @@ fn check_hosts(config: &Config) -> Result<(), anyhow::Error> {
         ));
     }
 
+    Ok(())
+}
+
+/// How a host of the configuration file gets its certificate is written down: wildcard hosts
+/// say `dns-01` (the only challenge Let's Encrypt accepts for them), which needs the DNS
+/// provider (ADR 0009)
+fn check_challenge(config: &Config, host: &crate::config::host::Host) -> Result<(), String> {
+    use crate::config::host::Challenge;
+
+    if !host.tls.enabled || host.tls.certificate.is_some() {
+        return Ok(());
+    }
+    if host.name.starts_with("*.") && host.tls.challenge != Some(Challenge::Dns01) {
+        return Err(
+            "wildcard certificates need tls { challenge = \"dns-01\" } (or certificate files)"
+                .to_string(),
+        );
+    }
+    if host.tls.challenge == Some(Challenge::Dns01) && config.lets_encrypt.dns.is_none() {
+        return Err("challenge = \"dns-01\" needs lets_encrypt { dns { ... } }".to_string());
+    }
     Ok(())
 }
 
@@ -321,6 +343,84 @@ host "a.test" {
             check_config(&config).unwrap_err().to_string(),
             "host \"a.test\": location \"/\": upstream \"10.0.0.1\" needs a port (host:port)"
         );
+    }
+
+    #[test]
+    fn test_challenges() {
+        let host = |name: &str, tls: &str| {
+            config_with_host_block(&format!(
+                "host \"{name}\" {{\n  {tls}\n  location \"/\" {{\n    upstream \"10.0.0.1:3000\" {{}}\n  }}\n}}\n"
+            ))
+        };
+        let error = |config: &Config| check_config(config).err().map(|err| err.to_string());
+        let with_dns = |mut config: Config| {
+            config.lets_encrypt.dns = Some(crate::config::DnsChallenge {
+                provider: crate::config::DnsProviderKind::Cloudflare,
+                api_token: "token".to_string(),
+            });
+            config
+        };
+
+        // Wildcard hosts say how their certificate is ordered
+        assert_eq!(
+            error(&host("*.a.test", "tls {}")),
+            Some("host \"*.a.test\": wildcard certificates need tls { challenge = \"dns-01\" } (or certificate files)".to_string())
+        );
+        assert_eq!(
+            error(&host("*.a.test", "tls {\n challenge = \"dns-01\"\n}")),
+            Some(
+                "host \"*.a.test\": challenge = \"dns-01\" needs lets_encrypt { dns { ... } }"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            error(&with_dns(host(
+                "*.a.test",
+                "tls {\n challenge = \"dns-01\"\n}"
+            ))),
+            None
+        );
+        assert_eq!(
+            error(&with_dns(host(
+                "b.a.test",
+                "tls {\n challenge = \"dns-01\"\n}"
+            ))),
+            None
+        );
+        // Or bring their certificate
+        assert_eq!(
+            error(&host(
+                "*.a.test",
+                "tls {\n certificate {\n pem = \"/a.pem\"\n key = \"/a.key\"\n }\n}"
+            )),
+            None
+        );
+        // Without TLS, nothing is ordered
+        assert_eq!(error(&host("*.a.test", "tls = false")), None);
+    }
+
+    #[test]
+    fn test_dns_provider() {
+        #[derive(serde::Deserialize)]
+        struct Doc {
+            lets_encrypt: crate::config::LetsEncrypt,
+        }
+        let parse = |hcl: &str| {
+            <crate::config::hcl::HclFormat as figment::providers::Format>::from_str::<Doc>(hcl)
+                .map(|doc| doc.lets_encrypt.dns)
+                .map_err(|err| err.to_string())
+        };
+
+        let dns = parse(
+            "lets_encrypt {\n  email = \"a@b.test\"\n  dns {\n    provider = \"cloudflare\"\n    api_token = \"secret\"\n  }\n}\n",
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(dns.provider, crate::config::DnsProviderKind::Cloudflare);
+        assert_eq!(dns.api_token, "secret");
+
+        let err = parse("lets_encrypt {\n  email = \"a@b.test\"\n  dns {\n    provider = \"route53\"\n    api_token = \"x\"\n  }\n}\n").unwrap_err();
+        assert!(err.contains("unknown variant `route53`"), "{err}");
     }
 
     #[test]

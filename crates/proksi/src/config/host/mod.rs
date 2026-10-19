@@ -40,6 +40,9 @@ pub struct HostTls {
     /// Use a self-signed certificate if no other certificate can be obtained
     #[serde(default)]
     pub self_signed_on_failure: bool,
+    /// How Let's Encrypt checks the host is ours, if written (see [`HostTls::challenge`])
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub challenge: Option<Challenge>,
 }
 
 impl Default for HostTls {
@@ -48,7 +51,31 @@ impl Default for HostTls {
             enabled: true,
             certificate: None,
             self_signed_on_failure: false,
+            challenge: None,
         }
+    }
+}
+
+/// How Let's Encrypt checks that a host is ours (ADR 0009)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Challenge {
+    /// A token served over HTTP, on port 80
+    #[serde(rename = "http-01")]
+    Http01,
+    /// A TXT record at `_acme-challenge.<name>`, set through the DNS provider
+    #[serde(rename = "dns-01")]
+    Dns01,
+}
+
+impl Challenge {
+    /// The challenge of the host `name`: as `written`, or DNS-01 for wildcard hosts (the only
+    /// one Let's Encrypt accepts for them) and HTTP-01 for the others
+    pub fn of_host(written: Option<Challenge>, name: &str) -> Challenge {
+        written.unwrap_or(if name.starts_with("*.") {
+            Challenge::Dns01
+        } else {
+            Challenge::Http01
+        })
     }
 }
 

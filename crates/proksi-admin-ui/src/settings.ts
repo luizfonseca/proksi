@@ -10,6 +10,7 @@ const WORDS: Record<string, string> = {
   https: 'HTTPS',
   mb: 'MB',
   sni: 'SNI',
+  dns: 'DNS',
   secs: '',
 };
 

@@ -70,8 +70,8 @@ pub async fn wait(sources: &[RouteSourceKind], certificates: bool) -> bool {
 /// Whether every host with TLS has its certificate in the store
 async fn all_certificates() -> bool {
     let store = crate::stores::global::get_store();
-    for (host, _) in crate::stores::lookup::tls_hosts() {
-        if store.get_certificate(&host).await.is_none() {
+    for host in crate::stores::lookup::tls_hosts() {
+        if store.get_certificate(&host.name).await.is_none() {
             return false;
         }
     }

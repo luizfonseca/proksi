@@ -90,7 +90,7 @@ host "api.example.com" {
 **Hosts without TLS, and any host**
 
 - `tls = false` serves a host over plain HTTP on `server.http_address` instead of redirecting to HTTPS, and no certificate is issued for it.
-- `host "*.example.com"` serves names one label under `example.com`: `a.example.com`, not `example.com` or `a.b.example.com`. A host with the exact name wins over it. Let's Encrypt only issues wildcard certificates through DNS challenges, so for now give it certificate files (`tls { certificate { ... } }`); without them it gets a self-signed certificate.
+- `host "*.example.com"` serves names one label under `example.com`: `a.example.com`, not `example.com` or `a.b.example.com`. A host with the exact name wins over it. Its certificate comes from certificate files, or from Let's Encrypt with a DNS challenge (below).
 - `host "*"` serves requests whose `Host` has no host of its own, or wildcard host. It needs `tls = false` (certificates are issued per name).
 - `listen = ["ip:port", ...]` sets the addresses a host is served on, instead of `server.https_address` (or `server.http_address` with `tls = false`). Proksi only opens the ports its hosts need: with only `tls = false` hosts, the HTTPS port isn't opened at all.
 - A port is either HTTP or HTTPS: a host with TLS and a host without it can't share an address. Hosts with TLS also need `server.http_address` (port 80) for redirects and Let's Encrypt challenges.
@@ -105,6 +105,36 @@ host "*" {
   }
 }
 ```
+
+**Wildcard hosts and DNS challenges**
+
+Let's Encrypt checks that a name is yours before issuing a certificate. By default (`http-01`) it fetches a token from the host over port 80. With `challenge = "dns-01"`, Proksi writes a TXT record at `_acme-challenge.<name>` through your DNS provider instead, waits until the zone's name servers answer it, and removes it once Let's Encrypt has checked it. It's the only way to get a wildcard certificate, and it works for hosts Let's Encrypt can't reach over port 80.
+
+```hcl
+lets_encrypt {
+  enabled = true
+  email   = env("LETS_ENCRYPT_EMAIL")
+
+  dns {
+    provider  = "cloudflare"
+    api_token = env("CLOUDFLARE_API_TOKEN")
+  }
+}
+
+host "*.example.com" {
+  tls {
+    challenge = "dns-01"
+  }
+
+  location "/" {
+    upstream "app:8080" {}
+  }
+}
+```
+
+- Wildcard hosts must say `challenge = "dns-01"` (or have certificate files), and `dns-01` needs the `dns` block.
+- Wildcard hosts from docker labels, the store or Kubernetes use `dns-01`, and need the `dns` block to get a certificate.
+- `cloudflare` is the only provider for now. Give it an [API token](https://dash.cloudflare.com/profile/api-tokens) limited to `Zone:DNS:Edit` on the zones Proksi serves: it can change those zones' records.
 
 **Matching paths**
 

@@ -189,6 +189,26 @@ pub struct LetsEncrypt {
 
     /// Renewal check interval in seconds (default: 84600 - a day)
     pub renew_interval_secs: Option<u64>,
+
+    /// The DNS provider for DNS-01 challenges (ADR 0009)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dns: Option<DnsChallenge>,
+}
+
+/// `lets_encrypt { dns { ... } }`: where DNS-01 challenges' TXT records are written
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DnsChallenge {
+    pub provider: DnsProviderKind,
+    /// A token allowed to edit the DNS records of the zones served (`Zone:DNS:Edit`)
+    pub api_token: String,
+}
+
+/// The DNS providers supported for DNS-01 challenges
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DnsProviderKind {
+    Cloudflare,
 }
 
 impl Default for LetsEncrypt {
@@ -198,6 +218,7 @@ impl Default for LetsEncrypt {
             enabled: Some(false),
             staging: Some(true),
             renew_interval_secs: Some(84_600),
+            dns: None,
         }
     }
 }

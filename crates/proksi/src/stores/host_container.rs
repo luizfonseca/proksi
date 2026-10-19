@@ -16,6 +16,8 @@ pub struct HostContainer {
     /// Addresses the host is served on (empty: the default address of its protocol)
     pub listen: Vec<SocketAddr>,
     pub self_signed_certificate: bool,
+    /// How Let's Encrypt checks the host, if written (ADR 0009)
+    pub challenge: Option<crate::config::host::Challenge>,
     /// Rules of the host's requests, before the location is chosen (ADR 0007)
     pub rules: Option<Arc<crate::rules::Rules>>,
 }
@@ -30,6 +32,7 @@ impl HostContainer {
             tls_enabled: tls.enabled,
             listen: vec![],
             self_signed_certificate: tls.self_signed_on_failure,
+            challenge: tls.challenge,
             rules: None,
         }
     }
@@ -95,6 +98,7 @@ mod tests {
                 enabled: false,
                 certificate: None,
                 self_signed_on_failure: true,
+                challenge: None,
             },
         );
         assert!(!host.tls_enabled);

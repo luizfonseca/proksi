@@ -39,6 +39,7 @@ impl Host {
                     .as_ref()
                     .and_then(|ssl| ssl.self_signed_on_failure)
                     .unwrap_or(false),
+                challenge: None,
             },
             locations: paths
                 .into_iter()
@@ -93,6 +94,7 @@ mod tests {
                     pem: PathBuf::from("/certs/a.pem"),
                 }),
                 self_signed_on_failure: false,
+                challenge: None,
             }
         );
         assert_eq!(host.locations.len(), 1);

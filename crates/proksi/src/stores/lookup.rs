@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+use crate::config::host::Challenge;
+
 use super::{get_route_by_key, get_routes, host_container::HostContainer};
 
 /// Host serving a request for `name`: the host with that name, the wildcard host of its parent
@@ -25,8 +27,17 @@ pub fn certificate_name(name: &str) -> std::borrow::Cow<'_, str> {
     certificate_name_in(name, get_route_by_key)
 }
 
-/// Hosts served over HTTPS, with whether to fall back to a self-signed certificate
-pub fn tls_hosts() -> Vec<(String, bool)> {
+/// A host served over HTTPS, needing a certificate
+#[derive(Debug, Clone, PartialEq)]
+pub struct TlsHost {
+    pub name: String,
+    /// Fall back to a self-signed certificate
+    pub self_signed_on_failure: bool,
+    pub challenge: Challenge,
+}
+
+/// Hosts served over HTTPS
+pub fn tls_hosts() -> Vec<TlsHost> {
     tls_hosts_in(get_routes().iter())
 }
 
@@ -90,10 +101,14 @@ fn with_wildcard_parent<T>(name: &str, f: impl FnOnce(&str) -> Option<T>) -> Opt
 
 fn tls_hosts_in<'a>(
     hosts: impl Iterator<Item = (&'a String, &'a Arc<HostContainer>)>,
-) -> Vec<(String, bool)> {
+) -> Vec<TlsHost> {
     hosts
         .filter(|(_, host)| host.tls_enabled)
-        .map(|(name, host)| (name.clone(), host.self_signed_certificate))
+        .map(|(name, host)| TlsHost {
+            name: name.clone(),
+            self_signed_on_failure: host.self_signed_certificate,
+            challenge: Challenge::of_host(host.challenge, name),
+        })
         .collect()
 }
 
@@ -103,7 +118,9 @@ mod tests {
 
     use crate::{config::host::HostTls, stores::host_container::HostContainer};
 
-    use super::{certificate_name_in, find_host_in, named_host_in, tls_hosts_in};
+    use crate::config::host::Challenge;
+
+    use super::{certificate_name_in, find_host_in, named_host_in, tls_hosts_in, TlsHost};
 
     fn container(enabled: bool, self_signed_on_failure: bool) -> Arc<HostContainer> {
         Arc::new(HostContainer::new(
@@ -112,6 +129,7 @@ mod tests {
                 enabled,
                 certificate: None,
                 self_signed_on_failure,
+                challenge: None,
             },
         ))
     }
@@ -222,14 +240,30 @@ mod tests {
     fn test_only_hosts_with_tls_need_certificates() {
         let hosts = [
             ("a.test".to_string(), container(true, true)),
+            ("*.a.test".to_string(), container(true, false)),
             ("plain.test".to_string(), container(false, false)),
             ("*".to_string(), container(false, false)),
         ];
 
-        let mut names = tls_hosts_in(hosts.iter().map(|(name, host)| (name, host)));
-        names.sort();
+        let mut hosts = tls_hosts_in(hosts.iter().map(|(name, host)| (name, host)));
+        hosts.sort_by(|a, b| a.name.cmp(&b.name));
 
-        assert_eq!(names, vec![("a.test".to_string(), true)]);
+        // Wildcard hosts are checked through DNS (ADR 0009)
+        assert_eq!(
+            hosts,
+            vec![
+                TlsHost {
+                    name: "*.a.test".to_string(),
+                    self_signed_on_failure: false,
+                    challenge: Challenge::Dns01,
+                },
+                TlsHost {
+                    name: "a.test".to_string(),
+                    self_signed_on_failure: true,
+                    challenge: Challenge::Http01,
+                },
+            ]
+        );
     }
 
     #[test]

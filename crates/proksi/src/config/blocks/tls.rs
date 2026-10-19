@@ -5,7 +5,10 @@ use serde::{
     Deserialize, Deserializer, Serialize,
 };
 
-use crate::config::{host::HostTls, RouteSslPath};
+use crate::config::{
+    host::{Challenge, HostTls},
+    RouteSslPath,
+};
 
 /// `tls { ... }` in a host
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -16,6 +19,9 @@ pub struct TlsBlock {
     /// Use a self-signed certificate if no other certificate can be obtained
     #[serde(default)]
     pub self_signed_on_failure: bool,
+    /// How Let's Encrypt checks the host is ours (`http-01` by default, ADR 0009)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub challenge: Option<Challenge>,
 }
 
 /// `tls = false` / `tls = true`, or `tls { ... }`
@@ -37,6 +43,7 @@ impl TlsSetting {
                 enabled: true,
                 certificate: block.certificate.clone(),
                 self_signed_on_failure: block.self_signed_on_failure,
+                challenge: block.challenge,
             },
         }
     }
@@ -76,7 +83,7 @@ mod tests {
 
     use crate::config::hcl::HclFormat;
 
-    use super::{TlsBlock, TlsSetting};
+    use super::{Challenge, TlsBlock, TlsSetting};
 
     #[derive(Deserialize)]
     struct Doc {
@@ -106,10 +113,21 @@ mod tests {
         assert_eq!(
             hcl("tls {\n  self_signed_on_failure = true\n}\n"),
             Ok(TlsSetting::Settings(TlsBlock {
-                certificate: None,
                 self_signed_on_failure: true,
+                ..TlsBlock::default()
             }))
         );
+    }
+
+    #[test]
+    fn test_tls_block_with_a_challenge() {
+        let tls = hcl("tls {\n  challenge = \"dns-01\"\n}\n").unwrap();
+        assert_eq!(tls.to_host_tls().challenge, Some(Challenge::Dns01));
+        let tls = hcl("tls {\n  challenge = \"http-01\"\n}\n").unwrap();
+        assert_eq!(tls.to_host_tls().challenge, Some(Challenge::Http01));
+
+        let err = hcl("tls {\n  challenge = \"dns\"\n}\n").unwrap_err();
+        assert!(err.contains("unknown variant `dns`"), "{err}");
     }
 
     #[test]
@@ -125,8 +143,8 @@ mod tests {
         assert!(disabled.certificate.is_none());
 
         let settings = TlsSetting::Settings(TlsBlock {
-            certificate: None,
             self_signed_on_failure: true,
+            ..TlsBlock::default()
         })
         .to_host_tls();
         assert!(settings.enabled);
