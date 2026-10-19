@@ -53,6 +53,7 @@ dashmap = "6.1.0"
 figment = { version = "0.10.19", features = ["yaml", "env"] }
 hcl-rs = "0.19.4"
 http = "1.2.0"
+httpdate = "1.0.3"
 ipnet = "2.11.0"
 itertools = "0.15.0"
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto", "use_pem"] }

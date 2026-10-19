@@ -38,6 +38,7 @@ pub struct LocationBlock {
     pub compress: Option<PluginConfig>,
     pub redirect: Option<PluginConfig>,
     pub respond: Option<PluginConfig>,
+    pub static_files: Option<PluginConfig>,
     pub timeouts: Option<LocationTimeouts>,
     pub rewrite: Option<PathRewrite>,
     pub health_check: Option<HealthCheck>,
@@ -101,6 +102,7 @@ impl LocationBlock {
             ("compress", &self.compress),
             ("redirect", &self.redirect),
             ("respond", &self.respond),
+            ("static_files", &self.static_files),
         ]
         .into_iter()
         .filter_map(|(name, config)| {

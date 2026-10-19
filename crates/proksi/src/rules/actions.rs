@@ -70,6 +70,8 @@ struct MethodChange {
 /// JSON Schema
 pub fn schema() -> serde_json::Map<String, serde_json::Value> {
     let mut actions = crate::blocks::settings::schemas();
+    // Files are found below a location's path, which rules don't have
+    actions.remove("static_files");
     actions.insert(
         "headers".to_string(),
         schemars::schema_for!(HeaderChanges).to_value(),

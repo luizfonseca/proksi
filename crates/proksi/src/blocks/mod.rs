@@ -30,6 +30,7 @@ use priority::{plugin_priority, priority};
 use rate_limit::RateLimit;
 use redirect::{Redirect, Respond};
 use request_id::RequestId;
+use static_files::StaticFiles;
 
 mod basic_auth;
 mod body_limit;
@@ -46,6 +47,7 @@ mod rate_limit;
 pub mod settings;
 mod redirect;
 mod request_id;
+mod static_files;
 
 /// The stages of a request a block can take part in
 // `async_trait` marks the generated methods as `#[must_use]`
@@ -110,6 +112,7 @@ pub enum Kind {
     Compress,
     Headers,
     Cache,
+    StaticFiles,
 }
 
 impl Kind {
@@ -129,6 +132,7 @@ impl Kind {
             Kind::Compress => "compress",
             Kind::Headers => "headers",
             Kind::Cache => "cache",
+            Kind::StaticFiles => "static_files",
         }
     }
 
@@ -142,6 +146,8 @@ impl Kind {
             Kind::Compress => 40,
             Kind::Headers => 50,
             Kind::Cache => 60,
+            // Last: the other blocks see the request before it's answered
+            Kind::StaticFiles => 90,
         }
     }
 }
@@ -185,6 +191,10 @@ impl Blocks {
                 "oauth2" => (Kind::Oauth2, Arc::new(Oauth2::new(plugin)?)),
                 "forward_auth" => (Kind::ForwardAuth, Arc::new(ForwardAuth::new(plugin)?)),
                 "compress" => (Kind::Compress, Arc::new(Compress::new(plugin)?)),
+                "static_files" => (
+                    Kind::StaticFiles,
+                    Arc::new(StaticFiles::new(plugin, &location.path)?),
+                ),
                 // Other plugins of `routes = [...]` and docker labels are ignored, as before
                 _ => continue,
             };

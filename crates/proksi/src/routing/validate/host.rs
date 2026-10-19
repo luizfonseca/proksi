@@ -28,7 +28,16 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
         }
         validate_upstreams(&location.upstreams).map_err(in_location)?;
         validate_headers(location.headers.as_ref()).map_err(in_location)?;
-        Blocks::build(location).map_err(in_location)?;
+        let blocks = Blocks::build(location).map_err(in_location)?;
+        if !location.upstreams.is_empty()
+            && blocks
+                .iter()
+                .any(|block| block.kind == crate::blocks::Kind::StaticFiles)
+        {
+            return Err(in_location(
+                "static_files answers its requests, so it has no upstreams".to_string(),
+            ));
+        }
         if let Some(rewrite) = &location.rewrite {
             rewrite.compile().map_err(in_location)?;
         }
@@ -199,6 +208,29 @@ mod tests {
 
         catch_all.tls.enabled = false;
         assert!(validate_host(&catch_all).is_ok());
+    }
+
+    #[test]
+    fn test_static_files_answer_without_upstreams() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut files = host("a.test", "10.0.0.1");
+        files.locations[0].plugins = Some(vec![crate::config::RoutePlugin {
+            name: "static_files".into(),
+            config: Some(std::collections::HashMap::from([(
+                "directory".into(),
+                serde_json::json!(directory.path()),
+            )])),
+        }]);
+        assert_eq!(
+            validate_host(&files),
+            Err(
+                "location \"/*\": static_files answers its requests, so it has no upstreams"
+                    .to_string()
+            )
+        );
+
+        files.locations[0].upstreams.clear();
+        assert_eq!(validate_host(&files), Ok(()));
     }
 
     #[test]
