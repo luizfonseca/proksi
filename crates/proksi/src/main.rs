@@ -84,13 +84,9 @@ fn main() -> Result<(), anyhow::Error> {
     let (default_https, default_http) =
         config::listeners::default_addresses(&proxy_config).map_err(anyhow::Error::msg)?;
 
-    // What only the admin API reads is kept, and metrics recorded (unless it turns them off),
-    // only with it: before routes are built
-    if let Some(admin) = &proxy_config.admin {
-        admin::enable();
-        if admin.metrics {
-            metrics::enable();
-        }
+    // Metrics are recorded only for the admin API, unless it turns them off
+    if proxy_config.admin.as_ref().is_some_and(|admin| admin.metrics) {
+        metrics::enable();
     }
 
     // The clients of requests behind trusted proxies (validated when loading the configuration)
@@ -244,6 +240,8 @@ fn add_listeners(
         )?));
     }
     if let Some(address) = listeners.admin {
+        // What only the admin API reads is kept only with it (routes are built after this)
+        admin::enable();
         let tokens = proxy_config
             .admin
             .as_ref()
