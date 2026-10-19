@@ -1,0 +1,65 @@
+---
+title: "Admin UI"
+description: "A web interface to see what Proksi serves, watch its traffic, and change hosts and their rules."
+---
+
+Proksi comes with a web interface, served by its admin listener. It shows what Proksi serves and how it's doing, and, with a token that can write, lets you add and change hosts and their rules.
+
+<Image src="/assets/admin/overview.png" alt="The overview: requests, errors, latency, CPU and memory, the hosts being accessed, and the latest requests" caption="The overview, live from the moment it's opened" />
+
+It's part of every Proksi binary and image: there's nothing to install. It's served only when the configuration has an `admin` block, and costs nothing while no one has it open.
+
+## Turning it on
+
+```hcl
+admin {
+  listen = "127.0.0.1:7555"
+
+  # Can see everything, change nothing
+  token "viewer" {
+    secret = env("PROKSI_VIEWER_TOKEN")
+  }
+
+  # Can also add, change and remove hosts in the store
+  token "ops" {
+    secret = env("PROKSI_ADMIN_TOKEN")
+    access = "write"
+  }
+}
+```
+
+Then open `http://127.0.0.1:7555` and sign in with a token's secret.
+
+<Image src="/assets/admin/sign-in.png" alt="The sign-in page, asking for a token" />
+
+- A token can only read unless it has `access = "write"`. `access` is `"read"` or `"write"`.
+- Without any `token` block, `listen` must be a loopback address (`127.0.0.1`, `::1`), and anyone who reaches it can read and write.
+- Signing in exchanges the secret for a session cookie: the page never keeps the secret. A session ends after 12 hours without a request, when you sign out, or when Proksi restarts.
+
+The same listener serves the [admin API](/configuration/admin) and `/metrics`: the UI uses the API, and anything it does can be done with `curl` and a token.
+
+## Reaching it
+
+The admin listener speaks plain HTTP, so keep it on a loopback address and reach it through a tunnel:
+
+```bash
+# A server
+ssh -L 7555:127.0.0.1:7555 your-server
+
+# Kubernetes
+kubectl port-forward deploy/proksi 7555:7555
+```
+
+Then open `http://127.0.0.1:7555` on your machine. To serve it to a team instead, see [Good practices](/admin-ui/good-practices#exposing-it).
+
+## Changing hosts
+
+Hosts can be changed from the UI only when they're in the [store](/configuration/redis): hosts from the configuration file, docker labels or Kubernetes are read-only there, as Proksi never rewrites those sources. A host in the store takes priority over the same host from another source, and every Proksi instance sharing the store serves it.
+
+With the default memory store, hosts added from the UI last as long as the Proksi process. Use [Redis](/configuration/redis) or [SQLite / Postgres](/configuration/sql) to keep them.
+
+## Next
+
+- [A tour](/admin-ui/tour) of each page
+- [How-tos](/admin-ui/how-to): watching a host, finding a failing upstream, adding a host, building rules
+- [Good practices](/admin-ui/good-practices): tokens, exposing it, what it costs

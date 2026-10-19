@@ -1,0 +1,61 @@
+---
+title: "Good practices"
+description: "Tokens, exposing the admin UI, and what it costs."
+---
+
+## Tokens
+
+- **One token for each person or tool**, named after them: removing a token removes only that access, and the UI shows who's signed in.
+- **Read-only unless needed.** Tokens can only read unless they say `access = "write"`: give that to the people who change hosts, not to dashboards or scrapers.
+- **Secrets from the environment** (`secret = env("PROKSI_ADMIN_TOKEN")`), never written in the configuration file. Use long random ones: `openssl rand -hex 32`.
+- **Rotate** by changing the secret and restarting Proksi: sessions end when it restarts.
+- **Scrapers** that only need `/metrics` can use their own listener, `metrics_listen`, which serves nothing else ([details](/configuration/admin#a-listener-for-metrics-only)).
+
+## Exposing it
+
+The admin listener is plain HTTP and controls every host: don't put it on a public address.
+
+**A tunnel** is the simplest: the listener stays on `127.0.0.1`, and only those who can reach the server can reach it.
+
+**For a team**, serve it through Proksi itself, on a host of its own with TLS, an identity check in front, and the admin token still required behind it:
+
+```hcl
+host "proksi-admin.example.com" {
+  location "/" {
+    # Only from the office or the VPN
+    ip_filter {
+      allow = ["203.0.113.0/24", "10.8.0.0/16"]
+    }
+
+    # Then sign in with GitHub, letting in only these people
+    oauth2 {
+      provider      = "github"
+      client_id     = env("GITHUB_CLIENT_ID")
+      client_secret = env("GITHUB_CLIENT_SECRET")
+      jwt_secret    = env("OAUTH2_JWT_SECRET")
+      validations = [
+        { type = "email", value = ["alice@example.com", "bob@example.com"] }
+      ]
+    }
+
+    upstream "127.0.0.1:7555" {}
+  }
+}
+```
+
+The UI's session cookie is then `Secure`, and changes are refused unless they come from the UI's own pages. Its pages allow no scripts but their own, and can't be framed by other sites.
+
+## The store
+
+- Hosts added from the UI live in the [store](/configuration/redis). With the default memory store they're gone when Proksi restarts: use Redis, SQLite or Postgres to keep them.
+- Keep the hosts you manage as code in the configuration file, and use the store for changes made at runtime. A host in the store takes priority over the file's, which is a way to change one for a while, and to undo it by removing it.
+- Every instance sharing the store serves its hosts: the overview's instances table shows which revision each one serves.
+
+## What it costs
+
+Nothing, while no one uses it:
+
+- Without an `admin` block, nothing listens and nothing more is kept.
+- With one, live stats are sampled only while someone reads them (the overview, a host's page, `/api/v1/stats`), and stop 5 minutes after the last read.
+- The latest requests are built only while someone watches them, at most 100 a second for each.
+- The metrics behind `/metrics` and the charts cost a few atomic additions for each request. `metrics = false` turns them off, and the charts with them.
