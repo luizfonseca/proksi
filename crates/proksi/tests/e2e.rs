@@ -2832,11 +2832,9 @@ admin {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_failed_tls_handshakes_and_tcp_upstream_errors_are_counted() {
     use tokio::io::AsyncReadExt;
-    // Nothing listens on this port
-    let refused_port = {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.local_addr().unwrap().port()
-    };
+    // Nothing listens on port 1 (a port released by another test could be taken again by the
+    // tests running alongside)
+    let refused_port = 1;
     let proksi = Harness::start_with(
         vec![Route::new("app.test", Upstream::Http)],
         &format!(
@@ -2871,7 +2869,8 @@ tcp "gone" {{
         .await
         .unwrap();
     let mut buf = [0u8; 16];
-    let _ = client.read(&mut buf).await;
+    let closed = tokio::time::timeout(Duration::from_secs(5), client.read(&mut buf)).await;
+    assert!(closed.is_ok(), "proksi didn't close the connection\n{}", proksi.logs());
 
     let expected = [
         "proksi_tls_handshake_failures_total 1",
