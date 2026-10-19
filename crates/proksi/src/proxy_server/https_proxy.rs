@@ -483,6 +483,11 @@ impl ProxyHttp for Router {
                 .record(status_code, duration);
         }
 
+        // The latest requests, only while someone watches (at most 100 a second)
+        if crate::metrics::requests::wanted(&ctx.host) {
+            crate::metrics::requests::publish(served(session, ctx, status_code, duration));
+        }
+
         // Nothing to build when access logs aren't written
         let info = tracing::enabled!(tracing::Level::INFO);
         if !info || !crate::services::logger::access_logs_enabled() {
@@ -513,24 +518,13 @@ impl ProxyHttp for Router {
             .get("user-agent")
             .unwrap_or(&empty_header);
 
-        // The connection's address, or behind trusted proxies, the client they forwarded
         let peer = session.client_addr();
         let forwarded_for = session
             .req_header()
             .headers
             .get("x-forwarded-for")
             .and_then(|value| value.to_str().ok());
-        let client_ip = match peer.and_then(|addr| addr.as_inet()) {
-            Some(addr) => {
-                let client = crate::proxy_server::client::client_ip(addr.ip(), forwarded_for);
-                if client == addr.ip() {
-                    addr.to_string()
-                } else {
-                    client.to_string()
-                }
-            }
-            None => peer.map(ToString::to_string).unwrap_or_default(),
-        };
+        let client_ip = client_ip(session);
 
         let (reused, upstream_addr) = match &ctx.upstream_connection {
             Some((reused, peer)) => (if *reused { "true" } else { "false" }, Some(peer)),
@@ -761,6 +755,54 @@ fn upstream_metrics(ctx: &RouterContext) -> Option<&UpstreamMetrics> {
 fn cache_key_for(host: &str, path_and_query: &str) -> CacheKey {
     let primary = format!("{host}{}", base64::encode_block(path_and_query.as_bytes()));
     CacheKey::new(primary, host)
+}
+
+/// The connection's address, or behind trusted proxies, the client they forwarded
+fn client_ip(session: &Session) -> String {
+    let peer = session.client_addr();
+    let forwarded_for = session
+        .req_header()
+        .headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok());
+    match peer.and_then(|addr| addr.as_inet()) {
+        Some(addr) => {
+            let client = crate::proxy_server::client::client_ip(addr.ip(), forwarded_for);
+            if client == addr.ip() {
+                addr.to_string()
+            } else {
+                client.to_string()
+            }
+        }
+        None => peer.map(ToString::to_string).unwrap_or_default(),
+    }
+}
+
+/// A request for the overview's latest requests
+fn served(
+    session: &Session,
+    ctx: &RouterContext,
+    status: u16,
+    duration: Duration,
+) -> crate::metrics::requests::Served {
+    let request = session.req_header();
+    crate::metrics::requests::Served {
+        time: crate::metrics::requests::Served::now(),
+        method: request.method.to_string(),
+        host: ctx.host.clone(),
+        path: request.uri.path().to_string(),
+        status,
+        duration_ms: duration.as_secs_f64() * 1000.0,
+        client_ip: client_ip(session),
+        location: ctx
+            .route_container
+            .as_ref()
+            .map(|location| location.path.clone()),
+        upstream: ctx
+            .upstream_connection
+            .as_ref()
+            .map(|(_, peer)| peer.to_string()),
+    }
 }
 
 /// Shows nothing for `None`: access log fields are there for every request

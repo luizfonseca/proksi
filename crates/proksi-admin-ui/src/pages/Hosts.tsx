@@ -2,7 +2,8 @@ import { useState } from 'preact/hooks';
 import type { Host } from '../api';
 import { Lock, Search } from '../components/icons';
 import { Loaded, SourceBadge } from '../components/State';
-import { navigate } from '../router';
+import { navigate, onLink } from '../router';
+import { useCanWrite } from '../session';
 import { useData } from '../useData';
 
 function Health({ host }: { host: Host }) {
@@ -42,6 +43,7 @@ export function Hosts() {
   const [data] = useData<Host[]>('/hosts');
   const [query, setQuery] = useState('');
   const [source, setSource] = useState('all');
+  const canWrite = useCanWrite();
 
   return (
     <>
@@ -50,6 +52,11 @@ export function Hosts() {
           <h1>Hosts</h1>
           <p>Every host Proksi serves, from every source.</p>
         </div>
+        {canWrite && (
+          <div class="actions">
+            <a class="button primary" href="/hosts/new" onClick={onLink}>New host</a>
+          </div>
+        )}
       </div>
       <Loaded data={data}>
         {(hosts) => {

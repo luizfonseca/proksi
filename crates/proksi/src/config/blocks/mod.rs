@@ -198,6 +198,7 @@ host:
                             remove: None,
                             priority: None,
                         }),
+                        name: None,
                     }],
                     headers: host_headers(&[header("x-location", "default")]),
                     plugins: Some(vec![RoutePlugin {
@@ -220,6 +221,7 @@ host:
                         weight: None,
                         sni: None,
                         headers: None,
+                        name: None,
                     }],
                     headers: host_headers(&[]),
                     plugins: Some(vec![]),

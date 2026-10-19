@@ -1816,7 +1816,11 @@ async fn test_hosts_are_only_served_on_their_addresses() {
 const ADMIN: &str = r#"
 admin {
   listen = "127.0.0.1:{tcp_port_2}"
-  token  = "e2e-token"
+
+  token "e2e" {
+    secret = "e2e-token"
+    access = "write"
+  }
 }
 
 host "limited.test" {
@@ -2024,6 +2028,13 @@ async fn test_admin_live_stats() {
     };
     let body = |res: &str| res.split("\r\n\r\n").nth(1).unwrap_or_default().to_string();
 
+    // Nothing is sampled until the stats are read: the first read starts it
+    let res = proksi
+        .raw_http_on(admin_port, get("/api/v1/stats").as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+
     proksi.resolve("app.test");
     for _ in 0..5 {
         assert_eq!(proksi.get("app.test", "/live").await.unwrap().status, 200);
@@ -2086,6 +2097,38 @@ async fn test_admin_live_stats() {
         .unwrap();
     let event: serde_json::Value = serde_json::from_str(event).unwrap();
     assert!(event["hosts"].is_array(), "{event}");
+    assert!(event["total"]["requests_per_second"].is_number(), "{event}");
+    assert!(event["process"]["memory_bytes"].as_u64().unwrap() > 0, "{event}");
+
+    // The requests stream sends each request served while it's open
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", admin_port))
+        .await
+        .unwrap();
+    tokio::io::AsyncWriteExt::write_all(&mut stream, get("/api/v1/requests/stream?host=APP.test").as_bytes())
+        .await
+        .unwrap();
+    let mut received = String::new();
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !received.contains("\"path\":\"/watched\"") && tokio::time::Instant::now() < deadline {
+        proksi.get_http_port("app.test", "/watched").await.unwrap();
+        if let Ok(Ok(read)) = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            tokio::io::AsyncReadExt::read(&mut stream, &mut buf),
+        )
+        .await
+        {
+            received.push_str(&String::from_utf8_lossy(&buf[..read]));
+        }
+    }
+    let event = received
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .find(|event| event.contains("/watched"))
+        .unwrap_or_else(|| panic!("{received}"));
+    let event: serde_json::Value = serde_json::from_str(event).unwrap();
+    assert_eq!(event["host"], "app.test", "{event}");
+    assert_eq!(event["method"], "GET", "{event}");
+    assert!(event["status"].is_number(), "{event}");
 
     proksi.assert_healthy();
 }
@@ -2179,7 +2222,7 @@ async fn test_admin_routes() {
 
     // JSON, in the stored format
     let json = format!(
-        r#"{{ "tls": {{ "enabled": false }}, "locations": [{{ "path": "/", "upstreams": [{{ "ip": "127.0.0.1", "port": {} }}] }}] }}"#,
+        r#"{{ "name": "api.test", "tls": {{ "enabled": false }}, "locations": [{{ "path": "/", "upstreams": [{{ "ip": "127.0.0.1", "port": {} }}] }}] }}"#,
         proksi.http_upstream.port
     );
     let res = proksi
@@ -2194,20 +2237,27 @@ async fn test_admin_routes() {
     let res = served("HTTP/1.1 200").await;
     assert!(res.contains("\"path\":\"/hello\""), "{res}");
 
-    // HCL, like a host block of the configuration file
-    let hcl = format!(
-        "tls = false\nlocation \"/\" {{\n  rate_limit {{\n    requests = 1\n    per = \"1m\"\n  }}\n  upstream \"127.0.0.1:{}\" {{}}\n}}\n",
-        proksi.http_upstream.port
-    );
+    // One host, as stored
     let res = proksi
         .raw_http_on(
             admin_port,
-            request("PUT", "/api/v1/routes/api.test", "text/hcl", &hcl).as_bytes(),
+            request("GET", "/api/v1/routes/api.test", "application/json", "").as_bytes(),
         )
         .await
         .unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
-    served("HTTP/1.1 429").await;
+    assert!(res.contains(r#""revision":"#), "{res}");
+
+    // The API takes JSON only: HCL is for configuration files
+    let hcl = "tls = false\nlocation \"/\" {}\n";
+    let res = proksi
+        .raw_http_on(
+            admin_port,
+            request("PUT", "/api/v1/routes/api.test", "text/hcl", hcl).as_bytes(),
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 400"), "{res}");
 
     // Invalid hosts are refused with the reason
     let res = proksi
@@ -2292,8 +2342,11 @@ async fn test_forwarded_headers() {
 const ADMIN_WITHOUT_METRICS: &str = r#"
 admin {
   listen  = "127.0.0.1:{tcp_port_2}"
-  token   = "e2e-token"
   metrics = false
+
+  token "e2e" {
+    secret = "e2e-token"
+  }
 }
 "#;
 
@@ -2750,8 +2803,11 @@ async fn test_metrics_on_a_listener_of_their_own() {
         r#"
 admin {
   listen         = "127.0.0.1:{tcp_port_2}"
-  token          = "admin-token"
   metrics_listen = "127.0.0.1:{tcp_port_1}"
+
+  token "ops" {
+    secret = "admin-token"
+  }
 }
 "#,
     )
@@ -3305,7 +3361,10 @@ async fn test_upstreams_that_failed_their_health_check_get_requests_when_none_is
             r#"
 admin {{
   listen = "127.0.0.1:{{tcp_port_2}}"
-  token  = "e2e-token"
+
+  token "e2e" {{
+    secret = "e2e-token"
+  }}
 }}
 
 host "starting.test" {{

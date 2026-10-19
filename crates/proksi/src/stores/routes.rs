@@ -89,6 +89,22 @@ impl RouteStoreContainer {
         healthy
     }
 
+    /// The addresses each upstream resolved to, and whether each is healthy
+    pub fn upstream_addresses(&self) -> Vec<Vec<(String, bool)>> {
+        let backends = self.load_balancer.backends();
+        let mut addresses = vec![vec![]; self.upstreams.len()];
+        for backend in backends.get_backend().iter() {
+            let index = upstream_index(backend);
+            if let Some(list) = index.and_then(|index| addresses.get_mut(index)) {
+                list.push((backend.addr.to_string(), backends.ready(backend)));
+            }
+        }
+        for list in &mut addresses {
+            list.sort();
+        }
+        addresses
+    }
+
     /// The upstream a backend of the load balancer came from
     pub fn upstream(&self, backend: &Backend) -> Option<(usize, &RouteUpstream)> {
         let index = upstream_index(backend)?;

@@ -8,11 +8,21 @@ Proksi can serve metrics and an admin API on an address of its own. It's off unl
 ```hcl
 admin {
   listen = "127.0.0.1:7555"
-  token  = env("PROKSI_ADMIN_TOKEN")
+
+  # Can read: stats, metrics, hosts, certificates
+  token "grafana" {
+    secret = env("PROKSI_GRAFANA_TOKEN")
+  }
+
+  # Can also change hosts
+  token "ops" {
+    secret = env("PROKSI_ADMIN_TOKEN")
+    access = "write"
+  }
 }
 ```
 
-Every request needs the token, as `Authorization: Bearer <token>`. Without a `token`, `listen` must be a loopback address (`127.0.0.1`, `::1`), so the admin API is never reachable from another machine without one.
+Every request needs a token's secret, as `Authorization: Bearer <secret>`. A token can only read unless it has `access = "write"` (`access` is `"read"` or `"write"`); a change with a read-only token is refused with `403`. Without a `token` block, `listen` must be a loopback address (`127.0.0.1`, `::1`), so the admin API is never reachable from another machine without one; on loopback, anyone reaching it can read and write.
 
 The admin listener is plain HTTP. To reach it from outside, route a host to it and put `basic_auth`, `oauth2` or another plugin in front:
 
@@ -30,9 +40,25 @@ host "admin.example.com" {
 
 Like the other listeners, the `admin` block is read when Proksi starts: changing it restarts Proksi.
 
+### The requests being served
+
+`GET /api/v1/requests/stream` (or `?host=example.com`, for one host's) sends each request as it's served, as server-sent events, with the fields of access logs (also when access logs are off): time, method, host, path, status, duration, client, location and upstream. At most 100 a second are built for each client (past that, requests aren't built at all); once a second, an `event: skipped` says how many a slow client missed. While no one watches, requests cost nothing more: nothing is built.
+
+```bash
+curl -N -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" http://127.0.0.1:7555/api/v1/requests/stream
+```
+
 ## UI
 
-The admin listener also serves a UI, at its address (`http://127.0.0.1:7555`): the hosts Proksi serves, from every source, with their locations, upstreams and their health, and plugins; and certificates. It signs in with the token, which it keeps in memory only.
+The admin listener also serves a UI, at its address (`http://127.0.0.1:7555`):
+
+- **Overview**: requests by status, errors, latency (p50, p90, p99), CPU and memory, charted from the moment the page is opened (up to 15 minutes, kept by the page); the latest requests; and the instances sharing the store.
+- **Hosts**: every host served, from every source. A host's page shows its traffic as a graph, from clients to its locations and upstreams (each line green while traffic flows, amber or red with errors or an unhealthy upstream), its requests and latency, and its latest requests; then its locations, upstreams (with what they resolved to) and their health, plugins and rules. With a token that can write, hosts in the store can be created, changed and removed.
+- **Certificates** and **Server** (the settings Proksi started with).
+
+Rules are shown without what can be a secret: the values headers, cookies and query parameters are compared with, the settings of `basic_auth`, `oauth2` and `forward_auth`, and the values of headers a rule adds.
+
+The UI signs in with a token's secret, exchanged for a session cookie (`HttpOnly`, `SameSite=Strict`, and `Secure` unless the address is loopback): the page never keeps the secret. Sessions end after 12 hours without a request, and when Proksi restarts. Changes made with a session must come from the UI's own pages (its `Origin`).
 
 To reach it on a server, use a tunnel: `ssh -L 7555:127.0.0.1:7555 your-server`, or `kubectl port-forward`, then open `http://127.0.0.1:7555`. See [ADR 0008](/adrs/0008-admin-ui) for what comes next.
 
@@ -85,12 +111,16 @@ scrape_configs:
 
 ### A listener for metrics only
 
-The admin API's token also lets its holder change routes. To give a scraper metrics and nothing else, serve them on an address of their own, with `metrics_listen`. It answers `/metrics` only, `404` on every other path, and takes its own `metrics_token`, if any:
+A read-only token can't change anything, but reaches every read endpoint. To give a scraper metrics and nothing else, serve them on an address of their own, with `metrics_listen`. It answers `/metrics` only, `404` on every other path, and takes its own `metrics_token`, if any:
 
 ```hcl
 admin {
   listen = "127.0.0.1:7555"
-  token  = env("PROKSI_ADMIN_TOKEN")
+
+  token "ops" {
+    secret = env("PROKSI_ADMIN_TOKEN")
+    access = "write"
+  }
 
   metrics_listen = "0.0.0.0:9100"
   metrics_token  = env("PROKSI_METRICS_TOKEN") # optional
@@ -119,6 +149,19 @@ Without running Prometheus, `GET /api/v1/stats?window=60` returns what happened 
 ```json
 {
   "window_seconds": 60.0,
+  "total": {
+    "requests_per_second": 120.5,
+    "responses": { "2xx": 7180, "4xx": 42 },
+    "duration_ms": { "p50": 3.1, "p90": 8.4, "p99": 31.2 }
+  },
+  "process": {
+    "cpu_percent": 12.4,
+    "cpu_seconds": 1830.2,
+    "memory_bytes": 72351744,
+    "allocator_bytes": 28311552,
+    "memory_limit_bytes": 536870912,
+    "cpu_limit": 1.5
+  },
   "hosts": [
     {
       "host": "example.com",
@@ -132,6 +175,7 @@ Without running Prometheus, `GET /api/v1/stats?window=60` returns what happened 
           "upstreams": [
             {
               "upstream": "10.0.0.1:3000",
+              "requests_per_second": 120.1,
               "healthy": true,
               "errors": 0,
               "duration_ms": { "p50": 2.8, "p90": 7.9, "p99": 30.1 }
@@ -160,14 +204,17 @@ Without running Prometheus, `GET /api/v1/stats?window=60` returns what happened 
 curl -N -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" "http://127.0.0.1:7555/api/v1/stats/stream?window=10"
 ```
 
-The stats come from the same metrics, sampled every second and kept for 5 minutes, so they cost nothing more per request. Percentiles are interpolated within the histogram buckets (as Prometheus' `histogram_quantile` does), and `null` when there were no requests. Each Proksi instance has its own stats; to combine several, use Prometheus.
+`total` adds up every host and location. `process` is Proksi's own: CPU used over the window (`cpu_percent`, of one core), resident memory, memory committed by the allocator, and in a container, its limits (cgroups v2; `null` otherwise).
+
+The stats come from the same metrics, sampled every second while someone reads them, so they cost nothing more per request, and nothing at all when no one looks: 5 minutes after the last read, sampling stops until the next one (whose window then starts at that read). Samples are kept every second for a minute, then every 10 seconds up to 5 minutes: longer windows are within 10 seconds of the one asked for (`window_seconds` says which). Percentiles are interpolated within the histogram buckets (as Prometheus' `histogram_quantile` does), and `null` when there were no requests. Each Proksi instance has its own stats; to combine several, use Prometheus.
 
 ## Status, hosts and certificates
 
 | Endpoint | |
 | --- | --- |
 | `GET /api/v1/status` | Version, replica id, uptime, the addresses Proksi listens on, the store (its revision, the revision this instance applied, and the instances reporting to it), and hosts by source, with conflicts and invalid routes |
-| `GET /api/v1/hosts` | Every host being served: its source (`file`, `docker`, `kubernetes`, `store`), TLS, locations, the plugins of each location (by name, without their settings, which can hold secrets), and upstreams with their weight and health |
+| `GET /api/v1/hosts` | Every host being served: its source (`file`, `docker`, `kubernetes`, `store`), TLS, locations, the plugins of each location (by name, without their settings, which can hold secrets), and upstreams as written, with what they came from (a docker label or Kubernetes service), their weight, and the addresses they resolved to with their health |
+| `GET /api/v1/server` | The settings read when Proksi starts (addresses, store, cache, Let's Encrypt, logging, workers, admin tokens' names and access), with their defaults. Secrets and credentials are never included |
 | `GET /api/v1/certificates` | Every certificate: domain, issuer, whether it's self-signed, when it expires (`expires_at`, `days_left`), and which instance holds its lease while it's being ordered or renewed |
 
 With several instances sharing a store, `status` shows each instance and the routes revision it applied, so a change can be confirmed as applied everywhere.
@@ -179,28 +226,16 @@ Hosts can be added, changed and removed through the API. They're written to the 
 | Endpoint | |
 | --- | --- |
 | `GET /api/v1/routes` | The hosts in the store, with the store's revision |
+| `GET /api/v1/routes/<host>` | One host, as stored, with the store's revision |
 | `PUT /api/v1/routes/<host>` | Adds or replaces a host. Returns the new revision |
 | `DELETE /api/v1/routes/<host>` | Removes a host. Returns the revision |
 
-The body of a `PUT` is either the body of a `host` block, as in the configuration file (with `Content-Type: text/hcl`):
+Changing a host needs a token with `access = "write"`. The API takes and returns JSON only: a host in the format hosts are stored in (`GET /api/v1/routes/<host>` returns it), with its `name`:
 
 ```bash
-curl -X PUT -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" -H "Content-Type: text/hcl" \
-  --data-binary @- http://127.0.0.1:7555/api/v1/routes/api.example.com <<'HCL'
-location "/" {
-  rate_limit {
-    requests = 100
-    per      = "1m"
-  }
-  upstream "10.0.0.1:3000" {}
-}
-HCL
-```
-
-or JSON, in the format hosts are stored in (`GET /api/v1/routes` returns it):
-
-```json
-{ "locations": [{ "path": "/", "upstreams": [{ "ip": "10.0.0.1", "port": 3000 }] }] }
+curl -X PUT -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "name": "api.example.com", "locations": [{ "path": "/", "upstreams": [{ "ip": "10.0.0.1", "port": 3000 }] }] }' \
+  http://127.0.0.1:7555/api/v1/routes/api.example.com
 ```
 
 - Hosts are validated like hosts from any other source; an invalid one is refused (`400`) with the reason.

@@ -378,6 +378,7 @@ fn upstreams(
     }) else {
         return vec![];
     };
+    let name = format!("{}.{namespace}:{}", backend.name, port.port);
     // The service's address, unless it has none (headless services)
     let cluster_ip = service
         .spec
@@ -392,6 +393,7 @@ fn upstreams(
                 ip.to_string().into()
             },
             port,
+            name: Some(name),
             ..RouteUpstream::default()
         }];
     }
@@ -439,6 +441,7 @@ fn upstreams(
                 upstreams.push(RouteUpstream {
                     ip: ip.into(),
                     port: target,
+                    name: Some(name.clone()),
                     ..RouteUpstream::default()
                 });
             }
@@ -573,6 +576,11 @@ mod tests {
                 vec!["10.1.0.1:8080", "10.1.0.3:8080"]
             );
         }
+        // Each address names the service it came from
+        assert_eq!(
+            host.locations[0].upstreams[0].name.as_deref(),
+            Some("web.default:80")
+        );
     }
 
     #[test]

@@ -14,12 +14,6 @@ export const Globe = () => (
 export const Shield = () => (
   <svg {...props}><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z" /><path d="M9 12l2 2 4-4" /></svg>
 );
-export const Branch = () => (
-  <svg {...props}><circle cx="6" cy="6" r="2" /><circle cx="6" cy="18" r="2" /><circle cx="18" cy="8" r="2" /><path d="M6 8v8M18 10c0 4-6 3-12 6" /></svg>
-);
-export const History = () => (
-  <svg {...props}><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></svg>
-);
 export const Pulse = () => (
   <svg {...props}><path d="M3 12h4l3-8 4 16 3-8h4" /></svg>
 );
@@ -31,4 +25,7 @@ export const Unlock = () => (
 );
 export const Search = () => (
   <svg {...props}><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+);
+export const Server = () => (
+  <svg {...props}><rect x="4" y="4" width="16" height="7" rx="2" /><rect x="4" y="13" width="16" height="7" rx="2" /><path d="M8 7.5h.01M8 16.5h.01" /></svg>
 );

@@ -1,11 +1,14 @@
 //! `/api/v1/routes`: hosts written to the store (ADR 0004), applied by every instance through
-//! the store sync (ADR 0001)
+//! the store sync (ADR 0001). Hosts are JSON, in and out.
 
-use serde_json::{json, Value};
+use serde::Serialize;
 
 use crate::{
-    config::{blocks::HostBlock, host::Host},
-    stores::{store_trait::Store, stored_route::StoredRoute},
+    config::host::Host,
+    stores::{
+        store_trait::Store,
+        stored_route::{StoredRoute, StoredRouteError},
+    },
 };
 
 /// Why a request was refused
@@ -15,73 +18,98 @@ pub enum Refused {
     Invalid(String),
     /// The store couldn't be reached (503)
     Unavailable(String),
+    /// No such host in the store (404)
+    NotFound(String),
+}
+
+/// `GET /api/v1/routes`
+#[derive(Debug, Serialize)]
+pub struct RouteList {
+    pub revision: u64,
+    pub routes: Vec<StoredRoute>,
+    /// Routes this version can't read
+    pub unreadable: Vec<StoredRouteError>,
+}
+
+/// `GET /api/v1/routes/<host>`
+#[derive(Debug, Serialize)]
+pub struct OneRoute {
+    pub host: Host,
+    /// The store's revision when it was read
+    pub revision: u64,
+}
+
+/// `PUT` and `DELETE /api/v1/routes/<host>`
+#[derive(Debug, PartialEq, Serialize)]
+pub struct Written {
+    pub host: String,
+    /// The store's revision after the change
+    pub revision: u64,
 }
 
 /// The routes in the store, and the ones this version can't read
-pub async fn list(store: &dyn Store) -> Result<Value, Refused> {
-    let snapshot = store
-        .routes()
-        .await
-        .map_err(|err| Refused::Unavailable(err.to_string()))?;
-    let (routes, unreadable): (Vec<_>, Vec<_>) =
-        snapshot.routes.into_iter().partition(Result::is_ok);
-    Ok(json!({
-        "revision": snapshot.revision,
-        "routes": routes.into_iter().flatten().collect::<Vec<_>>(),
-        "unreadable": unreadable.into_iter().filter_map(Result::err).collect::<Vec<_>>(),
-    }))
+pub async fn list(store: &dyn Store) -> Result<RouteList, Refused> {
+    let snapshot = store.routes().await.map_err(unavailable)?;
+    let mut routes = RouteList {
+        revision: snapshot.revision,
+        routes: vec![],
+        unreadable: vec![],
+    };
+    for route in snapshot.routes {
+        match route {
+            Ok(route) => routes.routes.push(route),
+            Err(err) => routes.unreadable.push(err),
+        }
+    }
+    Ok(routes)
 }
 
-/// Writes the host `name` to the store, from the stored format (JSON) or a `host` block's body
-/// (`Content-Type: text/hcl`). Returns the new revision.
-pub async fn put(
-    store: &dyn Store,
-    name: &str,
-    content_type: Option<&str>,
-    body: &[u8],
-) -> Result<Value, Refused> {
-    let host = parse(&name.to_lowercase(), content_type, body).map_err(Refused::Invalid)?;
-    let route = StoredRoute::new(host);
-    let key = route.key();
-    let revision = store
-        .put_route(route)
-        .await
-        .map_err(|err| Refused::Unavailable(err.to_string()))?;
-    crate::routing::store_source::sync_now();
-    Ok(json!({ "host": key, "revision": revision }))
-}
-
-/// Removes the host `name` from the store. Returns the (possibly unchanged) revision.
-pub async fn delete(store: &dyn Store, name: &str) -> Result<Value, Refused> {
+/// The host `name`, as stored
+pub async fn get(store: &dyn Store, name: &str) -> Result<OneRoute, Refused> {
     let name = name.to_lowercase();
-    let revision = store
-        .delete_route(&name)
-        .await
-        .map_err(|err| Refused::Unavailable(err.to_string()))?;
+    let snapshot = store.routes().await.map_err(unavailable)?;
+    let route = snapshot.routes.into_iter().find(|route| match route {
+        Ok(route) => route.key() == name,
+        Err(err) => err.host == name,
+    });
+    match route {
+        Some(Ok(route)) => Ok(OneRoute {
+            host: route.host,
+            revision: snapshot.revision,
+        }),
+        Some(Err(err)) => Err(Refused::Unavailable(err.error)),
+        None => Err(Refused::NotFound(format!(
+            "no host \"{name}\" in the store"
+        ))),
+    }
+}
+
+/// Writes the host `name` to the store
+pub async fn put(store: &dyn Store, name: &str, body: &[u8]) -> Result<Written, Refused> {
+    let host = parse(&name.to_lowercase(), body).map_err(Refused::Invalid)?;
+    let route = StoredRoute::new(host);
+    let host = route.key();
+    let revision = store.put_route(route).await.map_err(unavailable)?;
     crate::routing::store_source::sync_now();
-    Ok(json!({ "host": name, "revision": revision }))
+    Ok(Written { host, revision })
+}
+
+/// Removes the host `name` from the store (the revision is unchanged if it wasn't there)
+pub async fn delete(store: &dyn Store, name: &str) -> Result<Written, Refused> {
+    let host = name.to_lowercase();
+    let revision = store.delete_route(&host).await.map_err(unavailable)?;
+    crate::routing::store_source::sync_now();
+    Ok(Written { host, revision })
+}
+
+fn unavailable(err: impl std::fmt::Display) -> Refused {
+    Refused::Unavailable(err.to_string())
 }
 
 /// A host from a request body, validated like routes from any other source
-fn parse(name: &str, content_type: Option<&str>, body: &[u8]) -> Result<Host, String> {
-    let hcl = content_type.is_some_and(|content_type| content_type.contains("hcl"));
-    let host = if hcl {
-        let body = std::str::from_utf8(body).map_err(|err| format!("invalid HCL: {err}"))?;
-        let block = <crate::config::hcl::HclFormat as figment::providers::Format>::from_str::<
-            HostBlock,
-        >(body)
-        .map_err(|err| format!("invalid HCL: {err}"))?;
-        block.to_host(name)?
-    } else {
-        let mut value: Value =
-            serde_json::from_slice(body).map_err(|err| format!("invalid JSON: {err}"))?;
-        // The name comes from the path when the body doesn't have one
-        if let Some(object) = value.as_object_mut() {
-            object.entry("name").or_insert_with(|| json!(name));
-        }
-        serde_json::from_value::<Host>(value).map_err(|err| format!("invalid JSON: {err}"))?
-    };
-
+fn parse(name: &str, body: &[u8]) -> Result<Host, String> {
+    let host =
+        serde_json::from_slice::<Host>(body).map_err(|err| format!("invalid JSON: {err}"))?;
     if !host.name.eq_ignore_ascii_case(name) {
         return Err(format!(
             "the body is for host \"{}\", not \"{name}\"",
@@ -101,52 +129,29 @@ fn parse(name: &str, content_type: Option<&str>, body: &[u8]) -> Result<Host, St
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use crate::stores::{store_trait::Store, MemoryStore};
 
-    use super::{delete, list, parse, put, Refused};
+    use super::{delete, get, list, parse, put, Refused, Written};
 
     const JSON: &str = r#"{
         "name": "api.test",
         "locations": [{ "path": "/", "upstreams": [{ "ip": "10.0.0.1", "port": 3000 }] }]
     }"#;
 
-    const HCL: &str = r#"
-location "/" {
-  rate_limit {
-    requests = 10
-    per      = "1m"
-  }
-  upstream "10.0.0.1:3000" {}
-}
-"#;
-
     #[test]
-    fn test_parse_json_and_hcl() {
-        let from_json = parse("api.test", Some("application/json"), JSON.as_bytes()).unwrap();
-        assert_eq!(from_json.name, "api.test");
-        assert_eq!(from_json.locations[0].upstreams[0].port, 3000);
-
-        // The name comes from the path
-        let without_name = JSON.replace(r#""name": "api.test","#, "");
-        let host = parse("api.test", None, without_name.as_bytes()).unwrap();
+    fn test_parse() {
+        let host = parse("api.test", JSON.as_bytes()).unwrap();
         assert_eq!(host.name, "api.test");
-
-        let from_hcl = parse("api.test", Some("text/hcl; charset=utf-8"), HCL.as_bytes()).unwrap();
-        assert_eq!(from_hcl.name, "api.test");
-        assert_eq!(from_hcl.locations[0].path, "/");
-        assert_eq!(
-            from_hcl.locations[0].plugins.as_ref().unwrap()[0].name,
-            "rate_limit"
-        );
+        assert_eq!(host.locations[0].upstreams[0].port, 3000);
     }
 
     #[test]
     fn test_invalid_hosts() {
         let cases = [
             (JSON.replace("api.test", "other.test"), "the body is for host \"other.test\", not \"api.test\""),
+            (JSON.replace(r#""name": "api.test","#, ""), "invalid JSON: missing field `name`"),
             ("{ not json".to_string(), "invalid JSON: "),
+            ("location \"/\" {}".to_string(), "invalid JSON: "),
             (
                 JSON.replace("3000", "0"),
                 "location \"/\": upstreams[0].port must be greater than 0",
@@ -157,36 +162,54 @@ location "/" {
             ),
         ];
         for (body, expected) in cases {
-            let err = parse("api.test", None, body.as_bytes()).unwrap_err();
+            let err = parse("api.test", body.as_bytes()).unwrap_err();
             assert!(err.starts_with(expected), "{err}");
         }
-        let err = parse("api.test", Some("text/hcl"), b"locaton \"/\" {}").unwrap_err();
-        assert!(err.starts_with("invalid HCL: "), "{err}");
     }
 
     #[tokio::test]
-    async fn test_put_list_and_delete() {
+    async fn test_put_get_list_and_delete() {
         let store = MemoryStore::new();
 
-        let written = put(&store, "API.test", None, JSON.as_bytes()).await.unwrap();
-        assert_eq!(written, json!({ "host": "api.test", "revision": 1 }));
+        let written = put(&store, "API.test", JSON.as_bytes()).await.unwrap();
+        assert_eq!(
+            written,
+            Written {
+                host: "api.test".to_string(),
+                revision: 1
+            }
+        );
         assert!(store.routes().await.unwrap().routes[0].is_ok());
 
         let listed = list(&store).await.unwrap();
-        assert_eq!(listed["revision"], 1);
-        assert_eq!(listed["routes"][0]["host"]["name"], "api.test");
-        assert_eq!(listed["routes"][0]["schema_version"], 2);
-        assert_eq!(listed["unreadable"], json!([]));
+        assert_eq!(listed.revision, 1);
+        assert_eq!(listed.routes[0].host.name, "api.test");
+        assert!(listed.unreadable.is_empty());
+        let one = get(&store, "API.test").await.unwrap();
+        assert_eq!(one.host.name, "api.test");
+        assert_eq!(one.revision, 1);
+        assert_eq!(
+            get(&store, "nope.test").await.map(|_| ()),
+            Err(Refused::NotFound(
+                "no host \"nope.test\" in the store".to_string()
+            ))
+        );
 
         assert_eq!(
-            put(&store, "api.test", None, b"{").await.map(|_| ()),
+            put(&store, "api.test", b"{").await,
             Err(Refused::Invalid(
                 "invalid JSON: EOF while parsing an object at line 1 column 1".to_string()
             ))
         );
 
         let deleted = delete(&store, "api.test").await.unwrap();
-        assert_eq!(deleted, json!({ "host": "api.test", "revision": 2 }));
-        assert_eq!(list(&store).await.unwrap()["routes"], json!([]));
+        assert_eq!(
+            deleted,
+            Written {
+                host: "api.test".to_string(),
+                revision: 2
+            }
+        );
+        assert!(list(&store).await.unwrap().routes.is_empty());
     }
 }
