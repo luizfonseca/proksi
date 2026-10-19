@@ -1,0 +1,117 @@
+---
+title: "ADR 0009: Wildcard hosts and DNS-01 challenges"
+description: "Hosts are found by their exact name or the catch-all, and certificates are only ordered over HTTP-01."
+---
+
+- Status: proposed
+- Date: 2026-10-19
+- Related: [ADR 0002](/adrs/0002-certificate-issuance) (coordinated certificate issuance), [ADR 0003](/adrs/0003-configuration-model) (hosts and locations), [ADR 0005](/adrs/0005-kubernetes-ingress) (Kubernetes ingress)
+
+## Context
+
+A request is served by the host with its exact name, or by the catch-all host `*` (plain HTTP only). There's no way to serve every subdomain of a name with one host: each one needs its own `host` block, its own certificate, and its own Let's Encrypt order.
+
+Certificates are ordered with the HTTP-01 challenge (ADR 0002): Let's Encrypt fetches a token from the domain over port 80. That rules out:
+
+- **Wildcard certificates** (`*.example.com`): Let's Encrypt only issues them through DNS-01, a TXT record at `_acme-challenge.example.com`.
+- **Hosts Let's Encrypt can't reach**: internal names, or servers without port 80 open to the internet.
+- **Many subdomains**: each is a separate order, and Let's Encrypt limits orders per registered domain (50 certificates a week).
+
+Kubernetes `Ingress` resources can already name wildcard hosts (`*.example.com`), which the ingress controller can't serve today.
+
+## Decision
+
+### Wildcard hosts
+
+A host may be named `*.<name>`, with `<name>` having at least two labels (`*.example.com`, not `*.com`). As in certificates (RFC 6125), it matches exactly one more label: `*.example.com` serves `a.example.com`, not `example.com` or `a.b.example.com`.
+
+A request's host is looked up in this order:
+
+1. The host with its exact name.
+2. The wildcard host for its parent: `a.example.com` → `*.example.com`.
+3. The catch-all host `*`.
+
+Exact hosts always win, so a wildcard host can be refined by adding a host for one name. The second lookup only happens when the first misses, with the name's first label cut off (no allocation), so hosts found by their exact name cost nothing more.
+
+Wildcard hosts are allowed wherever hosts are named: the configuration file, docker labels, the store and the admin API, and Kubernetes `Ingress` rules. Hosts from docker labels, the store and Kubernetes can't name a challenge, so wildcard hosts from them use DNS-01, and need the `dns` provider to get a certificate.
+
+### DNS-01 challenges
+
+The DNS provider is configured once, in `lets_encrypt`:
+
+```hcl
+lets_encrypt {
+  email = "ops@example.com"
+
+  dns "cloudflare" {
+    api_token = env("CLOUDFLARE_API_TOKEN")
+  }
+}
+```
+
+A host chooses the challenge in its `tls` block. HTTP-01 stays the default, and wildcard hosts must say `dns-01`, so how a certificate is ordered is always written down:
+
+```hcl
+host "*.example.com" {
+  tls {
+    challenge = "dns-01"
+  }
+  location "/" {
+    upstream "app:8080" {}
+  }
+}
+```
+
+A host with `challenge = "dns-01"` and no `dns` provider, or a wildcard host with `http-01`, is refused when the configuration is read. Hosts with certificate files (`tls { certificate { ... } }`) order nothing, as today.
+
+Providers implement one trait, so others can be added without changing how orders work:
+
+```rust
+#[async_trait]
+trait DnsProvider: Send + Sync {
+    /// Creates the TXT record `name` with `value`, returning what's needed to remove it
+    async fn set_txt(&self, name: &str, value: &str) -> Result<DnsRecord, DnsError>;
+    async fn remove_txt(&self, record: &DnsRecord) -> Result<(), DnsError>;
+}
+```
+
+The first is **Cloudflare**, with an API token limited to `Zone:DNS:Edit`. The zone is found by asking Cloudflare for the record's name without its first labels, one at a time (`_acme-challenge.example.com` → `example.com`), so subdomains delegated to their own zone work too.
+
+### Ordering
+
+DNS-01 orders follow ADR 0002: one lease per certificate name (`acme:*.example.com`), taken before ordering and released after. For each name, an instance:
+
+1. Takes the lease, and reads the store again in case another instance renewed it.
+2. Creates the TXT record with the provider.
+3. Waits until the record can be seen through the provider's own name servers (up to 2 minutes), so Let's Encrypt doesn't check too early.
+4. Asks Let's Encrypt to validate, and saves the certificate, as for HTTP-01.
+5. Removes the TXT record, also when the order fails.
+
+A wildcard certificate covers every subdomain with one order and one renewal, which keeps large sets of subdomains well under the rate limits.
+
+### Finding certificates
+
+A TLS handshake for `a.example.com` looks for a certificate in the same order as hosts: `a.example.com`, then `*.example.com`. Hosts with their own name order their own certificate, as today.
+
+## Consequences
+
+- One host and one certificate can serve any number of subdomains, which suits per-customer or per-branch subdomains.
+- Hosts that Let's Encrypt can't reach over port 80 can get certificates.
+- Proksi holds a DNS API token. It should be limited to editing DNS records of the zones it serves.
+- Requests for names without an exact host do one more lookup before the catch-all.
+- Only Cloudflare is supported at first. Other providers (Route 53, DigitalOcean, RFC 2136) implement the same trait.
+
+### Testing
+
+- Host lookup: exact before wildcard before catch-all, one label only, and no wildcard match for the bare parent name.
+- Certificate lookup: the same order for SNI names.
+- Configuration: wildcard names validated, and `dns-01` without a provider, or a wildcard host with `http-01`, refused.
+- The Cloudflare provider against a fake API server: finding the zone, creating and removing the record, and errors.
+- An order end to end against [Pebble](https://github.com/letsencrypt/pebble) and its test DNS server, through a provider that writes records there: the record is created, the certificate issued, and the record removed, also on failure.
+
+### Not part of this decision
+
+- Other DNS providers.
+- Including the parent name (`example.com`) in a wildcard certificate.
+- Wildcards anywhere but the leftmost label, or matching several labels.
+- Choosing the challenge for hosts from docker labels, the store or Kubernetes.
