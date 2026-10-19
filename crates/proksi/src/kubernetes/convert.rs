@@ -137,6 +137,7 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
                 health_check: blocks.as_ref().and_then(|blocks| blocks.health_check),
                 // Rules aren't read from annotations (ADR 0007)
                 rules: vec![],
+                splits: vec![],
             };
             locations.insert((path, exact), (location, id.clone()));
         }

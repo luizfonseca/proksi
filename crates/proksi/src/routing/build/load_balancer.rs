@@ -71,15 +71,27 @@ pub fn upstream_addresses(
 /// Round-robin between the upstreams, in proportion to their weight (1 by default).
 /// Names are resolved now, and again when the load balancer is updated.
 pub fn load_balancer(upstreams: &[RouteUpstream]) -> LoadBalancer<RoundRobin> {
-    load_balancer_with(
-        upstreams,
-        Arc::new(system_lookup),
-    )
+    load_balancer_at(upstreams, 0)
+}
+
+/// Like [`load_balancer`], for upstreams numbered from `first` among a location's (a traffic
+/// split's, after the location's own)
+pub fn load_balancer_at(upstreams: &[RouteUpstream], first: usize) -> LoadBalancer<RoundRobin> {
+    load_balancer_from(upstreams, first, Arc::new(system_lookup))
 }
 
 /// Like [`load_balancer`], resolving names with `lookup`
+#[cfg(test)]
 pub fn load_balancer_with(upstreams: &[RouteUpstream], lookup: Lookup) -> LoadBalancer<RoundRobin> {
-    let resolver = Resolver::new(upstreams, lookup);
+    load_balancer_from(upstreams, 0, lookup)
+}
+
+fn load_balancer_from(
+    upstreams: &[RouteUpstream],
+    first: usize,
+    lookup: Lookup,
+) -> LoadBalancer<RoundRobin> {
+    let resolver = Resolver::new(upstreams, first, lookup);
     let load_balancer = LoadBalancer::from_backends(Backends::new(Box::new(resolver)));
     // Loads the backends: the first discovery returns the addresses resolved above
     {
@@ -156,10 +168,12 @@ struct Resolver {
     /// The first discovery returns the addresses resolved when built
     built: AtomicBool,
     lookup: Lookup,
+    /// The index of the first upstream among the location's
+    first: usize,
 }
 
 impl Resolver {
-    fn new(upstreams: &[RouteUpstream], lookup: Lookup) -> Self {
+    fn new(upstreams: &[RouteUpstream], first: usize, lookup: Lookup) -> Self {
         let targets = upstreams
             .iter()
             .map(|upstream| Target {
@@ -192,6 +206,7 @@ impl Resolver {
             resolved_at: Mutex::new(Instant::now()),
             built: AtomicBool::new(true),
             lookup,
+            first,
         }
     }
 
@@ -260,7 +275,7 @@ impl Resolver {
         for (index, (target, addresses)) in self.targets.iter().zip(addresses.iter()).enumerate() {
             for addr in addresses {
                 let mut ext = Extensions::new();
-                ext.insert(UpstreamIndex(index));
+                ext.insert(UpstreamIndex(self.first + index));
                 // The first upstream with an address keeps it
                 backends.insert(Backend {
                     addr: BackendAddr::Inet(*addr),

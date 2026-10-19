@@ -181,6 +181,8 @@ h2 .badge.protocol, h3 .badge.protocol { margin-left: 8px; vertical-align: 1px; 
 .location-body h3 { margin: 0 0 8px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--faint); }
 .upstream { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
 .upstream .weight { margin-left: auto; color: var(--faint); font-size: 12px; }
+.upstream .badge.split { margin-left: auto; background: color-mix(in srgb, var(--chart-2) 16%, transparent); color: var(--chart-2); border-color: transparent; }
+.upstream .badge.split + .weight { margin-left: 8px; }
 .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .none { color: var(--faint); font-size: 13px; }
 

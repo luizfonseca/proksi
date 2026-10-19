@@ -18,7 +18,6 @@ use pingora_cache::{
     CacheKey, CacheMeta, ForcedFreshness, HitHandler, NoCacheReason, RespCacheable,
 };
 
-use crate::routing::build::select_or_resolve;
 use crate::metrics::{LocationMetrics, UpstreamMetrics};
 use crate::stores::{self, routes::RouteStoreContainer};
 
@@ -61,6 +60,10 @@ pub struct RouterContext {
     pub body_deadline: Option<(std::time::Instant, Duration)>,
     /// A health check (`/ping`): neither logged nor counted
     pub health_check: bool,
+    /// The traffic split a rule chose (`then { traffic_split = "..." }`)
+    pub traffic_split: Option<Arc<str>>,
+    /// Traffic split cookies to set on the response: name, and the new client's id
+    pub split_cookies: Vec<(String, String)>,
 
     pub timings: RouterTimings,
 }
@@ -88,6 +91,8 @@ impl ProxyHttp for Router {
             upstream_start: None,
             body_deadline: None,
             health_check: false,
+            traffic_split: None,
+            split_cookies: vec![],
 
             timings: RouterTimings {
                 request_filter_start: std::time::Instant::now(),
@@ -283,7 +288,7 @@ impl ProxyHttp for Router {
         }
 
         let Some(healthy_upstream) =
-            select_or_resolve(&route_container.load_balancer).await
+            crate::routing::split::select(session, ctx, &route_container).await
         else {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
@@ -332,6 +337,15 @@ impl ProxyHttp for Router {
                 .await;
         }
         crate::rules::response(session, upstream_response, ctx).await;
+
+        // A new client of a traffic split keeps its side
+        for (name, id) in std::mem::take(&mut ctx.split_cookies) {
+            let secure = if self.listener == Listener::Https { "; Secure" } else { "" };
+            upstream_response.append_header(
+                http::header::SET_COOKIE,
+                format!("{name}={id}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax{secure}"),
+            )?;
+        }
 
         if let Some(cache_state) = ctx.cache_state.filter(|_| session.cache.enabled()) {
             // indicates whether it was HIT or MISS in the cache

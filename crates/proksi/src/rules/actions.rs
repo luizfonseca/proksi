@@ -32,6 +32,7 @@ struct ThenBlock {
     request_id: Option<PluginConfig>,
     headers: Option<HeaderChanges>,
     method: Option<MethodChange>,
+    traffic_split: Option<String>,
 }
 
 /// `headers`: changes the request's headers, or the response's
@@ -80,6 +81,13 @@ pub fn schema() -> serde_json::Map<String, serde_json::Value> {
         "method".to_string(),
         schemars::schema_for!(MethodChange).to_value(),
     );
+    actions.insert(
+        "traffic_split".to_string(),
+        serde_json::json!({
+            "type": "string",
+            "description": "Sends the request to this traffic split of its location, whatever its share",
+        }),
+    );
     actions
 }
 
@@ -119,6 +127,7 @@ fn blocks_location(
         rewrite: None,
         health_check: None,
         rules: vec![],
+        splits: vec![],
     }
 }
 
@@ -151,6 +160,8 @@ fn request_changes(request: &Changes) -> Result<HeaderChange, String> {
 pub(crate) struct Then {
     pub(super) blocks: Blocks,
     method: Option<Method>,
+    /// The traffic split the request goes to
+    pub(super) split: Option<std::sync::Arc<str>>,
     add: Vec<(HeaderName, HeaderValue)>,
     remove: Vec<HeaderName>,
 }
@@ -200,14 +211,23 @@ impl Then {
             })
             .transpose()?;
 
+        let split = match then.traffic_split {
+            Some(name) if name.trim().is_empty() => {
+                return Err("traffic_split: the name of a traffic split of the location".to_string())
+            }
+            name => name.map(std::sync::Arc::from),
+        };
+
         let then = Self {
             blocks,
             method,
+            split,
             add,
             remove,
         };
         if then.blocks.iter().next().is_none()
             && then.method.is_none()
+            && then.split.is_none()
             && then.add.is_empty()
             && then.remove.is_empty()
         {
@@ -245,6 +265,16 @@ mod tests {
 
     fn err(then: serde_json::Value) -> String {
         Then::build(&then).err().unwrap_or_default()
+    }
+
+    #[test]
+    fn test_then_chooses_a_traffic_split() {
+        let then = Then::build(&json!({ "traffic_split": "v2" })).unwrap();
+        assert_eq!(then.split.as_deref(), Some("v2"));
+        assert_eq!(
+            err(json!({ "traffic_split": "" })),
+            "traffic_split: the name of a traffic split of the location"
+        );
     }
 
     #[test]

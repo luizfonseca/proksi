@@ -36,7 +36,12 @@ fn load_balancers() -> Vec<(String, Arc<LoadBalancer<RoundRobin>>)> {
             container
                 .locations
                 .iter()
-                .map(|location| (host.clone(), location.load_balancer.clone()))
+                .flat_map(|location| {
+                    location
+                        .load_balancers()
+                        .map(|load_balancer| (host.clone(), load_balancer.clone()))
+                        .collect::<Vec<_>>()
+                })
                 .collect::<Vec<_>>()
         })
         .chain(crate::tcp::load_balancers().iter().cloned())

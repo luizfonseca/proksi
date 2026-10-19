@@ -28,6 +28,38 @@ pub struct Location {
     /// Rules of the location's requests (ADR 0007), in order
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rules: Vec<crate::rules::Rule>,
+    /// Shares of the requests sent to other upstreams (`traffic_split "<name>" { ... }`)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub splits: Vec<TrafficSplit>,
+}
+
+/// `traffic_split "<name>" { ... }`: a share of a location's clients, sent to upstreams of its
+/// own
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TrafficSplit {
+    pub name: String,
+    /// The share of clients, from 0 to 100
+    pub percent: u8,
+    /// How a client keeps its side
+    #[serde(default)]
+    pub sticky: Sticky,
+    /// The cookie of `sticky = "cookie"` (default: a name of its own, telling nothing)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cookie: Option<String>,
+    pub upstreams: Vec<RouteUpstream>,
+}
+
+/// How a client keeps its side of a traffic split
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Sticky {
+    /// A random id in a cookie, set on the first response
+    #[default]
+    Cookie,
+    /// The client's address
+    ClientIp,
+    /// Each request is chosen on its own
+    None,
 }
 
 /// `rewrite { ... }` in a location: the path sent to upstreams, instead of the request's
@@ -282,6 +314,7 @@ mod tests {
             rewrite: None,
             health_check: None,
             rules: vec![],
+            splits: vec![],
         }
     }
 

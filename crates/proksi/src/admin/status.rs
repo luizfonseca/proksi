@@ -94,6 +94,16 @@ pub struct UpstreamStatus {
     pub healthy: bool,
     /// What it resolved to
     pub addresses: Vec<AddressStatus>,
+    /// The traffic split it's in, if any
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub split: Option<SplitStatus>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SplitStatus {
+    pub name: String,
+    /// The share of clients it takes
+    pub percent: u8,
 }
 
 #[derive(Debug, Serialize)]
@@ -180,7 +190,14 @@ pub fn hosts() -> Vec<HostStatus> {
                 .locations
                 .iter()
                 .map(|location| {
-                    let upstreams = upstreams(&location.upstreams, location.upstream_addresses());
+                    let mut upstreams =
+                        upstreams(&location.upstreams, location.upstream_addresses());
+                    for (index, upstream) in upstreams.iter_mut().enumerate() {
+                        upstream.split = location.split_of(index).map(|split| SplitStatus {
+                            name: split.name.clone(),
+                            percent: split.percent(),
+                        });
+                    }
                     LocationStatus {
                         location: location.path.clone(),
                         blocks: location
@@ -261,6 +278,7 @@ fn upstreams(
                 weight: upstream.weight.unwrap_or(1),
                 healthy: addresses.iter().any(|address| address.healthy),
                 addresses,
+                split: None,
             }
         })
         .collect()
