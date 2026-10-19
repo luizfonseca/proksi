@@ -12,7 +12,7 @@ resolver = "2"
 # Released with proksi, at its version: release-please sets the version here, which its
 # cargo-workspace plugin doesn't rewrite (it does crates/proksi/Cargo.toml)
 [workspace.dependencies]
-proksi-admin-ui = { path = "crates/proksi-admin-ui", version = "0.13.0" }
+proksi-admin-ui = { path = "crates/proksi-admin-ui", version = "0.13.1" }
 
 [profile.dev]
 opt-level = 0
