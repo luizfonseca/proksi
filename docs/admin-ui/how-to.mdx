@@ -1,0 +1,72 @@
+---
+title: "How-tos"
+description: "Common tasks with the admin UI."
+---
+
+## Watch a host's traffic
+
+1. Open **Hosts**, then the host. **Hosts right now** on the overview lists the busiest ones.
+2. The graph shows where requests go, and which lines fail.
+3. Click **Watch requests** to see its requests as they're served: their status, path, duration, client and upstream.
+
+Nothing is watched until you ask: Proksi builds the latest requests only while someone watches them.
+
+## Find a failing upstream
+
+1. On the overview, **Errors (5xx)** and **Hosts right now** tell which host fails.
+2. On the host's page, the red line leads to the location and upstream that fail. **unhealthy** means its health checks fail; **failed** counts connections that couldn't be made or answered.
+3. Under the location, an upstream written as a name (`app.internal:8080`) shows the addresses it resolved to: one that resolves somewhere unexpected (an IPv6 address the upstream doesn't listen on, for instance) shows there.
+4. **Watch requests** shows which requests fail, and with which upstream: `502` when it couldn't be reached, `504` when it didn't answer in time.
+
+## Add a host
+
+This needs a token with `access = "write"`, and a [store](/configuration/redis) to keep the host in.
+
+1. **Hosts** → **New host**.
+2. Name it (`app.example.com`), keep HTTPS on, and add an upstream (`10.0.0.5:8080`).
+3. Add locations for paths served differently (`/api`, `/static`): the most specific path wins.
+4. **Save**. The instance you're on serves it right away, and the others sharing the store within their sync interval (10 seconds by default): the instances table on the overview shows when they all have.
+
+A host from the configuration file can't be changed from the UI. To serve a different version of it, add a host with the same name to the store: it takes priority, and removing it brings back the file's.
+
+## Limit writes, not reads
+
+1. Edit the host, and under the location, **+ Rules** → **+ Add rule**.
+2. Name it `writes`.
+3. **When**: **All of**, `method` **is none of** `GET`, `HEAD`, `OPTIONS`.
+4. **Then**: remove `respond`, **+ Add an action** → `rate_limit`, with `requests` `30` and `per` `1m`.
+5. **Save**.
+
+As stored:
+
+```json
+{
+  "name": "writes",
+  "and": { "method": { "not_in": ["GET", "HEAD", "OPTIONS"] } },
+  "then": { "rate_limit": { "requests": 30, "per": "1m" } }
+}
+```
+
+## Keep a path to the office
+
+1. **+ Add rule**, named `office only`.
+2. **When**: **All of**, `path` **starts with** `/admin`, then **+ Group** → **None of**, `client` **is one of** `203.0.113.0/24`.
+3. **Then**: `respond`, with `status` `403`.
+
+Rules run in order: the first one that answers ends the request. See the [examples](/rules/examples) for more.
+
+## Give a dashboard read-only access
+
+Add a token without `access`: it can read everything (stats, hosts, metrics), and change nothing.
+
+```hcl
+admin {
+  listen = "127.0.0.1:7555"
+
+  token "grafana" {
+    secret = env("PROKSI_GRAFANA_TOKEN")
+  }
+}
+```
+
+Tools use it as `Authorization: Bearer <secret>`, against the [admin API](/configuration/admin). In the UI, a read-only token shows **read-only** next to its name, and no Edit, Remove or New host.

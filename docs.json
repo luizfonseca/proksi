@@ -110,6 +110,27 @@
       ]
     },
     {
+      "group": "Admin UI",
+      "pages": [
+        {
+          "title": "Admin UI",
+          "href": "/admin-ui"
+        },
+        {
+          "title": "A tour",
+          "href": "/admin-ui/tour"
+        },
+        {
+          "title": "How-tos",
+          "href": "/admin-ui/how-to"
+        },
+        {
+          "title": "Good practices",
+          "href": "/admin-ui/good-practices"
+        }
+      ]
+    },
+    {
       "group": "Storage",
       "pages": [
         {
