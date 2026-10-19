@@ -1,8 +1,9 @@
 import { useState } from 'preact/hooks';
-import type { Status } from '../api';
+import type { Status, TcpBlock } from '../api';
 import { LineChart, Sparkline } from '../components/Chart';
 import { RequestLog } from '../components/RequestLog';
-import { Loaded } from '../components/State';
+import { Loaded, ProtocolBadge } from '../components/State';
+import { TcpBlocks } from '../components/Tcp';
 import { bytes, ms, percent, rate } from '../format';
 import { activeHosts, type Point, type Stats, useLive } from '../live';
 import { onLink } from '../router';
@@ -44,7 +45,10 @@ function ActiveHosts({ latest, history }: { latest: Stats | null; history: Point
   return (
     <section class="panel">
       <div class="chart-head">
-        <h3>Hosts right now</h3>
+        <h3>
+          Hosts right now
+          <ProtocolBadge protocol="http" />
+        </h3>
         <div class="legend">
           <span>over the last 5 seconds{idle > 0 ? ` · ${idle} idle` : ''}</span>
         </div>
@@ -137,6 +141,7 @@ export function Overview() {
   const [span, setSpan] = useState(300);
   const { history, latest } = useLive();
   const [status] = useData<Status>('/status', 10000);
+  const [tcp] = useData<TcpBlock[]>('/tcp', 10000);
   const last = history[history.length - 1];
   const process = latest?.process;
   const memoryLimit = process?.memory_limit_bytes ?? null;
@@ -225,6 +230,7 @@ export function Overview() {
       </div>
 
       <ActiveHosts latest={latest} history={history} />
+      {tcp.state === 'ready' && <TcpBlocks blocks={tcp.value} withHost />}
       <RequestLog />
       <Loaded data={status}>{(status) => <Instances status={status} />}</Loaded>
     </>

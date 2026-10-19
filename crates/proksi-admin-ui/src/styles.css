@@ -154,6 +154,11 @@ button.primary:disabled { opacity: 0.6; cursor: default; }
 .badge.file { background: var(--sunken); }
 .badge.store { background: var(--accent-soft); color: var(--accent-text); border-color: transparent; }
 .badge.docker, .badge.kubernetes { background: var(--info-soft); color: var(--info-text); border-color: transparent; }
+.badge.protocol { font: 600 10.5px var(--mono); letter-spacing: 0.04em; padding: 1px 6px; border-radius: 4px; }
+.badge.protocol.http { background: color-mix(in srgb, var(--chart-3) 14%, transparent); color: var(--chart-3); border-color: transparent; }
+.badge.protocol.tcp { background: color-mix(in srgb, var(--chart-2) 16%, transparent); color: var(--chart-2); border-color: transparent; }
+h2 .badge.protocol, h3 .badge.protocol { margin-left: 8px; vertical-align: 1px; }
+.host-name .plain { display: inline-flex; color: var(--warn); }
 .badge.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
 .badge.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 .badge.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
@@ -305,8 +310,8 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .plot .tick.middle { top: calc(50% + 2px); }
 .plot .waiting { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 12.5px; }
 .requests, .overview-instances { margin-bottom: 12px; }
-section.panel.requests, section.panel:has(> table) { padding: 14px 0 0; }
-section.panel.requests .chart-head, section.panel:has(> table) .chart-head { padding: 0 16px; }
+section.panel.requests, section.panel:has(> table, > .table-wide) { padding: 14px 0 0; }
+section.panel.requests .chart-head, section.panel:has(> table, > .table-wide) .chart-head { padding: 0 16px; }
 .table-scroll { max-height: 420px; overflow: auto; }
 .requests tbody tr { cursor: pointer; }
 .requests td .muted, td.muted { color: var(--faint); }
@@ -348,11 +353,21 @@ svg.flow .edge.bad .flow { stroke: var(--bad); }
 @media (max-width: 720px) { .host-charts { grid-template-columns: 1fr; } }
 h2.section-title { font-size: 14px; font-weight: 600; margin: 20px 0 10px; }
 .locations > .panel:target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.active-hosts .trend { width: 220px; }
-.active-hosts td.trend { position: relative; height: 34px; padding: 0 16px; }
-.active-hosts td.trend .sparkline { position: static; height: 28px; display: block; }
-.active-hosts a { font-weight: 600; color: var(--text); text-decoration: none; }
-.active-hosts a:hover { color: var(--accent-text); }
+.active-hosts .trend, .tcp-blocks .trend { width: 220px; }
+.active-hosts td.trend, .tcp-blocks td.trend { position: relative; height: 34px; padding: 0 16px; }
+.active-hosts td.trend .sparkline, .tcp-blocks td.trend .sparkline { position: static; height: 28px; display: block; }
+.active-hosts a, .tcp-blocks a { font-weight: 600; color: var(--text); text-decoration: none; }
+.active-hosts a:hover, .tcp-blocks a:hover { color: var(--accent-text); }
+.tcp-blocks .name { font-weight: 600; }
+.tcp-blocks td { vertical-align: top; }
+.tcp-blocks td.mono, .tcp-blocks td .mono, .tcp-blocks .addresses { white-space: nowrap; }
+section.tcp { margin-bottom: 12px; }
+.locations + section.tcp { margin-top: 12px; }
+.table-wide { overflow-x: auto; }
+/* On phones: the block, its connections and failures */
+@media (max-width: 720px) {
+  .tcp-blocks :is(th, td):is(:nth-child(2), :nth-child(5), :nth-child(7), :nth-child(8)) { display: none; }
+}
 section.panel + section.panel, .charts + section.panel { margin-bottom: 12px; }
 
 /* Rule builder */

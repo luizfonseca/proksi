@@ -147,6 +147,7 @@ impl AdminApi {
             store_type: String::new(),
             listeners: serde_json::Value::Null,
             server: None,
+            tcp: vec![],
         };
         let tokens = token.filter(|token| !token.is_empty()).map(|secret| {
             let access = Access::Read;
@@ -227,6 +228,10 @@ impl AdminApi {
                 None => Reply::not_found(),
             },
             Endpoint::Hosts => Reply::ok(&status::hosts()),
+            Endpoint::Tcp => Reply::ok(&status::tcp(
+                &self.instance.tcp,
+                crate::tcp::load_balancers(),
+            )),
             Endpoint::Schema => Reply::ok(&serde_json::json!({
                 "rules": crate::rules::schema::schema(),
                 "blocks": crate::blocks::settings::schemas(),
@@ -493,6 +498,7 @@ mod tests {
             store_type: "memory".to_string(),
             listeners: serde_json::json!({}),
             server: None,
+            tcp: vec![],
         }
     }
 

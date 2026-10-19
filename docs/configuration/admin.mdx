@@ -194,6 +194,7 @@ Without running Prometheus, `GET /api/v1/stats?window=60` returns what happened 
       "active": 14,
       "bytes_in_per_second": 5120.0,
       "bytes_out_per_second": 81920.0,
+      "upstream_errors": 0,
       "duration_ms": { "p50": 1200.0, "p90": 9800.0, "p99": 10000.0 }
     }
   ]
@@ -216,6 +217,7 @@ The stats come from the same metrics, sampled every second while someone reads t
 | --- | --- |
 | `GET /api/v1/status` | Version, replica id, uptime, the addresses Proksi listens on, the store (its revision, the revision this instance applied, and the instances reporting to it), and hosts by source, with conflicts and invalid routes |
 | `GET /api/v1/hosts` | Every host being served: its source (`file`, `docker`, `kubernetes`, `store`), TLS, locations, the plugins of each location (by name, without their settings, which can hold secrets), and upstreams as written, with what they came from (a docker label or Kubernetes service), their weight, and the addresses they resolved to with their health |
+| `GET /api/v1/tcp` | Every `tcp` block: its name as the stats and metrics name it (`block`), its host if any, the address it listens on, TLS (`none`, `terminate` or `passthrough`), the protocols (ALPN) it's chosen by, and its upstreams with the addresses they resolved to and their health |
 | `GET /api/v1/schema` | What rules and blocks accept, generated from the code that reads them: rule fields and the operators each takes, and each block's settings as JSON Schema (types, required, limits, descriptions) |
 | `GET /api/v1/server` | The settings read when Proksi starts (addresses, store, cache, Let's Encrypt, logging, workers, admin tokens' names and access), with their defaults. Secrets and credentials are never included |
 | `GET /api/v1/certificates` | Every certificate: domain, issuer, whether it's self-signed, when it expires (`expires_at`, `days_left`), and which instance holds its lease while it's being ordered or renewed |

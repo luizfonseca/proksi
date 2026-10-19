@@ -48,6 +48,26 @@ pub fn upstream_index(backend: &Backend) -> Option<usize> {
     backend.ext.get::<UpstreamIndex>().map(|index| index.0)
 }
 
+/// The addresses each of `upstreams` upstreams resolved to in `load_balancer`, and whether
+/// each is healthy
+pub fn upstream_addresses(
+    load_balancer: &LoadBalancer<RoundRobin>,
+    upstreams: usize,
+) -> Vec<Vec<(String, bool)>> {
+    let backends = load_balancer.backends();
+    let mut addresses = vec![vec![]; upstreams];
+    for backend in backends.get_backend().iter() {
+        let index = upstream_index(backend);
+        if let Some(list) = index.and_then(|index| addresses.get_mut(index)) {
+            list.push((backend.addr.to_string(), backends.ready(backend)));
+        }
+    }
+    for list in &mut addresses {
+        list.sort();
+    }
+    addresses
+}
+
 /// Round-robin between the upstreams, in proportion to their weight (1 by default).
 /// Names are resolved now, and again when the load balancer is updated.
 pub fn load_balancer(upstreams: &[RouteUpstream]) -> LoadBalancer<RoundRobin> {

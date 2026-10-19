@@ -80,6 +80,17 @@ export type Host = {
   rules: Rule[];
   locations: Location[];
 };
+/** A `tcp` block: connections accepted on `listen`, forwarded to its upstreams */
+export type TcpBlock = {
+  /** As the stats name it (`tcp "db" in host "a.com"`) */
+  block: string;
+  name: string;
+  host: string | null;
+  listen: string;
+  tls: 'none' | 'terminate' | 'passthrough';
+  alpn: string[];
+  upstreams: Upstream[];
+};
 export type Certificate = {
   domain: string;
   issuer: string | null;

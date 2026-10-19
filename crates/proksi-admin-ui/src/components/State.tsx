@@ -14,6 +14,11 @@ export function Loaded<T>({ data, children }: { data: Data<T>; children: (value:
   );
 }
 
+/** What a host or block serves: HTTP requests, or TCP connections */
+export function ProtocolBadge({ protocol }: { protocol: 'http' | 'tcp' }) {
+  return <span class={`badge protocol ${protocol}`}>{protocol.toUpperCase()}</span>;
+}
+
 export function SourceBadge({ source }: { source: string | null }) {
   const name = source ?? 'unknown';
   return <span class={`badge ${name}`}>{name}</span>;

@@ -1,14 +1,15 @@
 import { useState } from 'preact/hooks';
-import { type Host as HostData, routes, type Upstream } from '../api';
+import { type Host as HostData, routes, type TcpBlock, type Upstream } from '../api';
 import { Lock, Unlock } from '../components/icons';
 import { LineChart } from '../components/Chart';
 import { Flow } from '../components/Flow';
 import { RequestLog } from '../components/RequestLog';
 import { Rules } from '../components/Rules';
+import { TcpBlocks } from '../components/Tcp';
 import { layout } from '../flow';
 import { ms, rate } from '../format';
 import { useLive } from '../live';
-import { Loaded, SourceBadge } from '../components/State';
+import { Loaded, ProtocolBadge, SourceBadge } from '../components/State';
 import { navigate, onLink } from '../router';
 import { useCanWrite } from '../session';
 import { useData } from '../useData';
@@ -106,11 +107,13 @@ function Traffic({ host }: { host: HostData }) {
 
 export function Host({ name }: { name: string }) {
   const [data] = useData<HostData[]>('/hosts');
+  const [tcp] = useData<TcpBlock[]>('/tcp', 10000);
   const canWrite = useCanWrite();
   return (
     <Loaded data={data}>
       {(hosts) => {
         const host = hosts.find((candidate) => candidate.host === name);
+        const blocks = tcp.state === 'ready' ? tcp.value.filter((block) => block.host === host?.host) : [];
         if (!host) {
           return (
             <div class="panel empty">
@@ -129,6 +132,8 @@ export function Host({ name }: { name: string }) {
                 <h1>{host.host}</h1>
                 <div class="meta" style={{ marginTop: 8 }}>
                   <SourceBadge source={host.source} />
+                  {host.locations.length > 0 && <ProtocolBadge protocol="http" />}
+                  {blocks.length > 0 && <ProtocolBadge protocol="tcp" />}
                   <span class="badge">
                     {host.tls ? <Lock /> : <Unlock />} {host.tls ? 'HTTPS' : 'Plain HTTP'}
                   </span>
@@ -144,7 +149,10 @@ export function Host({ name }: { name: string }) {
                 <Rules rules={host.rules} />
               </section>
             )}
-            <h2 class="section-title">Locations</h2>
+            <h2 class="section-title">
+              Locations
+              <ProtocolBadge protocol="http" />
+            </h2>
             <div class="locations">
               {host.locations.map((location) => (
                 <div class="panel" id={encodeURIComponent(`location ${location.location}`)}>
@@ -179,6 +187,7 @@ export function Host({ name }: { name: string }) {
                 </div>
               ))}
             </div>
+            <TcpBlocks blocks={blocks} />
           </>
         );
       }}
