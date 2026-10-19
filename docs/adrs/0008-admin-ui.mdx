@@ -83,12 +83,14 @@ The admin listener itself never serves TLS: Proksi's hosts already do.
 
 | Page | |
 | --- | --- |
-| Overview | Status, instances sharing the store, live requests, errors and latency (`/api/v1/stats/stream`) |
+| Overview | Status and instances sharing the store; charts of requests, errors and latency (p50, p90, p99), CPU and memory; the latest requests as they're served |
 | Hosts | Every host served, with its source (`file`, `docker`, `kubernetes`, `store`), locations, upstreams and their health |
 | Host | Locations, upstreams, building blocks and rules, as forms. Hosts from the store can be changed; others are read-only |
 | Rules | A host's and its locations' rules, built as a tree of `and`, `or` and `not`, with a request to try them on |
 | Certificates | Domains, expiry, issuer, and the instance renewing each |
 | Changes | Who changed which host, when, and what; a previous version can be restored |
+
+The overview's charts and requests are kept by the page, in memory, from the time it's opened (up to the last 15 minutes): Proksi doesn't store more than it does today.
 
 Hosts from the configuration file, docker labels or Kubernetes are read-only: Proksi never rewrites those sources. The UI can **override** one: it copies the host to the store, where it takes priority (ADR 0001), and removing the override brings the original back. Any host can be **exported** as HCL, to move it into a configuration file. A UI test checks that exported hosts load back as the same JSON.
 
@@ -105,8 +107,11 @@ Hosts from the configuration file, docker labels or Kubernetes are read-only: Pr
 | `GET /api/v1/schema` | What the forms (and HCL export) are built from: building blocks and their settings (types, defaults, limits), which keys are blocks and which take a label, rule fields and the operators each takes |
 | `POST /api/v1/rules/test` | Rules and a request (method, host, path, headers, client): which rules match, in order, and what they'd do |
 | `GET /api/v1/routes/<host>/history` | The host's previous versions: revision, time, token name. `POST .../history/<revision>/restore` writes one back |
+| `GET /api/v1/requests/stream` | The requests being served, as server-sent events, with the fields of access logs (also when access logs are off). At most 100 a second for each stream, with the number skipped |
 | `POST`, `DELETE /api/v1/session` | Sign in and out |
 
+- `stats` and `stats/stream` gain the process: CPU (time used, and % of one core over the window), resident memory, memory in use by the allocator, and in a container, its memory limit and CPU quota (cgroups). They're read once a second by the task that already snapshots the stats.
+- `requests/stream` costs nothing while no one watches: the request path checks a count of open streams, and builds nothing when it's zero.
 - `schema` is generated from the code that reads the configuration, so the forms can't offer what Proksi wouldn't accept.
 - Every write is validated as a configuration file is, and logged: `{"admin_change": true, "token": "ops", "host": "api.example.com", "revision": 42}`.
 - The store keeps the last 50 versions of each host. Every store (memory, Redis, SQLite, Postgres) implements history the same way, with the routes they already keep.
@@ -130,7 +135,7 @@ Hosts from the configuration file, docker labels or Kubernetes are read-only: Pr
 
 1. Named read and read-write tokens, sessions, origin checks, security headers, failed sign-in limits, and the change log.
 2. The API: JSON only, one host with its revision and `If-Match`, `validate`, `schema`.
-3. Embedding: `ui/` built into the crate, CI, Docker and releases; the UI's overview, hosts (read-only) and certificates.
+3. Embedding: `ui/` built into the crate, CI, Docker and releases; process stats and `requests/stream`; the UI's overview, hosts (read-only) and certificates.
 4. Editing hosts: locations, upstreams and building blocks; overriding, and exporting as HCL.
 5. Rules: the editor, `rules/test`, and rule metrics (ADR 0007 step 3).
 6. History: versions in every store, the changes page, restoring.
