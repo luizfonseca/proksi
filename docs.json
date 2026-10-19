@@ -176,6 +176,10 @@
           "href": "/plugins/oauth2"
         },
         {
+          "title": "JWT",
+          "href": "/plugins/jwt"
+        },
+        {
           "title": "Rate limit",
           "href": "/plugins/rate-limit"
         },

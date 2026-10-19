@@ -3625,3 +3625,150 @@ host "*.wild.test" {{
     assert!(proksi.get("wild.test", "/").await.is_err());
     assert!(proksi.get("a.b.wild.test", "/").await.is_err());
 }
+
+const HOST_WITH_JWT: &str = r#"
+host "jwt.test" {
+  tls = false
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    jwt {
+      secret            = "e2e-secret"
+      issuer            = "https://auth.test/"
+      audience          = ["api"]
+      claims_to_headers = { sub = "X-User-Id", roles = "X-User-Roles" }
+    }
+  }
+
+  location "/cookie" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    jwt {
+      secret = "e2e-secret"
+      cookie = "session"
+    }
+  }
+
+  location "/jwks" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    jwt {
+      jwks_url = "http://127.0.0.1:{jwks_port}/jwks.json"
+    }
+  }
+}
+"#;
+
+/// Serves `body` (a JWKS) to every request
+async fn jwks_server(body: String) -> u16 {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                return;
+            };
+            let body = body.clone();
+            tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut buffer = [0u8; 4096];
+                let _ = stream.read(&mut buffer).await;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+            });
+        }
+    });
+    port
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_jwt() {
+    use jsonwebtoken::{encode, jwk::Jwk, Algorithm, EncodingKey, Header};
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let claims = serde_json::json!({
+        "sub": "alice", "roles": ["admin", "ops"], "iss": "https://auth.test/", "aud": "api", "exp": now + 600,
+    });
+    let secret = EncodingKey::from_secret(b"e2e-secret");
+    let valid = encode(&Header::default(), &claims, &secret).unwrap();
+    let wrong_key = encode(&Header::default(), &claims, &EncodingKey::from_secret(b"other")).unwrap();
+
+    // An RSA key, published as a JWKS
+    let rsa = openssl::rsa::Rsa::generate(2048).unwrap();
+    let rsa_key = EncodingKey::from_rsa_pem(&rsa.private_key_to_pem().unwrap()).unwrap();
+    let mut jwk = Jwk::from_encoding_key(&rsa_key, Algorithm::RS256).unwrap();
+    jwk.common.key_id = Some("k1".to_string());
+    let jwks_port = jwks_server(serde_json::json!({ "keys": [jwk] }).to_string()).await;
+    let mut header = Header::new(Algorithm::RS256);
+    header.kid = Some("k1".to_string());
+    let signed = encode(&header, &claims, &rsa_key).unwrap();
+
+    let config = HOST_WITH_JWT.replace("{jwks_port}", &jwks_port.to_string());
+    let mut proksi = Harness::start_without_https(&config).await;
+    let port = proksi.http_port;
+    let get = |path: &str, headers: &str| {
+        format!("GET {path} HTTP/1.1\r\nHost: jwt.test\r\n{headers}Connection: close\r\n\r\n")
+    };
+    let header = |res: &str, name: &str| {
+        res.lines()
+            .take_while(|line| !line.is_empty())
+            .find_map(|line| {
+                let (key, value) = line.split_once(": ")?;
+                key.eq_ignore_ascii_case(name).then(|| value.to_string())
+            })
+    };
+
+    // A valid token: proxied with its claims (not the client's own headers)
+    let request = get("/", &format!("Authorization: Bearer {valid}\r\nX-User-Id: mallory\r\n"));
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    let body = res.split("\r\n\r\n").nth(1).unwrap_or_default();
+    let upstream: serde_json::Value = serde_json::from_str(body).unwrap();
+    assert_eq!(upstream["headers"]["x-user-id"], "alice", "{res}");
+    assert_eq!(upstream["headers"]["x-user-roles"], "admin,ops", "{res}");
+
+    // No token, and an invalid one
+    let res = proksi.raw_http_on(port, get("/", "").as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 401"), "{res}");
+    assert_eq!(header(&res, "www-authenticate").as_deref(), Some("Bearer"));
+    let request = get("/", &format!("Authorization: Bearer {wrong_key}\r\n"));
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 401"), "{res}");
+    assert_eq!(
+        header(&res, "www-authenticate").as_deref(),
+        Some("Bearer error=\"invalid_token\"")
+    );
+
+    // From a cookie
+    let request = get("/cookie", &format!("Cookie: theme=dark; session={valid}\r\n"));
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    let request = get("/cookie", &format!("Authorization: Bearer {valid}\r\n"));
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 401"), "{res}");
+
+    // Signed by a key of the JWKS, fetched in the background
+    let request = get("/jwks", &format!("Authorization: Bearer {signed}\r\n"));
+    let mut status = String::new();
+    for _ in 0..50 {
+        let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+        status = res.lines().next().unwrap_or_default().to_string();
+        if status.starts_with("HTTP/1.1 200") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(status.starts_with("HTTP/1.1 200"), "{status}\n{}", proksi.logs());
+    let request = get("/jwks", &format!("Authorization: Bearer {valid}\r\n"));
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 401"), "{res}");
+
+    proksi.assert_healthy();
+}

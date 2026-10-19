@@ -189,6 +189,34 @@ pub struct ForwardAuth {
     pub priority: Priority,
 }
 
+/// `jwt`: lets through requests with a valid JSON Web Token, and answers `401` to the others
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Jwt {
+    /// The shared secret of HMAC tokens (HS256, HS384, HS512)
+    pub secret: Option<String>,
+    /// The public key of signed tokens, in PEM (RSA, ECDSA or Ed25519)
+    pub public_key: Option<String>,
+    /// Where the issuer publishes its public keys (JWKS), fetched in the background
+    pub jwks_url: Option<String>,
+    /// The issuer tokens must name (`iss`)
+    pub issuer: Option<String>,
+    /// Tokens must name one of these audiences (`aud`)
+    pub audience: Option<Vec<String>>,
+    /// Read the token from this cookie, instead of `Authorization: Bearer`
+    pub cookie: Option<String>,
+    /// Claims sent to the upstream as headers, by claim (`{ sub = "X-User-Id" }`). Headers of
+    /// the same names sent by the client are removed.
+    pub claims_to_headers: Option<std::collections::BTreeMap<String, String>>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
 /// `basic_auth`: asks for a user and password
 // Read by its plugin, from the settings as written
 #[allow(dead_code)]
@@ -292,6 +320,7 @@ pub fn schemas() -> serde_json::Map<String, serde_json::Value> {
         ("cors", schema(schemars::schema_for!(Cors))),
         ("compress", schema(schemars::schema_for!(Compress))),
         ("forward_auth", schema(schemars::schema_for!(ForwardAuth))),
+        ("jwt", schema(schemars::schema_for!(Jwt))),
         ("basic_auth", schema(schemars::schema_for!(BasicAuth))),
         ("oauth2", schema(schemars::schema_for!(Oauth2))),
         ("request_id", schema(schemars::schema_for!(RequestId))),
@@ -364,6 +393,7 @@ mod tests {
             "{limit}"
         );
         assert_eq!(limit["properties"]["priority"]["maximum"], 100);
-        assert_eq!(schemas.len(), 11);
+        assert_eq!(schemas["jwt"]["additionalProperties"], false);
+        assert_eq!(schemas.len(), 12);
     }
 }

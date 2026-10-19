@@ -55,7 +55,7 @@ hcl-rs = "0.19.4"
 http = "1.2.0"
 ipnet = "2.11.0"
 itertools = "0.15.0"
-jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto", "use_pem"] }
 nix = { version = "0.31.3", features = ["signal", "hostname", "process"] }
 notify = { version = "8.0.0", default-features = false, features = [
     "fsevent-sys",

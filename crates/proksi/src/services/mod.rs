@@ -133,6 +133,9 @@ impl pingora::services::ServiceWithDependents for BackgroundFunctionService {
             }
         };
 
+        // Keys of the `jwt` blocks' JWKS URLs: waits while no block uses one
+        let jwks = crate::blocks::jwt::jwks::refresh();
+
         let ready = ready(&self.config, shared, ready_notifier);
 
         let drain = crate::proxy_server::connections::exit_when_drained(
@@ -147,6 +150,7 @@ impl pingora::services::ServiceWithDependents for BackgroundFunctionService {
             kubernetes,
             certificate_metrics,
             live_stats,
+            jwks,
             Service::start_service(&mut routing_service, None, shutdown.clone(), _listeners_per_fd),
             Service::start_service(&mut health_service, None, shutdown.clone(), _listeners_per_fd),
             Service::start_service(&mut config_server, None, shutdown.clone(), _listeners_per_fd),
