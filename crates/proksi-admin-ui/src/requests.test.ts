@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { add, type Served, SHOWN } from './requests';
+import { add, addAll, type Served, SHOWN } from './requests';
 
 const served = (path: string): Served => ({
   time: 0,
@@ -19,5 +19,13 @@ describe('the latest requests', () => {
     for (let index = 0; index < SHOWN + 5; index++) requests = add(requests, served(`/${index}`));
     expect(requests).toHaveLength(SHOWN);
     expect(requests[0].path).toBe(`/${SHOWN + 4}`);
+  });
+
+  it('adds what arrived in a second at once, newest first', () => {
+    const requests = addAll([served('/old')], [served('/1'), served('/2')]);
+    expect(requests.map((one) => one.path)).toEqual(['/2', '/1', '/old']);
+    const many = Array.from({ length: SHOWN + 20 }, (_, index) => served(`/${index}`));
+    expect(addAll([], many)).toHaveLength(SHOWN);
+    expect(addAll([], many)[0].path).toBe(`/${SHOWN + 19}`);
   });
 });

@@ -39,12 +39,14 @@ const take = (history: Point[], read: (point: Point) => number | null) => histor
 
 function Requests() {
   const [paused, setPaused] = useState(false);
-  const { requests, skipped } = useRequests(paused);
+  const [held, setHeld] = useState(false);
+  const { requests, skipped } = useRequests(paused, held);
   return (
     <section class="panel requests">
       <div class="chart-head">
         <h3>Latest requests</h3>
         <div class="legend">
+          {held && !paused && <span>Held while the pointer is on the list</span>}
           {skipped > 0 && <span>{skipped} not shown last second (more than 100)</span>}
           <button type="button" class="secondary" onClick={() => setPaused(!paused)}>
             {paused ? 'Resume' : 'Pause'}
@@ -57,7 +59,7 @@ function Requests() {
           Requests appear here as they're served, while this page is open.
         </div>
       ) : (
-        <div class="table-scroll">
+        <div class="table-scroll" onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)}>
           <table>
             <thead>
               <tr>
