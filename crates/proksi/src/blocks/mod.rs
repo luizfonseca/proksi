@@ -24,6 +24,7 @@ use cors::Cors;
 use forward_auth::ForwardAuth;
 use headers::Headers;
 use ip_filter::IpFilter;
+use jwt::Jwt;
 use oauth2::Oauth2;
 use priority::{plugin_priority, priority};
 use rate_limit::RateLimit;
@@ -38,6 +39,7 @@ mod cors;
 mod forward_auth;
 mod headers;
 mod ip_filter;
+pub mod jwt;
 mod oauth2;
 mod priority;
 mod rate_limit;
@@ -102,6 +104,7 @@ pub enum Kind {
     Respond,
     BodyLimit,
     BasicAuth,
+    Jwt,
     Oauth2,
     ForwardAuth,
     Compress,
@@ -120,6 +123,7 @@ impl Kind {
             Kind::Respond => "respond",
             Kind::BodyLimit => "body_limit",
             Kind::BasicAuth => "basic_auth",
+            Kind::Jwt => "jwt",
             Kind::Oauth2 => "oauth2",
             Kind::ForwardAuth => "forward_auth",
             Kind::Compress => "compress",
@@ -134,7 +138,7 @@ impl Kind {
             Kind::RequestId | Kind::IpFilter | Kind::Cors | Kind::RateLimit => 0,
             Kind::Redirect | Kind::Respond => 5,
             Kind::BodyLimit => 10,
-            Kind::BasicAuth | Kind::Oauth2 | Kind::ForwardAuth => 20,
+            Kind::BasicAuth | Kind::Jwt | Kind::Oauth2 | Kind::ForwardAuth => 20,
             Kind::Compress => 40,
             Kind::Headers => 50,
             Kind::Cache => 60,
@@ -177,6 +181,7 @@ impl Blocks {
                 "redirect" => (Kind::Redirect, Arc::new(Redirect::new(plugin)?)),
                 "respond" => (Kind::Respond, Arc::new(Respond::new(plugin)?)),
                 "basic_auth" => (Kind::BasicAuth, Arc::new(BasicAuth::new(plugin)?)),
+                "jwt" => (Kind::Jwt, Arc::new(Jwt::new(plugin)?)),
                 "oauth2" => (Kind::Oauth2, Arc::new(Oauth2::new(plugin)?)),
                 "forward_auth" => (Kind::ForwardAuth, Arc::new(ForwardAuth::new(plugin)?)),
                 "compress" => (Kind::Compress, Arc::new(Compress::new(plugin)?)),
@@ -252,6 +257,7 @@ impl Blocks {
                         | Kind::RateLimit
                         | Kind::BodyLimit
                         | Kind::BasicAuth
+                        | Kind::Jwt
                         | Kind::Oauth2
                         | Kind::ForwardAuth
                 )

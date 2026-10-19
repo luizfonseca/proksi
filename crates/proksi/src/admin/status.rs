@@ -270,7 +270,7 @@ fn upstreams(
 const HIDDEN: &str = "(hidden)";
 
 /// Blocks whose settings are secrets (passwords, client secrets, auth endpoints' headers)
-const SECRET_BLOCKS: [&str; 3] = ["basic_auth", "oauth2", "forward_auth"];
+const SECRET_BLOCKS: [&str; 4] = ["basic_auth", "jwt", "oauth2", "forward_auth"];
 
 /// Rules as written, without what can be a secret: the values headers, cookies and query
 /// parameters are compared with (API keys), the settings of authentication blocks, and the values of headers they add

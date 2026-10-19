@@ -1,0 +1,71 @@
+---
+title: "JWT"
+description: "Lets through requests with a valid JSON Web Token."
+---
+
+Requests of a location need a valid [JSON Web Token](https://jwt.io/introduction), signed by your auth service (Auth0, Keycloak, Cognito, Supabase, your own API). Others get a `401`. Claims of the token, such as who the user is, can be sent to the upstream as headers, so it doesn't have to check tokens itself.
+
+The token is read from `Authorization: Bearer <token>`, or from a cookie with `cookie`. It's checked for:
+
+- **Its signature**, by one of the keys below. Algorithms follow from the key: an HMAC secret checks `HS256`, `HS384` and `HS512` tokens, an RSA key `RS*` and `PS*`, an ECDSA key `ES256` and `ES384`, an Ed25519 key `EdDSA`. Unsigned tokens (`alg: none`), and tokens claiming another algorithm than their key's, are refused.
+- **Its expiry**: `exp` is required, and `exp` and `nbf` are checked with 60 seconds of leeway, for clocks a bit apart.
+- **Its issuer and audience**, when `issuer` and `audience` are set.
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `secret` | The shared secret of HMAC tokens |
+| `public_key` | The public key of signed tokens, in PEM (RSA, ECDSA or Ed25519) |
+| `jwks_url` | Where the issuer publishes its public keys (a JWKS, such as `https://auth.example.com/.well-known/jwks.json`) |
+| `issuer` | The issuer tokens must name (`iss`) |
+| `audience` | Tokens must name one of these audiences (`aud`) |
+| `cookie` | Read the token from this cookie, instead of `Authorization: Bearer` |
+| `claims_to_headers` | Claims sent to the upstream as headers, by claim: `{ sub = "X-User-Id" }`. Lists are joined with commas. The client's own headers with these names are removed, so they can't be forged. |
+| `priority` | When it runs among the blocks of the location (default: `20`, as the other authentication blocks) |
+
+One of `secret`, `public_key` and `jwks_url` is required.
+
+### Usage
+
+**proksi.hcl**
+```hcl
+host "api.example.com" {
+  location "/v1" {
+    upstream "api:8080" {}
+
+    jwt {
+      jwks_url = "https://auth.example.com/.well-known/jwks.json"
+      issuer   = "https://auth.example.com/"
+      audience = ["api"]
+
+      claims_to_headers = {
+        sub   = "X-User-Id"
+        email = "X-User-Email"
+      }
+    }
+  }
+
+  # Public: no token needed
+  location "/v1/health" {
+    upstream "api:8080" {}
+  }
+}
+```
+
+With a shared secret instead, kept out of the file:
+
+```hcl
+jwt {
+  secret = env("JWT_SECRET")
+}
+```
+
+### Good to know
+
+- Keys of a `jwks_url` are fetched in the background, never while a request waits: when Proksi starts, every 10 minutes, and when a token names a key not seen yet (at most once a minute), so rotated keys are picked up. If fetching fails, the keys fetched before are kept. Locations with the same `jwks_url` share one copy.
+- Requests are refused with `401` and `WWW-Authenticate: Bearer` (no token) or `Bearer error="invalid_token"`. Why a token was refused is logged at the `debug` level, not told to the client.
+- The token is passed on to the upstream as it came.
+- The admin UI and API don't show the block's settings, as they can hold a secret.
+- Requests it refuses are counted in `proksi_blocked_requests_total` with `block="jwt"` (see [metrics](/configuration/admin#metrics)).
+- It can also be a [rule's](/rules/actions) action, for some requests only.

@@ -27,6 +27,7 @@ pub struct LocationBlock {
     pub headers: Option<HeadersBlock>,
     pub cache: Option<RouteCache>,
     pub basic_auth: Option<PluginConfig>,
+    pub jwt: Option<PluginConfig>,
     pub oauth2: Option<PluginConfig>,
     pub forward_auth: Option<PluginConfig>,
     pub request_id: Option<PluginConfig>,
@@ -89,6 +90,7 @@ impl LocationBlock {
     fn plugins(&self) -> Vec<RoutePlugin> {
         [
             ("basic_auth", &self.basic_auth),
+            ("jwt", &self.jwt),
             ("oauth2", &self.oauth2),
             ("forward_auth", &self.forward_auth),
             ("request_id", &self.request_id),
