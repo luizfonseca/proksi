@@ -133,9 +133,10 @@ Hosts from the configuration file, docker labels or Kubernetes are read-only: Pr
 
 ## Steps
 
-1. Named read and read-write tokens, sessions, origin checks, security headers, failed sign-in limits, and the change log.
-2. The API: JSON only, one host with its revision and `If-Match`, `validate`, `schema`.
-3. Embedding: `ui/` built into the crate, CI, Docker and releases; process stats and `requests/stream`; the UI's overview, hosts (read-only) and certificates.
+1. Embedding: `ui/` built into the crate, CI, Docker and releases; the UI's hosts (read-only) and certificates.
+2. Named read and read-write tokens, sessions, origin checks, security headers, failed sign-in limits, and the change log.
+3. The API: JSON only, one host with its revision and `If-Match`, `validate`, `schema`.
 4. Editing hosts: locations, upstreams and building blocks; overriding, and exporting as HCL.
 5. Rules: the editor, `rules/test`, and rule metrics (ADR 0007 step 3).
 6. History: versions in every store, the changes page, restoring.
+7. The overview: process stats, `requests/stream`, and its charts.
