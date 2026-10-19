@@ -37,13 +37,14 @@ Wildcard hosts are allowed wherever hosts are named: the configuration file, doc
 
 ### DNS-01 challenges
 
-The DNS provider is configured once, in `lets_encrypt`:
+The DNS provider is configured once, in `lets_encrypt`. As elsewhere, a block's label would be a name chosen by the user, so the provider is a setting of the block, not its label:
 
 ```hcl
 lets_encrypt {
   email = "ops@example.com"
 
-  dns "cloudflare" {
+  dns {
+    provider  = "cloudflare"
     api_token = env("CLOUDFLARE_API_TOKEN")
   }
 }
