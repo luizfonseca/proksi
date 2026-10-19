@@ -119,12 +119,29 @@ export function point(stats: Stats, at: number): Point {
   };
 }
 
-/** Hosts with requests in the latest stats, busiest first */
-export function activeHosts(stats: Stats | null): { host: string; point: HostPoint }[] {
-  return (stats?.hosts ?? [])
-    .map((host) => ({ host: host.host, point: hostPoint(host, stats?.window_seconds ?? 1) }))
-    .filter(({ point }) => point.requests > 0)
-    .sort((a, b) => b.point.requests - a.point.requests);
+/** A host in "Hosts right now": its latest numbers, and when it last had requests */
+export type ActiveHost = { host: string; point: HostPoint; lastSeen: number };
+
+/**
+ * Hosts with requests since the page opened (its history): the busiest of the latest stats first,
+ * then the others, most recently seen first. They stay until the history no longer has them.
+ */
+export function activeHosts(stats: Stats | null, history: Point[]): ActiveHost[] {
+  const now = history.length ? history[history.length - 1].at : Date.now();
+  const lastSeen = new Map<string, number>();
+  for (const point of history) {
+    for (const [host, numbers] of Object.entries(point.hosts)) {
+      if (numbers.requests > 0) lastSeen.set(host, point.at);
+    }
+  }
+  const latest = new Map((stats?.hosts ?? []).map((host) => [host.host, hostPoint(host, stats?.window_seconds ?? 1)]));
+  for (const [host, point] of latest) {
+    if (point.requests > 0) lastSeen.set(host, now);
+  }
+  const idle: HostPoint = { requests: 0, errors: 0, p50: null, p99: null };
+  return [...lastSeen]
+    .map(([host, seen]) => ({ host, point: latest.get(host) ?? idle, lastSeen: seen }))
+    .sort((a, b) => b.point.requests - a.point.requests || b.lastSeen - a.lastSeen);
 }
 
 /** `points` with `next`, without the ones beyond `KEPT` */

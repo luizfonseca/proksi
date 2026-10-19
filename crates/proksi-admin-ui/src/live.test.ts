@@ -47,8 +47,31 @@ describe('the live history', () => {
         { location: '/', requests_per_second: rate, responses: { '2xx': rate * 5 }, duration_ms: { p50: 1, p90: 1, p99: 1 }, blocked: {}, upstreams: [] },
       ],
     });
-    const hosts = activeHosts({ ...stats, hosts: [host('quiet.test', 0), host('a.test', 1), host('b.test', 9)] });
+    const hosts = activeHosts({ ...stats, hosts: [host('quiet.test', 0), host('a.test', 1), host('b.test', 9)] }, []);
     expect(hosts.map(({ host }) => host)).toEqual(['b.test', 'a.test']);
+  });
+
+  it('keeps the hosts that had requests since the page opened, most recent first', () => {
+    const host = (name: string, rate: number) => ({
+      host: name,
+      locations: [
+        { location: '/', requests_per_second: rate, responses: { '2xx': rate * 5 }, duration_ms: { p50: 1, p90: 1, p99: 1 }, blocked: {}, upstreams: [] },
+      ],
+    });
+    const at = (time: number, hosts: { host: string; locations: ReturnType<typeof host>['locations'] }[]) => point({ ...stats, hosts }, time);
+    const history = [
+      at(1000, [host('old.test', 2), host('recent.test', 0)]),
+      at(2000, [host('old.test', 0), host('recent.test', 1)]),
+      at(3000, [host('old.test', 0), host('recent.test', 0), host('busy.test', 3)]),
+    ];
+    const latest = { ...stats, hosts: [host('old.test', 0), host('recent.test', 0), host('busy.test', 3), host('never.test', 0)] };
+    const hosts = activeHosts(latest, history);
+    expect(hosts.map(({ host, lastSeen }) => [host, lastSeen])).toEqual([
+      ['busy.test', 3000],
+      ['recent.test', 2000],
+      ['old.test', 1000],
+    ]);
+    expect(hosts[1].point.requests).toBe(0);
   });
 
   it('reads the tcp blocks', () => {
