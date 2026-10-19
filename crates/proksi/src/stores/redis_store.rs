@@ -287,7 +287,7 @@ impl Store for RedisStore {
         }
 
         // Replaced in place, so handshakes always find a certificate
-        let mut cache = self.cache.pin();
+        let cache = self.cache.pin();
         for (domain, certificate) in &certificates {
             cache.insert(domain.clone(), certificate.clone());
         }
