@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.14.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.14.0...proksi-v0.14.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* tcp blocks in the admin UI ([#492](https://github.com/luizfonseca/proksi/issues/492)) ([e608648](https://github.com/luizfonseca/proksi/commit/e6086488e0797e72064ea0bbf3cc89a3088aeae7))
+* tcp connections closed before any bytes aren't errors ([#494](https://github.com/luizfonseca/proksi/issues/494)) ([8400796](https://github.com/luizfonseca/proksi/commit/8400796dd1179bfba9b6d422bd7ce12ae17efc3d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.14.0 to 0.14.1
+
 ## [0.14.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.13.1...proksi-v0.14.0) (2026-10-19)
 
 
