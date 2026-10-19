@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
-import type { Host } from '../api';
-import { Lock, Search } from '../components/icons';
-import { Loaded, SourceBadge } from '../components/State';
+import type { Host, TcpBlock } from '../api';
+import { Lock, Search, Unlock } from '../components/icons';
+import { Loaded, ProtocolBadge, SourceBadge } from '../components/State';
 import { navigate, onLink } from '../router';
 import { useCanWrite } from '../session';
 import { useData } from '../useData';
@@ -41,6 +41,8 @@ function Summary({ hosts }: { hosts: Host[] }) {
 
 export function Hosts() {
   const [data] = useData<Host[]>('/hosts');
+  const [tcp] = useData<TcpBlock[]>('/tcp', 10000);
+  const tcpHosts = new Set(tcp.state === 'ready' ? tcp.value.map((block) => block.host) : []);
   const [query, setQuery] = useState('');
   const [source, setSource] = useState('all');
   const canWrite = useCanWrite();
@@ -110,8 +112,10 @@ export function Hosts() {
                                 {host.tls ? (
                                   <span class="tls" title="HTTPS"><Lock /></span>
                                 ) : (
-                                  <span class="badge warn" title="Served over plain HTTP">HTTP</span>
+                                  <span class="plain" title="Plain HTTP: no TLS"><Unlock /></span>
                                 )}
+                                {host.locations.length > 0 && <ProtocolBadge protocol="http" />}
+                                {tcpHosts.has(host.host) && <ProtocolBadge protocol="tcp" />}
                               </span>
                             </td>
                             <td><SourceBadge source={host.source} /></td>

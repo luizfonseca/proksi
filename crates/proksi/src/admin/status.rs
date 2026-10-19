@@ -2,10 +2,15 @@
 
 use std::{collections::BTreeMap, time::Instant};
 
+use pingora::lb::{selection::RoundRobin, LoadBalancer};
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
+    config::{
+        tcp::{TcpRoute, TcpTls},
+        RouteUpstream,
+    },
     routing::merge::{Conflict, InvalidRoute},
     stores::{store_trait::Store, stored_route::ReplicaStatus},
 };
@@ -18,6 +23,8 @@ pub struct Instance {
     pub listeners: Value,
     /// The settings read at startup (none on the metrics-only listener)
     pub server: Option<super::server::Settings>,
+    /// The `tcp` blocks, set at startup
+    pub tcp: Vec<TcpRoute>,
 }
 
 /// `GET /api/v1/status`: version, replica, listeners, the store's revision and its replicas,
@@ -95,6 +102,22 @@ pub struct AddressStatus {
     pub healthy: bool,
 }
 
+/// `GET /api/v1/tcp`: a `tcp` block
+#[derive(Debug, Serialize)]
+pub struct TcpStatus {
+    /// How the stats name it (`tcp "db" in host "a.com"`)
+    pub block: String,
+    pub name: String,
+    /// The host it's in, if any
+    pub host: Option<String>,
+    pub listen: String,
+    /// `none`, `terminate` or `passthrough`
+    pub tls: &'static str,
+    /// Protocols (ALPN) it's chosen by
+    pub alpn: Vec<String>,
+    pub upstreams: Vec<UpstreamStatus>,
+}
+
 /// `GET /api/v1/certificates`: a certificate in the store
 #[derive(Debug, Serialize)]
 pub struct CertificateStatus {
@@ -157,22 +180,7 @@ pub fn hosts() -> Vec<HostStatus> {
                 .locations
                 .iter()
                 .map(|location| {
-                    let upstreams = location
-                        .upstreams
-                        .iter()
-                        .zip(location.upstream_health())
-                        .zip(location.upstream_addresses())
-                        .map(|((upstream, healthy), addresses)| UpstreamStatus {
-                            upstream: format!("{}:{}", upstream.ip, upstream.port),
-                            name: upstream.name.clone(),
-                            weight: upstream.weight.unwrap_or(1),
-                            healthy,
-                            addresses: addresses
-                                .into_iter()
-                                .map(|(address, healthy)| AddressStatus { address, healthy })
-                                .collect(),
-                        })
-                        .collect();
+                    let upstreams = upstreams(&location.upstreams, location.upstream_addresses());
                     LocationStatus {
                         location: location.path.clone(),
                         blocks: location
@@ -197,6 +205,65 @@ pub fn hosts() -> Vec<HostStatus> {
         .collect::<Vec<_>>();
     hosts.sort_by(|a, b| a.host.cmp(&b.host));
     hosts
+}
+
+/// The `tcp` blocks, with the health of their upstreams (from their `load_balancers`, by block)
+pub fn tcp(
+    routes: &[TcpRoute],
+    load_balancers: &[(String, std::sync::Arc<LoadBalancer<RoundRobin>>)],
+) -> Vec<TcpStatus> {
+    routes
+        .iter()
+        .map(|route| {
+            let block = route.label();
+            let addresses = load_balancers
+                .iter()
+                .find(|(label, _)| *label == block)
+                .map(|(_, load_balancer)| {
+                    crate::routing::build::upstream_addresses(load_balancer, route.upstreams.len())
+                })
+                .unwrap_or_default();
+            TcpStatus {
+                name: route.name.clone(),
+                host: route.host.clone(),
+                listen: route.listen.clone(),
+                tls: match route.tls {
+                    TcpTls::None => "none",
+                    TcpTls::Terminate => "terminate",
+                    TcpTls::Passthrough => "passthrough",
+                },
+                alpn: route.alpn.clone(),
+                upstreams: upstreams(&route.upstreams, addresses),
+                block,
+            }
+        })
+        .collect()
+}
+
+/// `upstreams` with the addresses each resolved to: healthy when one of them is
+fn upstreams(
+    upstreams: &[RouteUpstream],
+    addresses: Vec<Vec<(String, bool)>>,
+) -> Vec<UpstreamStatus> {
+    let mut addresses = addresses.into_iter();
+    upstreams
+        .iter()
+        .map(|upstream| {
+            let addresses = addresses
+                .next()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(address, healthy)| AddressStatus { address, healthy })
+                .collect::<Vec<_>>();
+            UpstreamStatus {
+                upstream: format!("{}:{}", upstream.ip, upstream.port),
+                name: upstream.name.clone(),
+                weight: upstream.weight.unwrap_or(1),
+                healthy: addresses.iter().any(|address| address.healthy),
+                addresses,
+            }
+        })
+        .collect()
 }
 
 /// What's hidden of a rule
@@ -357,6 +424,7 @@ mod tests {
             store_type: "memory".to_string(),
             listeners: json!({ "https": ["0.0.0.0:443"] }),
             server: None,
+            tcp: vec![],
         }
     }
 
@@ -403,6 +471,55 @@ mod tests {
                     "weight": 1,
                     "healthy": true,
                     "addresses": [{ "address": "10.0.0.7:3000", "healthy": true }],
+                }],
+            }])
+        );
+    }
+
+    #[test]
+    fn test_tcp() {
+        use crate::config::{
+            tcp::{TcpRoute, TcpTls},
+            RouteUpstream,
+        };
+        let upstreams = vec![RouteUpstream {
+            ip: "10.0.0.9".into(),
+            port: 5432,
+            ..RouteUpstream::default()
+        }];
+        let route = TcpRoute {
+            name: "postgres".to_string(),
+            host: Some("db.test".to_string()),
+            listen: "0.0.0.0:5433".to_string(),
+            tls: TcpTls::Terminate,
+            alpn: vec!["postgresql".to_string()],
+            connect_timeout: Duration::from_secs(1),
+            idle_timeout: None,
+            health_check: None,
+            upstreams: upstreams.clone(),
+        };
+        let load_balancers = [(
+            route.label(),
+            Arc::new(crate::routing::build::load_balancer(&upstreams)),
+        )];
+
+        let tcp = serde_json::to_value(super::tcp(&[route], &load_balancers)).unwrap();
+
+        assert_eq!(
+            tcp,
+            json!([{
+                "block": "tcp \"postgres\" in host \"db.test\"",
+                "name": "postgres",
+                "host": "db.test",
+                "listen": "0.0.0.0:5433",
+                "tls": "terminate",
+                "alpn": ["postgresql"],
+                "upstreams": [{
+                    "upstream": "10.0.0.9:5432",
+                    "name": null,
+                    "weight": 1,
+                    "healthy": true,
+                    "addresses": [{ "address": "10.0.0.9:5432", "healthy": true }],
                 }],
             }])
         );

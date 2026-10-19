@@ -24,6 +24,17 @@ export type LocationStats = {
   upstreams: UpstreamStats[];
 };
 export type HostStats = { host: string; locations: LocationStats[] };
+/** A `tcp` block's connections, named as in `/api/v1/tcp` (`tcp "db" in host "a.com"`) */
+export type TcpStats = {
+  block: string;
+  connections_per_second: number;
+  active: number;
+  bytes_in_per_second: number;
+  bytes_out_per_second: number;
+  /** Connections that couldn't reach an upstream */
+  upstream_errors: number;
+  duration_ms: Percentiles;
+};
 
 /** What `/api/v1/stats` reports (the parts the overview uses) */
 export type Stats = {
@@ -37,7 +48,11 @@ export type Stats = {
     cpu_limit: number | null;
   };
   hosts: HostStats[];
+  tcp: TcpStats[];
 };
+
+/** A `tcp` block's point: its new connections a second, open ones, and bytes a second both ways */
+export type TcpPoint = { connections: number; active: number; bytes: number };
 
 /** A host's point: its requests, and the 5xx among them, a second, and its latency */
 export type HostPoint = { requests: number; errors: number; p50: number | null; p99: number | null };
@@ -57,6 +72,7 @@ export type Point = {
   memory: number;
   allocator: number;
   hosts: Record<string, HostPoint>;
+  tcp: Record<string, TcpPoint>;
 };
 
 /** A host's numbers: its locations added up (its slowest location's latency) */
@@ -94,6 +110,12 @@ export function point(stats: Stats, at: number): Point {
     memory: stats.process.memory_bytes,
     allocator: stats.process.allocator_bytes,
     hosts: Object.fromEntries((stats.hosts ?? []).map((host) => [host.host, hostPoint(host, window)])),
+    tcp: Object.fromEntries(
+      (stats.tcp ?? []).map((block) => [
+        block.block,
+        { connections: block.connections_per_second, active: block.active, bytes: block.bytes_in_per_second + block.bytes_out_per_second },
+      ]),
+    ),
   };
 }
 

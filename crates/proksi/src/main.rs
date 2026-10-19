@@ -258,6 +258,7 @@ fn add_listeners(
                 "metrics": listeners.metrics.map(|address| address.to_string()),
             }),
             server: Some(admin::server::Settings::new(proxy_config)),
+            tcp: listeners.tcp.clone(),
         };
         handles.push(server.add_service(admin::admin_service(address, tokens, trusted_origins, instance)));
     }

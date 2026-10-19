@@ -6,6 +6,7 @@ const stats: Stats = {
   total: { requests_per_second: 4, responses: { '2xx': 18, '5xx': 2 }, duration_ms: { p50: 3, p90: 9, p99: 40 } },
   process: { cpu_percent: 12.5, memory_bytes: 2048, allocator_bytes: 1024, memory_limit_bytes: null, cpu_limit: null },
   hosts: [],
+  tcp: [],
 };
 
 describe('the live history', () => {
@@ -22,6 +23,7 @@ describe('the live history', () => {
       memory: 2048,
       allocator: 1024,
       hosts: {},
+      tcp: {},
     });
   });
 
@@ -47,6 +49,21 @@ describe('the live history', () => {
     });
     const hosts = activeHosts({ ...stats, hosts: [host('quiet.test', 0), host('a.test', 1), host('b.test', 9)] });
     expect(hosts.map(({ host }) => host)).toEqual(['b.test', 'a.test']);
+  });
+
+  it('reads the tcp blocks', () => {
+    const tcp = [
+      {
+        block: 'tcp "db"',
+        connections_per_second: 2,
+        active: 4,
+        bytes_in_per_second: 500,
+        bytes_out_per_second: 1500,
+        upstream_errors: 1,
+        duration_ms: { p50: 10, p90: 20, p99: 30 },
+      },
+    ];
+    expect(point({ ...stats, tcp }, 0).tcp).toEqual({ 'tcp "db"': { connections: 2, active: 4, bytes: 2000 } });
   });
 
   it('has no errors without requests', () => {

@@ -10,7 +10,7 @@ use super::Reply;
 const WINDOWS: std::ops::RangeInclusive<u64> = 1..=300;
 
 /// Paths answering other methods (`405` rather than `404`)
-const PATHS: [&str; 12] = [
+const PATHS: [&str; 13] = [
     "/api/v1/schema",
     "/api/v1/validate",
     "/metrics",
@@ -20,6 +20,7 @@ const PATHS: [&str; 12] = [
     "/api/v1/status",
     "/api/v1/server",
     "/api/v1/hosts",
+    "/api/v1/tcp",
     "/api/v1/certificates",
     "/api/v1/routes",
     "/api/v1/session",
@@ -46,6 +47,8 @@ pub enum Endpoint<'a> {
     Validate,
     /// `GET /api/v1/hosts`: the hosts served, from every source
     Hosts,
+    /// `GET /api/v1/tcp`: the `tcp` blocks
+    Tcp,
     /// `GET /api/v1/certificates`
     Certificates,
     /// `GET /api/v1/routes`: the hosts in the store
@@ -68,7 +71,7 @@ impl<'a> Endpoint<'a> {
     pub fn parse(method: &Method, path: &'a str, query: Option<&'a str>) -> Result<Self, Reply> {
         use Endpoint::{
             Certificates, DeleteRoute, Hosts, Metrics, PutRoute, RequestsStream, Route, Routes, Schema, Validate,
-            Server, Session, SignIn, SignOut, Stats, StatsStream, Status,
+            Server, Session, SignIn, SignOut, Stats, StatsStream, Status, Tcp,
         };
 
         if let Some(host) = path.strip_prefix("/api/v1/routes/") {
@@ -92,6 +95,7 @@ impl<'a> Endpoint<'a> {
             ("GET", "/api/v1/schema") => Schema,
             ("POST", "/api/v1/validate") => Validate,
             ("GET", "/api/v1/hosts") => Hosts,
+            ("GET", "/api/v1/tcp") => Tcp,
             ("GET", "/api/v1/certificates") => Certificates,
             ("GET", "/api/v1/routes") => Routes,
             ("GET", "/api/v1/session") => Session,
@@ -181,6 +185,7 @@ mod tests {
             parse(Method::GET, "/api/v1/server", None),
             Ok(Endpoint::Server)
         );
+        assert_eq!(parse(Method::GET, "/api/v1/tcp", None), Ok(Endpoint::Tcp));
         assert_eq!(
             parse(Method::GET, "/api/v1/routes/a.test", None),
             Ok(Endpoint::Route("a.test"))

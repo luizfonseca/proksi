@@ -396,6 +396,9 @@ fn collect(earlier: &Sample, latest: &Sample) -> (Hosts, BTreeMap<String, Tcp>) 
                     block.bytes_out = delta();
                 }
             }
+            "proksi_tcp_upstream_errors_total" => {
+                tcp.entry(label("block").to_string()).or_default().upstream_errors = delta();
+            }
             "proksi_tcp_connection_duration_seconds" => {
                 tcp.entry(label("block").to_string()).or_default().duration = histogram();
             }
@@ -475,6 +478,7 @@ fn render(window: f64, hosts: Hosts, tcp: BTreeMap<String, Tcp>) -> Value {
                 "active": count(stats.active),
                 "bytes_in_per_second": per_second(stats.bytes_in),
                 "bytes_out_per_second": per_second(stats.bytes_out),
+                "upstream_errors": count(stats.upstream_errors),
                 "duration_ms": percentiles(&stats.duration),
             })
         })
@@ -519,6 +523,7 @@ struct Tcp {
     active: f64,
     bytes_in: f64,
     bytes_out: f64,
+    upstream_errors: f64,
     duration: Vec<(f64, u64)>,
 }
 
@@ -736,6 +741,7 @@ mod tests {
                 ),
                 (key("proksi_tcp_connections_total", &tcp), Reading::Scalar(11.0)),
                 (key("proksi_tcp_connections_active", &tcp), Reading::Scalar(4.0)),
+                (key("proksi_tcp_upstream_errors_total", &tcp), Reading::Scalar(3.0)),
                 (
                     key("proksi_tcp_bytes_total", &[tcp[0], ("direction", "in")]),
                     Reading::Scalar(5000.0),
@@ -773,6 +779,8 @@ mod tests {
         assert_eq!(tcp["active"], json!(4));
         assert_eq!(tcp["bytes_in_per_second"], json!(500.0));
         assert_eq!(tcp["bytes_out_per_second"], json!(0.0));
+        // Connections that couldn't reach an upstream in the window
+        assert_eq!(tcp["upstream_errors"], json!(3));
 
         // Every host and location together
         assert_eq!(stats["total"]["requests_per_second"], json!(2.0));
