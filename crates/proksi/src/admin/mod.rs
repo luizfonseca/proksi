@@ -29,6 +29,18 @@ mod ui;
 
 use endpoint::Endpoint;
 
+/// Whether the admin API is served (an `admin` block): what only it reads (rules as written) is
+/// kept only then
+static ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn enable() {
+    ENABLED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn enabled() -> bool {
+    ENABLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Largest request body accepted (a host)
 const MAX_BODY: usize = 1024 * 1024;
 
