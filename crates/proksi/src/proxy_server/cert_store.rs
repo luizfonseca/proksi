@@ -49,8 +49,9 @@ impl TlsAccept for CertStore {
             .unwrap_or_default()
             .to_string();
 
+        // A wildcard host's certificate for the names it serves (ADR 0009)
         let Some(cert) = stores::global::get_store()
-            .get_certificate(&host_name)
+            .get_certificate(&stores::lookup::certificate_name(&host_name))
             .await
         else {
             tracing::info!("No certificate found for host: {:?}", host_name);

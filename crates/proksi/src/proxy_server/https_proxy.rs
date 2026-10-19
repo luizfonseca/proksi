@@ -162,7 +162,7 @@ impl ProxyHttp for Router {
                         return Ok(true);
                     }
                 } else {
-                    let port = stores::get_route_by_key(&host_without_port.to_lowercase())
+                    let port = stores::lookup::named_host(host_without_port)
                         .and_then(|host| host.https_redirect_port());
                     return http_proxy::redirect_to_https(session, &req_host, port).await;
                 }

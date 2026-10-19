@@ -327,7 +327,12 @@ impl LetsencryptService {
             return Self::insert_certificate(domain, cert.certificate(), cert.private_key()).await;
         }
 
-        let ordered = Self::create_order_for_domain(domain, account).await;
+        // Let's Encrypt issues wildcard certificates through DNS-01 only (ADR 0009)
+        let ordered = if domain.starts_with("*.") {
+            Err(anyhow!("wildcard certificates need the DNS-01 challenge"))
+        } else {
+            Self::create_order_for_domain(domain, account).await
+        };
         if ordered.is_err() {
             Self::create_self_signed_certificate(domain, self_signed_on_failure).await?;
         }

@@ -584,6 +584,23 @@ mod tests {
     }
 
     #[test]
+    fn test_wildcard_hosts() {
+        let ingresses = vec![ingress(
+            "web",
+            "2026-01-01T00:00:00Z",
+            json!({
+                "ingressClassName": "proksi",
+                "rules": [rule(Some("*.a.test"), json!([path(Some("/"), "Prefix", "web", json!({ "number": 80 }))]))],
+            }),
+        )];
+
+        let Converted { hosts, invalid, .. } = hosts(&cluster(ingresses), "proksi");
+
+        assert_eq!(invalid, vec![]);
+        assert_eq!(by_name(&hosts, "*.a.test").locations.len(), 1);
+    }
+
+    #[test]
     fn test_only_ingresses_of_the_class() {
         let spec = |class: Option<&str>| {
             let mut spec = json!({

@@ -4,13 +4,25 @@ use std::sync::Arc;
 
 use super::{get_route_by_key, get_routes, host_container::HostContainer};
 
-/// Host serving a request for `name`: the host with that name, or `*` if there's none.
+/// Host serving a request for `name`: the host with that name, the wildcard host of its parent
+/// (`*.example.com` for `a.example.com`), or `*` if there's neither (ADR 0009).
 /// `None` if that host doesn't `serves` the request (e.g. on the port it came in on).
 pub fn find_host(
     name: &str,
     serves: impl Fn(&Arc<HostContainer>) -> bool,
 ) -> Option<Arc<HostContainer>> {
     find_host_in(name, get_route_by_key, serves)
+}
+
+/// The host with that name, or the wildcard host of its parent, without the catch-all `*`
+pub fn named_host(name: &str) -> Option<Arc<HostContainer>> {
+    named_host_in(name, get_route_by_key)
+}
+
+/// The name the certificate for `name` (a TLS server name) is stored under: the name of the
+/// host serving it, so a wildcard host's for names it serves
+pub fn certificate_name(name: &str) -> std::borrow::Cow<'_, str> {
+    certificate_name_in(name, get_route_by_key)
 }
 
 /// Hosts served over HTTPS, with whether to fall back to a self-signed certificate
@@ -23,6 +35,12 @@ fn find_host_in<T>(
     get: impl Fn(&str) -> Option<T>,
     serves: impl Fn(&T) -> bool,
 ) -> Option<T> {
+    named_host_in(name, &get)
+        .or_else(|| get("*"))
+        .filter(|host| serves(host))
+}
+
+fn named_host_in<T>(name: &str, get: impl Fn(&str) -> Option<T>) -> Option<T> {
     // Names are lowercase already, as clients send them
     let lowercase;
     let name = if name.chars().any(char::is_uppercase) {
@@ -31,9 +49,43 @@ fn find_host_in<T>(
     } else {
         name
     };
-    get(name)
-        .or_else(|| get("*"))
-        .filter(|host| serves(host))
+    get(name).or_else(|| with_wildcard_parent(name, |wildcard| get(wildcard)))
+}
+
+fn certificate_name_in<T>(
+    name: &str,
+    get: impl Fn(&str) -> Option<T>,
+) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
+    let name: Cow<'_, str> = if name.chars().any(char::is_uppercase) {
+        Cow::Owned(name.to_lowercase())
+    } else {
+        Cow::Borrowed(name)
+    };
+    if get(&name).is_some() {
+        return name;
+    }
+    with_wildcard_parent(&name, |wildcard| {
+        get(wildcard).map(|_| wildcard.to_string())
+    })
+    .map_or(name, Cow::Owned)
+}
+
+/// Calls `f` with `*.<parent>` for `name` (`*.example.com` for `a.example.com`), built on the
+/// stack. `None` for names without a parent of two labels or more.
+fn with_wildcard_parent<T>(name: &str, f: impl FnOnce(&str) -> Option<T>) -> Option<T> {
+    // The longest DNS name is 253 characters
+    const MAX: usize = 255;
+    let (_, parent) = name.split_once('.')?;
+    if !parent.contains('.') || parent.len() + 2 > MAX {
+        return None;
+    }
+    let mut buffer = [0u8; MAX];
+    let wildcard = buffer.get_mut(..parent.len() + 2)?;
+    let (prefix, rest) = wildcard.split_at_mut(2);
+    prefix.copy_from_slice(b"*.");
+    rest.copy_from_slice(parent.as_bytes());
+    f(std::str::from_utf8(wildcard).ok()?)
 }
 
 fn tls_hosts_in<'a>(
@@ -51,7 +103,7 @@ mod tests {
 
     use crate::{config::host::HostTls, stores::host_container::HostContainer};
 
-    use super::{find_host_in, tls_hosts_in};
+    use super::{certificate_name_in, find_host_in, named_host_in, tls_hosts_in};
 
     fn container(enabled: bool, self_signed_on_failure: bool) -> Arc<HostContainer> {
         Arc::new(HostContainer::new(
@@ -89,6 +141,70 @@ mod tests {
             &find_host_in("other.test", get, |_| true).unwrap(),
             &catch_all
         ));
+    }
+
+    #[test]
+    fn test_wildcard_host_serves_one_more_label() {
+        let wildcard = container(true, false);
+        let catch_all = container(false, false);
+        let hosts = HashMap::from([
+            ("*.example.test".to_string(), wildcard.clone()),
+            ("*".to_string(), catch_all.clone()),
+        ]);
+        let get = |name: &str| hosts.get(name).cloned();
+        let found = |name: &str| find_host_in(name, get, |_| true).unwrap();
+
+        assert!(Arc::ptr_eq(&found("a.example.test"), &wildcard));
+        assert!(Arc::ptr_eq(&found("B.Example.Test"), &wildcard));
+        // Not the parent itself, nor two more labels
+        assert!(Arc::ptr_eq(&found("example.test"), &catch_all));
+        assert!(Arc::ptr_eq(&found("a.b.example.test"), &catch_all));
+    }
+
+    #[test]
+    fn test_exact_host_wins_over_wildcard_host() {
+        let exact = container(true, false);
+        let hosts = HashMap::from([
+            ("a.example.test".to_string(), exact.clone()),
+            ("*.example.test".to_string(), container(true, false)),
+        ]);
+        let get = |name: &str| hosts.get(name).cloned();
+
+        assert!(Arc::ptr_eq(
+            &find_host_in("a.example.test", get, |_| true).unwrap(),
+            &exact
+        ));
+    }
+
+    #[test]
+    fn test_named_host_ignores_catch_all() {
+        let wildcard = container(true, false);
+        let hosts = HashMap::from([
+            ("*.example.test".to_string(), wildcard.clone()),
+            ("*".to_string(), container(false, false)),
+        ]);
+        let get = |name: &str| hosts.get(name).cloned();
+
+        assert!(Arc::ptr_eq(
+            &named_host_in("a.example.test", get).unwrap(),
+            &wildcard
+        ));
+        assert!(named_host_in("other.test", get).is_none());
+    }
+
+    #[test]
+    fn test_certificate_of_the_host_serving_a_name() {
+        let hosts = HashMap::from([
+            ("a.example.test".to_string(), container(true, false)),
+            ("*.example.test".to_string(), container(true, false)),
+        ]);
+        let get = |name: &str| hosts.get(name).cloned();
+
+        assert_eq!(certificate_name_in("a.example.test", get), "a.example.test");
+        assert_eq!(certificate_name_in("b.example.test", get), "*.example.test");
+        assert_eq!(certificate_name_in("B.Example.Test", get), "*.example.test");
+        // Names no host serves keep their own (nothing is found for them)
+        assert_eq!(certificate_name_in("other.test", get), "other.test");
     }
 
     #[test]

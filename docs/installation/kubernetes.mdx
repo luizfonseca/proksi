@@ -87,6 +87,7 @@ spec:
 - Upstreams are the ready pods of the backend service, for the port it targets. They follow the pods as they scale or restart. A service without ready pods answers `503`.
 - Rules of several `Ingress`es for the same host are merged. When two define the same path, the oldest `Ingress` keeps it and the other is logged.
 - A rule without a `host`, and `defaultBackend`, are served for any other name (`host "*"`).
+- Wildcard hosts (`*.example.com`) are served for names one label under theirs.
 - The class is `spec.ingressClassName`, or the older annotation `kubernetes.io/ingress.class` without it. `Ingress`es with neither are served when the `proksi` `IngressClass` has the annotation `ingressclass.kubernetes.io/is-default-class: "true"`; ones for another class never are.
 - With the annotation `proksi.ingress/upstream: service`, the upstream is the service's own address (its cluster IP) instead of its pods, and Kubernetes balances the requests.
 

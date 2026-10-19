@@ -3576,3 +3576,52 @@ async fn test_upstream_with_hostname_over_http2() {
         assert!(status == 200 || status == 502, "{status}");
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_wildcard_host_serves_one_more_label_with_its_certificate() {
+    let dir = tempfile::tempdir().unwrap();
+    let (pem, key) = (dir.path().join("cert.pem"), dir.path().join("key.pem"));
+    let (certificate, private) = harness::signed_certificate("*.wild.test", None, false);
+    std::fs::write(&pem, certificate.to_pem().unwrap()).unwrap();
+    std::fs::write(&key, private.private_key_to_pem_pkcs8().unwrap()).unwrap();
+
+    let config = format!(
+        r#"
+host "*.wild.test" {{
+  tls {{
+    certificate {{
+      pem = "{}"
+      key = "{}"
+    }}
+  }}
+  location "/" {{
+    upstream "127.0.0.1:{{http_upstream_port}}" {{}}
+  }}
+}}
+"#,
+        pem.display(),
+        key.display()
+    );
+    let mut proksi = Harness::start_with(vec![], &config).await;
+    for name in ["a.wild.test", "b.wild.test", "wild.test", "a.b.wild.test"] {
+        proksi.resolve(name);
+    }
+
+    assert_eq!(proksi.wait_for("a.wild.test", "/", 200).await, Some(200));
+    let res = proksi.get("b.wild.test", "/").await.unwrap();
+    assert_eq!(res.status, 200, "{}", proksi.logs());
+    assert_eq!(
+        res.upstream_request()["headers"]["host"],
+        format!("b.wild.test:{}", proksi.https_port)
+    );
+
+    // The wildcard host's certificate, for every name it serves
+    let served = proksi
+        .served_certificate(proksi.https_port, "b.wild.test")
+        .await;
+    assert_eq!(served.to_pem().unwrap(), certificate.to_pem().unwrap());
+
+    // Not the parent itself, nor two more labels: unknown names, without a certificate
+    assert!(proksi.get("wild.test", "/").await.is_err());
+    assert!(proksi.get("a.b.wild.test", "/").await.is_err());
+}
