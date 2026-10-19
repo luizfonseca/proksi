@@ -1,6 +1,6 @@
-//! `admin { listen = "...", token = "..." }`: the admin API (ADR 0004)
+//! `admin { listen = "...", token "name" { ... } }`: the admin API (ADR 0004, ADR 0008)
 
-use std::net::SocketAddr;
+use std::{collections::BTreeMap, net::SocketAddr};
 
 use serde::{Deserialize, Serialize};
 
@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
 pub struct AdminConfig {
     /// The address of the admin API (`ip:port`)
     pub listen: String,
-    /// Required in `Authorization: Bearer <token>`. Without one, `listen` must be a loopback
-    /// address.
-    #[serde(skip_serializing)]
-    pub token: Option<String>,
+    /// `token "name" { secret = "...", access = "write" }`, by name. Without one, `listen` must
+    /// be a loopback address.
+    #[serde(default, rename = "token", skip_serializing)]
+    pub tokens: BTreeMap<String, Token>,
     /// Record metrics (`/metrics` and live stats). Off, requests don't record anything.
     #[serde(default = "enabled_by_default")]
     pub metrics: bool,
@@ -24,6 +24,25 @@ pub struct AdminConfig {
     /// Required in `Authorization: Bearer <token>` on `metrics_listen`, if set
     #[serde(default, skip_serializing)]
     pub metrics_token: Option<String>,
+}
+
+/// `token "name" { ... }`: a secret given in `Authorization: Bearer <secret>`, or to sign in
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Token {
+    #[serde(skip_serializing)]
+    pub secret: String,
+    #[serde(default)]
+    pub access: Access,
+}
+
+/// What a token can do: read, unless it says `access = "write"`
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Access {
+    #[default]
+    Read,
+    Write,
 }
 
 fn enabled_by_default() -> bool {
@@ -39,17 +58,19 @@ impl AdminConfig {
                 self.listen
             )
         })?;
-        if self.token().is_none() && !address.ip().is_loopback() {
+        if let Some((name, _)) = self
+            .tokens
+            .iter()
+            .find(|(_, token)| token.secret.is_empty())
+        {
+            return Err(format!("admin: token {name:?} has an empty secret"));
+        }
+        if self.tokens.is_empty() && !address.ip().is_loopback() {
             return Err(format!(
-                "admin: without a `token`, `listen` must be a loopback address (e.g. 127.0.0.1:7555), not {address}"
+                "admin: without a `token` block, `listen` must be a loopback address (e.g. 127.0.0.1:7555), not {address}"
             ));
         }
         Ok(address)
-    }
-
-    /// The token, if set (an empty one is none)
-    pub fn token(&self) -> Option<&str> {
-        self.token.as_deref().filter(|token| !token.is_empty())
     }
 
     /// The address of the metrics-only listener, if any
@@ -67,7 +88,9 @@ impl AdminConfig {
 
     /// The token of the metrics-only listener, if set (an empty one is none)
     pub fn metrics_token(&self) -> Option<&str> {
-        self.metrics_token.as_deref().filter(|token| !token.is_empty())
+        self.metrics_token
+            .as_deref()
+            .filter(|token| !token.is_empty())
     }
 }
 
@@ -77,7 +100,7 @@ mod tests {
 
     use crate::config::hcl::HclFormat;
 
-    use super::AdminConfig;
+    use super::{Access, AdminConfig};
 
     fn admin(hcl: &str) -> AdminConfig {
         #[derive(serde::Deserialize)]
@@ -89,11 +112,18 @@ mod tests {
 
     #[test]
     fn test_admin_block() {
-        let admin = admin("admin {\n  listen = \"0.0.0.0:7555\"\n  token = \"secret\"\n}\n");
+        let admin = admin(
+            "admin {\n  listen = \"0.0.0.0:7555\"\n  token \"grafana\" {\n    secret = \"a\"\n  }\n  token \"ops\" {\n    secret = \"b\"\n    access = \"write\"\n  }\n}\n",
+        );
 
-        assert_eq!(admin.token.as_deref(), Some("secret"));
+        assert_eq!(admin.tokens.len(), 2);
+        assert_eq!(admin.tokens["grafana"].secret, "a");
+        assert_eq!(admin.tokens["grafana"].access, Access::Read);
+        assert_eq!(admin.tokens["ops"].access, Access::Write);
         assert!(admin.metrics);
-        assert!(!self::admin("admin {\n  listen = \"127.0.0.1:7555\"\n  metrics = false\n}\n").metrics);
+        assert!(
+            !self::admin("admin {\n  listen = \"127.0.0.1:7555\"\n  metrics = false\n}\n").metrics
+        );
         assert_eq!(admin.address(), Ok("0.0.0.0:7555".parse().unwrap()));
     }
 
@@ -108,12 +138,29 @@ mod tests {
             .is_ok());
         assert_eq!(
             admin("admin {\n  listen = \"0.0.0.0:7555\"\n}\n").address(),
-            Err("admin: without a `token`, `listen` must be a loopback address (e.g. 127.0.0.1:7555), not 0.0.0.0:7555".to_string())
+            Err("admin: without a `token` block, `listen` must be a loopback address (e.g. 127.0.0.1:7555), not 0.0.0.0:7555".to_string())
         );
-        // An empty token is no token
-        assert!(admin("admin {\n  listen = \"0.0.0.0:7555\"\n  token = \"\"\n}\n")
-            .address()
-            .is_err());
+        assert_eq!(
+            admin("admin {\n  listen = \"0.0.0.0:7555\"\n  token \"ops\" {\n    secret = \"\"\n  }\n}\n")
+                .address(),
+            Err("admin: token \"ops\" has an empty secret".to_string())
+        );
+    }
+
+    #[test]
+    fn test_tokens_are_blocks() {
+        #[derive(Debug, serde::Deserialize)]
+        #[allow(dead_code)]
+        struct Doc {
+            admin: AdminConfig,
+        }
+        // `token = "..."` is gone, and `access` is "read" or "write", nothing else
+        for hcl in [
+            "admin {\n  listen = \"127.0.0.1:7555\"\n  token = \"secret\"\n}\n",
+            "admin {\n  listen = \"127.0.0.1:7555\"\n  token \"ops\" {\n    secret = \"a\"\n    access = \"rw\"\n  }\n}\n",
+        ] {
+            assert!(HclFormat::from_str::<Doc>(hcl).is_err(), "{hcl}");
+        }
     }
 
     #[test]

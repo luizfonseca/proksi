@@ -414,7 +414,7 @@ host "b.test" {
     fn test_metrics_address() {
         let admin = |metrics_listen: &str, metrics| crate::config::admin::AdminConfig {
             listen: "127.0.0.1:7555".to_string(),
-            token: None,
+            tokens: std::collections::BTreeMap::new(),
             metrics,
             metrics_listen: Some(metrics_listen.to_string()),
             metrics_token: None,
@@ -448,7 +448,7 @@ host "b.test" {
         let mut with_admin = config("host \"a.test\" {}\n");
         with_admin.admin = Some(crate::config::admin::AdminConfig {
             listen: "127.0.0.1:7555".to_string(),
-            token: None,
+            tokens: std::collections::BTreeMap::new(),
             metrics: true,
             metrics_listen: None,
             metrics_token: None,
@@ -464,7 +464,13 @@ host "b.test" {
             );
             config.admin = Some(crate::config::admin::AdminConfig {
                 listen: address.to_string(),
-                token: Some("secret".to_string()),
+                tokens: std::collections::BTreeMap::from([(
+                    "ops".to_string(),
+                    crate::config::admin::Token {
+                        secret: "secret".to_string(),
+                        access: crate::config::admin::Access::Write,
+                    },
+                )]),
                 metrics: true,
                 metrics_listen: None,
                 metrics_token: None,

@@ -42,6 +42,8 @@ pub struct Rules {
     compiled: Compiled,
     /// For scopes with many rules
     index: Option<index::Index>,
+    /// As written, for the admin API (empty without it)
+    source: Vec<Rule>,
 }
 
 impl Rules {
@@ -52,7 +54,20 @@ impl Rules {
         }
         let compiled = compile::compile(rules)?;
         let index = index::Index::build(&compiled);
-        Ok(Some(Arc::new(Self { compiled, index })))
+        Ok(Some(Arc::new(Self {
+            compiled,
+            index,
+            source: if crate::admin::enabled() {
+                rules.to_vec()
+            } else {
+                vec![]
+            },
+        })))
+    }
+
+    /// The rules as written
+    pub fn source(&self) -> &[Rule] {
+        &self.source
     }
 
     /// The rules `request` can match
@@ -260,7 +275,21 @@ mod tests {
 
     use crate::config::hcl::HclFormat;
 
-    use super::{one_or_many, Rules};
+    use super::{one_or_many, Rule, Rules};
+
+    #[test]
+    fn test_rules_as_written_with_the_admin_api() {
+        crate::admin::enable();
+        let rules = vec![Rule(serde_json::json!({
+            "name": "writes",
+            "and": { "method": { "eq": "POST" } },
+            "then": { "respond": { "status": 403 } },
+        }))];
+
+        let compiled = Rules::compile(&rules).unwrap().unwrap();
+
+        assert_eq!(compiled.source(), rules.as_slice());
+    }
 
     /// The pages of the Rules section, whose examples must load
     const PAGES: [(&str, &str); 5] = [

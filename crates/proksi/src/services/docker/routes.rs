@@ -14,13 +14,15 @@ pub fn docker_route(host: &str, docker_route: ProksiDockerRoute) -> Route {
     let upstreams = docker_route
         .upstreams
         .iter()
-        .filter_map(|upstream| upstream.to_socket_addrs().ok())
-        .flatten()
-        .map(|addr| RouteUpstream {
-            ip: Cow::Owned(addr.ip().to_string()),
-            port: addr.port(),
-            weight: Some(1),
-            ..RouteUpstream::default()
+        .filter_map(|upstream| Some((upstream, upstream.to_socket_addrs().ok()?)))
+        .flat_map(|(upstream, addrs)| {
+            addrs.map(move |addr| RouteUpstream {
+                ip: Cow::Owned(addr.ip().to_string()),
+                port: addr.port(),
+                weight: Some(1),
+                name: Some(upstream.clone()),
+                ..RouteUpstream::default()
+            })
         })
         .collect();
 

@@ -65,7 +65,7 @@ admin {
 **The UI signs in with a token.** `POST /api/v1/session` exchanges it for a session cookie:
 
 - `HttpOnly` (scripts can't read it), `SameSite=Strict` (other sites can't send it), and `Secure` unless the admin listener is reached over plain HTTP on a loopback address.
-- Signed with a key Proksi generates when it starts: sessions end when Proksi restarts, and each instance has its own. A session also ends after 12 hours without a request.
+- A random id, kept in Proksi's memory: sessions end when Proksi restarts, and each instance has its own. A session also ends after 12 hours without a request, or when signing out.
 - The token is never stored by the UI (no `localStorage`, no `sessionStorage`).
 
 **Changes must come from the UI's own origin.** A request that changes something with a session cookie must carry an `Origin` header naming the admin listener's own address, or it's refused. API clients using `Authorization: Bearer` are unaffected.
@@ -89,9 +89,9 @@ The admin listener itself never serves TLS: Proksi's hosts already do.
 | --- | --- |
 | Overview | Status and instances sharing the store; charts of requests, errors and latency (p50, p90, p99), CPU and memory; the latest requests as they're served |
 | Hosts | Every host served, with its source (`file`, `docker`, `kubernetes`, `store`), locations, upstreams and their health |
-| Host | Locations, upstreams, building blocks and rules, as forms. Hosts from the store can be changed; others are read-only |
-| Rules | A host's and its locations' rules, built as a tree of `and`, `or` and `not`, with a request to try them on |
+| Host | Its traffic as a graph (clients, locations, upstreams, each line toned by what flows through it), its requests and latency, and its latest requests. Locations, upstreams, building blocks and rules, as forms. Hosts from the store can be changed; others are read-only. Rules are part of their host and location: shown as a tree of `and`, `or` and `not`, with a request to try them on |
 | Certificates | Domains, expiry, issuer, and the instance renewing each |
+| Server | The settings Proksi started with (addresses, store, cache, Let's Encrypt, logging, workers, sources, admin tokens' names), defaults included, without secrets |
 | Changes | Who changed which host, when, and what; a previous version can be restored |
 
 The overview's charts and requests are kept by the page, in memory, from the time it's opened (up to the last 15 minutes): Proksi doesn't store more than it does today.
@@ -111,8 +111,9 @@ Hosts from the configuration file, docker labels or Kubernetes are read-only: Pr
 | `GET /api/v1/schema` | What the forms (and HCL export) are built from: building blocks and their settings (types, defaults, limits), which keys are blocks and which take a label, rule fields and the operators each takes |
 | `POST /api/v1/rules/test` | Rules and a request (method, host, path, headers, client): which rules match, in order, and what they'd do |
 | `GET /api/v1/routes/<host>/history` | The host's previous versions: revision, time, token name. `POST .../history/<revision>/restore` writes one back |
-| `GET /api/v1/requests/stream` | The requests being served, as server-sent events, with the fields of access logs (also when access logs are off). At most 100 a second for each stream, with the number skipped |
+| `GET /api/v1/requests/stream` | The requests being served (`?host=` for one host's), as server-sent events, with the fields of access logs (also when access logs are off). At most 100 a second for each stream, with the number skipped |
 | `POST`, `DELETE /api/v1/session` | Sign in and out |
+| `GET /api/v1/server` | The settings read at startup, with their defaults. Each is listed explicitly, so a new setting or a secret is never shown by accident |
 
 - `stats` and `stats/stream` gain the process: CPU (time used, and % of one core over the window), resident memory, memory in use by the allocator, and in a container, its memory limit and CPU quota (cgroups). They're read once a second by the task that already snapshots the stats.
 - `requests/stream` costs nothing while no one watches: the request path checks a count of open streams, and builds nothing when it's zero.
@@ -141,6 +142,6 @@ Hosts from the configuration file, docker labels or Kubernetes are read-only: Pr
 2. Named read and read-write tokens, sessions, origin checks, security headers, failed sign-in limits, and the change log.
 3. The API: JSON only, one host with its revision and `If-Match`, `validate`, `schema`.
 4. Editing hosts: locations, upstreams and building blocks; overriding, and exporting as HCL.
-5. Rules: the editor, `rules/test`, and rule metrics (ADR 0007 step 3).
+5. Rules, on the host pages: the editor, `rules/test`, and rule metrics (ADR 0007 step 3).
 6. History: versions in every store, the changes page, restoring.
 7. The overview: process stats, `requests/stream`, and its charts.
