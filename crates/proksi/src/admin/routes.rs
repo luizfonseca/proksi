@@ -94,6 +94,22 @@ pub async fn put(store: &dyn Store, name: &str, body: &[u8]) -> Result<Written, 
     Ok(Written { host, revision })
 }
 
+/// `POST /api/v1/validate`
+#[derive(Debug, PartialEq, Serialize)]
+pub struct Valid {
+    pub valid: bool,
+}
+
+/// Checks a host as `put` would, without writing it
+pub fn validate(body: &[u8]) -> Result<Valid, Refused> {
+    let name = serde_json::from_slice::<serde_json::Value>(body)
+        .ok()
+        .and_then(|host| host.get("name")?.as_str().map(str::to_lowercase))
+        .unwrap_or_default();
+    parse(&name, body).map_err(Refused::Invalid)?;
+    Ok(Valid { valid: true })
+}
+
 /// Removes the host `name` from the store (the revision is unchanged if it wasn't there)
 pub async fn delete(store: &dyn Store, name: &str) -> Result<Written, Refused> {
     let host = name.to_lowercase();
@@ -137,6 +153,18 @@ mod tests {
         "name": "api.test",
         "locations": [{ "path": "/", "upstreams": [{ "ip": "10.0.0.1", "port": 3000 }] }]
     }"#;
+
+    #[test]
+    fn test_validate() {
+        assert_eq!(super::validate(JSON.as_bytes()), Ok(super::Valid { valid: true }));
+        let err = super::validate(JSON.replace("3000", "0").as_bytes());
+        assert_eq!(
+            err,
+            Err(Refused::Invalid(
+                "location \"/\": upstreams[0].port must be greater than 0".to_string()
+            ))
+        );
+    }
 
     #[test]
     fn test_parse() {

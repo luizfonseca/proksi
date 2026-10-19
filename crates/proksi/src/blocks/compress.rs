@@ -33,30 +33,23 @@ pub(super) struct Compress {
 
 impl Compress {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
-        let setting = |key: &str| plugin.config.as_ref().and_then(|config| config.get(key));
-
-        let allowed = match setting("algorithms") {
+        let settings: super::settings::Compress = super::settings::read("compress", plugin)?;
+        let allowed = match settings.algorithms {
             None => ALGORITHMS.iter().map(|(name, ..)| *name).collect(),
-            Some(value) => value
-                .as_array()
-                .filter(|names| !names.is_empty())
-                .and_then(|names| names.iter().map(serde_json::Value::as_str).collect())
-                .filter(|names: &Vec<&str>| {
-                    names
-                        .iter()
-                        .all(|name| ALGORITHMS.iter().any(|(known, ..)| known == name))
+            Some(algorithms) if algorithms.is_empty() => return Err(INVALID_ALGORITHMS.to_string()),
+            Some(algorithms) => algorithms
+                .iter()
+                .map(|algorithm| match algorithm {
+                    super::settings::Algorithm::Zstd => "zstd",
+                    super::settings::Algorithm::Br => "br",
+                    super::settings::Algorithm::Gzip => "gzip",
                 })
-                .ok_or(INVALID_ALGORITHMS)?,
+                .collect::<Vec<_>>(),
         };
-        let level = setting("level")
-            .map(|value| {
-                value
-                    .as_u64()
-                    .and_then(|level| u32::try_from(level).ok())
-                    .filter(|level| *level > 0)
-                    .ok_or("compress: `level` must be a number greater than 0")
-            })
-            .transpose()?;
+        let level = match settings.level {
+            Some(0) => return Err("compress: `level` must be a number greater than 0".to_string()),
+            level => level,
+        };
 
         let levels = ALGORITHMS
             .iter()
@@ -204,16 +197,17 @@ mod tests {
 
     #[test]
     fn test_invalid_settings() {
-        for config in [
-            serde_json::json!({ "algorithms": ["deflate"] }),
-            serde_json::json!({ "algorithms": [] }),
-            serde_json::json!({ "algorithms": "gzip" }),
-        ] {
-            assert_eq!(
-                compress(config).unwrap_err(),
-                super::INVALID_ALGORITHMS.to_string()
-            );
-        }
+        assert_eq!(
+            compress(serde_json::json!({ "algorithms": [] })).unwrap_err(),
+            super::INVALID_ALGORITHMS.to_string()
+        );
+        assert_eq!(
+            compress(serde_json::json!({ "algorithms": ["deflate"] })).unwrap_err(),
+            "compress: unknown variant `deflate`, expected one of `zstd`, `br`, `gzip`"
+        );
+        assert!(compress(serde_json::json!({ "algorithms": "gzip" }))
+            .unwrap_err()
+            .starts_with("compress: invalid type"));
         assert!(compress(serde_json::json!({ "level": 0 })).is_err());
         // Above brotli's highest level
         assert_eq!(

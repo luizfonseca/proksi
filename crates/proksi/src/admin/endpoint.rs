@@ -10,7 +10,9 @@ use super::Reply;
 const WINDOWS: std::ops::RangeInclusive<u64> = 1..=300;
 
 /// Paths answering other methods (`405` rather than `404`)
-const PATHS: [&str; 10] = [
+const PATHS: [&str; 12] = [
+    "/api/v1/schema",
+    "/api/v1/validate",
     "/metrics",
     "/api/v1/stats",
     "/api/v1/stats/stream",
@@ -38,6 +40,10 @@ pub enum Endpoint<'a> {
     Status,
     /// `GET /api/v1/server`: the settings read at startup, without secrets
     Server,
+    /// `GET /api/v1/schema`: what rules and blocks accept, for the UI's forms
+    Schema,
+    /// `POST /api/v1/validate`: checks a host (JSON) without writing it
+    Validate,
     /// `GET /api/v1/hosts`: the hosts served, from every source
     Hosts,
     /// `GET /api/v1/certificates`
@@ -61,7 +67,7 @@ pub enum Endpoint<'a> {
 impl<'a> Endpoint<'a> {
     pub fn parse(method: &Method, path: &'a str, query: Option<&'a str>) -> Result<Self, Reply> {
         use Endpoint::{
-            Certificates, DeleteRoute, Hosts, Metrics, PutRoute, RequestsStream, Route, Routes,
+            Certificates, DeleteRoute, Hosts, Metrics, PutRoute, RequestsStream, Route, Routes, Schema, Validate,
             Server, Session, SignIn, SignOut, Stats, StatsStream, Status,
         };
 
@@ -83,6 +89,8 @@ impl<'a> Endpoint<'a> {
             ("GET", "/api/v1/requests/stream") => RequestsStream(parameter(query, "host")),
             ("GET", "/api/v1/status") => Status,
             ("GET", "/api/v1/server") => Server,
+            ("GET", "/api/v1/schema") => Schema,
+            ("POST", "/api/v1/validate") => Validate,
             ("GET", "/api/v1/hosts") => Hosts,
             ("GET", "/api/v1/certificates") => Certificates,
             ("GET", "/api/v1/routes") => Routes,

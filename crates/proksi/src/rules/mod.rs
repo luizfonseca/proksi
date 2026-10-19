@@ -27,6 +27,7 @@ mod eval;
 mod fields;
 mod index;
 mod model;
+pub mod schema;
 
 #[cfg(test)]
 mod bench;

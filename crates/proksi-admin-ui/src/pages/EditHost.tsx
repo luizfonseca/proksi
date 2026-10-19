@@ -11,39 +11,28 @@ import {
   toForm,
 } from '../hostForm';
 import { navigate, onLink } from '../router';
+import { RulesEditor } from '../components/RuleEditor';
 
-const EXAMPLE = `[
-  {
-    "name": "writes",
-    "and": { "method": { "not_in": ["GET", "HEAD"] } },
-    "then": { "rate_limit": { "requests": 30, "per": "1m" } }
-  }
-]`;
-
-/** A scope's rules, as JSON (a builder comes with ADR 0008 step 5) */
-function RulesField({ label, hint, value, onInput }: { label: string; hint?: string; value: string; onInput: (value: string) => void }) {
-  const [open, setOpen] = useState(value.trim() !== '');
+/** A scope's rules: shown once there are some, or when asked for */
+function RulesSection({ title, hint, rules, onChange }: { title: string; hint: string; rules: unknown[]; onChange: (rules: unknown[]) => void }) {
+  const [open, setOpen] = useState(rules.length > 0);
   if (!open) {
     return (
       <button type="button" class="link" onClick={() => setOpen(true)}>
-        + Add {label.toLowerCase()}
+        + {title}
       </button>
     );
   }
   return (
-    <label>
-      <span>
-        {label} {hint && <small class="hint">{hint}</small>} <a class="hint" href="https://docs.proksi.info/rules" target="_blank" rel="noreferrer">How rules work</a>
-      </span>
-      <textarea
-        class="mono"
-        spellcheck={false}
-        rows={Math.min(16, Math.max(5, value.split('\n').length + 1))}
-        placeholder={EXAMPLE}
-        value={value}
-        onInput={(e) => onInput(e.currentTarget.value)}
-      />
-    </label>
+    <div class="rules-section">
+      <div class="rules-section-head">
+        <strong>{title}</strong> <small class="hint">{hint}</small>{' '}
+        <a class="hint" href="https://docs.proksi.info/rules" target="_blank" rel="noreferrer">
+          How rules work
+        </a>
+      </div>
+      <RulesEditor rules={rules} onChange={onChange} />
+    </div>
   );
 }
 
@@ -52,6 +41,20 @@ export function EditHost({ name }: { name: string | null }) {
   const [form, setForm] = useState<HostForm | null>(name ? null : emptyHost());
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  // What Proksi says of the form as it is, checked shortly after each change
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    if (!form) return;
+    const result = fromForm(form);
+    if (!('host' in result)) return setProblem(null);
+    const timer = setTimeout(() => {
+      routes
+        .validate(result.host)
+        .then(() => setProblem(null))
+        .catch((err) => setProblem(String(err.message ?? err)));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [form]);
 
   useEffect(() => {
     if (!name) return;
@@ -103,6 +106,11 @@ export function EditHost({ name }: { name: string | null }) {
         </div>
       </div>
 
+      {problem && errors.length === 0 && (
+        <div class="error" role="status">
+          {problem}
+        </div>
+      )}
       {errors.length > 0 && (
         <div class="error" role="alert">
           {errors.map((error) => <div>{error}</div>)}
@@ -126,11 +134,11 @@ export function EditHost({ name }: { name: string | null }) {
             <span>Self-signed certificate if none can be obtained</span>
           </label>
         )}
-        <RulesField
-          label="Host rules"
-          hint="Every request, before its location is chosen"
-          value={form.rules}
-          onInput={(rules) => update({ rules })}
+        <RulesSection
+          title="Host rules"
+          hint="every request, before its location is chosen"
+          rules={form.rules}
+          onChange={(rules) => update({ rules })}
         />
       </div>
 
@@ -178,7 +186,7 @@ export function EditHost({ name }: { name: string | null }) {
           <button type="button" class="link" onClick={() => updateLocation(index, { upstreams: [...location.upstreams, emptyUpstream()] })}>
             + Add upstream
           </button>
-          <RulesField label="Rules" value={location.rules} onInput={(rules) => updateLocation(index, { rules })} />
+          <RulesSection title="Rules" hint="this location's requests, in order" rules={location.rules} onChange={(rules) => updateLocation(index, { rules })} />
           {Object.keys(location.rest).filter((key) => location.rest[key] != null).length > 0 && (
             <p class="kept">
               Kept as they are: {Object.keys(location.rest).filter((key) => location.rest[key] != null).join(', ')}

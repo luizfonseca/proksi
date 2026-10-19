@@ -33,29 +33,51 @@ struct ThenBlock {
     method: Option<MethodChange>,
 }
 
-/// `headers { request { ... } response { ... } }`
-#[derive(Debug, Deserialize)]
+/// `headers`: changes the request's headers, or the response's
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct HeaderChanges {
+    /// The request's headers, as the next rules and the upstream see them
     request: Option<Changes>,
+    /// The response's headers
     response: Option<Changes>,
+    /// When the response's are changed among the blocks, from 0 to 100
+    #[schemars(range(max = 100))]
     priority: Option<u8>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct Changes {
+    /// Headers added, replacing any with the same name
     #[serde(default)]
     add: BTreeMap<String, String>,
+    /// Headers removed
     #[serde(default)]
     remove: Vec<String>,
 }
 
-/// `method { set = "DELETE" }`
-#[derive(Debug, Deserialize)]
+/// `method`: changes the request's method
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct MethodChange {
+    /// The method sent to the upstream, such as "DELETE"
     set: String,
+}
+
+/// What `then` takes: each block (the settings of a location's), and changes to the request, as
+/// JSON Schema
+pub fn schema() -> serde_json::Map<String, serde_json::Value> {
+    let mut actions = crate::blocks::settings::schemas();
+    actions.insert(
+        "headers".to_string(),
+        schemars::schema_for!(HeaderChanges).to_value(),
+    );
+    actions.insert(
+        "method".to_string(),
+        schemars::schema_for!(MethodChange).to_value(),
+    );
+    actions
 }
 
 /// A location holding the blocks of `then`, to build them as a location's

@@ -30,16 +30,3 @@ pub(super) fn plugin_priority(kind: Kind, plugin: &RoutePlugin) -> Result<u8, St
     priority(kind, set)
 }
 
-/// A setting a plugin requires, as a string
-pub(super) fn required<'a>(
-    kind: Kind,
-    plugin: &'a RoutePlugin,
-    key: &str,
-) -> Result<&'a str, String> {
-    plugin
-        .config
-        .as_ref()
-        .and_then(|config| config.get(key))
-        .and_then(|value| value.as_str())
-        .ok_or_else(|| format!("{}: `{key}` is required", kind.name()))
-}
