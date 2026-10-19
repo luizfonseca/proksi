@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/luizfonseca/proksi/compare/plugins_api-v0.1.0...plugins_api-v0.1.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* latest dependencies ([#481](https://github.com/luizfonseca/proksi/issues/481)) ([9696f89](https://github.com/luizfonseca/proksi/commit/9696f890dc1899567363cc0eb3fad9a57dc017b8))
+
 ## [0.12.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.11.1...proksi-v0.12.0) (2026-10-18)
 
 
