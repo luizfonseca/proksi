@@ -23,6 +23,11 @@
           "type": "toml",
           "path": "/Cargo.toml",
           "jsonpath": "$.workspace.dependencies.proksi-admin-ui.version"
+        },
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name=='proksi-admin-ui')].version"
         }
       ]
     },

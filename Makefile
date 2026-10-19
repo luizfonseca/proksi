@@ -3,7 +3,7 @@ lint:
 lint.fix:
 	cargo clippy --fix --allow-dirty --allow-staged
 test:
-	cargo test --all-features
+	cargo test --all-features --locked
 build.release:
 	cargo build --release
 build.dev:

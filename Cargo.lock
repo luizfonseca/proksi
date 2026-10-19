@@ -3600,7 +3600,7 @@ dependencies = [
 
 [[package]]
 name = "proksi-admin-ui"
-version = "0.13.0"
+version = "0.13.1"
 
 [[package]]
 name = "prometheus"
