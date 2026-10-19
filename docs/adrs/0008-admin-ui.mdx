@@ -27,7 +27,7 @@ The UI is a static web application in a crate of its own, `proksi-admin-ui`, bui
 
 - Without an `admin` block, nothing listens, as today. The UI adds only the size of its files to the binary.
 - Its files are compressed when built (brotli and gzip) and served from memory, with a content hash in their names and long cache lifetimes.
-- `proksi-admin-ui` is released on its own (release-please), so changes to the UI release only it, never Proksi. Proksi carries the version of the UI it depends on.
+- `proksi-admin-ui` is published with each release of Proksi, with Proksi's version. Changes to the UI alone release nothing: the next release of Proksi carries the UI as it is then.
 - The application is small and has no runtime dependencies beyond its own bundle: [Preact](https://preactjs.com) and TypeScript, built with Vite. Budget: 150 KB compressed.
 
 ### Building it
@@ -60,7 +60,7 @@ admin {
 }
 ```
 
-`access` is `"read"` unless written as `"write"`. `token = "..."` (ADR 0004) keeps working as before, read-write and named `default`, and is deprecated: Proksi logs a warning asking for a `token` block.
+`access` is `"read"` unless written as `"write"`. `token = "..."` (ADR 0004) is replaced by `token` blocks.
 
 **The UI signs in with a token.** `POST /api/v1/session` exchanges it for a session cookie:
 
@@ -118,7 +118,7 @@ Hosts from the configuration file, docker labels or Kubernetes are read-only: Pr
 - `requests/stream` costs nothing while no one watches: the request path checks a count of open streams, and builds nothing when it's zero.
 - `schema` is generated from the code that reads the configuration, so the forms can't offer what Proksi wouldn't accept.
 - Every write is validated as a configuration file is, and logged: `{"admin_change": true, "token": "ops", "host": "api.example.com", "revision": 42}`.
-- The store keeps the last 50 versions of each host. Every store (memory, Redis, SQLite, Postgres) implements history the same way, with the routes they already keep.
+- The store keeps the last 10 versions of each host. Every store (memory, Redis, SQLite, Postgres) implements history the same way, with the routes they already keep.
 
 ## Consequences
 

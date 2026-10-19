@@ -1,5 +1,7 @@
 {
-  "plugins": ["cargo-workspace"],
+  "plugins": [
+    "cargo-workspace"
+  ],
   "commit-search-depth": 10,
   "packages": {
     "crates/proksi": {
@@ -10,7 +12,19 @@
       "separate-pull-requests": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
-      "prerelease": false
+      "prerelease": false,
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/crates/proksi-admin-ui/Cargo.toml",
+          "jsonpath": "$.package.version"
+        },
+        {
+          "type": "toml",
+          "path": "/crates/proksi/Cargo.toml",
+          "jsonpath": "$.dependencies.proksi-admin-ui.version"
+        }
+      ]
     },
     "crates/plugins_api": {
       "changelog-path": "/CHANGELOG.md",

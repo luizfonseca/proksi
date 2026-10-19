@@ -1,6 +1,11 @@
 [workspace]
 package = { rust-version = "1.99.0" }
-members = ["crates/plugin_request_id", "crates/plugins_api", "crates/proksi"]
+members = [
+    "crates/plugin_request_id",
+    "crates/plugins_api",
+    "crates/proksi",
+    "crates/proksi-admin-ui",
+]
 exclude = ["vendor"]
 resolver = "2"
 

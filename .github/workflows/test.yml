@@ -40,5 +40,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build the admin UI
+        working-directory: crates/proksi-admin-ui
+        run: npm ci && npm run build
       - run: make test
       - run: make lint
