@@ -358,6 +358,7 @@ h2.section-title { font-size: 14px; font-weight: 600; margin: 20px 0 10px; }
 .active-hosts td.trend .sparkline, .tcp-blocks td.trend .sparkline { position: static; height: 28px; display: block; }
 .active-hosts a, .tcp-blocks a { font-weight: 600; color: var(--text); text-decoration: none; }
 .active-hosts a:hover, .tcp-blocks a:hover { color: var(--accent-text); }
+.active-hosts tr.quiet a { color: var(--muted); font-weight: 500; }
 .tcp-blocks .name { font-weight: 600; }
 .tcp-blocks td { vertical-align: top; }
 .tcp-blocks td.mono, .tcp-blocks td .mono, .tcp-blocks .addresses { white-space: nowrap; }

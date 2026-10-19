@@ -38,10 +38,18 @@ function Card({ label, value, detail, values, color }: { label: string; value: s
 
 const take = (history: Point[], read: (point: Point) => number | null) => history.map(read);
 
-/** The hosts being accessed now (the last 5 seconds), busiest first */
+/** How long ago `at` was, roughly */
+function ago(at: number, now: number): string {
+  const seconds = Math.max(0, Math.round((now - at) / 1000));
+  return seconds < 60 ? `${seconds}s ago` : `${Math.round(seconds / 60)}m ago`;
+}
+
+/** The hosts being accessed now (the last 5 seconds), busiest first, then the ones accessed since the page opened */
 function ActiveHosts({ latest, history }: { latest: Stats | null; history: Point[] }) {
-  const hosts = activeHosts(latest);
-  const idle = (latest?.hosts.length ?? 0) - hosts.length;
+  const hosts = activeHosts(latest, history);
+  const now = history[history.length - 1]?.at ?? Date.now();
+  const listed = new Set(hosts.map(({ host }) => host));
+  const idle = (latest?.hosts ?? []).filter(({ host }) => !listed.has(host)).length;
   return (
     <section class="panel">
       <div class="chart-head">
@@ -50,13 +58,13 @@ function ActiveHosts({ latest, history }: { latest: Stats | null; history: Point
           <ProtocolBadge protocol="http" />
         </h3>
         <div class="legend">
-          <span>over the last 5 seconds{idle > 0 ? ` · ${idle} idle` : ''}</span>
+          <span>over the last 5 seconds, and since this page opened{idle > 0 ? ` · ${idle} without requests` : ''}</span>
         </div>
       </div>
       {hosts.length === 0 ? (
         <div class="empty">
           <strong>{latest ? 'No requests' : 'Waiting for data…'}</strong>
-          Hosts appear here while they're being accessed.
+          Hosts appear here once they're accessed, and stay while this page is open.
         </div>
       ) : (
         <table class="active-hosts">
@@ -70,19 +78,25 @@ function ActiveHosts({ latest, history }: { latest: Stats | null; history: Point
             </tr>
           </thead>
           <tbody>
-            {hosts.map(({ host, point }) => {
+            {hosts.map(({ host, point, lastSeen }) => {
               const errors = point.requests ? point.errors / point.requests : 0;
               return (
-                <tr>
+                <tr class={point.requests > 0 ? undefined : 'quiet'}>
                   <td>
                     <a href={`/hosts/${encodeURIComponent(host)}`} onClick={onLink}>
                       {host}
                     </a>
                   </td>
-                  <td class="mono">{rate(point.requests)}</td>
-                  <td>
-                    <span class={`badge ${errors >= 0.25 ? 'bad' : errors > 0 ? 'warn' : 'ok'}`}>{percent(errors * 100)}</span>
-                  </td>
+                  {point.requests > 0 ? (
+                    <>
+                      <td class="mono">{rate(point.requests)}</td>
+                      <td>
+                        <span class={`badge ${errors >= 0.25 ? 'bad' : errors > 0 ? 'warn' : 'ok'}`}>{percent(errors * 100)}</span>
+                      </td>
+                    </>
+                  ) : (
+                    <td class="muted" colSpan={2}>last request {ago(lastSeen, now)}</td>
+                  )}
                   <td class="mono">{ms(point.p99)}</td>
                   <td class="trend">
                     <Sparkline values={history.map((one) => one.hosts[host]?.requests ?? 0)} color={errors > 0 ? 'var(--warn)' : 'var(--ok)'} />
