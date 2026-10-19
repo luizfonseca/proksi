@@ -3541,7 +3541,7 @@ dependencies = [
 
 [[package]]
 name = "proksi"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "TinyUFO",
  "acme-v2",

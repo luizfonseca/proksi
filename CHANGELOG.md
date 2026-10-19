@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.13.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.12.0...proksi-v0.13.0) (2026-10-19)
+
+
+### Features
+
+* rule builder ([#480](https://github.com/luizfonseca/proksi/issues/480)) ([104e47a](https://github.com/luizfonseca/proksi/commit/104e47ab0e02ecc184a42c4886f53acf36660aa3))
+
+
+### Bug Fixes
+
+* error responses over HTTP/2 ([#484](https://github.com/luizfonseca/proksi/issues/484)) ([87bf40a](https://github.com/luizfonseca/proksi/commit/87bf40aeb1e423e8c44c74222afe687842755aab))
+* latest dependencies ([#481](https://github.com/luizfonseca/proksi/issues/481)) ([9696f89](https://github.com/luizfonseca/proksi/commit/9696f890dc1899567363cc0eb3fad9a57dc017b8))
+
 ## [0.1.1](https://github.com/luizfonseca/proksi/compare/plugins_api-v0.1.0...plugins_api-v0.1.1) (2026-10-19)
 
 
