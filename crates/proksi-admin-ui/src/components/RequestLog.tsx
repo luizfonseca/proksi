@@ -1,19 +1,31 @@
 import { useState } from 'preact/hooks';
 import { ms } from '../format';
-import { useRequests } from '../requests';
+import { matches, useRequests } from '../requests';
+import { Search } from './icons';
 import { navigate } from '../router';
+
+/** Rows drawn at once: the newest matching ones (up to `KEPT` are kept to search) */
+const DRAWN = 200;
 
 /** The latest requests, of every host or of `host` */
 export function RequestLog({ host }: { host?: string }) {
   // Off until asked for: Proksi builds nothing for it until then
   const [paused, setPaused] = useState(true);
   const [held, setHeld] = useState(false);
+  const [filter, setFilter] = useState('');
   const { requests, skipped } = useRequests(paused, held, host);
+  const shown = filter.trim() ? requests.filter((served) => matches(served, filter.trim())) : requests;
   return (
     <section class="panel requests">
       <div class="chart-head">
         <h3>Latest requests</h3>
         <div class="legend">
+          {requests.length > 0 && (
+            <label class="search">
+              <Search />
+              <input placeholder="Filter: path, 5xx, client…" value={filter} onInput={(event) => setFilter(event.currentTarget.value)} />
+            </label>
+          )}
           {held && !paused && <span>Held while the pointer is on the list</span>}
           {!paused && <span>up to 100 a second</span>}
           {skipped > 0 && <span>{skipped} missed last second</span>}
@@ -22,7 +34,12 @@ export function RequestLog({ host }: { host?: string }) {
           </button>
         </div>
       </div>
-      {requests.length === 0 ? (
+      {requests.length > 0 && shown.length === 0 ? (
+        <div class="empty">
+          <strong>No requests match</strong>
+          {requests.length} kept: try another filter.
+        </div>
+      ) : requests.length === 0 ? (
         <div class="empty">
           <strong>{paused ? 'Not watching' : 'Waiting for requests…'}</strong>
           {paused
@@ -43,7 +60,7 @@ export function RequestLog({ host }: { host?: string }) {
               </tr>
             </thead>
             <tbody>
-              {requests.map((served) => (
+              {shown.slice(0, DRAWN).map((served) => (
                 <tr onClick={() => !host && served.host && navigate(`/hosts/${encodeURIComponent(served.host)}`)}>
                   <td class="mono muted">{new Date(served.time).toLocaleTimeString()}</td>
                   <td>

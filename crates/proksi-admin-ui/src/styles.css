@@ -465,3 +465,6 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-s
 .test-row .test-value { min-width: 0; }
 .schema-form .more-settings { justify-self: start; }
 @media (max-width: 720px) { .test-row { flex-wrap: wrap; } }
+.requests .legend .search { flex: 0 1 240px; }
+.requests .legend .search input { padding-top: 5px; padding-bottom: 5px; }
+.requests .chart-head .legend { flex: 1; justify-content: flex-end; }
