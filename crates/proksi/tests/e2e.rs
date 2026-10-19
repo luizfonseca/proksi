@@ -2028,6 +2028,13 @@ async fn test_admin_live_stats() {
     };
     let body = |res: &str| res.split("\r\n\r\n").nth(1).unwrap_or_default().to_string();
 
+    // Nothing is sampled until the stats are read: the first read starts it
+    let res = proksi
+        .raw_http_on(admin_port, get("/api/v1/stats").as_bytes())
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+
     proksi.resolve("app.test");
     for _ in 0..5 {
         assert_eq!(proksi.get("app.test", "/live").await.unwrap().status, 200);

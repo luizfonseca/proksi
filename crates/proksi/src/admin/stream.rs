@@ -9,8 +9,6 @@ use tokio::sync::broadcast::error::RecvError;
 
 use crate::metrics::requests;
 
-/// Requests sent to a watcher each second, at most
-const REQUESTS_PER_SECOND: u32 = 100;
 
 /// Starts the events; returns whether the headers were written
 async fn start(session: &mut ServerSession) -> bool {
@@ -63,9 +61,9 @@ pub async fn requests(
     if !start(&mut session).await {
         return;
     }
-    let mut watch = requests::watch();
+    let mut watch = requests::watch(host.clone());
     let mut interval = tokio::time::interval(Duration::from_secs(1));
-    let (mut sent, mut skipped) = (0u32, 0u64);
+    let (mut sent, mut skipped) = (0u64, 0u64);
     loop {
         tokio::select! {
             received = watch.receiver.recv() => {
@@ -80,7 +78,7 @@ pub async fn requests(
                 if host.as_ref().is_some_and(|host| !served.host.eq_ignore_ascii_case(host)) {
                     continue;
                 }
-                if sent >= REQUESTS_PER_SECOND {
+                if sent >= requests::PER_SECOND {
                     skipped += 1;
                     continue;
                 }
@@ -93,6 +91,7 @@ pub async fn requests(
                 }
             }
             _ = interval.tick() => {
+                requests::new_second();
                 // Also keeps the connection open while nothing is served
                 let event = format!("event: skipped\ndata: {skipped}\n\n");
                 if !send(&mut session, event).await {

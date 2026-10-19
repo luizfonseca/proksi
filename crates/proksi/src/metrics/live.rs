@@ -1,6 +1,12 @@
 //! Live stats (ADR 0004): once a second, the metrics are sampled and kept for 5 minutes. A
 //! window is the difference between the latest sample and an earlier one, so the request path
 //! does no extra work.
+//!
+//! Kept small: each series' name and labels (and histogram bounds) are kept once, and a sample
+//! holds only numbers. Samples are kept every second for a minute, then every 10 seconds.
+//!
+//! Sampled only while someone reads the stats: 5 minutes after the last read, sampling stops and
+//! the samples are dropped, until the next read.
 
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
@@ -10,8 +16,10 @@ use std::{
 
 use serde_json::{json, Map, Value};
 
-/// Samples kept: 5 minutes at one a second
-const KEPT: usize = 301;
+/// Kept every second for this long, then every `SPARSE`, up to `OLDEST`
+const DENSE: Duration = Duration::from_secs(60);
+const SPARSE: Duration = Duration::from_secs(10);
+const OLDEST: Duration = Duration::from_secs(301);
 
 /// A series: its metric name and labels (sorted by name)
 pub type Key = (String, Vec<(String, String)>);
@@ -24,20 +32,106 @@ pub enum Reading {
     Histogram(Vec<(f64, u64)>),
 }
 
+/// A reading as kept: a histogram's bounds are kept once, with its series
+#[derive(Debug, Clone, PartialEq)]
+enum Kept {
+    Missing,
+    Scalar(f64),
+    Histogram(Box<[u64]>),
+}
+
+/// Every series seen, by id
+#[derive(Default)]
+struct Series {
+    ids: HashMap<Key, usize>,
+    keys: Vec<Key>,
+    /// Histograms' upper bounds (the last one is `+Inf`)
+    bounds: Vec<Arc<[f64]>>,
+}
+
+static SERIES: Mutex<Option<Series>> = Mutex::new(None);
+
 /// Every series at one point in time
 #[derive(Debug, Clone)]
 pub struct Sample {
     pub at: Instant,
-    pub series: HashMap<Key, Reading>,
+    /// By series id
+    readings: Vec<Kept>,
     /// The process' CPU time and memory
     pub process: super::process::Reading,
 }
 
-static HISTORY: Mutex<VecDeque<Arc<Sample>>> = Mutex::new(VecDeque::new());
+impl Sample {
+    /// A sample of these readings, at `at`
+    pub fn new(at: Instant, series: &[(Key, Reading)], process: super::process::Reading) -> Self {
+        let mut known = SERIES.lock().unwrap_or_else(PoisonError::into_inner);
+        let known = known.get_or_insert_with(Series::default);
+        let mut readings = vec![];
+        for (key, reading) in series {
+            let id = known.id(key, reading);
+            if readings.len() <= id {
+                readings.resize(id + 1, Kept::Missing);
+            }
+            if let Some(slot) = readings.get_mut(id) {
+                *slot = match reading {
+                    Reading::Scalar(value) => Kept::Scalar(*value),
+                    Reading::Histogram(buckets) => {
+                        Kept::Histogram(buckets.iter().map(|(_, count)| *count).collect())
+                    }
+                };
+            }
+        }
+        Self {
+            at,
+            readings,
+            process,
+        }
+    }
+
+    /// The reading of a series, if it has one
+    #[cfg(test)]
+    pub fn get(&self, key: &Key) -> Option<Reading> {
+        let known = SERIES.lock().unwrap_or_else(PoisonError::into_inner);
+        let known = known.as_ref()?;
+        let id = *known.ids.get(key)?;
+        known.reading(id, self.readings.get(id)?)
+    }
+}
+
+impl Series {
+    /// The id of `key`, given an id when first seen
+    fn id(&mut self, key: &Key, reading: &Reading) -> usize {
+        if let Some(id) = self.ids.get(key) {
+            return *id;
+        }
+        let id = self.keys.len();
+        self.ids.insert(key.clone(), id);
+        self.keys.push(key.clone());
+        let bounds = match reading {
+            Reading::Histogram(buckets) => buckets.iter().map(|(bound, _)| *bound).collect(),
+            Reading::Scalar(_) => Arc::from([]),
+        };
+        self.bounds.push(bounds);
+        id
+    }
+
+    fn reading(&self, id: usize, kept: &Kept) -> Option<Reading> {
+        match kept {
+            Kept::Missing => None,
+            Kept::Scalar(value) => Some(Reading::Scalar(*value)),
+            Kept::Histogram(counts) => {
+                let bounds = self.bounds.get(id)?;
+                Some(Reading::Histogram(
+                    bounds.iter().copied().zip(counts.iter().copied()).collect(),
+                ))
+            }
+        }
+    }
+}
 
 /// Every series of the metrics, now
 pub fn sample() -> Sample {
-    let mut series = HashMap::new();
+    let mut series = vec![];
     for family in super::families() {
         for metric in family.get_metric() {
             let mut labels = metric
@@ -67,39 +161,75 @@ pub fn sample() -> Sample {
                 }
                 _ => continue,
             };
-            series.insert((family.name().to_string(), labels), reading);
+            series.push(((family.name().to_string(), labels), reading));
         }
     }
-    Sample {
-        at: Instant::now(),
-        series,
-        process: super::process::read(),
-    }
+    Sample::new(Instant::now(), &series, super::process::read())
 }
 
-/// Keeps a sample of the metrics, dropping the ones older than 5 minutes
+/// Keeps a sample of the metrics, thinning out older ones
 pub fn record() {
     let sample = Arc::new(sample());
     let mut history = HISTORY.lock().unwrap_or_else(PoisonError::into_inner);
     history.push_back(sample);
-    while history.len() > KEPT {
-        history.pop_front();
-    }
+    thin(&mut history);
 }
 
-/// Samples the metrics every second, forever
+static HISTORY: Mutex<VecDeque<Arc<Sample>>> = Mutex::new(VecDeque::new());
+
+/// When the stats were last read
+static LAST_READ: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// Whether the stats were read in the last 5 minutes
+fn read_lately() -> bool {
+    LAST_READ
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .is_some_and(|read| read.elapsed() <= OLDEST)
+}
+
+/// Every sample of the last minute, then one every 10 seconds, up to 5 minutes
+fn thin(history: &mut VecDeque<Arc<Sample>>) {
+    let Some(latest) = history.back().map(|sample| sample.at) else {
+        return;
+    };
+    let mut previous: Option<Instant> = None;
+    history.retain(|sample| {
+        let age = latest.saturating_duration_since(sample.at);
+        let keep = age <= DENSE
+            || (age <= OLDEST
+                && previous.is_none_or(|previous| {
+                    sample.at.saturating_duration_since(previous) >= SPARSE
+                }));
+        if keep && age > DENSE {
+            previous = Some(sample.at);
+        }
+        keep
+    });
+}
+
+/// Samples the metrics every second while the stats are read; drops the samples otherwise
 pub async fn run() {
     let mut interval = tokio::time::interval(Duration::from_secs(1));
     loop {
         interval.tick().await;
-        record();
+        if read_lately() {
+            record();
+        } else {
+            HISTORY.lock().unwrap_or_else(PoisonError::into_inner).clear();
+        }
     }
 }
 
 /// The sample about `window` before the latest one (or the oldest, if there's none that old
 /// yet), and the latest one
 pub fn window(window: Duration) -> Option<(Arc<Sample>, Arc<Sample>)> {
-    let history = HISTORY.lock().unwrap_or_else(PoisonError::into_inner);
+    *LAST_READ.lock().unwrap_or_else(PoisonError::into_inner) = Some(Instant::now());
+    let mut history = HISTORY.lock().unwrap_or_else(PoisonError::into_inner);
+    // Not sampled lately: from now on
+    if history.is_empty() {
+        history.push_back(Arc::new(sample()));
+    }
     pick(&history, window)
 }
 
@@ -181,22 +311,35 @@ type Hosts = BTreeMap<String, BTreeMap<String, Location>>;
 fn collect(earlier: &Sample, latest: &Sample) -> (Hosts, BTreeMap<String, Tcp>) {
     let mut hosts = Hosts::new();
     let mut tcp: BTreeMap<String, Tcp> = BTreeMap::new();
+    let known = SERIES.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(known) = known.as_ref() else {
+        return (hosts, tcp);
+    };
 
-    for ((name, labels), reading) in &latest.series {
+    for (id, kept) in latest.readings.iter().enumerate() {
+        let (Some((name, labels)), Some(reading)) = (known.keys.get(id), known.reading(id, kept))
+        else {
+            continue;
+        };
+        let reading = &reading;
+        let before = earlier
+            .readings
+            .get(id)
+            .and_then(|kept| known.reading(id, kept));
         let label = |label: &str| {
             labels
                 .iter()
                 .find(|(name, _)| name == label)
                 .map_or("", |(_, value)| value.as_str())
         };
-        let delta = || match (reading, earlier.series.get(&(name.clone(), labels.clone()))) {
+        let delta = || match (reading, before.as_ref()) {
             (Reading::Scalar(latest), Some(Reading::Scalar(earlier))) => {
                 (latest - earlier).max(0.0)
             }
             (Reading::Scalar(latest), _) => *latest,
             (Reading::Histogram(_), _) => 0.0,
         };
-        let histogram = || match (reading, earlier.series.get(&(name.clone(), labels.clone()))) {
+        let histogram = || match (reading, before.as_ref()) {
             (Reading::Histogram(latest), Some(Reading::Histogram(earlier))) => latest
                 .iter()
                 .zip(earlier)
@@ -430,10 +573,7 @@ fn round(value: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::HashMap,
-        time::{Duration, Instant},
-    };
+    use std::time::{Duration, Instant};
 
     use serde_json::json;
 
@@ -460,19 +600,42 @@ mod tests {
     }
 
     #[test]
+    fn test_older_samples_are_thinned() {
+        let start = Instant::now();
+        let mut history = std::collections::VecDeque::new();
+        for second in 0..=400 {
+            history.push_back(std::sync::Arc::new(sample(start + Duration::from_secs(second), &[])));
+            super::thin(&mut history);
+        }
+
+        let ages = history
+            .iter()
+            .map(|sample| (start + Duration::from_secs(400)).duration_since(sample.at).as_secs())
+            .collect::<Vec<_>>();
+        // Every second of the last minute, then one every 10 seconds, up to 5 minutes
+        assert!(ages.len() < 90, "{ages:?}");
+        assert!((0..=60).all(|age| ages.contains(&age)), "{ages:?}");
+        assert!(ages.iter().all(|age| *age <= 301), "{ages:?}");
+        assert!(*ages.first().unwrap() >= 290, "{ages:?}");
+        // A 5-minute window still has a sample about 5 minutes old
+        let (earlier, latest) = super::pick(&history, Duration::from_secs(300)).unwrap();
+        assert!(latest.at.duration_since(earlier.at).as_secs() >= 290);
+    }
+
+    #[test]
     fn test_sample_and_record() {
         crate::metrics::LocationMetrics::new("live-sample.test", "/", &[])
             .record(200, Duration::from_millis(3));
 
         let sample = super::sample();
         assert_eq!(
-            sample.series.get(&key(
+            sample.get(&key(
                 "proksi_requests_total",
                 &[("host", "live-sample.test"), ("location", "/"), ("status", "2xx")]
             )),
-            Some(&Reading::Scalar(1.0))
+            Some(Reading::Scalar(1.0))
         );
-        let Some(Reading::Histogram(buckets)) = sample.series.get(&key(
+        let Some(Reading::Histogram(buckets)) = sample.get(&key(
             "proksi_request_duration_seconds",
             &[("host", "live-sample.test"), ("location", "/")],
         )) else {
@@ -480,8 +643,9 @@ mod tests {
         };
         assert_eq!(buckets.last(), Some(&(f64::INFINITY, 1)));
 
-        super::record();
+        // Reading the stats starts sampling, from that moment
         assert!(super::window(Duration::from_secs(60)).is_some());
+        assert!(super::read_lately());
     }
 
     #[test]
@@ -509,15 +673,12 @@ mod tests {
     }
 
     fn sample(at: Instant, series: &[(Key, Reading)]) -> Sample {
-        Sample {
-            at,
-            series: series.iter().cloned().collect::<HashMap<_, _>>(),
-            process: crate::metrics::process::Reading {
-                cpu_seconds: 0.0,
-                rss_bytes: 2048,
-                allocator_bytes: 1024,
-            },
-        }
+        let process = crate::metrics::process::Reading {
+            cpu_seconds: 0.0,
+            rss_bytes: 2048,
+            allocator_bytes: 1024,
+        };
+        Sample::new(at, series, process)
     }
 
     fn histogram(below_10ms: u64, below_100ms: u64) -> Reading {

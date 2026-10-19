@@ -483,8 +483,8 @@ impl ProxyHttp for Router {
                 .record(status_code, duration);
         }
 
-        // The overview's latest requests, only while someone watches
-        if crate::metrics::requests::watched() {
+        // The latest requests, only while someone watches (at most 100 a second)
+        if crate::metrics::requests::wanted(&ctx.host) {
             crate::metrics::requests::publish(served(session, ctx, status_code, duration));
         }
 

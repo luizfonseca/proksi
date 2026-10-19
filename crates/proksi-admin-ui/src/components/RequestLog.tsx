@@ -15,7 +15,8 @@ export function RequestLog({ host }: { host?: string }) {
         <h3>Latest requests</h3>
         <div class="legend">
           {held && !paused && <span>Held while the pointer is on the list</span>}
-          {skipped > 0 && <span>{skipped} not shown last second (more than 100)</span>}
+          {!paused && <span>up to 100 a second</span>}
+          {skipped > 0 && <span>{skipped} missed last second</span>}
           <button type="button" class={paused && !requests.length ? 'primary' : 'secondary'} onClick={() => setPaused(!paused)}>
             {paused ? (requests.length ? 'Resume' : 'Watch requests') : 'Pause'}
           </button>
