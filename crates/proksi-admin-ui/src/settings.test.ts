@@ -4,6 +4,7 @@ import { isSection, label, value } from './settings';
 describe('settings', () => {
   it('reads names as labels', () => {
     expect(label('shutdown_timeout_secs')).toBe('Shutdown timeout');
+    expect(label('dns_provider')).toBe('DNS provider');
     expect(label('tls_min_version')).toBe('TLS min version');
     expect(label('memory_limit_mb')).toBe('Memory limit MB');
     expect(label('lets_encrypt')).toBe("Let's Encrypt");

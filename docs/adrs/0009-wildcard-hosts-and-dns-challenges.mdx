@@ -108,11 +108,12 @@ A TLS handshake for `a.example.com` looks for a certificate in the same order as
 - Certificate lookup: the same order for SNI names.
 - Configuration: wildcard names validated, and `dns-01` without a provider, or a wildcard host with `http-01`, refused.
 - The Cloudflare provider against a fake API server: finding the zone, creating and removing the record, and errors.
-- An order end to end against [Pebble](https://github.com/letsencrypt/pebble) and its test DNS server, through a provider that writes records there: the record is created, the certificate issued, and the record removed, also on failure.
+- The DNS-01 steps with a fake provider and fake name servers: the record is created, checked on every name server, validated only once visible, and removed, also on failure.
 
 ### Not part of this decision
 
 - Other DNS providers.
+- An order end to end against [Pebble](https://github.com/letsencrypt/pebble): the ACME client only trusts public CAs, not Pebble's own.
 - Including the parent name (`example.com`) in a wildcard certificate.
 - Wildcards anywhere but the leftmost label, or matching several labels.
 - Choosing the challenge for hosts from docker labels, the store or Kubernetes.

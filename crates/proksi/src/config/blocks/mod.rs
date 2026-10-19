@@ -181,6 +181,7 @@ host:
                     key: "/certs/app.key".into(),
                 }),
                 self_signed_on_failure: true,
+                challenge: None,
             },
             // Sorted by path
             locations: vec![

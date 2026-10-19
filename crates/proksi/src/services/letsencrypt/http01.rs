@@ -13,11 +13,12 @@ use tokio::time;
 use tracing::info;
 
 use crate::{
-    config::Config,
-    stores::{self, certificates::Certificate},
+    config::{host::Challenge, Config},
+    stores::{self, certificates::Certificate, lookup::TlsHost},
 };
 
 use super::{
+    dns::{self, DnsProvider},
     lease::{with_lease, Outcome, LEASE_TTL},
     storage::PersistType,
 };
@@ -31,13 +32,14 @@ const ACCOUNT_LEASE: &str = "acme:account";
 /// A service that handles the creation of certificates using the Let's Encrypt API
 pub struct LetsencryptService {
     pub(crate) config: Arc<Config>,
-    // pub(crate) route_store: RouteStore,
-    // pub(crate) cert_store: CertificateStore,
+    /// Where DNS-01 challenges are written, if configured (ADR 0009)
+    dns: Option<Box<dyn DnsProvider>>,
 }
 
 impl LetsencryptService {
     pub fn new(config: Arc<Config>) -> Self {
-        Self { config }
+        let dns = config.lets_encrypt.dns.as_ref().map(dns::provider);
+        Self { config, dns }
     }
 
     /// Parse a PEM-encoded private key from a string slice
@@ -95,6 +97,35 @@ impl LetsencryptService {
             // Let's Encrypt will check the domain's URL to validate the challenge
             tracing::info!("HTTP-01 validating (retry: 5s)...");
             challenge.validate(5000)?; // Retry every 5000 ms
+        }
+        Ok(())
+    }
+
+    /// Writes the DNS-01 challenge of each authorization as a TXT record, waits until its
+    /// zone's name servers answer it, and has Let's Encrypt check it. Records are removed
+    /// afterwards, whatever happens.
+    async fn handle_dns_01_challenge(
+        order: &mut NewOrder<PersistType>,
+        provider: &dyn DnsProvider,
+    ) -> Result<(), anyhow::Error> {
+        for auth in order.authorizations()? {
+            let challenge = auth.dns_challenge();
+            let name = dns::challenge_name(auth.domain_name());
+            let proof = challenge.dns_proof();
+            info!("DNS-01 challenge for domain: {}", auth.domain_name());
+
+            dns::with_txt_record(
+                provider,
+                &name,
+                &proof,
+                async |record| dns::wait_until_visible(record, dns::PROPAGATION_TIMEOUT).await,
+                async {
+                    // Let's Encrypt will look the record up on the zone's name servers
+                    challenge.validate(5000).map_err(|err| err.to_string())
+                },
+            )
+            .await
+            .map_err(|err| anyhow!(err))?;
         }
         Ok(())
     }
@@ -200,7 +231,17 @@ impl LetsencryptService {
     async fn create_order_for_domain(
         domain: &str,
         account: &Account<PersistType>,
+        challenge: Challenge,
+        dns: Option<&dyn DnsProvider>,
     ) -> Result<(), anyhow::Error> {
+        let dns = match (challenge, dns) {
+            (Challenge::Dns01, None) => {
+                return Err(anyhow!(
+                    "challenge = \"dns-01\" needs lets_encrypt {{ dns {{ ... }} }}"
+                ))
+            }
+            (_, dns) => dns,
+        };
         let mut order = account.new_order(domain, &[])?;
 
         let order_csr = loop {
@@ -211,9 +252,17 @@ impl LetsencryptService {
 
             // Get the possible authorizations (for a single domain
             // this will only be one element).
-            Self::handle_http_01_challenge(&mut order)
-                .await
-                .map_err(|err| anyhow!("Failed to handle HTTP-01 challenge: {err}"))?;
+            match (challenge, dns) {
+                (Challenge::Dns01, Some(provider)) => {
+                    // Boxed: it waits on the name servers, with buffers of its own
+                    Box::pin(Self::handle_dns_01_challenge(&mut order, provider))
+                        .await
+                        .map_err(|err| anyhow!("Failed to handle DNS-01 challenge: {err}"))?;
+                }
+                _ => Self::handle_http_01_challenge(&mut order)
+                    .await
+                    .map_err(|err| anyhow!("Failed to handle HTTP-01 challenge: {err}"))?,
+            }
 
             order.refresh().unwrap_or_default();
         };
@@ -247,8 +296,8 @@ impl LetsencryptService {
                 .collect::<std::collections::HashSet<_>>();
 
             // Hosts without TLS (and `*`) don't get certificates
-            for (host, self_signed_on_failure) in stores::lookup::tls_hosts() {
-                if existing.contains(&host) {
+            for host in stores::lookup::tls_hosts() {
+                if existing.contains(&host.name) {
                     continue;
                 }
 
@@ -256,13 +305,13 @@ impl LetsencryptService {
                 let outcome = with_lease(
                     store.as_ref(),
                     stores::replica_id(),
-                    &format!("acme:{host}"),
+                    &format!("acme:{}", host.name),
                     LEASE_TTL,
-                    async { store.get_certificate(&host).await.is_none() },
-                    Self::handle_certificate_for_domain(&host, account, self_signed_on_failure),
+                    async { store.get_certificate(&host.name).await.is_none() },
+                    Self::handle_certificate_for_domain(&host, account, self.dns.as_deref()),
                 )
                 .await;
-                log_outcome(&host, "creating", &outcome);
+                log_outcome(&host.name, "creating", &outcome);
             }
         }
     }
@@ -278,8 +327,8 @@ impl LetsencryptService {
 
         loop {
             tracing::debug!("checking for certificates to renew");
-            for (domain, _) in stores::lookup::tls_hosts() {
-                let domain = domain.as_str();
+            for host in stores::lookup::tls_hosts() {
+                let domain = host.name.as_str();
                 let Ok(Some(cert)) = account.certificate(domain) else {
                     continue;
                 };
@@ -306,7 +355,12 @@ impl LetsencryptService {
                     &format!("acme:{domain}"),
                     LEASE_TTL,
                     still_expiring,
-                    Self::create_order_for_domain(domain, account),
+                    Self::create_order_for_domain(
+                        domain,
+                        account,
+                        host.challenge,
+                        self.dns.as_deref(),
+                    ),
                 )
                 .await;
                 log_outcome(domain, "renewing", &outcome);
@@ -319,22 +373,18 @@ impl LetsencryptService {
     /// Saves the domain's certificate in the store: the one Let's Encrypt already issued, a
     /// new one, or a self-signed one if ordering fails (and `self_signed_on_failure`)
     async fn handle_certificate_for_domain(
-        domain: &str,
+        host: &TlsHost,
         account: &Account<PersistType>,
-        self_signed_on_failure: bool,
+        dns: Option<&dyn DnsProvider>,
     ) -> Result<(), anyhow::Error> {
+        let domain = host.name.as_str();
         if let Some(cert) = account.certificate(domain)? {
             return Self::insert_certificate(domain, cert.certificate(), cert.private_key()).await;
         }
 
-        // Let's Encrypt issues wildcard certificates through DNS-01 only (ADR 0009)
-        let ordered = if domain.starts_with("*.") {
-            Err(anyhow!("wildcard certificates need the DNS-01 challenge"))
-        } else {
-            Self::create_order_for_domain(domain, account).await
-        };
+        let ordered = Self::create_order_for_domain(domain, account, host.challenge, dns).await;
         if ordered.is_err() {
-            Self::create_self_signed_certificate(domain, self_signed_on_failure).await?;
+            Self::create_self_signed_certificate(domain, host.self_signed_on_failure).await?;
         }
         ordered
     }

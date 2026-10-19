@@ -62,6 +62,8 @@ pub struct LetsEncrypt {
     pub renew_interval_secs: u64,
     /// Where certificates are kept
     pub path: PathBuf,
+    /// Where DNS-01 challenges are written (its token isn't included)
+    pub dns_provider: Option<crate::config::DnsProviderKind>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -167,6 +169,7 @@ impl Settings {
                 email: config.lets_encrypt.email.to_string(),
                 renew_interval_secs: config.lets_encrypt.renew_interval_secs.unwrap_or(84_600),
                 path: config.paths.lets_encrypt.clone(),
+                dns_provider: config.lets_encrypt.dns.as_ref().map(|dns| dns.provider),
             },
             logging: Logging {
                 enabled: config.logging.enabled,
@@ -280,6 +283,10 @@ mod tests {
             metrics_token: Some("metrics-secret".to_string()),
             trusted_origins: vec![],
         });
+        config.lets_encrypt.dns = Some(crate::config::DnsChallenge {
+            provider: crate::config::DnsProviderKind::Cloudflare,
+            api_token: "dns-secret".to_string(),
+        });
 
         let server = serde_json::to_string(&Settings::new(&config)).unwrap();
 
@@ -295,7 +302,16 @@ mod tests {
             server.contains(r#""https_address":"0.0.0.0:443""#),
             "{server}"
         );
-        for secret in ["store-secret", "token-secret", "metrics-secret"] {
+        assert!(
+            server.contains(r#""dns_provider":"cloudflare""#),
+            "{server}"
+        );
+        for secret in [
+            "store-secret",
+            "token-secret",
+            "metrics-secret",
+            "dns-secret",
+        ] {
             assert!(!server.contains(secret), "{server}");
         }
     }
