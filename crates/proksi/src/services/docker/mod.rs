@@ -5,7 +5,8 @@ use std::{
 
 use async_trait::async_trait;
 use bollard::{
-    container::ListContainersOptions, service::ListServicesOptions, Docker, API_DEFAULT_VERSION,
+    query_parameters::{ListContainersOptions, ListServicesOptions},
+    Docker, API_DEFAULT_VERSION,
 };
 use pingora::{
     server::{ListenFds, ShutdownWatch},
@@ -23,6 +24,14 @@ use crate::{
 pub mod routes;
 
 /// Based on the provided endpoint, returns the correct Docker client
+/// Docker's filters, as its API takes them
+fn owned<T: Into<String>>(filters: HashMap<T, Vec<T>>) -> HashMap<String, Vec<String>> {
+    filters
+        .into_iter()
+        .map(|(key, values)| (key.into(), values.into_iter().map(Into::into).collect()))
+        .collect()
+}
+
 fn connect_to_docker(endpoint: &str) -> Result<Docker, bollard::errors::Error> {
     if endpoint.starts_with("unix:///") {
         return Docker::connect_with_unix(endpoint, 120, API_DEFAULT_VERSION);
@@ -108,8 +117,8 @@ impl LabelService {
 
         let services = match docker
             .list_services(Some(ListServicesOptions {
-                filters,
-                status: true,
+                filters: Some(owned(filters)),
+                status: Some(true),
             }))
             .await
         {
@@ -292,7 +301,7 @@ impl LabelService {
             .list_containers(Some(ListContainersOptions {
                 all: false,
                 limit: Some(1000),
-                filters,
+                filters: Some(owned(filters)),
                 size: false,
             }))
             .await

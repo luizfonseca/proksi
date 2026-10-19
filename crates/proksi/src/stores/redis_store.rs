@@ -185,7 +185,8 @@ impl Store for RedisStore {
         let keys: Vec<String> = conn
             .scan_match(format!("{REPLICA_KEY_PREFIX}*"))
             .map_err(unavailable)?
-            .collect();
+            .collect::<Result<_, _>>()
+            .map_err(unavailable)?;
         if keys.is_empty() {
             return Ok(vec![]);
         }
@@ -260,7 +261,8 @@ impl Store for RedisStore {
         let keys: Vec<String> = conn
             .scan_match(format!("{CERTIFICATE_KEY_PREFIX}*"))
             .map_err(unavailable)?
-            .collect();
+            .collect::<Result<_, _>>()
+            .map_err(unavailable)?;
         let values: Vec<Option<String>> = if keys.is_empty() {
             vec![]
         } else {
@@ -353,7 +355,7 @@ impl Store for RedisStore {
         // SCAN instead of KEYS, which blocks redis while it goes through every key
         let keys = conn_guard
             .scan_match::<_, String>(&pattern)
-            .map(Iterator::collect::<Vec<_>>);
+            .and_then(Iterator::collect::<Result<Vec<_>, _>>);
         if let Ok(keys) = keys {
             for key in keys {
                 if let Some(domain) = key.strip_prefix("proksi:cert:") {
