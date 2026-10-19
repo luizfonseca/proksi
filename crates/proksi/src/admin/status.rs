@@ -310,8 +310,7 @@ pub async fn certificates(store: &dyn Store) -> Vec<CertificateStatus> {
             .issuer_name()
             .entries_by_nid(openssl::nid::Nid::COMMONNAME)
             .next()
-            .and_then(|entry| entry.data().as_utf8().ok())
-            .map(|name| name.to_string());
+            .and_then(|entry| entry.data().to_string().ok());
         let self_signed = leaf
             .issuer_name()
             .try_cmp(leaf.subject_name())
