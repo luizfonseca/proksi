@@ -2,7 +2,7 @@
 name = "proksi-admin-ui"
 description = "The admin UI of Proksi, built and embedded (ADR 0008)"
 # Published with each release of Proksi, with its version (release-please-config.json)
-version = "0.13.0"
+version = "0.13.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["The Proksi Contributors <toaster.chicory-0b@icloud.com>"]

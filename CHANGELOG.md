@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.13.0...proksi-v0.13.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* admin UI version in releases ([#486](https://github.com/luizfonseca/proksi/issues/486)) ([c1c1f80](https://github.com/luizfonseca/proksi/commit/c1c1f8009fef48b4918fec8fa61bec3a62df3000))
+
 ## [0.13.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.12.0...proksi-v0.13.0) (2026-10-19)
 
 
