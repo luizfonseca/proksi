@@ -66,7 +66,7 @@ Every connection of a [`tcp` block](/routing/tcp) gets one too, once it closes:
 { "protocol": "tcp", "block": "tcp \"db\" in host \"db.example.com\"", "client_ip": "10.0.0.7:51234", "server_name": "db.example.com", "upstream": "10.0.0.5:5432", "duration_ms": 61234, "bytes_in": 5120, "bytes_out": 81920, "access_log": true }
 ```
 
-`server_name` is set when TLS is terminated, `upstream` once one was chosen, and `error` when the connection couldn't be forwarded (no healthy upstream, or the upstream refused it) or ended with an error. `access_logs_enabled = false` turns both off.
+`server_name` is set when TLS is terminated, `upstream` once one was chosen, and `error` when the connection couldn't be forwarded (no healthy upstream, or the upstream refused it) or ended with an error. A connection closed before any bytes flowed (a client checking it can connect, then hanging up) has no `error`: it's a normal close. `access_logs_enabled = false` turns both off.
 
 ### Logging under heavy load
 
