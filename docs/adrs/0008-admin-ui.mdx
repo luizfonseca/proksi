@@ -41,23 +41,26 @@ The UI is a static web application in a crate of its own, `proksi-admin-ui`, bui
 
 The admin listener keeps the rules of ADR 0004: off without an `admin` block, a loopback address unless there's a token, plain HTTP.
 
-**Tokens are named, and read-only or read-write**, so a dashboard can't change anything and every change says who made it:
+**Tokens are named, and read-only unless they say otherwise**, so a dashboard can't change anything, writing is always a choice someone made, and every change says who made it:
 
 ```hcl
 admin {
   listen = "127.0.0.1:7555"
 
-  token "ops" {
-    secret = env("PROKSI_ADMIN_TOKEN")
-  }
+  # Read-only: stats, hosts, certificates, rules
   token "grafana" {
     secret = env("PROKSI_GRAFANA_TOKEN")
-    access = "read" # stats, hosts, certificates, rules; no changes
+  }
+
+  # Can also change hosts and rules
+  token "ops" {
+    secret = env("PROKSI_ADMIN_TOKEN")
+    access = "write"
   }
 }
 ```
 
-`token = "..."` keeps working, as a read-write token named `default`.
+`access` is `"read"` unless written as `"write"`. `token = "..."` (ADR 0004) keeps working as before, read-write and named `default`, and is deprecated: Proksi logs a warning asking for a `token` block.
 
 **The UI signs in with a token.** `POST /api/v1/session` exchanges it for a session cookie:
 
