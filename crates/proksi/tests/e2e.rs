@@ -3498,3 +3498,81 @@ host "regex.test" {
         assert_eq!(res.upstream_request()["path"], upstream_path, "{path}");
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_unreachable_upstreams_answer_502_over_http2() {
+    // Nothing listens on the port of `/down`'s upstream
+    let mut proksi = Harness::start_with(
+        vec![],
+        r#"
+host "app.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  location "/down" {
+    upstream "127.0.0.1:{tcp_port_0}" {}
+  }
+
+  location "/answered" {
+    respond {
+      status = 403
+      body   = "no"
+    }
+  }
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#,
+    )
+    .await;
+    proksi.resolve("app.test");
+    let url = |path: &str| format!("https://app.test:{}{path}", proksi.https_port);
+
+    for client in [proksi.client(), proksi.client_h2()] {
+        // Before and after a request to a working upstream, on the same connection
+        for path in ["/answered", "/", "/answered", "/down", "/", "/down", "/down", "/"] {
+            let res = client.get(url(path)).send().await.unwrap();
+            let (version, status) = (res.version(), res.status());
+            let body = res.text().await;
+            assert!(body.is_ok(), "{version:?} {path} {status}: {body:?}");
+            let expected = match path {
+                "/" => 200,
+                "/answered" => 403,
+                _ => 502,
+            };
+            assert_eq!(status, expected, "{version:?} {path}");
+        }
+    }
+    let res = proksi.client_h2().get(url("/")).send().await.unwrap();
+    assert_eq!(res.version(), reqwest::Version::HTTP_2);
+
+    proksi.assert_healthy();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_upstream_with_hostname_over_http2() {
+    let proksi = Harness::start(vec![
+        Route::new("app.test", Upstream::Http).upstream_ip("localhost")
+    ])
+    .await;
+    let client = proksi.client_h2();
+
+    // `localhost` is also ::1, where nothing listens: requests sent there are retried or 502
+    for _ in 0..8 {
+        let res = client
+            .get(format!("https://app.test:{}/", proksi.https_port))
+            .send()
+            .await
+            .unwrap();
+        let status = res.status();
+        let body = res.text().await;
+        assert!(body.is_ok(), "{status}: {body:?}\n{}", proksi.logs());
+        assert!(status == 200 || status == 502, "{status}");
+    }
+}

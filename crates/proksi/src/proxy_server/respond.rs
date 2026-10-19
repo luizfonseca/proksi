@@ -14,7 +14,14 @@ pub async fn respond(
     mut response: ResponseHeader,
 ) -> pingora::Result<()> {
     response_blocks(session, &mut response, ctx).await;
-    session.write_response_header(Box::new(response), true).await
+    session.write_response_header(Box::new(response), true).await?;
+    // Pingora sends HTTP/2 headers without ending the stream, and ends it only for sessions it
+    // finishes: one dropped after an error (an upstream that can't be reached) would be reset,
+    // and clients would see a failure instead of this response
+    if session.is_http2() {
+        session.downstream_session.finish_body().await?;
+    }
+    Ok(())
 }
 
 /// The response blocks of the location and of the rules the request matched
