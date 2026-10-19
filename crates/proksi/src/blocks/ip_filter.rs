@@ -25,22 +25,12 @@ pub(super) struct IpFilter {
 
 impl IpFilter {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
-        let networks = |key: &str| -> Result<Vec<IpNet>, String> {
-            let Some(value) = plugin.config.as_ref().and_then(|config| config.get(key)) else {
-                return Ok(vec![]);
-            };
-            let invalid = || {
-                format!(
-                    "ip_filter: `{key}` must be a list of addresses and networks \
-                     (\"203.0.113.9\", \"10.0.0.0/8\")"
-                )
-            };
-            value
-                .as_array()
-                .ok_or_else(invalid)?
+        let settings: super::settings::IpFilter = super::settings::read("ip_filter", plugin)?;
+        let networks = |entries: Option<Vec<String>>| -> Result<Vec<IpNet>, String> {
+            entries
+                .unwrap_or_default()
                 .iter()
                 .map(|entry| {
-                    let entry = entry.as_str().ok_or_else(invalid)?;
                     entry
                         .parse::<IpNet>()
                         .or_else(|_| entry.parse::<IpAddr>().map(IpNet::from))
@@ -50,8 +40,7 @@ impl IpFilter {
                 })
                 .collect()
         };
-
-        let (allow, deny) = (networks("allow")?, networks("deny")?);
+        let (allow, deny) = (networks(settings.allow)?, networks(settings.deny)?);
         if allow.is_empty() && deny.is_empty() {
             return Err("ip_filter: `allow` or `deny` is required".to_string());
         }

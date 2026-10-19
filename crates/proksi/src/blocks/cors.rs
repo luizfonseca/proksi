@@ -83,20 +83,10 @@ impl Origin {
 
 impl Cors {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
-        let setting = |key: &str| plugin.config.as_ref().and_then(|config| config.get(key));
-        let list = |key: &str| -> Result<Option<Vec<&str>>, String> {
-            setting(key)
-                .map(|value| {
-                    value
-                        .as_array()
-                        .and_then(|values| values.iter().map(serde_json::Value::as_str).collect())
-                        .ok_or_else(|| format!("cors: `{key}` must be a list of strings"))
-                })
-                .transpose()
-        };
+        let settings: super::settings::Cors = super::settings::read("cors", plugin)?;
         // A list as a header value (`GET, POST`)
-        let joined = |key: &str| -> Result<Option<HeaderValue>, String> {
-            list(key)?
+        let joined = |key: &str, values: Option<Vec<String>>| -> Result<Option<HeaderValue>, String> {
+            values
                 .filter(|values| !values.is_empty())
                 .map(|values| {
                     HeaderValue::from_str(&values.join(", "))
@@ -105,36 +95,23 @@ impl Cors {
                 .transpose()
         };
 
-        // `allowed_origins`: the name of earlier configurations
-        let origins = list("origins")?
-            .or(list("allowed_origins")?)
-            .filter(|origins| !origins.is_empty())
-            .ok_or("cors: `origins` is required")?
-            .into_iter()
-            .map(Origin::parse)
+        if settings.origins.is_empty() {
+            return Err("cors: `origins` is required".to_string());
+        }
+        let origins = settings
+            .origins
+            .iter()
+            .map(|origin| Origin::parse(origin))
             .collect::<Result<Vec<_>, _>>()?;
-        let credentials = match setting("credentials") {
-            None => false,
-            Some(value) => value
-                .as_bool()
-                .ok_or("cors: `credentials` must be true or false")?,
-        };
-        let max_age = setting("max_age_secs")
-            .map(|value| {
-                value
-                    .as_u64()
-                    .map(HeaderValue::from)
-                    .ok_or("cors: `max_age_secs` must be a number of seconds")
-            })
-            .transpose()?;
 
         Ok(Self {
             origins,
-            methods: joined("methods")?.unwrap_or(HeaderValue::from_static(DEFAULT_METHODS)),
-            headers: joined("headers")?,
-            expose_headers: joined("expose_headers")?,
-            credentials,
-            max_age,
+            methods: joined("methods", settings.methods)?
+                .unwrap_or(HeaderValue::from_static(DEFAULT_METHODS)),
+            headers: joined("headers", settings.headers)?,
+            expose_headers: joined("expose_headers", settings.expose_headers)?,
+            credentials: settings.credentials.unwrap_or(false),
+            max_age: settings.max_age_secs.map(HeaderValue::from),
         })
     }
 

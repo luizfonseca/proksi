@@ -7,41 +7,28 @@ export type LocationForm = {
   path: string;
   exact: boolean;
   upstreams: UpstreamForm[];
-  /** As JSON: a list of rules (empty: none) */
-  rules: string;
+  /** As Proksi takes them, in order */
+  rules: unknown[];
   rest: Record<string, unknown>;
 };
 export type HostForm = {
   name: string;
   tls: boolean;
   selfSigned: boolean;
-  rules: string;
+  rules: unknown[];
   locations: LocationForm[];
   tlsRest: Record<string, unknown>;
   rest: Record<string, unknown>;
 };
 
 export const emptyUpstream = (): UpstreamForm => ({ address: '', weight: '', sni: '', rest: {} });
-export const emptyLocation = (): LocationForm => ({ path: '/', exact: false, upstreams: [emptyUpstream()], rules: '', rest: {} });
+export const emptyLocation = (): LocationForm => ({ path: '/', exact: false, upstreams: [emptyUpstream()], rules: [], rest: {} });
 
 export function emptyHost(): HostForm {
-  return { name: '', tls: true, selfSigned: false, rules: '', locations: [emptyLocation()], tlsRest: {}, rest: {} };
+  return { name: '', tls: true, selfSigned: false, rules: [], locations: [emptyLocation()], tlsRest: {}, rest: {} };
 }
 
-const rulesText = (rules: unknown) => (Array.isArray(rules) && rules.length ? JSON.stringify(rules, null, 2) : '');
-
-/** Rules from their JSON, or why they can't be read */
-function parseRules(text: string, at: string, errors: string[]): unknown[] | undefined {
-  if (!text.trim()) return undefined;
-  try {
-    const rules = JSON.parse(text);
-    if (Array.isArray(rules)) return rules;
-    errors.push(`${at}: rules must be a list ([ ... ]).`);
-  } catch (err) {
-    errors.push(`${at}: the rules aren't valid JSON (${(err as Error).message}).`);
-  }
-  return undefined;
-}
+const list = (rules: unknown) => (Array.isArray(rules) ? rules : []);
 
 export function toForm(host: StoredHost): HostForm {
   const { name, tls, locations, rules, ...rest } = host;
@@ -50,13 +37,13 @@ export function toForm(host: StoredHost): HostForm {
     name,
     tls: enabled !== false,
     selfSigned: Boolean(self_signed_on_failure),
-    rules: rulesText(rules),
+    rules: list(rules),
     tlsRest,
     rest,
     locations: (locations ?? []).map(({ path, exact, upstreams, rules, ...rest }) => ({
       path,
       exact: Boolean(exact),
-      rules: rulesText(rules),
+      rules: list(rules),
       rest,
       upstreams: (upstreams ?? []).map(({ ip, port, weight, sni, ...rest }) => ({
         address: `${ip}:${port}`,
@@ -102,17 +89,17 @@ export function fromForm(form: HostForm): { host: StoredHost } | { errors: strin
           sni: upstream.sni.trim() || null,
         };
       });
-    const rules = parseRules(location.rules, at, errors);
-    return { ...location.rest, path: location.path, exact: location.exact, upstreams, ...(rules && { rules }) };
+    const rules = location.rules.length ? { rules: location.rules } : {};
+    return { ...location.rest, path: location.path, exact: location.exact, upstreams, ...rules };
   });
-  const rules = parseRules(form.rules, 'Host rules', errors);
+  const rules = form.rules.length ? { rules: form.rules } : {};
   if (errors.length) return { errors };
   return {
     host: {
       ...form.rest,
       name,
       tls: { ...form.tlsRest, enabled: form.tls, self_signed_on_failure: form.selfSigned },
-      ...(rules && { rules }),
+      ...rules,
       locations,
     },
   };

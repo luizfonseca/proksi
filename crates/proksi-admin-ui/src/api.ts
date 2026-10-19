@@ -50,6 +50,8 @@ export const routes = {
   get: (name: string) => get<{ host: StoredHost; revision: number }>(hostPath(name)),
   put: (host: StoredHost) => request<{ host: string; revision: number }>('PUT', hostPath(host.name), host),
   delete: (name: string) => request<{ host: string; revision: number }>('DELETE', hostPath(name)),
+  /** Checks a host as saving would, without saving it */
+  validate: (host: StoredHost) => request<{ valid: boolean }>('POST', '/validate', host),
 };
 
 export const session = {

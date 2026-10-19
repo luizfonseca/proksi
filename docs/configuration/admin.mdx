@@ -53,7 +53,7 @@ curl -N -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" http://127.0.0.1:7555/api
 The admin listener also serves a UI, at its address (`http://127.0.0.1:7555`):
 
 - **Overview**: requests by status, errors, latency (p50, p90, p99), CPU and memory, charted from the moment the page is opened (up to 15 minutes, kept by the page); the latest requests; and the instances sharing the store.
-- **Hosts**: every host served, from every source. A host's page shows its traffic as a graph, from clients to its locations and upstreams (each line green while traffic flows, amber or red with errors or an unhealthy upstream), its requests and latency, and its latest requests; then its locations, upstreams (with what they resolved to) and their health, plugins and rules. With a token that can write, hosts in the store can be created, changed and removed.
+- **Hosts**: every host served, from every source. A host's page shows its traffic as a graph, from clients to its locations and upstreams (each line green while traffic flows, amber or red with errors or an unhealthy upstream), its requests and latency, and its latest requests; then its locations, upstreams (with what they resolved to) and their health, plugins and rules. With a token that can write, hosts in the store can be created, changed and removed, and their rules built with a form (conditions as a tree of all of, any of and none of; actions with their settings), checked by Proksi as they're edited.
 - **Certificates** and **Server** (the settings Proksi started with).
 
 Rules are shown without what can be a secret: the values headers, cookies and query parameters are compared with, the settings of `basic_auth`, `oauth2` and `forward_auth`, and the values of headers a rule adds.
@@ -214,6 +214,7 @@ The stats come from the same metrics, sampled every second while someone reads t
 | --- | --- |
 | `GET /api/v1/status` | Version, replica id, uptime, the addresses Proksi listens on, the store (its revision, the revision this instance applied, and the instances reporting to it), and hosts by source, with conflicts and invalid routes |
 | `GET /api/v1/hosts` | Every host being served: its source (`file`, `docker`, `kubernetes`, `store`), TLS, locations, the plugins of each location (by name, without their settings, which can hold secrets), and upstreams as written, with what they came from (a docker label or Kubernetes service), their weight, and the addresses they resolved to with their health |
+| `GET /api/v1/schema` | What rules and blocks accept, generated from the code that reads them: rule fields and the operators each takes, and each block's settings as JSON Schema (types, required, limits, descriptions) |
 | `GET /api/v1/server` | The settings read when Proksi starts (addresses, store, cache, Let's Encrypt, logging, workers, admin tokens' names and access), with their defaults. Secrets and credentials are never included |
 | `GET /api/v1/certificates` | Every certificate: domain, issuer, whether it's self-signed, when it expires (`expires_at`, `days_left`), and which instance holds its lease while it's being ordered or renewed |
 
@@ -228,6 +229,7 @@ Hosts can be added, changed and removed through the API. They're written to the 
 | `GET /api/v1/routes` | The hosts in the store, with the store's revision |
 | `GET /api/v1/routes/<host>` | One host, as stored, with the store's revision |
 | `PUT /api/v1/routes/<host>` | Adds or replaces a host. Returns the new revision |
+| `POST /api/v1/validate` | Checks a host as `PUT` would, without writing it: `{"valid": true}`, or `400` with the reason |
 | `DELETE /api/v1/routes/<host>` | Removes a host. Returns the revision |
 
 Changing a host needs a token with `access = "write"`. The API takes and returns JSON only: a host in the format hosts are stored in (`GET /api/v1/routes/<host>` returns it), with its `name`:

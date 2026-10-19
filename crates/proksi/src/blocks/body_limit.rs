@@ -24,13 +24,8 @@ pub(super) struct BodyLimit {
 
 impl BodyLimit {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
-        let max = plugin
-            .config
-            .as_ref()
-            .and_then(|config| config.get("max"))
-            .and_then(serde_json::Value::as_str)
-            .and_then(parse_size)
-            .ok_or(INVALID_MAX)?;
+        let settings: super::settings::BodyLimit = super::settings::read("body_limit", plugin)?;
+        let max = parse_size(&settings.max).ok_or(INVALID_MAX)?;
         Ok(Self { max })
     }
 }
@@ -121,15 +116,12 @@ mod tests {
 
     #[test]
     fn test_invalid_settings() {
-        for config in [
-            serde_json::json!({}),
-            serde_json::json!({ "max": "1TB" }),
-            serde_json::json!({ "max": 1024 }),
-        ] {
-            assert_eq!(
-                BodyLimit::new(&plugin(config)).err().as_deref(),
-                Some("body_limit: `max` must be a size such as \"512KiB\", \"1MiB\" or \"10MB\"")
-            );
-        }
+        let err = |config| BodyLimit::new(&plugin(config)).err().unwrap_or_default();
+        assert_eq!(err(serde_json::json!({})), "body_limit: `max` is required");
+        assert_eq!(
+            err(serde_json::json!({ "max": "1TB" })),
+            "body_limit: `max` must be a size such as \"512KiB\", \"1MiB\" or \"10MB\""
+        );
+        assert!(err(serde_json::json!({ "max": 1024 })).starts_with("body_limit: invalid type"));
     }
 }

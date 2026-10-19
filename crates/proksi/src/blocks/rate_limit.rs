@@ -27,17 +27,12 @@ pub(super) struct RateLimit {
 
 impl RateLimit {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
-        let setting = |key: &str| plugin.config.as_ref().and_then(|config| config.get(key));
-
-        let requests = setting("requests")
-            .and_then(serde_json::Value::as_u64)
+        let settings: super::settings::RateLimit = super::settings::read("rate_limit", plugin)?;
+        let requests = Some(settings.requests)
             .filter(|requests| *requests > 0)
             .and_then(|requests| isize::try_from(requests).ok())
             .ok_or("rate_limit: `requests` must be a number greater than 0")?;
-        let per = setting("per")
-            .and_then(serde_json::Value::as_str)
-            .and_then(parse_duration)
-            .ok_or(INVALID_PER)?;
+        let per = parse_duration(&settings.per).ok_or(INVALID_PER)?;
 
         Ok(Self {
             requests,
@@ -126,7 +121,7 @@ mod tests {
         for (config, expected) in [
             (
                 serde_json::json!({ "per": "1m" }),
-                "rate_limit: `requests` must be a number greater than 0",
+                "rate_limit: `requests` is required",
             ),
             (
                 serde_json::json!({ "requests": 0, "per": "1m" }),
@@ -134,7 +129,7 @@ mod tests {
             ),
             (
                 serde_json::json!({ "requests": 10 }),
-                "rate_limit: `per` must be a duration such as \"10s\", \"1m\" or \"1h\"",
+                "rate_limit: `per` is required",
             ),
             (
                 serde_json::json!({ "requests": 10, "per": "1x" }),

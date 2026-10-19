@@ -35,23 +35,15 @@ describe('the host form', () => {
     expect(saved.host.locations[0].upstreams[0]).toMatchObject({ ip: 'other.internal', port: 80, network: null });
   });
 
-  it('edits rules as JSON', () => {
+  it('keeps rules, and leaves out empty ones', () => {
     const form = toForm(stored);
-    expect(JSON.parse(form.rules)).toEqual(stored.rules);
-    form.locations[0].rules = '[{ "name": "a" }]';
-    form.rules = '';
+    expect(form.rules).toEqual(stored.rules);
+    form.locations[0].rules = [{ name: 'a' }];
+    form.rules = [];
     const saved = fromForm(form);
     if (!('host' in saved)) throw new Error(String(saved.errors));
     expect(saved.host.rules).toBeUndefined();
     expect(saved.host.locations[0].rules).toEqual([{ name: 'a' }]);
-
-    form.rules = '{ "name": "a" }';
-    form.locations[0].rules = '[{';
-    const refused = fromForm(form);
-    expect('errors' in refused && refused.errors).toEqual([
-      expect.stringMatching(/^Location \/api: the rules aren't valid JSON/),
-      'Host rules: rules must be a list ([ ... ]).',
-    ]);
   });
 
   it('refuses what the API would', () => {

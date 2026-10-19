@@ -10,7 +10,7 @@ use crate::{
     proxy_server::https_proxy::RouterContext,
 };
 
-use super::{priority::required, Kind, Middleware};
+use super::Middleware;
 
 pub(super) struct BasicAuth {
     plugin: RoutePlugin,
@@ -18,8 +18,7 @@ pub(super) struct BasicAuth {
 
 impl BasicAuth {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
-        required(Kind::BasicAuth, plugin, "user")?;
-        required(Kind::BasicAuth, plugin, "pass")?;
+        let _: super::settings::BasicAuth = super::settings::read("basic_auth", plugin)?;
         Ok(Self {
             plugin: plugin.clone(),
         })

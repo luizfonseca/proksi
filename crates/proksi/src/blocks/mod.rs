@@ -41,6 +41,7 @@ mod ip_filter;
 mod oauth2;
 mod priority;
 mod rate_limit;
+pub mod settings;
 mod redirect;
 mod request_id;
 
@@ -160,12 +161,15 @@ impl Blocks {
 
         for plugin in location.plugins.iter().flatten() {
             let (kind, middleware): (Kind, Arc<dyn Middleware>) = match plugin.name.as_ref() {
-                "request_id" => (
-                    Kind::RequestId,
-                    Arc::new(RequestId {
-                        plugin: plugin.clone(),
-                    }),
-                ),
+                "request_id" => {
+                    let _: settings::RequestId = settings::read("request_id", plugin)?;
+                    (
+                        Kind::RequestId,
+                        Arc::new(RequestId {
+                            plugin: plugin.clone(),
+                        }),
+                    )
+                }
                 "ip_filter" => (Kind::IpFilter, Arc::new(IpFilter::new(plugin)?)),
                 "cors" => (Kind::Cors, Arc::new(Cors::new(plugin)?)),
                 "rate_limit" => (Kind::RateLimit, Arc::new(RateLimit::new(plugin)?)),
@@ -432,6 +436,10 @@ mod tests {
     fn test_invalid_block_settings_are_rejected() {
         for (plugin, expected) in [
             (
+                serde_json::json!({ "name": "rate_limit", "config": { "requests": 1, "per": "1m", "burst": 2 } }),
+                "rate_limit: unknown field `burst`, expected one of `requests`, `per`, `priority`",
+            ),
+            (
                 serde_json::json!({ "name": "basic_auth", "config": { "user": "u" } }),
                 "basic_auth: `pass` is required",
             ),
@@ -443,7 +451,7 @@ mod tests {
                 serde_json::json!({ "name": "oauth2", "config": {
                     "provider": "other", "client_id": "a", "client_secret": "b", "jwt_secret": "c"
                 } }),
-                "oauth2: unknown provider \"other\" (github, workos)",
+                "oauth2: unknown variant `other`, expected `github` or `workos`",
             ),
         ] {
             let err = Blocks::build(&location(serde_json::json!({ "plugins": [plugin] }))).err();

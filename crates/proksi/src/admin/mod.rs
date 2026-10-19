@@ -209,6 +209,11 @@ impl AdminApi {
                 None => Reply::not_found(),
             },
             Endpoint::Hosts => Reply::ok(&status::hosts()),
+            Endpoint::Schema => Reply::ok(&serde_json::json!({
+                "rules": crate::rules::schema::schema(),
+                "blocks": crate::blocks::settings::schemas(),
+            })),
+            Endpoint::Validate => routes_reply(routes::validate(request.body)),
             Endpoint::Certificates => Reply::ok(&status::certificates(store).await),
             Endpoint::Routes => routes_reply(routes::list(store).await),
             Endpoint::Route(host) => routes_reply(routes::get(store, host).await),

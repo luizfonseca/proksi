@@ -37,22 +37,18 @@ enum Part {
 
 impl Redirect {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
-        let setting = |key: &str| plugin.config.as_ref().and_then(|config| config.get(key));
-
-        let to = setting("to")
-            .and_then(serde_json::Value::as_str)
-            .filter(|to| !to.is_empty())
-            .ok_or("redirect: `to` is required")?;
-        let status = match setting("status") {
+        let settings: super::settings::Redirect = super::settings::read("redirect", plugin)?;
+        if settings.to.is_empty() {
+            return Err("redirect: `to` is required".to_string());
+        }
+        let status = match settings.status {
             None => 302,
-            Some(status) => status
-                .as_u64()
-                .and_then(|status| u16::try_from(status).ok())
+            Some(status) => Some(status)
                 .filter(|status| REDIRECT_STATUSES.contains(status))
                 .ok_or("redirect: `status` must be 301, 302, 303, 307 or 308")?,
         };
         Ok(Self {
-            to: parse(to)?,
+            to: parse(&settings.to)?,
             status,
         })
     }
@@ -134,35 +130,21 @@ pub(super) struct Respond {
 
 impl Respond {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
-        let setting = |key: &str| plugin.config.as_ref().and_then(|config| config.get(key));
-        let text = |key: &str| -> Result<Option<String>, String> {
-            setting(key)
-                .map(|value| {
-                    value
-                        .as_str()
-                        .map(ToString::to_string)
-                        .ok_or_else(|| format!("respond: `{key}` must be a string"))
-                })
-                .transpose()
-        };
-
-        let status = match setting("status") {
+        let settings: super::settings::Respond = super::settings::read("respond", plugin)?;
+        let status = match settings.status {
             None => 200,
-            Some(status) => status
-                .as_u64()
-                .and_then(|status| u16::try_from(status).ok())
+            Some(status) => Some(status)
                 .filter(|status| (200..600).contains(status))
                 .ok_or("respond: `status` must be between 200 and 599")?,
         };
-        let content_type = text("content_type")?;
-        if let Some(content_type) = &content_type {
+        if let Some(content_type) = &settings.content_type {
             http::HeaderValue::from_str(content_type)
                 .map_err(|_| format!("respond: {content_type:?} isn't a valid content type"))?;
         }
         Ok(Self {
             status,
-            body: Bytes::from(text("body")?.unwrap_or_default()),
-            content_type,
+            body: Bytes::from(settings.body.unwrap_or_default()),
+            content_type: settings.content_type,
         })
     }
 }

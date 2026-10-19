@@ -50,46 +50,39 @@ pub(super) struct ForwardAuth {
 
 impl ForwardAuth {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
-        let setting = |key: &str| plugin.config.as_ref().and_then(|config| config.get(key));
-        let names = |key: &str| -> Result<Option<Vec<HeaderName>>, String> {
-            setting(key)
-                .map(|value| {
-                    let invalid =
-                        || format!("forward_auth: `{key}` must be a list of header names");
-                    value
-                        .as_array()
-                        .ok_or_else(invalid)?
+        let settings: super::settings::ForwardAuth = super::settings::read("forward_auth", plugin)?;
+        let names = |key: &str, names: Option<Vec<String>>| -> Result<Option<Vec<HeaderName>>, String> {
+            names
+                .map(|names| {
+                    names
                         .iter()
                         .map(|name| {
-                            name.as_str()
-                                .and_then(|name| HeaderName::from_bytes(name.as_bytes()).ok())
-                                .ok_or_else(invalid)
+                            HeaderName::from_bytes(name.as_bytes()).map_err(|_| {
+                                format!("forward_auth: `{key}` must be a list of header names")
+                            })
                         })
                         .collect()
                 })
                 .transpose()
         };
 
-        let url = setting("url")
-            .and_then(serde_json::Value::as_str)
-            .ok_or("forward_auth: `url` is required")?;
-        let url = reqwest::Url::parse(url)
+        let url = reqwest::Url::parse(&settings.url)
             .ok()
             .filter(|url| matches!(url.scheme(), "http" | "https"))
-            .ok_or_else(|| format!("forward_auth: {url:?} isn't an http or https URL"))?;
-        let timeout = match setting("timeout_secs") {
+            .ok_or_else(|| format!("forward_auth: {:?} isn't an http or https URL", settings.url))?;
+        let timeout = match settings.timeout_secs {
             None => Duration::from_secs(5),
-            Some(value) => value
-                .as_u64()
-                .filter(|secs| *secs > 0)
-                .map(Duration::from_secs)
-                .ok_or("forward_auth: `timeout_secs` must be a number greater than 0")?,
+            Some(0) => {
+                return Err("forward_auth: `timeout_secs` must be a number greater than 0".to_string())
+            }
+            Some(secs) => Duration::from_secs(secs),
         };
 
         Ok(Self {
             url,
-            request_headers: names("request_headers")?,
-            response_headers: names("response_headers")?.unwrap_or_default(),
+            request_headers: names("request_headers", settings.request_headers)?,
+            response_headers: names("response_headers", settings.response_headers)?
+                .unwrap_or_default(),
             timeout,
         })
     }

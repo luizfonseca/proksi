@@ -1,0 +1,369 @@
+//! Each block's settings, as written in a location or a rule's `then`: what a block accepts (an
+//! unknown or mistyped setting is an error), and the schema the admin UI builds its forms from
+
+use std::borrow::Cow;
+
+use schemars::JsonSchema;
+use serde::{de::DeserializeOwned, Deserialize};
+
+use crate::config::RoutePlugin;
+
+/// When a block runs among the blocks of its location, from 0 (first) to 100
+type Priority = Option<u8>;
+
+/// A block's settings, or why they're invalid (`rate_limit: unknown field "burst"`)
+pub fn read<T: DeserializeOwned>(name: &str, plugin: &RoutePlugin) -> Result<T, String> {
+    let settings = plugin
+        .config
+        .iter()
+        .flatten()
+        .map(|(key, value)| (Cow::into_owned(key.clone()), value.clone()))
+        .collect::<serde_json::Map<_, _>>();
+    serde_json::from_value(serde_json::Value::Object(settings)).map_err(|err| {
+        let err = err.to_string();
+        match err.strip_prefix("missing field ") {
+            Some(field) => format!("{name}: {field} is required"),
+            None => format!("{name}: {err}"),
+        }
+    })
+}
+
+/// `rate_limit`: answers `429` to clients over the limit
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RateLimit {
+    /// Requests allowed for each client in each period (more than 0)
+    pub requests: u64,
+    /// The period, such as "10s", "1m" or "1h"
+    pub per: String,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// `body_limit`: answers `413` to requests with a larger body
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BodyLimit {
+    /// The largest body accepted, such as "512KiB", "1MiB" or "10MB"
+    pub max: String,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// `redirect`: sends requests elsewhere
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Redirect {
+    /// Where requests are sent; `{uri}`, `{path}`, `{query}` and `{host}` are replaced with the
+    /// request's
+    pub to: String,
+    /// 301, 302, 303, 307 or 308 (default: 302)
+    pub status: Option<u16>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// `respond`: answers requests itself
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Respond {
+    /// The status, from 200 to 599 (default: 200)
+    pub status: Option<u16>,
+    /// The body (default: none)
+    pub body: Option<String>,
+    /// Its `Content-Type`, such as "text/plain"
+    pub content_type: Option<String>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// `ip_filter`: answers `403` to clients it doesn't accept
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct IpFilter {
+    /// Addresses and networks accepted ("203.0.113.9", "10.0.0.0/8"); when set, every other
+    /// client is refused
+    pub allow: Option<Vec<String>>,
+    /// Addresses and networks refused, even when `allow` includes them
+    pub deny: Option<Vec<String>>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// `cors`: answers browsers' cross-origin requests
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Cors {
+    /// The origins accepted: exact (`https://app.example.com`), subdomains
+    /// (`https://*.example.com`) or any (`*`)
+    #[serde(alias = "allowed_origins")]
+    pub origins: Vec<String>,
+    /// The methods allowed (default: GET, HEAD, POST, PUT, PATCH, DELETE)
+    pub methods: Option<Vec<String>>,
+    /// The request headers allowed (default: those the browser asks for)
+    pub headers: Option<Vec<String>>,
+    /// Response headers the page can read, besides the basic ones
+    pub expose_headers: Option<Vec<String>>,
+    /// Whether the browser sends cookies and `Authorization` (default: false)
+    pub credentials: Option<bool>,
+    /// How long browsers keep a preflight's answer, in seconds
+    pub max_age_secs: Option<u64>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// A compression algorithm
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Algorithm {
+    Zstd,
+    Br,
+    Gzip,
+}
+
+/// `compress`: compresses responses
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Compress {
+    /// The algorithms used (default: all three)
+    pub algorithms: Option<Vec<Algorithm>>,
+    /// The level of every algorithm (default: 3 for zstd, 4 for brotli, 6 for gzip)
+    pub level: Option<u32>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// `forward_auth`: asks another service whether requests may go through
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ForwardAuth {
+    /// The auth service's endpoint (http or https)
+    pub url: String,
+    /// Headers of its answer added to the request sent to the upstream
+    pub response_headers: Option<Vec<String>>,
+    /// Only these headers of the request are sent to it (default: all)
+    pub request_headers: Option<Vec<String>>,
+    /// How long it has to answer, in seconds (default: 5)
+    pub timeout_secs: Option<u64>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// `basic_auth`: asks for a user and password
+// Read by its plugin, from the settings as written
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BasicAuth {
+    pub user: String,
+    pub pass: String,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// An `oauth2` provider
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Provider {
+    Github,
+    Workos,
+}
+
+/// What an `oauth2` validation checks
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Check {
+    Email,
+    Username,
+    TeamId,
+    OrgId,
+}
+
+impl Check {
+    pub fn name(self) -> &'static str {
+        match self {
+            Check::Email => "email",
+            Check::Username => "username",
+            Check::TeamId => "team_id",
+            Check::OrgId => "org_id",
+        }
+    }
+}
+
+/// Users are let in only if their `type` is one of `value`
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Validation {
+    /// `key` in earlier documentation
+    #[serde(rename = "type", alias = "key")]
+    pub check: Check,
+    pub value: Vec<String>,
+}
+
+/// `oauth2`: signs users in with an `OAuth2` provider
+// Read by its plugin, from the settings as written
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Oauth2 {
+    pub provider: Provider,
+    pub client_id: String,
+    pub client_secret: String,
+    /// Signs the session cookie (at least 64 characters)
+    pub jwt_secret: String,
+    /// Who's let in (default: anyone the provider signs in)
+    pub validations: Option<Vec<Validation>>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// `request_id`: adds an `X-Request-Id` header to requests and responses
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RequestId {
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// Each block's settings, as JSON Schema, by name
+pub fn schemas() -> serde_json::Map<String, serde_json::Value> {
+    let schema = |schema: schemars::Schema| schema.to_value();
+    [
+        ("rate_limit", schema(schemars::schema_for!(RateLimit))),
+        ("body_limit", schema(schemars::schema_for!(BodyLimit))),
+        ("redirect", schema(schemars::schema_for!(Redirect))),
+        ("respond", schema(schemars::schema_for!(Respond))),
+        ("ip_filter", schema(schemars::schema_for!(IpFilter))),
+        ("cors", schema(schemars::schema_for!(Cors))),
+        ("compress", schema(schemars::schema_for!(Compress))),
+        ("forward_auth", schema(schemars::schema_for!(ForwardAuth))),
+        ("basic_auth", schema(schemars::schema_for!(BasicAuth))),
+        ("oauth2", schema(schemars::schema_for!(Oauth2))),
+        ("request_id", schema(schemars::schema_for!(RequestId))),
+    ]
+    .into_iter()
+    .map(|(name, schema)| (name.to_string(), schema))
+    .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::RoutePlugin;
+
+    use super::{read, schemas, Check, Oauth2, RateLimit};
+
+    fn plugin(name: &str, config: serde_json::Value) -> RoutePlugin {
+        serde_json::from_value(serde_json::json!({ "name": name, "config": config })).unwrap()
+    }
+
+    #[test]
+    fn test_unknown_and_mistyped_settings() {
+        let read_limit =
+            |config| read::<RateLimit>("rate_limit", &plugin("rate_limit", config)).map(|_| ());
+
+        assert_eq!(read_limit(serde_json::json!({ "requests": 10, "per": "1m" })), Ok(()));
+        let unknown = read_limit(serde_json::json!({ "requests": 10, "per": "1m", "burst": 5 }));
+        assert!(
+            unknown.as_ref().is_err_and(|err| err.starts_with("rate_limit: unknown field `burst`")),
+            "{unknown:?}"
+        );
+        let mistyped = read_limit(serde_json::json!({ "requests": "ten", "per": "1m" }));
+        assert!(mistyped.is_err_and(|err| err.starts_with("rate_limit: invalid type")));
+        assert_eq!(
+            read_limit(serde_json::json!({ "per": "1m" })),
+            Err("rate_limit: `requests` is required".to_string())
+        );
+    }
+
+    #[test]
+    fn test_oauth2_validations_as_documented() {
+        // `key`, as the documentation showed, is `type`
+        let oauth2 = read::<Oauth2>(
+            "oauth2",
+            &plugin(
+                "oauth2",
+                serde_json::json!({
+                    "provider": "github",
+                    "client_id": "id",
+                    "client_secret": "secret",
+                    "jwt_secret": "jwt",
+                    "validations": [{ "key": "email", "value": ["a@example.com"] }],
+                }),
+            ),
+        )
+        .unwrap();
+        assert_eq!(oauth2.validations.unwrap()[0].check, Check::Email);
+    }
+
+    #[test]
+    fn test_schemas() {
+        let schemas = schemas();
+        let limit = &schemas["rate_limit"];
+        assert_eq!(limit["required"], serde_json::json!(["requests", "per"]));
+        assert_eq!(limit["properties"]["requests"]["type"], "integer");
+        assert_eq!(limit["additionalProperties"], false);
+        assert!(
+            limit["properties"]["per"]["description"]
+                .as_str()
+                .is_some_and(|text| text.contains("1m")),
+            "{limit}"
+        );
+        assert_eq!(limit["properties"]["priority"]["maximum"], 100);
+        assert_eq!(schemas.len(), 11);
+    }
+}

@@ -10,9 +10,7 @@ use crate::{
     proxy_server::https_proxy::RouterContext,
 };
 
-use super::{priority::required, Kind, Middleware};
-
-const PROVIDERS: [&str; 2] = ["github", "workos"];
+use super::Middleware;
 
 pub(super) struct Oauth2 {
     plugin: RoutePlugin,
@@ -20,19 +18,19 @@ pub(super) struct Oauth2 {
 
 impl Oauth2 {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
-        let provider = required(Kind::Oauth2, plugin, "provider")?;
-        for key in ["client_id", "client_secret", "jwt_secret"] {
-            required(Kind::Oauth2, plugin, key)?;
+        let settings: super::settings::Oauth2 = super::settings::read("oauth2", plugin)?;
+        // Validations as the plugin reads them: `type` (also written `key`) and `value`
+        let mut plugin = plugin.clone();
+        if let (Some(validations), Some(config)) = (settings.validations, plugin.config.as_mut()) {
+            let validations = validations
+                .iter()
+                .map(|validation| {
+                    serde_json::json!({ "type": validation.check.name(), "value": validation.value })
+                })
+                .collect();
+            config.insert("validations".into(), serde_json::Value::Array(validations));
         }
-        if !PROVIDERS.contains(&provider) {
-            return Err(format!(
-                "oauth2: unknown provider {provider:?} ({})",
-                PROVIDERS.join(", ")
-            ));
-        }
-        Ok(Self {
-            plugin: plugin.clone(),
-        })
+        Ok(Self { plugin })
     }
 }
 
