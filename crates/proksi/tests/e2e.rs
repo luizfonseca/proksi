@@ -3902,3 +3902,128 @@ host "files.test" {{
 
     proksi.assert_healthy();
 }
+
+/// An upstream answering `body` to every request
+async fn answering(body: &'static str) -> u16 {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                return;
+            };
+            tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut buffer = [0u8; 4096];
+                let _ = stream.read(&mut buffer).await;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+            });
+        }
+    });
+    port
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_traffic_split() {
+    let v2_port = answering("v2").await;
+    let config = r#"
+host "split.test" {
+  tls = false
+
+  location "/all" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    traffic_split "v2" {
+      percent = 100
+      upstream "127.0.0.1:{v2_port}" {}
+    }
+  }
+
+  location "/beta" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    traffic_split "v2" {
+      percent = 0
+      upstream "127.0.0.1:{v2_port}" {}
+    }
+
+    rule "beta testers" {
+      and {
+        header "x-beta" {
+          exists = true
+        }
+      }
+      then {
+        traffic_split = "v2"
+      }
+    }
+  }
+
+  location "/down" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+    health_check {
+      interval_secs = 1
+    }
+
+    traffic_split "v2" {
+      percent = 100
+      sticky  = "none"
+      upstream "127.0.0.1:1" {}
+    }
+  }
+}
+"#
+    .replace("{v2_port}", &v2_port.to_string());
+    let mut proksi = Harness::start_without_https(&config).await;
+    let port = proksi.http_port;
+    let get = |path: &str, headers: &str| {
+        format!("GET {path} HTTP/1.1\r\nHost: split.test\r\n{headers}Connection: close\r\n\r\n")
+    };
+    let header = |res: &str, name: &str| {
+        res.lines()
+            .take_while(|line| !line.is_empty())
+            .find_map(|line| {
+                let (key, value) = line.split_once(": ")?;
+                key.eq_ignore_ascii_case(name).then(|| value.to_string())
+            })
+    };
+    let body = |res: &str| res.split_once("\r\n\r\n").map(|(_, body)| body.to_string()).unwrap_or_default();
+
+    // A new client gets the split, and a cookie telling nothing to keep it
+    let res = proksi.raw_http_on(port, get("/all", "").as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert_eq!(body(&res), "v2");
+    let cookie = header(&res, "set-cookie").unwrap();
+    assert!(cookie.starts_with("_t") && cookie.contains("; HttpOnly"), "{cookie}");
+    assert!(!cookie.to_lowercase().contains("split") && !cookie.contains("v2"), "{cookie}");
+    let pair = cookie.split(';').next().unwrap().to_string();
+
+    // With it, the same side, and no new cookie
+    let res = proksi.raw_http_on(port, get("/all", &format!("Cookie: {pair}\r\n")).as_bytes()).await.unwrap();
+    assert_eq!(body(&res), "v2");
+    assert_eq!(header(&res, "set-cookie"), None);
+
+    // At 0%, only the clients a rule sends there
+    let res = proksi.raw_http_on(port, get("/beta", "").as_bytes()).await.unwrap();
+    assert_ne!(body(&res), "v2", "{res}");
+    let res = proksi.raw_http_on(port, get("/beta", "X-Beta: 1\r\n").as_bytes()).await.unwrap();
+    assert_eq!(body(&res), "v2");
+
+    // A split whose upstreams the health checks found down: the location's own
+    let mut res = String::new();
+    for _ in 0..50 {
+        res = proksi.raw_http_on(port, get("/down", "").as_bytes()).await.unwrap();
+        if res.starts_with("HTTP/1.1 200") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}\n{}", proksi.logs());
+    assert_ne!(body(&res), "v2");
+
+    proksi.assert_healthy();
+}

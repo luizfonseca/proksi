@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     blocks::Blocks,
     config::host::{Location, PathRewrite},
@@ -17,7 +19,22 @@ pub(super) fn build_location_container(
 
     let mut container = RouteStoreContainer::new(load_balancer);
     container.path.clone_from(&location.path);
-    container.set_upstreams(location.upstreams.clone());
+    // The traffic splits' upstreams come after the location's own (ADR 0003)
+    let mut upstreams = location.upstreams.clone();
+    upstreams.extend(
+        location
+            .splits
+            .iter()
+            .flat_map(|split| split.upstreams.iter().cloned()),
+    );
+    container.set_upstreams(upstreams);
+    container.splits = Arc::new(crate::routing::split::Split::build(
+        host,
+        &location.path,
+        location.upstreams.len(),
+        &location.splits,
+        location.health_check,
+    ));
     container.cache.clone_from(&location.cache);
     container.timeouts = location.timeouts;
     container.rewrite = match location
@@ -32,7 +49,7 @@ pub(super) fn build_location_container(
             return None;
         }
     };
-    let upstreams = location
+    let upstreams = container
         .upstreams
         .iter()
         .map(|upstream| format!("{}:{}", upstream.ip, upstream.port))

@@ -34,6 +34,11 @@ function UpstreamRow({ upstream }: { upstream: Upstream }) {
         )}
         {upstream.addresses.length === 0 && <div class="addresses">not resolved</div>}
       </div>
+      {upstream.split && (
+        <span class="badge split" title="Traffic split: its share of clients">
+          {upstream.split.name} · {upstream.split.percent}%
+        </span>
+      )}
       <span class="weight">weight {upstream.weight}</span>
     </div>
   );

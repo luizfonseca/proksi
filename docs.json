@@ -155,6 +155,10 @@
           "href": "/routing/headers"
         },
         {
+          "title": "Traffic split",
+          "href": "/routing/traffic-split"
+        },
+        {
           "title": "TCP",
           "href": "/routing/tcp"
         }

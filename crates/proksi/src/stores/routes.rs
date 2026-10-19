@@ -37,6 +37,9 @@ pub struct RouteStoreContainer {
     pub metrics: Option<LocationMetrics>,
     /// Rules of the location's requests (ADR 0007)
     pub rules: Option<Arc<crate::rules::Rules>>,
+    /// Shares of the clients sent to other upstreams, numbered after the location's own in
+    /// `upstreams`
+    pub splits: Arc<Vec<crate::routing::split::Split>>,
 }
 
 impl Default for RouteStoreContainer {
@@ -53,6 +56,7 @@ impl Default for RouteStoreContainer {
             rewrite: None,
             metrics: None,
             rules: None,
+            splits: Arc::default(),
         }
     }
 }
@@ -69,6 +73,7 @@ impl RouteStoreContainer {
             rewrite: None,
             metrics: None,
             rules: None,
+            splits: Arc::default(),
         }
     }
 
@@ -77,13 +82,22 @@ impl RouteStoreContainer {
         self.upstreams = upstreams;
     }
 
+    /// The load balancers of the location: its own, then its traffic splits'
+    pub fn load_balancers(&self) -> impl Iterator<Item = &Arc<LoadBalancer<RoundRobin>>> {
+        std::iter::once(&self.load_balancer)
+            .chain(self.splits.iter().map(|split| &split.load_balancer))
+    }
+
     /// Whether each upstream is healthy, by the health checks: when one of its addresses is
     pub fn upstream_health(&self) -> Vec<bool> {
-        let backends = self.load_balancer.backends();
         let mut healthy = vec![false; self.upstreams.len()];
-        for backend in backends.get_backend().iter() {
-            if let Some(slot) = upstream_index(backend).and_then(|index| healthy.get_mut(index)) {
-                *slot |= backends.ready(backend);
+        for load_balancer in self.load_balancers() {
+            let backends = load_balancer.backends();
+            for backend in backends.get_backend().iter() {
+                if let Some(slot) = upstream_index(backend).and_then(|index| healthy.get_mut(index))
+                {
+                    *slot |= backends.ready(backend);
+                }
             }
         }
         healthy
@@ -91,7 +105,23 @@ impl RouteStoreContainer {
 
     /// The addresses each upstream resolved to, and whether each is healthy
     pub fn upstream_addresses(&self) -> Vec<Vec<(String, bool)>> {
-        crate::routing::build::upstream_addresses(&self.load_balancer, self.upstreams.len())
+        let mut addresses = vec![vec![]; self.upstreams.len()];
+        for load_balancer in self.load_balancers() {
+            let found =
+                crate::routing::build::upstream_addresses(load_balancer, self.upstreams.len());
+            for (all, found) in addresses.iter_mut().zip(found) {
+                all.extend(found);
+            }
+        }
+        for list in &mut addresses {
+            list.sort();
+        }
+        addresses
+    }
+
+    /// The traffic split holding the upstream at `index`, if any
+    pub fn split_of(&self, index: usize) -> Option<&crate::routing::split::Split> {
+        self.splits.iter().find(|split| split.holds(index))
     }
 
     /// The upstream a backend of the load balancer came from

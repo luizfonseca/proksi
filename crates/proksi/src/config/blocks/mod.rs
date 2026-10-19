@@ -211,6 +211,7 @@ host:
                     rewrite: None,
                     health_check: None,
                     rules: vec![],
+                    splits: vec![],
                 },
                 Location {
                     path: "/v1/session".to_string(),
@@ -231,6 +232,7 @@ host:
                     rewrite: None,
                     health_check: None,
                     rules: vec![],
+                    splits: vec![],
                 },
             ],
         }
@@ -302,6 +304,46 @@ host:
         let config = plugins[0].config.as_ref().unwrap();
         assert_eq!(config["requests"], 10);
         assert_eq!(config["per"], "1m");
+    }
+
+    #[test]
+    fn test_traffic_split_block() {
+        let doc = HclFormat::from_str::<Doc>(
+            r#"
+host "a.test" {
+  location "/" {
+    upstream "v1:8080" {}
+
+    traffic_split "v2" {
+      percent = 10
+      sticky  = "client_ip"
+      upstream "v2:8080" {
+        weight = 2
+      }
+    }
+
+    traffic_split "v3" {
+      percent = 5
+      upstream "v3:8080" {}
+    }
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        let host = doc.host.get("a.test").unwrap().to_host("a.test").unwrap();
+        let splits = &host.locations[0].splits;
+
+        assert_eq!(splits.len(), 2);
+        assert_eq!(splits[0].name, "v2");
+        assert_eq!(splits[0].percent, 10);
+        assert_eq!(splits[0].sticky, crate::config::host::Sticky::ClientIp);
+        assert_eq!(splits[0].upstreams[0].ip, "v2");
+        assert_eq!(splits[0].upstreams[0].weight, Some(2));
+        // Sticky by cookie unless said otherwise
+        assert_eq!(splits[1].sticky, crate::config::host::Sticky::Cookie);
+        assert_eq!(crate::routing::validate::validate_host(&host), Ok(()));
     }
 
     #[test]

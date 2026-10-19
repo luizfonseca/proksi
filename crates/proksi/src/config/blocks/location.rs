@@ -6,7 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    host::{HealthCheck, Location, LocationTimeouts, PathRewrite},
+    host::{HealthCheck, Location, LocationTimeouts, PathRewrite, Sticky, TrafficSplit},
     RouteCache, RoutePlugin,
 };
 
@@ -45,6 +45,21 @@ pub struct LocationBlock {
     /// `rule "<name>" { ... }`, in order
     #[serde(default, deserialize_with = "crate::rules::one_or_many")]
     pub rule: Vec<crate::rules::Rule>,
+    /// `traffic_split "<name>" { ... }`
+    #[serde(default)]
+    pub traffic_split: BTreeMap<String, TrafficSplitBlock>,
+}
+
+/// `traffic_split "<name>" { ... }` in a location
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TrafficSplitBlock {
+    pub percent: u8,
+    #[serde(default)]
+    pub sticky: Sticky,
+    pub cookie: Option<String>,
+    #[serde(default)]
+    pub upstream: BTreeMap<String, UpstreamBlock>,
 }
 
 impl LocationBlock {
@@ -84,6 +99,25 @@ impl LocationBlock {
                 None => host.health_check,
             },
             rules: self.rule.clone(),
+            splits: self
+                .traffic_split
+                .iter()
+                .map(|(name, split)| {
+                    let upstreams = split
+                        .upstream
+                        .iter()
+                        .map(|(label, upstream)| upstream.to_upstream(label))
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|err| format!("traffic_split \"{name}\": {err}"))?;
+                    Ok(TrafficSplit {
+                        name: name.clone(),
+                        percent: split.percent,
+                        sticky: split.sticky,
+                        cookie: split.cookie.clone(),
+                        upstreams,
+                    })
+                })
+                .collect::<Result<_, String>>()?,
         })
     }
 

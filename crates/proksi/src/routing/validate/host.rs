@@ -27,6 +27,7 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
             }
         }
         validate_upstreams(&location.upstreams).map_err(in_location)?;
+        validate_splits(location).map_err(in_location)?;
         validate_headers(location.headers.as_ref()).map_err(in_location)?;
         let blocks = Blocks::build(location).map_err(in_location)?;
         if !location.upstreams.is_empty()
@@ -45,6 +46,65 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
     }
     crate::rules::Rules::compile(&host.rules)?;
 
+    Ok(())
+}
+
+/// Traffic splits: each with upstreams, taking 100% of the requests at most together, the rest
+/// going to the location's own upstreams
+fn validate_splits(location: &crate::config::host::Location) -> Result<(), String> {
+    // Rules choose splits of their location
+    for rule in &location.rules {
+        let chosen = rule
+            .0
+            .pointer("/then/traffic_split")
+            .and_then(|name| name.as_str());
+        if let Some(name) = chosen {
+            if !location.splits.iter().any(|split| split.name == name) {
+                let rule_name = rule
+                    .0
+                    .get("name")
+                    .and_then(|name| name.as_str())
+                    .unwrap_or("");
+                return Err(format!(
+                    "rule \"{rule_name}\": no traffic_split \"{name}\" in the location"
+                ));
+            }
+        }
+    }
+    if location.splits.is_empty() {
+        return Ok(());
+    }
+    if location.upstreams.is_empty() {
+        return Err("traffic splits need the location's own upstreams too".to_string());
+    }
+    let mut total = 0u32;
+    for split in &location.splits {
+        let in_split = |err: String| format!("traffic_split \"{}\": {err}", split.name);
+        if split.percent > 100 {
+            return Err(in_split("percent is 0 to 100".to_string()));
+        }
+        if split.upstreams.is_empty() {
+            return Err(in_split("needs an upstream".to_string()));
+        }
+        validate_upstreams(&split.upstreams).map_err(in_split)?;
+        if let Some(cookie) = &split.cookie {
+            let token = !cookie.is_empty()
+                && cookie
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte));
+            if !token {
+                return Err(in_split(format!(
+                    "cookie \"{cookie}\" is not a cookie name"
+                )));
+            }
+        }
+        total += u32::from(split.percent);
+    }
+    if total > 100 {
+        return Err(format!(
+            "the traffic splits take {total}% of the requests, more than 100%"
+        ));
+    }
     Ok(())
 }
 
@@ -231,6 +291,76 @@ mod tests {
 
         files.locations[0].upstreams.clear();
         assert_eq!(validate_host(&files), Ok(()));
+    }
+
+    #[test]
+    fn test_traffic_splits() {
+        let split = |name: &str, percent: u8| {
+            serde_json::from_value::<crate::config::host::TrafficSplit>(serde_json::json!({
+                "name": name,
+                "percent": percent,
+                "upstreams": [{ "ip": "10.0.0.2", "port": 80 }],
+            }))
+            .unwrap()
+        };
+        let with = |splits: Vec<crate::config::host::TrafficSplit>| {
+            let mut host = host("a.test", "10.0.0.1");
+            host.locations[0].splits = splits;
+            validate_host(&host)
+        };
+
+        assert_eq!(with(vec![split("v2", 10), split("v3", 90)]), Ok(()));
+        assert_eq!(
+            with(vec![split("v2", 60), split("v3", 50)]),
+            Err(
+                "location \"/*\": the traffic splits take 110% of the requests, more than 100%"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            with(vec![split("v2", 101)]),
+            Err("location \"/*\": traffic_split \"v2\": percent is 0 to 100".to_string())
+        );
+        let mut empty = split("v2", 10);
+        empty.upstreams.clear();
+        assert_eq!(
+            with(vec![empty]),
+            Err("location \"/*\": traffic_split \"v2\": needs an upstream".to_string())
+        );
+        let mut bad_cookie = split("v2", 10);
+        bad_cookie.cookie = Some("a b".to_string());
+        assert_eq!(
+            with(vec![bad_cookie]),
+            Err(
+                "location \"/*\": traffic_split \"v2\": cookie \"a b\" is not a cookie name"
+                    .to_string()
+            )
+        );
+
+        // Rules choose splits of their location
+        let mut chooses = host("a.test", "10.0.0.1");
+        chooses.locations[0].splits = vec![split("v2", 10)];
+        chooses.locations[0].rules = vec![crate::rules::Rule(serde_json::json!({
+            "name": "beta", "and": { "method": { "eq": "GET" } }, "then": { "traffic_split": "v3" },
+        }))];
+        assert_eq!(
+            validate_host(&chooses),
+            Err(
+                "location \"/*\": rule \"beta\": no traffic_split \"v3\" in the location"
+                    .to_string()
+            )
+        );
+
+        // The requests the splits don't take go to the location's upstreams
+        let mut host = host("a.test", "10.0.0.1");
+        host.locations[0].upstreams.clear();
+        host.locations[0].splits = vec![split("v2", 10)];
+        assert_eq!(
+            validate_host(&host),
+            Err(
+                "location \"/*\": traffic splits need the location's own upstreams too".to_string()
+            )
+        );
     }
 
     #[test]

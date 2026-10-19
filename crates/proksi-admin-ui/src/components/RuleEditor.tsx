@@ -172,7 +172,10 @@ function Actions({ then, rules, onChange }: { then: Record<string, unknown>; rul
                 Remove
               </button>
             </div>
-            {schema ? (
+            {schema?.type === 'string' ? (
+              // An action taking a name, such as `traffic_split`
+              <input class="mono" value={typeof settings === 'string' ? settings : ''} onInput={(e) => onChange({ ...then, [name]: e.currentTarget.value })} />
+            ) : schema ? (
               <SchemaForm schema={schema} value={(settings as Record<string, unknown>) ?? {}} onChange={(value) => onChange({ ...then, [name]: value })} />
             ) : (
               <span class="none">Proksi doesn't know this action</span>
@@ -181,7 +184,7 @@ function Actions({ then, rules, onChange }: { then: Record<string, unknown>; rul
         );
       })}
       {available.length > 0 && (
-        <AddAction names={available} rules={rules} onAdd={(name) => onChange({ ...then, [name]: {} })} />
+        <AddAction names={available} rules={rules} onAdd={(name) => onChange({ ...then, [name]: rules.actions[name]?.type === 'string' ? '' : {} })} />
       )}
     </div>
   );

@@ -14,6 +14,7 @@ pub mod paths;
 pub mod readiness;
 pub mod reconciler;
 pub mod service;
+pub mod split;
 pub mod store_source;
 pub mod validate;
 

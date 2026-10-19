@@ -134,6 +134,9 @@ impl Rules {
                     host: &ctx.host,
                 });
             }
+            if let Some(split) = &rule.then.split {
+                ctx.traffic_split = Some(split.clone());
+            }
             if rule.then.blocks.request(session, ctx).await.is_some() {
                 return true;
             }

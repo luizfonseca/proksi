@@ -69,6 +69,8 @@ export type Upstream = {
   healthy: boolean;
   /** What it resolved to */
   addresses: { address: string; healthy: boolean }[];
+  /** The traffic split it's in, if any */
+  split?: { name: string; percent: number };
 };
 export type Location = { location: string; blocks: string[]; rules: Rule[]; upstreams: Upstream[] };
 export type Host = {

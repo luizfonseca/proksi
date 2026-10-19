@@ -1,0 +1,71 @@
+---
+title: "Traffic split"
+description: "Sends a share of a location's clients to other upstreams."
+---
+
+A `traffic_split` sends a share of a location's clients to upstreams of its own: a new version for 10% of them (a canary), an A/B test, or a gradual migration. The other clients keep going to the location's upstreams.
+
+```hcl
+host "app.example.com" {
+  location "/" {
+    upstream "app-v1:8080" {}
+
+    traffic_split "v2" {
+      percent = 10
+      upstream "app-v2:8080" {}
+    }
+  }
+}
+```
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `percent` | The share of clients sent to the split, from `0` to `100` (required) |
+| `upstream "<host:port>"` | Its upstreams, as a location's (`weight`, `sni`, `headers`); at least one |
+| `sticky` | How a client keeps its side: `cookie` (default), `client_ip`, or `none` (each request chosen on its own) |
+| `cookie` | The cookie of `sticky = "cookie"` (default: a name of its own for the location, such as `_t3fa91c2e`) |
+
+## How clients are split
+
+Each client is known by a key: a random id in a cookie, set on its first response (`HttpOnly`, for 30 days), or its address. The key is hashed into one of 100 buckets, the same in every instance, and the splits take the buckets in the order they're written: with `v2` at 10% and `v3` at 5%, the first 10 go to `v2`, the next 5 to `v3`, and the rest to the location's upstreams.
+
+- **A client keeps its side** while its key doesn't change, so a rollout doesn't switch it back and forth.
+- **Raising a percentage only adds clients**: from 10% to 25%, the clients already on `v2` stay there. Changing the share of a split moves the buckets of the splits written after it.
+- The cookie's name and value tell nothing about the split or the upstreams.
+
+## Choosing a split with rules
+
+A [rule](/rules) sends the requests it matches to a split, whatever its share: the team, beta testers, or a header your app sets.
+
+```hcl
+location "/" {
+  upstream "app-v1:8080" {}
+
+  traffic_split "v2" {
+    percent = 0      # nobody else, for now
+    upstream "app-v2:8080" {}
+  }
+
+  rule "beta testers" {
+    and {
+      cookie "beta" {
+        eq = "1"
+      }
+    }
+    then {
+      traffic_split = "v2"
+    }
+  }
+}
+```
+
+A rule of a location must name a split of that location. Rules of the host or of the server can name splits of any location: in locations without that split, they do nothing.
+
+### Good to know
+
+- The splits' upstreams are health checked as the location's. When none of a split's upstreams is healthy, its clients go to the location's upstreams until one is.
+- The location's own upstreams are required: they take the requests no split does.
+- The splits take 100% of the clients at most, together.
+- Metrics, the admin UI and its traffic graph show the splits' upstreams with the location's, each with its split.
