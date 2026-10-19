@@ -39,7 +39,8 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
     Ok(())
 }
 
-/// `*` serves requests for any other name, over plain HTTP (certificates are issued per name)
+/// `*` serves requests for any other name, over plain HTTP (certificates are issued per name).
+/// `*.example.com` serves names one label under `example.com` (ADR 0009).
 fn validate_wildcard(host: &Host) -> Result<(), String> {
     if host.name == "*" {
         if host.tls.enabled {
@@ -47,8 +48,19 @@ fn validate_wildcard(host: &Host) -> Result<(), String> {
                 "host \"*\" needs tls = false (certificates are issued per name)".to_string(),
             );
         }
-    } else if host.name.contains('*') {
-        return Err("only \"*\" is supported as a wildcard host".to_string());
+        return Ok(());
+    }
+    if !host.name.contains('*') {
+        return Ok(());
+    }
+    let parent = host.name.strip_prefix("*.").unwrap_or_default();
+    let labels = parent.split('.').collect::<Vec<_>>();
+    if labels.len() < 2
+        || labels
+            .iter()
+            .any(|label| label.is_empty() || label.contains('*'))
+    {
+        return Err("a wildcard host is \"*\" or \"*.\" followed by a name of two labels or more (\"*.example.com\")".to_string());
     }
     Ok(())
 }
@@ -190,13 +202,25 @@ mod tests {
     }
 
     #[test]
-    fn test_only_catch_all_wildcard_is_supported() {
-        let mut wildcard = host("*.example.com", "10.0.0.1");
-        wildcard.tls.enabled = false;
-        assert_eq!(
-            validate_host(&wildcard),
-            Err("only \"*\" is supported as a wildcard host".to_string())
-        );
+    fn test_wildcard_hosts() {
+        // One label, under a name of two labels or more, with or without TLS
+        assert!(validate_host(&host("*.example.com", "10.0.0.1")).is_ok());
+        assert!(validate_host(&host("*.a.example.com", "10.0.0.1")).is_ok());
+
+        let refused = "a wildcard host is \"*\" or \"*.\" followed by a name of two labels or more (\"*.example.com\")";
+        for name in [
+            "*.com",
+            "*example.com",
+            "a.*.example.com",
+            "*.*.example.com",
+            "**.example.com",
+            "*.example.com.",
+            "*..example.com",
+        ] {
+            let mut wildcard = host(name, "10.0.0.1");
+            wildcard.tls.enabled = false;
+            assert_eq!(validate_host(&wildcard), Err(refused.to_string()), "{name}");
+        }
     }
 
     #[test]
