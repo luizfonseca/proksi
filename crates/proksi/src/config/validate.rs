@@ -143,18 +143,54 @@ mod tests {
     }
 
     fn example_files_are_valid() {
+        let site = tempfile::tempdir().unwrap();
         for file in ["example.hcl", "example.yaml"] {
             let path = format!("{}/../../examples/{file}", env!("CARGO_MANIFEST_DIR"));
-            let config = crate::config::load_for_test(&path)
+            // `static_files` serves a directory that exists
+            let content = std::fs::read_to_string(&path)
+                .unwrap()
+                .replace("/var/www/app/dist", &site.path().to_string_lossy());
+            let copy = site.path().join(file);
+            std::fs::write(&copy, content).unwrap();
+            let config = crate::config::load_for_test(&copy.to_string_lossy())
                 .unwrap_or_else(|err| panic!("{file} can't be loaded: {err}"));
 
             check_config(&config).unwrap_or_else(|err| panic!("{file} is invalid: {err}"));
-            assert_eq!(config.hosts().len(), 3, "{file}");
+            let hosts = config.hosts();
+            for host in &hosts {
+                assert_eq!(
+                    crate::routing::validate::validate_host(host),
+                    Ok(()),
+                    "{file}: {}",
+                    host.name
+                );
+            }
+            assert_eq!(hosts.len(), 7, "{file}");
             assert_eq!(
                 config.tcp_routes().map(|routes| routes.len()),
-                Ok(1),
+                Ok(2),
                 "{file}"
             );
+
+            // The latest blocks
+            let api = hosts
+                .iter()
+                .find(|host| host.name == "app.example.com")
+                .and_then(|host| {
+                    host.locations
+                        .iter()
+                        .find(|location| location.path == "/api")
+                })
+                .unwrap_or_else(|| panic!("{file}: app.example.com /api"));
+            assert_eq!(api.splits.len(), 1, "{file}");
+            assert!(api.mirror.is_some() && api.retry.is_some(), "{file}");
+            assert_eq!(api.rules.len(), 2, "{file}");
+            assert_eq!(
+                api.load_balancing,
+                crate::config::host::LoadBalancing::LeastConnections,
+                "{file}"
+            );
+            assert!(config.lets_encrypt.dns.is_some(), "{file}");
         }
     }
 
