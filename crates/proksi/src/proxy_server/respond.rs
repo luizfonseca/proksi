@@ -24,15 +24,16 @@ pub async fn respond(
     Ok(())
 }
 
-/// Writes `response`, then `len` bytes of `body` as they're read (64 KiB at a time)
+/// Writes `response`, then `len` bytes of `body` as they're read (64 KiB at a time). `body` is
+/// read on the request's thread: a file, mostly in the page cache.
 pub async fn respond_streaming(
     session: &mut Session,
     ctx: &mut RouterContext,
     mut response: ResponseHeader,
-    mut body: impl tokio::io::AsyncRead + Unpin,
+    mut body: impl std::io::Read,
     len: u64,
 ) -> pingora::Result<()> {
-    use tokio::io::AsyncReadExt;
+    use std::io::Read;
 
     const CHUNK: u64 = 64 * 1024;
     if len == 0 {
@@ -44,13 +45,24 @@ pub async fn respond_streaming(
         .await?;
     let mut left = len;
     while left > 0 {
-        let mut chunk = bytes::BytesMut::zeroed(usize::try_from(left.min(CHUNK)).unwrap_or(0));
-        body.read_exact(&mut chunk).await.map_err(|err| {
-            pingora::Error::because(pingora::ErrorType::ReadError, "reading the body", err)
-        })?;
-        left -= chunk.len() as u64;
+        let want = left.min(CHUNK);
+        // Read into its capacity: no zeroing first
+        let mut chunk = Vec::with_capacity(usize::try_from(want).unwrap_or(0));
+        let read = (&mut body)
+            .take(want)
+            .read_to_end(&mut chunk)
+            .map_err(|err| {
+                pingora::Error::because(pingora::ErrorType::ReadError, "reading the body", err)
+            })?;
+        if read as u64 != want {
+            return Err(pingora::Error::explain(
+                pingora::ErrorType::ReadError,
+                "the body ended early",
+            ));
+        }
+        left -= want;
         session
-            .write_response_body(Some(chunk.freeze()), left == 0)
+            .write_response_body(Some(chunk.into()), left == 0)
             .await?;
     }
     Ok(())

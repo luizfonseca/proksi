@@ -4,7 +4,7 @@
 mod http;
 mod resolve;
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -23,10 +23,10 @@ use resolve::Found;
 
 pub(super) struct StaticFiles {
     /// Canonical: what a file's canonical path must start with
-    directory: Arc<PathBuf>,
+    directory: PathBuf,
     /// The location's path, without its trailing `/*` (`/assets`, or empty for `/`)
     prefix: String,
-    index: Arc<Vec<String>>,
+    index: Vec<String>,
     /// Segments of the file served for paths with none
     fallback: Option<Vec<String>>,
     cache_control: Option<String>,
@@ -75,34 +75,29 @@ impl StaticFiles {
         };
 
         Ok(Self {
-            directory: Arc::new(directory),
+            directory,
             prefix: prefix.to_string(),
-            index: Arc::new(index),
+            index,
             fallback,
             cache_control: settings.cache_control,
         })
     }
 
-    /// The file for `path` (the request's, normalized), or the fallback
-    async fn find(&self, path: &str) -> Option<PathBuf> {
+    /// The file for `path` (the request's, normalized), or the fallback. Asked on the request's
+    /// thread, as nginx does: files served are mostly in the page cache, where these calls take
+    /// microseconds, and a hop to a blocking thread for each costs far more.
+    fn find(&self, path: &str) -> Option<PathBuf> {
         let below = path.strip_prefix(self.prefix.as_str()).unwrap_or(path);
         let segments = resolve::segments(below)?;
-        let (directory, index, fallback) = (
-            self.directory.clone(),
-            self.index.clone(),
-            self.fallback.clone(),
-        );
-        // The file system is asked off the request's thread
-        tokio::task::spawn_blocking(move || match resolve::find(&directory, &segments, &index) {
+        match resolve::find(&self.directory, &segments, &self.index) {
             Found::File(file) => Some(file),
-            Found::Missing => match resolve::find(&directory, fallback.as_deref()?, &[]) {
-                Found::File(file) => Some(file),
-                Found::Missing => None,
-            },
-        })
-        .await
-        .ok()
-        .flatten()
+            Found::Missing => {
+                match resolve::find(&self.directory, self.fallback.as_deref()?, &[]) {
+                    Found::File(file) => Some(file),
+                    Found::Missing => None,
+                }
+            }
+        }
     }
 }
 
@@ -126,13 +121,12 @@ impl Middleware for StaticFiles {
             return Ok(true);
         }
 
-        let path =
-            crate::routing::paths::normalize_path(session.req_header().uri.path()).into_owned();
-        let Some(path) = self.find(&path).await else {
+        let path = crate::routing::paths::normalize_path(session.req_header().uri.path());
+        let Some(path) = self.find(&path) else {
             respond(session, ctx, status(404)?).await?;
             return Ok(true);
         };
-        let file = match tokio::fs::File::open(&path).await {
+        let file = match std::fs::File::open(&path) {
             Ok(file) => file,
             Err(err) => {
                 tracing::warn!("static_files: can't open {path:?}: {err}");
@@ -140,7 +134,7 @@ impl Middleware for StaticFiles {
                 return Ok(true);
             }
         };
-        let metadata = file.metadata().await?;
+        let metadata = file.metadata()?;
         let len = metadata.len();
         let validators = http::Validators::new(len, metadata.modified()?);
 
@@ -195,8 +189,8 @@ impl Middleware for StaticFiles {
         }
         let mut file = file;
         if start > 0 {
-            use tokio::io::AsyncSeekExt;
-            file.seek(std::io::SeekFrom::Start(start)).await?;
+            use std::io::Seek;
+            file.seek(std::io::SeekFrom::Start(start))?;
         }
         respond_streaming(session, ctx, response, file, length).await?;
         Ok(true)
@@ -228,7 +222,7 @@ mod tests {
 
         let files = static_files(serde_json::json!({ "directory": path }), "/assets/*").unwrap();
         assert_eq!(files.prefix, "/assets");
-        assert_eq!(*files.index, vec!["index.html".to_string()]);
+        assert_eq!(files.index, vec!["index.html".to_string()]);
         assert_eq!(
             static_files(serde_json::json!({ "directory": path }), "/")
                 .unwrap()
