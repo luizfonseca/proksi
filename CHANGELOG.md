@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.16.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.15.0...proksi-v0.16.0) (2026-10-20)
+
+
+### Bug Fixes
+
+* refuse TLS handshakes for unknown names ([#518](https://github.com/luizfonseca/proksi/issues/518)) ([defd7f1](https://github.com/luizfonseca/proksi/commit/defd7f18c2b4ead6eb914531ff8f0ae5794934ff))
+* TLS handshakes for unknown names refused before looking for a certificate ([defd7f1](https://github.com/luizfonseca/proksi/commit/defd7f18c2b4ead6eb914531ff8f0ae5794934ff))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.15.0 to 0.16.0
+
 ## [0.15.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.14.2...proksi-v0.15.0) (2026-10-20)
 
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.0](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.15.0...proksi-admin-ui-v0.16.0) (2026-10-20)
+
+
+### Features
+
+* request mirroring ([#508](https://github.com/luizfonseca/proksi/issues/508)) ([3d09f3e](https://github.com/luizfonseca/proksi/commit/3d09f3e189b30ec4f1d322d90a1e68adaad1632d))
+
+
+### Bug Fixes
+
+* deny unwrap, expect, panic, todo and unimplemented ([#512](https://github.com/luizfonseca/proksi/issues/512)) ([7bb8066](https://github.com/luizfonseca/proksi/commit/7bb8066e4bfb95a64c3fa71b8097cb6ef800d346))
+
 ## [0.15.0](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.14.2...proksi-admin-ui-v0.15.0) (2026-10-20)
 
 

@@ -3553,7 +3553,7 @@ dependencies = [
 
 [[package]]
 name = "proksi"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "TinyUFO",
  "acme-v2",
@@ -3616,7 +3616,7 @@ dependencies = [
 
 [[package]]
 name = "proksi-admin-ui"
-version = "0.15.0"
+version = "0.16.0"
 
 [[package]]
 name = "prometheus"
