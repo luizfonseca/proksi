@@ -9,6 +9,14 @@ members = [
 exclude = ["vendor"]
 resolver = "2"
 
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "warn"
+
 
 [profile.dev]
 opt-level = 0

@@ -2,6 +2,14 @@
 //!
 //! See `harness/mod.rs` for how proksi and the upstreams are started.
 
+// Test code: an unexpected value fails the test, loudly
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+
 mod harness;
 
 use std::{

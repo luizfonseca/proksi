@@ -7,14 +7,16 @@ pub struct Context {}
 #[derive(Clone, Debug, PartialEq, Ord, Eq, PartialOrd, Hash)]
 pub struct Session {}
 impl Session {
+    /// A header of the request: none yet, the host doesn't share them with plugins
     #[must_use]
     pub fn get_header(&self, _key: &str) -> Option<&str> {
-        unimplemented!()
+        None
     }
 
+    /// The request's header: none yet, the host doesn't share it with plugins
     #[must_use]
     pub fn req_header() -> Option<bool> {
-        unimplemented!()
+        None
     }
 }
 

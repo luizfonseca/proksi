@@ -2,6 +2,14 @@
 //! function: a third level goes in a function of its own, named for what it does. An `else if`
 //! is the same level as its `if`; closures don't start a new level.
 
+// Test code: an unexpected value fails the test, loudly
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+
 use std::path::{Path, PathBuf};
 
 use syn::visit::{self, Visit};

@@ -21,3 +21,6 @@ crate-type = ["cdylib"]
 [dependencies]
 anyhow = "1.0.99"
 wit-bindgen = "0.63.0"
+
+[lints]
+workspace = true
