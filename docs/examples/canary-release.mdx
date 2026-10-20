@@ -1,0 +1,67 @@
+---
+title: "Canary release"
+description: "Send a share of the users to a new version, the team first, and copy traffic to it before that."
+---
+
+A new version goes out in three steps, each a small change to the configuration.
+
+## 1. Copy traffic to it
+
+Before it takes any request, the new version gets copies of the real ones with a [mirror](/routing/mirror). Its answers are dropped, so users never see them, and you can watch its errors and latency.
+
+```hcl
+host "app.example.com" {
+  location "/" {
+    upstream "app-v1:8080" {}
+
+    mirror {
+      percent = 20
+      upstream "app-v2:8080" {}
+    }
+  }
+}
+```
+
+## 2. The team, then a share of the users
+
+A [traffic split](/routing/traffic-split) sends the team to the new version with a rule, and a share of everyone else. Each user keeps their side, through a cookie.
+
+```hcl
+host "app.example.com" {
+  location "/" {
+    upstream "app-v1:8080" {}
+
+    traffic_split "v2" {
+      percent = 5
+      upstream "app-v2:8080" {}
+    }
+
+    rule "the team" {
+      and {
+        client {
+          in = ["203.0.113.0/24"]
+        }
+      }
+      then {
+        traffic_split = "v2"
+      }
+    }
+  }
+}
+```
+
+Raise `percent` as it holds up: users already on `v2` stay there.
+
+## 3. Everyone
+
+When `v2` takes 100% of the users, make it the location's upstream and remove the split.
+
+```hcl
+host "app.example.com" {
+  location "/" {
+    upstream "app-v2:8080" {}
+  }
+}
+```
+
+To roll back at any step, lower `percent` to `0` or remove the block: the configuration is reloaded without dropping connections.

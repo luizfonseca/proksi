@@ -194,6 +194,49 @@ mod tests {
         }
     }
 
+    /// The pages of `docs/examples`: each HCL example is a whole configuration that loads, and
+    /// each of its hosts is valid
+    #[test]
+    fn test_the_examples_pages_are_valid() {
+        let pages = [
+            include_str!("../../../../docs/examples/blocking-url-scanners.mdx"),
+            include_str!("../../../../docs/examples/canary-release.mdx"),
+            include_str!("../../../../docs/examples/single-page-app.mdx"),
+        ];
+        figment::Jail::expect_with(|jail| {
+            jail.create_dir("site")?;
+            let site = jail.directory().join("site");
+            let mut count = 0;
+            for example in pages.iter().flat_map(|page| page.split("```hcl\n").skip(1)) {
+                let example = example.split("```").next().unwrap_or_default();
+                count += 1;
+                example_is_valid(jail, example, &site.to_string_lossy())?;
+            }
+            assert!(count >= 7, "{count} examples");
+            Ok(())
+        });
+    }
+
+    /// Loads an example as `proksi.hcl` (its `static_files` serving `site`) and validates it
+    fn example_is_valid(
+        jail: &mut figment::Jail,
+        example: &str,
+        site: &str,
+    ) -> figment::error::Result<()> {
+        let example = example
+            .replace("/var/www/app/dist/assets", site)
+            .replace("/var/www/app/dist", site);
+        jail.create_file("proksi.hcl", &example)?;
+        let config = crate::config::load_for_test("proksi.hcl")
+            .unwrap_or_else(|err| panic!("{err}\n{example}"));
+        check_config(&config).unwrap_or_else(|err| panic!("{err}\n{example}"));
+        for host in config.hosts() {
+            crate::routing::validate::validate_host(&host)
+                .unwrap_or_else(|err| panic!("{err}\n{example}"));
+        }
+        Ok(())
+    }
+
     /// The top-level settings of a configuration file
     const SETTINGS: [&str; 15] = [
         "service_name",

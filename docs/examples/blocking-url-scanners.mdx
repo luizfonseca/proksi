@@ -1,0 +1,77 @@
+---
+title: "Blocking URL scanners"
+description: "Turn away bots probing for secrets and WordPress pages before they reach your apps."
+---
+
+Every server on the internet gets probed for files that leak secrets (`/.env`, `/.git/config`, `/.aws/credentials`) and for WordPress or PHP pages, whether you run them or not. One [rule](/rules) in `server` answers them with a `404` before any host or upstream sees them:
+
+```hcl
+server {
+  rule "scanners" {
+    and {
+      path {
+        contains = ["/.env", "/.git", "/.aws", "/wp-", "/xmlrpc.php", "/phpmyadmin", "/cgi-bin"]
+      }
+    }
+    then {
+      respond {
+        status = 404
+      }
+    }
+  }
+}
+```
+
+- `contains` catches the probes under any path too, like `/app/.env.local` or `/blog/wp-login.php`.
+- Remove the values a site really serves, such as `/wp-` for a WordPress site.
+- The list can be as long as you need: 100,000 values cost about the same per request as 5, since they're searched all at once.
+
+## More patterns
+
+Paths ending with an extension your apps never serve:
+
+```hcl
+server {
+  rule "scripts" {
+    and {
+      path {
+        suffix = [".php", ".asp", ".aspx", ".jsp", ".cgi"]
+      }
+    }
+    then {
+      respond {
+        status = 404
+      }
+    }
+  }
+}
+```
+
+Leave out `.php` if a site runs PHP.
+
+## Only some hosts
+
+A rule in a `host` applies to that host only, before its location is chosen:
+
+```hcl
+host "api.example.com" {
+  rule "scanners" {
+    and {
+      path {
+        contains = ["/.env", "/.git", "/wp-"]
+      }
+    }
+    then {
+      respond {
+        status = 404
+      }
+    }
+  }
+
+  location "/" {
+    upstream "api:8080" {}
+  }
+}
+```
+
+Files served with [`static_files`](/plugins/static-files) are covered anyway: it never serves hidden files (`.env`, `.git`) or anything outside its directory.

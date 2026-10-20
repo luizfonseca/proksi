@@ -28,6 +28,7 @@ mod fields;
 mod index;
 mod model;
 pub mod schema;
+mod text_set;
 
 #[cfg(test)]
 mod bench;
@@ -289,9 +290,11 @@ mod tests {
 
     #[test]
     fn test_running_rules_allocates_nothing() {
+        let named = std::cell::Cell::new(0);
         let rule = |condition: serde_json::Value| {
             let mut rule = condition;
-            rule["name"] = serde_json::json!(format!("rule {}", rule.to_string().len()));
+            named.set(named.get() + 1);
+            rule["name"] = serde_json::json!(format!("rule {}", named.get()));
             rule["then"] = serde_json::json!({ "respond": { "status": 403 } });
             Rule(rule)
         };
@@ -325,6 +328,18 @@ mod tests {
         let many = super::bench::rules(100);
         let many = Rules::compile(&many).unwrap().unwrap();
         crate::allocations::assert_no_allocations("running 100 rules", || many.matching(&request));
+
+        // Long lists of values, matched in a time that doesn't grow with them
+        let probes = (0..1000).map(|i| format!("/probe-{i}")).collect::<Vec<_>>();
+        let lists = [
+            rule(serde_json::json!({ "and": { "path": { "contains": probes } } })),
+            rule(serde_json::json!({ "and": { "path": { "prefix": probes } } })),
+            rule(serde_json::json!({ "and": { "path": { "suffix": probes } } })),
+        ];
+        let lists = Rules::compile(&lists).unwrap().unwrap();
+        crate::allocations::assert_no_allocations("lists of 1000 values", || {
+            lists.matching(&request)
+        });
     }
 
     #[test]
