@@ -8,3 +8,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 plugins_api = { path = "../plugins_api", version = "0.1.0" }
+
+[lints]
+workspace = true

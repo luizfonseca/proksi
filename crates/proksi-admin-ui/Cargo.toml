@@ -13,3 +13,6 @@ rust-version.workspace = true
 include = ["Cargo.toml", "build.rs", "src/**/*.rs", "dist/**/*"]
 
 [dependencies]
+
+[lints]
+workspace = true
