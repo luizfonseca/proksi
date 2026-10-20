@@ -30,8 +30,7 @@
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
-      "prerelease": false,
-      "separate-pull-requests": true
+      "prerelease": false
     },
     "crates/proksi-admin-ui": {
       "component": "proksi-admin-ui",
