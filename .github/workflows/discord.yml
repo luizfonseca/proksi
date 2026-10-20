@@ -6,6 +6,8 @@ on:
 jobs:
   github-releases-to-discord:
     name: Publish Github Releases announcement to Discord
+    # Only proksi's releases: the admin UI and the plugin crates are released with it
+    if: ${{ startsWith(github.event.release.tag_name, 'proksi-v') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
