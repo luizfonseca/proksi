@@ -7,7 +7,7 @@ Requests of a location need a valid [JSON Web Token](https://jwt.io/introduction
 
 The token is read from `Authorization: Bearer <token>`, or from a cookie with `cookie`. It's checked for:
 
-- **Its signature**, by one of the keys below. Algorithms follow from the key: an HMAC secret checks `HS256`, `HS384` and `HS512` tokens, an RSA key `RS*` and `PS*`, an ECDSA key `ES256` and `ES384`, an Ed25519 key `EdDSA`. Unsigned tokens (`alg: none`), and tokens claiming another algorithm than their key's, are refused.
+- **Its signature**, by one of the keys below. Algorithms follow from the key: an HMAC secret checks `HS256`, `HS384` and `HS512` tokens, an RSA key (of at least 2048 bits) `RS*` and `PS*`, an ECDSA key `ES256` and `ES384`, an Ed25519 key `EdDSA`. Unsigned tokens (`alg: none`), and tokens claiming another algorithm than their key's, are refused.
 - **Its expiry**: `exp` is required, and `exp` and `nbf` are checked with 60 seconds of leeway, for clocks a bit apart.
 - **Its issuer and audience**, when `issuer` and `audience` are set.
 

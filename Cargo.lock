@@ -3596,6 +3596,7 @@ dependencies = [
  "redis",
  "regex",
  "reqwest",
+ "ring",
  "schemars",
  "seize 0.5.1",
  "serde",

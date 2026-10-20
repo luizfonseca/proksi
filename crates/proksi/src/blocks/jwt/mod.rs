@@ -1,6 +1,7 @@
 //! `jwt { ... }`: requests need a valid JSON Web Token, from `Authorization: Bearer` or a
 //! cookie. Others are answered `401`. Claims can be sent to the upstream as headers.
 
+pub mod crypto;
 pub mod jwks;
 mod verifier;
 
