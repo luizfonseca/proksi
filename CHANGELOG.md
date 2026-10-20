@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/luizfonseca/proksi/compare/plugins_api-v0.1.1...plugins_api-v0.1.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* deny unwrap, expect, panic, todo and unimplemented ([#512](https://github.com/luizfonseca/proksi/issues/512)) ([7bb8066](https://github.com/luizfonseca/proksi/commit/7bb8066e4bfb95a64c3fa71b8097cb6ef800d346))
+
 ## [0.14.2](https://github.com/luizfonseca/proksi/compare/proksi-v0.14.1...proksi-v0.14.2) (2026-10-19)
 
 
