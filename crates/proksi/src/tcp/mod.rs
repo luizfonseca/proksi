@@ -140,23 +140,23 @@ mod tests {
         }
     }
 
-    fn chosen(targets: &[TcpTarget], local: &str, sni: Option<&str>) -> Option<String> {
+    fn chosen<'a>(targets: &'a [TcpTarget], local: &str, sni: Option<&str>) -> Option<&'a str> {
         chosen_with(targets, local, sni, None)
     }
 
-    fn chosen_with(
-        targets: &[TcpTarget],
+    fn chosen_with<'a>(
+        targets: &'a [TcpTarget],
         local: &str,
         sni: Option<&str>,
         alpn: Option<&str>,
-    ) -> Option<String> {
+    ) -> Option<&'a str> {
         choose(
             targets,
             &local.parse().unwrap(),
             sni,
             alpn.map(str::as_bytes),
         )
-        .map(|target| target.label.clone())
+        .map(|target| target.label.as_str())
     }
 
     #[test]
@@ -167,7 +167,7 @@ mod tests {
         ];
 
         assert_eq!(
-            chosen(&targets, "10.0.0.1:7777", None).as_deref(),
+            chosen(&targets, "10.0.0.1:7777", None),
             Some("game")
         );
         // TLS passthrough is chosen before any handshake (`passthrough_for`), never here
@@ -184,11 +184,11 @@ mod tests {
         ];
 
         assert_eq!(
-            chosen(&targets, "10.0.0.1:5433", Some("a.test")).as_deref(),
+            chosen(&targets, "10.0.0.1:5433", Some("a.test")),
             Some("a")
         );
         assert_eq!(
-            chosen(&targets, "10.0.0.1:5433", Some("B.Test")).as_deref(),
+            chosen(&targets, "10.0.0.1:5433", Some("B.Test")),
             Some("b")
         );
         // Another name (or none) never reaches a host's block, even alone on its address
@@ -204,7 +204,7 @@ mod tests {
         let targets = [game];
 
         assert_eq!(
-            chosen_with(&targets, "10.0.0.1:443", Some("a.test"), Some("game/1")).as_deref(),
+            chosen_with(&targets, "10.0.0.1:443", Some("a.test"), Some("game/1")),
             Some("game")
         );
         // Other protocols (or none) are the host's locations
@@ -231,18 +231,18 @@ mod tests {
         ];
         let chosen = |local: &str, name: Option<&str>, https: bool| {
             super::passthrough_for(&targets, &local.parse().unwrap(), name, https)
-                .map(|target| target.label.clone())
+                .map(|target| target.label.as_str())
         };
 
-        assert_eq!(chosen("10.0.0.1:443", Some("a.test"), true).as_deref(), Some("a"));
-        assert_eq!(chosen("10.0.0.1:443", Some("b.test"), false).as_deref(), Some("b"));
+        assert_eq!(chosen("10.0.0.1:443", Some("a.test"), true), Some("a"));
+        assert_eq!(chosen("10.0.0.1:443", Some("b.test"), false), Some("b"));
         assert_eq!(chosen("10.0.0.1:443", Some("other.test"), true), None);
         assert_eq!(chosen("10.0.0.1:443", None, false), None);
         // Alone on its address: every connection
-        assert_eq!(chosen("10.0.0.1:8443", Some("other.test"), false).as_deref(), Some("c"));
-        assert_eq!(chosen("10.0.0.1:8443", None, false).as_deref(), Some("c"));
+        assert_eq!(chosen("10.0.0.1:8443", Some("other.test"), false), Some("c"));
+        assert_eq!(chosen("10.0.0.1:8443", None, false), Some("c"));
         // Unless the address is shared with HTTPS hosts
         assert_eq!(chosen("10.0.0.1:8443", Some("other.test"), true), None);
-        assert_eq!(chosen("10.0.0.1:8443", Some("C.Test"), true).as_deref(), Some("c"));
+        assert_eq!(chosen("10.0.0.1:8443", Some("C.Test"), true), Some("c"));
     }
 }
