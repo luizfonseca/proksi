@@ -6,6 +6,8 @@ on:
 jobs:
   github-releases-to-discord:
     name: Publish Github Releases announcement to Discord
+    # The admin UI is released with proksi: its own releases aren't announced
+    if: ${{ !startsWith(github.event.release.tag_name, 'proksi-admin-ui-') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
