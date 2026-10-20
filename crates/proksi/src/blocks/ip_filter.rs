@@ -6,7 +6,7 @@ use std::net::IpAddr;
 use anyhow::Result;
 use async_trait::async_trait;
 use http::{header, StatusCode};
-use ipnet::IpNet;
+use crate::ip_set::{network, IpSet};
 use pingora::{http::ResponseHeader, proxy::Session};
 
 use crate::{
@@ -19,26 +19,24 @@ use super::Middleware;
 /// Clients (by IP address, behind `server.trusted_proxies` the one they forwarded) in `deny`
 /// are refused, and when `allow` is set, so is every client not in it
 pub(super) struct IpFilter {
-    allow: Vec<IpNet>,
-    deny: Vec<IpNet>,
+    allow: IpSet,
+    deny: IpSet,
 }
 
 impl IpFilter {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
         let settings: super::settings::IpFilter = super::settings::read("ip_filter", plugin)?;
-        let networks = |entries: Option<Vec<String>>| -> Result<Vec<IpNet>, String> {
+        let networks = |entries: Option<Vec<String>>| -> Result<IpSet, String> {
             entries
                 .unwrap_or_default()
                 .iter()
                 .map(|entry| {
-                    entry
-                        .parse::<IpNet>()
-                        .or_else(|_| entry.parse::<IpAddr>().map(IpNet::from))
-                        .map_err(|_| {
-                            format!("ip_filter: {entry:?} is not an address or a network")
-                        })
+                    network(entry).ok_or_else(|| {
+                        format!("ip_filter: {entry:?} is not an address or a network")
+                    })
                 })
-                .collect()
+                .collect::<Result<Vec<_>, _>>()
+                .map(IpSet::new)
         };
         let (allow, deny) = (networks(settings.allow)?, networks(settings.deny)?);
         if allow.is_empty() && deny.is_empty() {
@@ -47,14 +45,9 @@ impl IpFilter {
         Ok(Self { allow, deny })
     }
 
+    /// IPv4 clients connected over IPv6 (`::ffff:10.0.0.1`) are matched as IPv4
     fn accepts(&self, client: &IpAddr) -> bool {
-        // IPv4 clients connected over IPv6 (`::ffff:10.0.0.1`) are matched as IPv4
-        let client = match client {
-            IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(*client, IpAddr::V4),
-            IpAddr::V4(_) => *client,
-        };
-        let listed = |networks: &[IpNet]| networks.iter().any(|network| network.contains(&client));
-        !listed(&self.deny) && (self.allow.is_empty() || listed(&self.allow))
+        !self.deny.contains(*client) && (self.allow.is_empty() || self.allow.contains(*client))
     }
 }
 

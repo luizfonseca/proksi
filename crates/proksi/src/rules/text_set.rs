@@ -70,6 +70,38 @@ impl Ends {
     }
 }
 
+/// The values a text is one of (`in`, `not_in`)
+#[derive(Debug)]
+pub(super) enum Exact {
+    Few(Vec<String>),
+    Many(HashSet<String>),
+}
+
+impl Exact {
+    pub fn new(values: Vec<String>) -> Self {
+        if values.len() <= FEW {
+            return Exact::Few(values);
+        }
+        Exact::Many(values.into_iter().collect())
+    }
+
+    /// Whether `text` is one of the values
+    pub fn holds(&self, text: &str) -> bool {
+        match self {
+            Exact::Few(values) => values.iter().any(|value| value == text),
+            Exact::Many(values) => values.contains(text),
+        }
+    }
+
+    /// The values, in no particular order
+    pub fn values(&self) -> Vec<String> {
+        match self {
+            Exact::Few(values) => values.clone(),
+            Exact::Many(values) => values.iter().cloned().collect(),
+        }
+    }
+}
+
 /// The values a text contains
 #[derive(Debug)]
 pub(super) enum Parts {
@@ -99,7 +131,7 @@ impl Parts {
 
 #[cfg(test)]
 mod tests {
-    use super::{Ends, Parts};
+    use super::{Ends, Exact, Parts};
 
     fn values(count: usize) -> Vec<String> {
         let mut values = (0..count)
@@ -124,9 +156,59 @@ mod tests {
             assert!(!ends.starts("ëx"));
             assert!(!ends.ends("xë"));
 
+            let exact = Exact::new(values(count));
+            assert!(exact.holds("/.env") && exact.holds("é"));
+            assert!(!exact.holds("/.env.local"));
+
             let parts = Parts::new(values(count)).unwrap();
             assert!(parts.found_in("/app/.env.local"));
             assert!(!parts.found_in("/environment"));
+        }
+    }
+
+    /// Random lists and texts: the sets give the answers of trying each value
+    #[test]
+    fn test_the_same_as_trying_each_value() {
+        let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        // Short texts over few letters, so values often start, end or appear in them
+        let mut text = |length: u64| {
+            (0..length)
+                .map(|_| ['a', 'b', '/', '.', 'é'][usize::try_from(next() % 5).unwrap()])
+                .collect::<String>()
+        };
+        let values = (0..300).map(|i| text(1 + i % 5)).collect::<Vec<_>>();
+        let (ends, exact) = (Ends::new(values.clone()), Exact::new(values.clone()));
+        let parts = Parts::new(values.clone()).unwrap();
+        for i in 0..5_000 {
+            let candidate = text(i % 12);
+            let any =
+                |test: fn(&str, &str) -> bool| values.iter().any(|value| test(&candidate, value));
+            assert_eq!(
+                ends.starts(&candidate),
+                any(|text, value| text.starts_with(value)),
+                "{candidate}"
+            );
+            assert_eq!(
+                ends.ends(&candidate),
+                any(|text, value| text.ends_with(value)),
+                "{candidate}"
+            );
+            assert_eq!(
+                parts.found_in(&candidate),
+                any(|text, value| text.contains(value)),
+                "{candidate}"
+            );
+            assert_eq!(
+                exact.holds(&candidate),
+                any(|text, value| text == value),
+                "{candidate}"
+            );
         }
     }
 }

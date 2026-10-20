@@ -49,4 +49,5 @@ host "example.com" {
 
 - Behind a load balancer or CDN, list it in `server.trusted_proxies`: the client is then the address it forwarded (`X-Forwarded-For`), as for [rate limits](/plugins/rate-limit) and access logs. Otherwise every request comes from the load balancer's address.
 - IPv4 clients connected over IPv6 (`::ffff:203.0.113.9`) are matched as IPv4.
+- The lists can be as long as you need, such as a blocklist of 100,000 addresses: a client is found in them in about the same time as in a list of 5.
 - Refused requests are counted in `proksi_blocked_requests_total` with `block="ip_filter"` (see [metrics](/configuration/admin#metrics)).

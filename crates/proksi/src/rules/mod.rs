@@ -335,6 +335,10 @@ mod tests {
             rule(serde_json::json!({ "and": { "path": { "contains": probes } } })),
             rule(serde_json::json!({ "and": { "path": { "prefix": probes } } })),
             rule(serde_json::json!({ "and": { "path": { "suffix": probes } } })),
+            rule(serde_json::json!({ "and": { "path": { "in": probes } } })),
+            rule(serde_json::json!({ "and": { "client": { "in": (0..1000)
+                .map(|i| format!("10.{}.{}.0/24", i / 256, i % 256))
+                .collect::<Vec<_>>() } } })),
         ];
         let lists = Rules::compile(&lists).unwrap().unwrap();
         crate::allocations::assert_no_allocations("lists of 1000 values", || {

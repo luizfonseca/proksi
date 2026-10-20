@@ -126,6 +126,15 @@ mod tests {
     }
 
     #[test]
+    fn test_checking_ip_sets_allocates_nothing() {
+        let networks = (0..1000)
+            .filter_map(|i| crate::ip_set::network(&format!("10.{}.{}.0/24", i / 256, i % 256)));
+        let set = crate::ip_set::IpSet::new(networks);
+        let client = "10.3.4.5".parse().unwrap();
+        assert_no_allocations("an IP set", || set.contains(client));
+    }
+
+    #[test]
     fn test_choosing_a_split_and_an_upstream_allocates_nothing() {
         let split: crate::config::host::TrafficSplit = serde_json::from_value(serde_json::json!({
             "name": "v2",

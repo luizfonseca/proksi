@@ -4,11 +4,12 @@
 use std::{net::IpAddr, sync::OnceLock};
 
 use http::HeaderValue;
-use ipnet::IpNet;
+
+use crate::ip_set::{network, IpSet};
 
 /// Proxies (addresses or networks) whose `X-Forwarded-For` is trusted
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct TrustedProxies(Vec<IpNet>);
+pub struct TrustedProxies(IpSet);
 
 static TRUSTED: OnceLock<TrustedProxies> = OnceLock::new();
 
@@ -18,21 +19,18 @@ impl TrustedProxies {
         proxies
             .iter()
             .map(|proxy| {
-                proxy
-                    .parse::<IpNet>()
-                    .or_else(|_| proxy.parse::<IpAddr>().map(IpNet::from))
-                    .map_err(|_| {
-                        format!(
-                            "trusted_proxies: {proxy:?} is not an address or a network (10.0.0.0/8)"
-                        )
-                    })
+                network(proxy).ok_or_else(|| {
+                    format!(
+                        "trusted_proxies: {proxy:?} is not an address or a network (10.0.0.0/8)"
+                    )
+                })
             })
             .collect::<Result<Vec<_>, _>>()
-            .map(Self)
+            .map(|networks| Self(IpSet::new(networks)))
     }
 
     fn trusts(&self, ip: &IpAddr) -> bool {
-        self.0.iter().any(|network| network.contains(ip))
+        self.0.contains(*ip)
     }
 
     /// The client of a connection from `peer`: `peer` itself, unless it's a trusted proxy.
@@ -150,7 +148,7 @@ pub fn forwarded<'a>(
 ) -> Forwarded {
     TRUSTED
         .get()
-        .unwrap_or(&TrustedProxies(vec![]))
+        .unwrap_or(&TrustedProxies(IpSet::default()))
         .forwarded(peer, incoming, proto, host)
 }
 
