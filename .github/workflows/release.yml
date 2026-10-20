@@ -25,6 +25,9 @@ jobs:
         id: release
         uses: googleapis/release-please-action@v4
         with:
+          # A token of its own, so its releases trigger other workflows (the Discord announcement):
+          # GitHub doesn't for the built-in one
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
