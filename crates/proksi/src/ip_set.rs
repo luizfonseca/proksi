@@ -148,4 +148,33 @@ mod tests {
             assert_eq!(set.contains(ip), expected, "{ip}");
         }
     }
+
+    #[test]
+    fn test_the_same_as_checking_each_ipv6_network() {
+        let mut seed = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        // Addresses close to each other (a shared /32), so networks overlap and nest
+        let address = |bits: u64| {
+            let low = u128::from(bits & 0xffff_ffff_ffff);
+            IpAddr::from((0x2001_0db8_u128 << 96 | low).to_be_bytes())
+        };
+        let networks = (0..2000)
+            .map(|_| {
+                let bits = next();
+                let length = u8::try_from(80 + bits % 49).unwrap();
+                IpNet::new(address(next()), length).unwrap().trunc()
+            })
+            .collect::<Vec<_>>();
+        let set = IpSet::new(networks.iter().copied());
+        for _ in 0..20_000 {
+            let ip = address(next());
+            let expected = networks.iter().any(|network| network.contains(&ip));
+            assert_eq!(set.contains(ip), expected, "{ip}");
+        }
+    }
 }

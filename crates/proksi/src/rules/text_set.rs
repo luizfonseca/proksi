@@ -165,4 +165,50 @@ mod tests {
             assert!(!parts.found_in("/environment"));
         }
     }
+
+    /// Random lists and texts: the sets give the answers of trying each value
+    #[test]
+    fn test_the_same_as_trying_each_value() {
+        let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        // Short texts over few letters, so values often start, end or appear in them
+        let mut text = |length: u64| {
+            (0..length)
+                .map(|_| ['a', 'b', '/', '.', 'é'][usize::try_from(next() % 5).unwrap()])
+                .collect::<String>()
+        };
+        let values = (0..300).map(|i| text(1 + i % 5)).collect::<Vec<_>>();
+        let (ends, exact) = (Ends::new(values.clone()), Exact::new(values.clone()));
+        let parts = Parts::new(values.clone()).unwrap();
+        for i in 0..5_000 {
+            let candidate = text(i % 12);
+            let any =
+                |test: fn(&str, &str) -> bool| values.iter().any(|value| test(&candidate, value));
+            assert_eq!(
+                ends.starts(&candidate),
+                any(|text, value| text.starts_with(value)),
+                "{candidate}"
+            );
+            assert_eq!(
+                ends.ends(&candidate),
+                any(|text, value| text.ends_with(value)),
+                "{candidate}"
+            );
+            assert_eq!(
+                parts.found_in(&candidate),
+                any(|text, value| text.contains(value)),
+                "{candidate}"
+            );
+            assert_eq!(
+                exact.holds(&candidate),
+                any(|text, value| text == value),
+                "{candidate}"
+            );
+        }
+    }
 }
