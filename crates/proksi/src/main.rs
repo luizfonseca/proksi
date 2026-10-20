@@ -66,6 +66,9 @@ fn main() -> Result<(), anyhow::Error> {
     #[cfg(target_os = "linux")]
     supervisor::restore_reservations();
 
+    // JSON Web Tokens are checked with `ring`, before any is
+    blocks::jwt::crypto::install();
+
     // Configuration can be refreshed on file change
     // Loads configuration from command-line, YAML or TOML sources
     let proxy_config = Arc::new(

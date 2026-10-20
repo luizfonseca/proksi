@@ -3704,10 +3704,18 @@ async fn test_jwt() {
     let rsa_key = EncodingKey::from_rsa_pem(&rsa.private_key_to_pem().unwrap()).unwrap();
     let mut jwk = Jwk::from_encoding_key(&rsa_key, Algorithm::RS256).unwrap();
     jwk.common.key_id = Some("k1".to_string());
-    let jwks_port = jwks_server(serde_json::json!({ "keys": [jwk] }).to_string()).await;
+    // And one too short to be trusted (under 2048 bits)
+    let weak = openssl::rsa::Rsa::generate(1024).unwrap();
+    let weak_key = EncodingKey::from_rsa_pem(&weak.private_key_to_pem().unwrap()).unwrap();
+    let mut weak_jwk = Jwk::from_encoding_key(&weak_key, Algorithm::RS256).unwrap();
+    weak_jwk.common.key_id = Some("k2".to_string());
+    let jwks_port =
+        jwks_server(serde_json::json!({ "keys": [jwk, weak_jwk] }).to_string()).await;
     let mut header = Header::new(Algorithm::RS256);
     header.kid = Some("k1".to_string());
     let signed = encode(&header, &claims, &rsa_key).unwrap();
+    header.kid = Some("k2".to_string());
+    let weakly_signed = encode(&header, &claims, &weak_key).unwrap();
 
     let config = HOST_WITH_JWT.replace("{jwks_port}", &jwks_port.to_string());
     let mut proksi = Harness::start_without_https(&config).await;
@@ -3766,6 +3774,9 @@ async fn test_jwt() {
     }
     assert!(status.starts_with("HTTP/1.1 200"), "{status}\n{}", proksi.logs());
     let request = get("/jwks", &format!("Authorization: Bearer {valid}\r\n"));
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 401"), "{res}");
+    let request = get("/jwks", &format!("Authorization: Bearer {weakly_signed}\r\n"));
     let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 401"), "{res}");
 
