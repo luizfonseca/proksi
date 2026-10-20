@@ -26,6 +26,63 @@ server {
   # HTTP requests to HTTPS and to answer Let's Encrypt challenges.
   # The default value is "0.0.0.0:80".
   http_address = "0.0.0.0:80"
+
+  # Proxies or load balancers in front of Proksi (optional). The client of a request is then
+  # the address they forward in `X-Forwarded-For` (rate limits, ip_filter, access logs).
+  trusted_proxies = ["10.0.0.0/8"]
+
+  # How long Proksi waits for clients, and for upstreams (the defaults).
+  # Hosts and locations can change them for their requests.
+  timeouts {
+    idle_secs  = 60 # for a request's headers, and between requests of a connection
+    read_secs  = 60 # for each read of a request body
+    write_secs = 60 # for a client to read each write of a response
+
+    upstream {
+      connect_secs = 5   # to connect
+      tls_secs     = 10  # for the TLS handshake of an HTTPS upstream
+      read_secs    = 360 # for each read of a response, including its headers
+      write_secs   = 60  # for the upstream to read each write of a request
+      idle_secs    = 360 # to keep an unused connection open, to reuse it
+    }
+  }
+
+  # TLS versions and TLS 1.2 ciphers clients can use (optional).
+  tls {
+    min_version = "1.2"
+  }
+
+  # Rules of every request, before its host is chosen (see docs/rules).
+  # Here: an old domain moved to a new one, keeping every path.
+  rule "old domain" {
+    and {
+      host {
+        eq = "old.example.com"
+      }
+    }
+    then {
+      redirect {
+        to     = "https://example.com{uri}"
+        status = 301
+      }
+    }
+  }
+}
+
+# The admin API, metrics and UI (optional: off without this block).
+admin {
+  listen = "127.0.0.1:7555"
+
+  # Every request needs a token's secret (`Authorization: Bearer <secret>`).
+  # Tokens can read unless they have `access = "write"` (to change hosts in the store).
+  token "grafana" {
+    secret = "<read_token>"
+  }
+
+  token "ops" {
+    secret = "<write_token>"
+    access = "write"
+  }
 }
 
 
@@ -167,6 +224,33 @@ host "example.com" {
     }
   }
 
+  # How the upstreams of its locations are checked (default: every 15 seconds).
+  health_check {
+    interval_secs = 5
+  }
+
+  # Timeouts of the host's requests, instead of the server's.
+  timeouts {
+    upstream {
+      connect_secs = 2
+    }
+  }
+
+  # Rules of the host's requests, before their location is chosen.
+  rule "maintenance" {
+    and {
+      path {
+        prefix = "/checkout"
+      }
+    }
+    then {
+      respond {
+        status = 503
+        body   = "Checkout is back in a few minutes"
+      }
+    }
+  }
+
   # Locations choose how requests are handled based on their path.
   # The most specific location wins: `/api` serves `/api`, `/api/` and everything
   # below it (not `/apis`), and `/` serves whatever no other location matches.
@@ -181,8 +265,39 @@ host "example.com" {
 
     upstream "10.1.2.24:3000" {}
 
-    # Plugins (optional)
+    # Plugins (optional). They run by priority: see docs/configuration/hcl.
     request_id {}
+
+    # Requests per client, in each period.
+    rate_limit {
+      requests = 120
+      per      = "1m"
+    }
+
+    # Cross-origin requests from these pages.
+    cors {
+      origins      = ["https://app.example.com", "https://*.preview.example.com"]
+      credentials  = true
+      max_age_secs = 600
+    }
+
+    # The largest request body accepted (a 413 otherwise).
+    body_limit {
+      max = "1MiB"
+    }
+
+    # Responses compressed (zstd, brotli or gzip), as the client accepts.
+    compress {}
+
+    # The path sent to the upstreams: /api/users is sent as /users.
+    rewrite {
+      strip_prefix = "/api"
+    }
+
+    # Timeouts of this location, instead of the host's.
+    timeouts {
+      read_secs = 300 # large uploads from slow connections
+    }
 
     oauth2 {
       provider      = "github"
@@ -190,6 +305,41 @@ host "example.com" {
       client_secret = "<client_secret>"
       jwt_secret    = "<jwt_secret>"
       validations   = [{ key = "team_id", value = ["<team_id>"] }]
+    }
+  }
+
+  # Only from the office and the VPN, and only for users the auth service lets through.
+  location "/admin" {
+    upstream "10.1.2.25:3000" {}
+
+    ip_filter {
+      allow = ["203.0.113.0/24", "10.8.0.0/16"]
+      deny  = ["10.8.0.13"]
+    }
+
+    # Each request is checked by an auth service first (Authelia, Authentik...).
+    forward_auth {
+      url              = "http://authelia:9091/api/authz/forward-auth"
+      response_headers = ["Remote-User", "Remote-Groups"]
+    }
+  }
+
+  # Responses kept by Proksi and served again while fresh.
+  location "/images" {
+    upstream "10.1.2.26:3000" {}
+
+    cache {
+      enabled         = true
+      cache_type      = "memcache" # or "disk", with `path`
+      expires_in_secs = 3600
+    }
+  }
+
+  # Answered by Proksi itself.
+  location "/robots.txt" {
+    respond {
+      body         = "User-agent: *\nDisallow: /admin\n"
+      content_type = "text/plain"
     }
   }
 
@@ -332,6 +482,25 @@ host "*.example.com" {
 
   location "/" {
     upstream "10.1.2.80:3000" {}
+  }
+}
+
+# Requests sent elsewhere: www.example.com/a?b=1 goes to https://example.com/a?b=1.
+host "www.example.com" {
+  location "/" {
+    redirect {
+      to     = "https://example.com{uri}"
+      status = 301
+    }
+  }
+}
+
+# TLS forwarded untouched to an upstream that terminates it with its own certificate.
+host "secure.example.com" {
+  tcp "app" {
+    listen = "0.0.0.0:8443"
+    tls    = "passthrough"
+    upstream "10.1.2.90:443" {}
   }
 }
 
