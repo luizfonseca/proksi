@@ -408,6 +408,8 @@ impl ProxyHttp for Router {
                 proto,
                 header("host").or_else(|| session.req_header().uri.host()),
             );
+            // `&'static str` names are the cheapest for Pingora: kept as they are for the case of
+            // HTTP/1.1 headers (a `HeaderName` is copied first), then parsed once
             upstream_request.insert_header("x-forwarded-for", forwarded.forwarded_for)?;
             upstream_request.insert_header("x-forwarded-proto", forwarded.proto)?;
             if let Some(host) = forwarded.host {
@@ -416,16 +418,15 @@ impl ProxyHttp for Router {
             upstream_request.insert_header("x-real-ip", forwarded.real_ip)?;
         }
 
-        // The headers of the upstream chosen
+        // The headers of the upstream chosen, parsed when its location was built
         let added = ctx
             .route_container
             .as_ref()
             .zip(ctx.upstream_index)
-            .and_then(|(location, index)| location.upstreams.get(index))
-            .and_then(|upstream| upstream.headers.as_ref()?.add.as_ref());
-        for header in added.into_iter().flatten() {
+            .and_then(|(location, index)| location.upstream_headers.get(index));
+        for (name, value) in added.into_iter().flatten() {
             upstream_request
-                .insert_header(header.name.to_string(), header.value.as_ref())
+                .insert_header(name.clone(), value.clone())
                 .ok();
         }
 

@@ -21,6 +21,9 @@ pub struct RouteStoreContainer {
     pub load_balancer: Arc<LoadBalancer<RoundRobin>>,
 
     pub upstreams: Vec<RouteUpstream>,
+    /// The headers each upstream adds to requests (`headers.add`), ready to set: names as
+    /// written (Pingora keeps their case for HTTP/1.1), values parsed
+    pub upstream_headers: Vec<Vec<(bytes::Bytes, http::HeaderValue)>>,
 
     /// Building blocks (plugins, headers, cache), in the order they run
     pub blocks: Blocks,
@@ -59,6 +62,7 @@ impl Default for RouteStoreContainer {
             ))),
             blocks: Blocks::default(),
             upstreams: Vec::new(),
+            upstream_headers: Vec::new(),
             cache: None,
             timeouts: None,
             rewrite: None,
@@ -80,6 +84,7 @@ impl RouteStoreContainer {
             load_balancer: Arc::new(load_balancer),
             blocks: Blocks::default(),
             upstreams: Vec::with_capacity(5),
+            upstream_headers: Vec::new(),
             cache: None,
             timeouts: None,
             rewrite: None,
@@ -95,6 +100,7 @@ impl RouteStoreContainer {
 
     /// Sets the upstreams of this route (the ones its load balancer was built with)
     pub fn set_upstreams(&mut self, upstreams: Vec<RouteUpstream>) {
+        self.upstream_headers = upstreams.iter().map(added_headers).collect();
         self.upstreams = upstreams;
     }
 
@@ -134,6 +140,23 @@ impl RouteStoreContainer {
     pub fn split_of(&self, index: usize) -> Option<&crate::routing::split::Split> {
         self.splits.iter().find(|split| split.holds(index))
     }
+}
+
+/// The headers an upstream adds to requests, ready to set (invalid ones left out, as before)
+fn added_headers(upstream: &RouteUpstream) -> Vec<(bytes::Bytes, http::HeaderValue)> {
+    let added = upstream
+        .headers
+        .as_ref()
+        .and_then(|headers| headers.add.as_ref());
+    added
+        .into_iter()
+        .flatten()
+        .filter_map(|header| {
+            http::HeaderName::from_bytes(header.name.as_bytes()).ok()?;
+            let value = http::HeaderValue::from_str(&header.value).ok()?;
+            Some((bytes::Bytes::from(header.name.to_string()), value))
+        })
+        .collect()
 }
 
 /// Marks the upstreams with a healthy address in `load_balancer`
