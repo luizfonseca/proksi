@@ -77,6 +77,8 @@ host "app.example.com" {
 | Caddyfile | Proksi |
 | --- | --- |
 | `reverse_proxy a b` with `lb_policy weighted_round_robin` | Several `upstream` blocks, with `weight` |
+| `lb_policy least_conn` | [`load_balancing = "least_connections"`](/routing/upstreams#least-connections) |
+| `lb_retries`, `lb_try_duration` | [`retry { attempts }`](/routing/upstreams#retries) |
 | `health_uri`, `health_interval` | [`health_check { interval_secs }`](/routing/upstreams#health-checks): a TCP connection to each upstream (no HTTP path) |
 | `header` (response) | `headers { response { add, remove } }` |
 | `header_up` | `headers { add = { ... } }` in an `upstream` |
@@ -93,8 +95,9 @@ host "app.example.com" {
 | `redir` | [`redirect { to, status }`](/plugins/redirect), with `{uri}` for `{uri}` |
 | `respond` | [`respond { status, body, content_type }`](/plugins/respond) |
 | `encode` | [`compress { }`](/plugins/compress) in each location (zstd, brotli and gzip) |
-| `file_server`, `php_fastcgi`, `templates` | Not available: Proksi only proxies |
-| On-demand TLS, wildcard sites (`*.example.com`), DNS challenges | Not available |
+| `file_server`, `try_files {path} /index.html` | [`static_files { directory, fallback }`](/plugins/static-files) |
+| Wildcard sites (`*.example.com`), DNS challenges | `host "*.example.com"`, and `lets_encrypt { dns { provider = "cloudflare" } }` (Cloudflare only) |
+| `php_fastcgi`, `templates`, on-demand TLS | Not available |
 
 ## Docker (caddy-docker-proxy)
 
