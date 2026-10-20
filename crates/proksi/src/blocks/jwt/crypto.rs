@@ -52,6 +52,8 @@ fn parameters(algorithm: Algorithm) -> Option<&'static dyn ring_signature::Verif
     })
 }
 
+// The signature `CryptoProvider` takes
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn new_verifier(algorithm: &Algorithm, key: &DecodingKey) -> Result<Box<dyn JwtVerifier>, Error> {
     let Some(parameters) = parameters(*algorithm) else {
         return (rust_crypto::DEFAULT_PROVIDER.verifier_factory)(algorithm, key);
