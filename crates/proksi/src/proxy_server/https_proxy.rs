@@ -64,6 +64,10 @@ pub struct RouterContext {
     pub traffic_split: Option<Arc<str>>,
     /// Traffic split cookies to set on the response: name, and the new client's id
     pub split_cookies: Vec<(String, String)>,
+    /// Whether a rule chose to copy the request to the location's mirror, or not to
+    pub mirror_rule: Option<bool>,
+    /// The copy of the request for the location's mirror
+    pub mirror: crate::routing::mirror::State,
 
     pub timings: RouterTimings,
 }
@@ -93,6 +97,8 @@ impl ProxyHttp for Router {
             health_check: false,
             traffic_split: None,
             split_cookies: vec![],
+            mirror_rule: None,
+            mirror: crate::routing::mirror::State::default(),
 
             timings: RouterTimings {
                 request_filter_start: std::time::Instant::now(),
@@ -266,7 +272,10 @@ impl ProxyHttp for Router {
                     metrics.blocked(block.name());
                 }
                 err
-            })
+            })?;
+        // The body of the mirror's copy, as proxied
+        crate::routing::mirror::body(&mut ctx.mirror, body.as_ref(), end_of_stream);
+        Ok(())
     }
 
     /// Define where the proxy should send the request to.
@@ -435,6 +444,27 @@ impl ProxyHttp for Router {
                 .await;
         }
         crate::rules::upstream_request(session, upstream_request, ctx).await;
+
+        // The copy for the location's mirror: the request as sent, without the headers of the
+        // upstream it's sent to
+        if let Some(location) = &ctx.route_container {
+            if location.mirror.is_some() {
+                let added = ctx
+                    .upstream_index
+                    .and_then(|index| location.upstreams.get(index))
+                    .and_then(|upstream| upstream.headers.as_ref()?.add.as_ref());
+                crate::routing::mirror::start(
+                    &mut ctx.mirror,
+                    location.mirror.as_ref(),
+                    ctx.mirror_rule,
+                    upstream_request,
+                    added
+                        .into_iter()
+                        .flatten()
+                        .map(|header| header.name.as_ref()),
+                );
+            }
+        }
 
         Ok(())
     }

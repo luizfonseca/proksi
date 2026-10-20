@@ -71,8 +71,12 @@ export type Upstream = {
   addresses: { address: string; healthy: boolean }[];
   /** The traffic split it's in, if any */
   split?: { name: string; percent: number };
+  /** An upstream of the location's mirror */
+  mirror?: boolean;
 };
-export type Location = { location: string; blocks: string[]; rules: Rule[]; upstreams: Upstream[] };
+/** Where copies of a location's requests go, and what became of them */
+export type Mirror = { percent: number; sent: number; failed: number; dropped: number; too_large: number };
+export type Location = { location: string; blocks: string[]; rules: Rule[]; upstreams: Upstream[]; mirror?: Mirror };
 export type Host = {
   host: string;
   source: string | null;

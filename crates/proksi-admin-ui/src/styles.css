@@ -183,6 +183,11 @@ h2 .badge.protocol, h3 .badge.protocol { margin-left: 8px; vertical-align: 1px; 
 .upstream .weight { margin-left: auto; color: var(--faint); font-size: 12px; }
 .upstream .badge.split { margin-left: auto; background: color-mix(in srgb, var(--chart-2) 16%, transparent); color: var(--chart-2); border-color: transparent; }
 .upstream .badge.split + .weight { margin-left: 8px; }
+.upstream .badge.mirror { margin-left: auto; background: color-mix(in srgb, var(--chart-3) 16%, transparent); color: var(--chart-3); border-color: transparent; }
+.upstream .badge.mirror + .weight { margin-left: 8px; }
+.mirror-counts { margin-top: 6px; color: var(--faint); font-size: 12px; }
+.action label.check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.action label.check input { width: auto; }
 .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .none { color: var(--faint); font-size: 13px; }
 

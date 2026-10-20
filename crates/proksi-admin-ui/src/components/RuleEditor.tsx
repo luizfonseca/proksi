@@ -172,7 +172,13 @@ function Actions({ then, rules, onChange }: { then: Record<string, unknown>; rul
                 Remove
               </button>
             </div>
-            {schema?.type === 'string' ? (
+            {schema?.type === 'boolean' ? (
+              // An action turning something on or off, such as `mirror`
+              <label class="check">
+                <input type="checkbox" checked={settings === true} onChange={(e) => onChange({ ...then, [name]: e.currentTarget.checked })} />
+                {settings === true ? 'yes' : 'no'}
+              </label>
+            ) : schema?.type === 'string' ? (
               // An action taking a name, such as `traffic_split`
               <input class="mono" value={typeof settings === 'string' ? settings : ''} onInput={(e) => onChange({ ...then, [name]: e.currentTarget.value })} />
             ) : schema ? (
@@ -184,7 +190,10 @@ function Actions({ then, rules, onChange }: { then: Record<string, unknown>; rul
         );
       })}
       {available.length > 0 && (
-        <AddAction names={available} rules={rules} onAdd={(name) => onChange({ ...then, [name]: rules.actions[name]?.type === 'string' ? '' : {} })} />
+        <AddAction names={available} rules={rules} onAdd={(name) => {
+            const type = rules.actions[name]?.type;
+            onChange({ ...then, [name]: type === 'string' ? '' : type === 'boolean' ? true : {} });
+          }} />
       )}
     </div>
   );

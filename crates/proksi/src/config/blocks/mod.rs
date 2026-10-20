@@ -212,6 +212,7 @@ host:
                     health_check: None,
                     rules: vec![],
                     splits: vec![],
+                    mirror: None,
                 },
                 Location {
                     path: "/v1/session".to_string(),
@@ -233,6 +234,7 @@ host:
                     health_check: None,
                     rules: vec![],
                     splits: vec![],
+                    mirror: None,
                 },
             ],
         }
@@ -344,6 +346,69 @@ host "a.test" {
         // Sticky by cookie unless said otherwise
         assert_eq!(splits[1].sticky, crate::config::host::Sticky::Cookie);
         assert_eq!(crate::routing::validate::validate_host(&host), Ok(()));
+    }
+
+    #[test]
+    fn test_mirror_block() {
+        let parse = |mirror: &str| {
+            let doc = HclFormat::from_str::<Doc>(&format!(
+                r#"
+host "a.test" {{
+  location "/" {{
+    upstream "v1:8080" {{}}
+    mirror {{
+      {mirror}
+      upstream "shadow:8080" {{}}
+    }}
+  }}
+}}
+"#
+            ))
+            .unwrap();
+            doc.host.get("a.test").unwrap().to_host("a.test")
+        };
+
+        let host = parse("").unwrap();
+        let mirror = host.locations[0].mirror.as_ref().unwrap();
+        assert_eq!(
+            (
+                mirror.percent,
+                mirror.max_body_size,
+                mirror.max_in_flight,
+                mirror.timeout_secs
+            ),
+            (100, 64 * 1024, 100, 5)
+        );
+        assert_eq!(mirror.upstreams[0].ip, "shadow");
+        assert_eq!(crate::routing::validate::validate_host(&host), Ok(()));
+
+        let host = parse(
+            r#"percent = 10
+      max_body_size = "1MiB"
+      max_in_flight = 20
+      timeout_secs  = 2"#,
+        )
+        .unwrap();
+        let mirror = host.locations[0].mirror.as_ref().unwrap();
+        assert_eq!(
+            (
+                mirror.percent,
+                mirror.max_body_size,
+                mirror.max_in_flight,
+                mirror.timeout_secs
+            ),
+            (10, 1024 * 1024, 20, 2)
+        );
+        // Requests without a body only
+        let host = parse("max_body_size = 0").unwrap();
+        assert_eq!(host.locations[0].mirror.as_ref().unwrap().max_body_size, 0);
+        assert_eq!(
+            parse(r#"max_body_size = "lots""#).err(),
+            Some(
+                "location \"/\": mirror: max_body_size \"lots\" is not a size such as \"64KiB\" or \"1MiB\""
+                    .to_string()
+            )
+        );
     }
 
     #[test]

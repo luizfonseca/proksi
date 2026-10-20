@@ -39,6 +39,11 @@ function UpstreamRow({ upstream }: { upstream: Upstream }) {
           {upstream.split.name} · {upstream.split.percent}%
         </span>
       )}
+      {upstream.mirror && (
+        <span class="badge mirror" title="Mirror: gets copies of the requests, its answers are dropped">
+          mirror
+        </span>
+      )}
       <span class="weight">weight {upstream.weight}</span>
     </div>
   );
@@ -174,6 +179,13 @@ export function Host({ name }: { name: string }) {
                         <span class="none">Answered by Proksi (no upstream)</span>
                       ) : (
                         location.upstreams.map((upstream) => <UpstreamRow upstream={upstream} />)
+                      )}
+                      {location.mirror && (
+                        <div class="mirror-counts" title="Copies of the requests sent to the mirror since Proksi started">
+                          Mirroring {location.mirror.percent}% · {location.mirror.sent} sent · {location.mirror.failed} failed
+                          {location.mirror.dropped > 0 && ` · ${location.mirror.dropped} dropped (too many at once)`}
+                          {location.mirror.too_large > 0 && ` · ${location.mirror.too_large} not copied (body too large)`}
+                        </div>
                       )}
                     </section>
                     <section>

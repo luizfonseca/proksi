@@ -40,6 +40,8 @@ pub struct RouteStoreContainer {
     /// Shares of the clients sent to other upstreams, numbered after the location's own in
     /// `upstreams`
     pub splits: Arc<Vec<crate::routing::split::Split>>,
+    /// Where copies of the requests go, its upstreams numbered after the splits' in `upstreams`
+    pub mirror: Option<Arc<crate::routing::mirror::Mirror>>,
 }
 
 impl Default for RouteStoreContainer {
@@ -57,6 +59,7 @@ impl Default for RouteStoreContainer {
             metrics: None,
             rules: None,
             splits: Arc::default(),
+            mirror: None,
         }
     }
 }
@@ -74,6 +77,7 @@ impl RouteStoreContainer {
             metrics: None,
             rules: None,
             splits: Arc::default(),
+            mirror: None,
         }
     }
 
@@ -82,10 +86,11 @@ impl RouteStoreContainer {
         self.upstreams = upstreams;
     }
 
-    /// The load balancers of the location: its own, then its traffic splits'
+    /// The load balancers of the location: its own, its traffic splits', then its mirror's
     pub fn load_balancers(&self) -> impl Iterator<Item = &Arc<LoadBalancer<RoundRobin>>> {
         std::iter::once(&self.load_balancer)
             .chain(self.splits.iter().map(|split| &split.load_balancer))
+            .chain(self.mirror.iter().map(|mirror| &mirror.load_balancer))
     }
 
     /// Whether each upstream is healthy, by the health checks: when one of its addresses is

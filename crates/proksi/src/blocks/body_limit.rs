@@ -64,7 +64,7 @@ impl Middleware for BodyLimit {
 }
 
 /// A size like `512KiB`, `1MiB` or `10MB`
-fn parse_size(value: &str) -> Option<u64> {
+pub(crate) fn parse_size(value: &str) -> Option<u64> {
     let split = value.find(|c: char| !c.is_ascii_digit())?;
     let (amount, unit) = value.split_at(split);
     let multiplier: u64 = match unit {

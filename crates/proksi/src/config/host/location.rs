@@ -31,6 +31,43 @@ pub struct Location {
     /// Shares of the requests sent to other upstreams (`traffic_split "<name>" { ... }`)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub splits: Vec<TrafficSplit>,
+    /// Copies of the requests sent to other upstreams, whose answers are dropped (`mirror`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mirror: Option<Mirror>,
+}
+
+/// `mirror { ... }`: copies of a location's requests, sent to upstreams of their own. Their
+/// answers are dropped: the requests never wait on them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Mirror {
+    /// The share of requests copied, from 0 to 100 (rules can choose others)
+    #[serde(default = "Mirror::default_percent")]
+    pub percent: u8,
+    /// Requests with a larger body aren't copied
+    #[serde(default = "Mirror::default_max_body_size")]
+    pub max_body_size: u64,
+    /// Copies being sent at most: others are dropped
+    #[serde(default = "Mirror::default_max_in_flight")]
+    pub max_in_flight: usize,
+    /// How long a copy can take, from connecting to its answer
+    #[serde(default = "Mirror::default_timeout_secs")]
+    pub timeout_secs: u64,
+    pub upstreams: Vec<RouteUpstream>,
+}
+
+impl Mirror {
+    pub fn default_percent() -> u8 {
+        100
+    }
+    pub fn default_max_body_size() -> u64 {
+        64 * 1024
+    }
+    pub fn default_max_in_flight() -> usize {
+        100
+    }
+    pub fn default_timeout_secs() -> u64 {
+        5
+    }
 }
 
 /// `traffic_split "<name>" { ... }`: a share of a location's clients, sent to upstreams of its
@@ -315,6 +352,7 @@ mod tests {
             health_check: None,
             rules: vec![],
             splits: vec![],
+            mirror: None,
         }
     }
 

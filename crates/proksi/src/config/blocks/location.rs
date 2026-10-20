@@ -6,7 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    host::{HealthCheck, Location, LocationTimeouts, PathRewrite, Sticky, TrafficSplit},
+    host::{HealthCheck, Location, LocationTimeouts, Mirror, PathRewrite, Sticky, TrafficSplit},
     RouteCache, RoutePlugin,
 };
 
@@ -48,6 +48,59 @@ pub struct LocationBlock {
     /// `traffic_split "<name>" { ... }`
     #[serde(default)]
     pub traffic_split: BTreeMap<String, TrafficSplitBlock>,
+    /// `mirror { ... }`
+    pub mirror: Option<MirrorBlock>,
+}
+
+/// `mirror { ... }` in a location
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MirrorBlock {
+    pub percent: Option<u8>,
+    /// A size such as "64KiB", or 0 for requests without a body only
+    pub max_body_size: Option<serde_json::Value>,
+    pub max_in_flight: Option<usize>,
+    pub timeout_secs: Option<u64>,
+    #[serde(default)]
+    pub upstream: BTreeMap<String, UpstreamBlock>,
+}
+
+impl MirrorBlock {
+    fn to_mirror(&self) -> Result<Mirror, String> {
+        let in_mirror = |err: String| format!("mirror: {err}");
+        let upstreams = self
+            .upstream
+            .iter()
+            .map(|(label, upstream)| upstream.to_upstream(label))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(in_mirror)?;
+        let max_body_size = match &self.max_body_size {
+            None => Mirror::default_max_body_size(),
+            Some(serde_json::Value::Number(number)) if number.as_u64() == Some(0) => 0,
+            Some(serde_json::Value::String(size)) => crate::blocks::body_limit::parse_size(size)
+                .ok_or_else(|| {
+                    in_mirror(format!(
+                        "max_body_size \"{size}\" is not a size such as \"64KiB\" or \"1MiB\""
+                    ))
+                })?,
+            Some(other) => {
+                return Err(in_mirror(format!(
+                    "max_body_size {other} is not a size such as \"64KiB\" or \"1MiB\", or 0"
+                )))
+            }
+        };
+        Ok(Mirror {
+            percent: self.percent.unwrap_or_else(Mirror::default_percent),
+            max_body_size,
+            max_in_flight: self
+                .max_in_flight
+                .unwrap_or_else(Mirror::default_max_in_flight),
+            timeout_secs: self
+                .timeout_secs
+                .unwrap_or_else(Mirror::default_timeout_secs),
+            upstreams,
+        })
+    }
 }
 
 /// `traffic_split "<name>" { ... }` in a location
@@ -118,6 +171,11 @@ impl LocationBlock {
                     })
                 })
                 .collect::<Result<_, String>>()?,
+            mirror: self
+                .mirror
+                .as_ref()
+                .map(MirrorBlock::to_mirror)
+                .transpose()?,
         })
     }
 

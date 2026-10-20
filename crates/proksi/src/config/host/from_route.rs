@@ -55,6 +55,7 @@ impl Host {
                     health_check: None,
                     rules: vec![],
                     splits: vec![],
+                    mirror: None,
                 })
                 .collect(),
         }

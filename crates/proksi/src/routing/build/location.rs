@@ -19,7 +19,7 @@ pub(super) fn build_location_container(
 
     let mut container = RouteStoreContainer::new(load_balancer);
     container.path.clone_from(&location.path);
-    // The traffic splits' upstreams come after the location's own (ADR 0003)
+    // The traffic splits' upstreams come after the location's own (ADR 0003), then the mirror's
     let mut upstreams = location.upstreams.clone();
     upstreams.extend(
         location
@@ -27,7 +27,18 @@ pub(super) fn build_location_container(
             .iter()
             .flat_map(|split| split.upstreams.iter().cloned()),
     );
+    let mirror_first = upstreams.len();
+    if let Some(mirror) = &location.mirror {
+        upstreams.extend(mirror.upstreams.iter().cloned());
+    }
     container.set_upstreams(upstreams);
+    container.mirror = location.mirror.as_ref().map(|mirror| {
+        Arc::new(crate::routing::mirror::Mirror::build(
+            mirror,
+            mirror_first,
+            location.health_check,
+        ))
+    });
     container.splits = Arc::new(crate::routing::split::Split::build(
         host,
         &location.path,

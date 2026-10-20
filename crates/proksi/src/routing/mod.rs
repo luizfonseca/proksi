@@ -10,6 +10,7 @@ use crate::config::host::Host;
 pub mod build;
 pub mod file_source;
 pub mod merge;
+pub mod mirror;
 pub mod paths;
 pub mod readiness;
 pub mod reconciler;
