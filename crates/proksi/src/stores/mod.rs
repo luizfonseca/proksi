@@ -1,4 +1,10 @@
-use std::{hash::RandomState, sync::Arc};
+use std::{
+    hash::RandomState,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
 use host_container::HostContainer;
 use once_cell::sync::Lazy;
@@ -66,12 +72,25 @@ pub fn get_routes(
     ROUTE_STORE.pin_owned()
 }
 
+/// Hosts with a wildcard name (`*.example.com`)
+static WILDCARD_HOSTS: AtomicUsize = AtomicUsize::new(0);
+
 pub fn insert_route(key: String, value: Arc<HostContainer>) {
-    ROUTE_STORE.pin().insert(key, value);
+    let wildcard = key.starts_with("*.");
+    if ROUTE_STORE.pin().insert(key, value).is_none() && wildcard {
+        WILDCARD_HOSTS.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 pub fn remove_route(key: &str) {
-    ROUTE_STORE.pin().remove(key);
+    if ROUTE_STORE.pin().remove(key).is_some() && key.starts_with("*.") {
+        WILDCARD_HOSTS.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// Whether any host has a wildcard name: requests don't look for one otherwise
+pub fn has_wildcard_hosts() -> bool {
+    WILDCARD_HOSTS.load(Ordering::Relaxed) > 0
 }
 
 // CERTIFICATE store
@@ -103,5 +122,30 @@ pub fn insert_cache_routing(key: &str, value: &str) {
     let store = CACHE_ROUTING_STORE.pin();
     if store.get(key).is_none() {
         store.insert(key.to_string(), value.to_string());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use crate::routing::{build::build_host_container, test_utils::host};
+
+    #[test]
+    fn test_wildcard_hosts_are_counted() {
+        let container =
+            || Arc::new(build_host_container(&host("*.count.test", "10.0.0.7")).unwrap());
+        assert!(!super::has_wildcard_hosts());
+
+        super::insert_route("*.count.test".to_string(), container());
+        // Replaced, not added
+        super::insert_route("*.count.test".to_string(), container());
+        super::insert_route("count.test".to_string(), container());
+        assert!(super::has_wildcard_hosts());
+
+        super::remove_route("*.count.test");
+        super::remove_route("*.count.test");
+        super::remove_route("count.test");
+        assert!(!super::has_wildcard_hosts());
     }
 }

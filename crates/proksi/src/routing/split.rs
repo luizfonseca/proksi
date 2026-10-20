@@ -146,33 +146,36 @@ fn chosen<'a>(
         return location.splits.iter().find(|split| *split.name == **name);
     }
 
-    // The clients' ids, or new ones (set on the response)
-    let mut ids: Vec<(&str, String)> = vec![];
+    // Clients without an id get a new one, set on the response
     for split in location
         .splits
         .iter()
         .filter(|split| split.sticky == Sticky::Cookie)
     {
-        if ids.iter().any(|(name, _)| *name == split.cookie) {
-            continue;
-        }
-        let id = if let Some(id) = cookie(session, &split.cookie) {
-            id.to_string()
-        } else {
+        if cookie(session, &split.cookie).is_none()
+            && !ctx
+                .split_cookies
+                .iter()
+                .any(|(name, _)| *name == split.cookie)
+        {
             let id = uuid::Uuid::new_v4().simple().to_string();
-            ctx.split_cookies.push((split.cookie.clone(), id.clone()));
-            id
-        };
-        ids.push((&split.cookie, id));
+            ctx.split_cookies.push((split.cookie.clone(), id));
+        }
     }
-    let client = crate::proxy_server::client::of_session(session);
 
+    let new_ids = &ctx.split_cookies;
     choose(&location.splits, |split| match split.sticky {
-        Sticky::Cookie => ids
-            .iter()
-            .find(|(name, _)| *name == split.cookie)
-            .map_or(Key::Random, |(_, id)| Key::Cookie(id)),
-        Sticky::ClientIp => client.map_or(Key::Random, Key::Ip),
+        Sticky::Cookie => cookie(session, &split.cookie)
+            .or_else(|| {
+                new_ids
+                    .iter()
+                    .find(|(name, _)| *name == split.cookie)
+                    .map(|(_, id)| id.as_str())
+            })
+            .map_or(Key::Random, Key::Cookie),
+        Sticky::ClientIp => {
+            crate::proxy_server::client::of_session(session).map_or(Key::Random, Key::Ip)
+        }
         Sticky::None => Key::Random,
     })
 }
