@@ -92,6 +92,7 @@ host "api.example.com" {
 - `tls = false` serves a host over plain HTTP on `server.http_address` instead of redirecting to HTTPS, and no certificate is issued for it.
 - `host "*.example.com"` serves names one label under `example.com`: `a.example.com`, not `example.com` or `a.b.example.com`. A host with the exact name wins over it. Its certificate comes from certificate files, or from Let's Encrypt with a DNS challenge (below).
 - `host "*"` serves requests whose `Host` has no host of its own, or wildcard host. It needs `tls = false` (certificates are issued per name).
+- Over HTTPS, a client asking for a name no host with TLS serves (or for none, such as an IP address) is refused during the TLS handshake (`unrecognized_name`), before any certificate is looked for: scanners and names pointed at the server by mistake cost nothing.
 - `listen = ["ip:port", ...]` sets the addresses a host is served on, instead of `server.https_address` (or `server.http_address` with `tls = false`). Proksi only opens the ports its hosts need: with only `tls = false` hosts, the HTTPS port isn't opened at all.
 - A port is either HTTP or HTTPS: a host with TLS and a host without it can't share an address. Hosts with TLS also need `server.http_address` (port 80) for redirects and Let's Encrypt challenges.
 - Hosts from `routes = [...]`, docker labels and the store use the default addresses, as they can appear while proksi runs (ports are opened at startup). A configuration change that needs other ports restarts proksi.

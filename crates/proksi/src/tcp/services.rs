@@ -129,7 +129,7 @@ pub fn tcp_services(
 /// The hosts' certificates (by SNI), as on the HTTPS port, without HTTP/2
 fn tls_settings() -> Result<TlsSettings, anyhow::Error> {
     let mut settings = TlsSettings::with_callbacks(Box::new(CertStore::new()))?;
-    settings.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
+    settings.set_servername_callback(CertStore::sni_callback);
     settings.set_min_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_2))?;
     settings.set_max_proto_version(Some(pingora::tls::ssl::SslVersion::TLS1_3))?;
     Ok(settings)

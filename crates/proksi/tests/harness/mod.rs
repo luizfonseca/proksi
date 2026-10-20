@@ -536,6 +536,26 @@ paths {{
         .unwrap()
     }
 
+    /// Connects over TLS to proksi on `port`, asking for `server_name` (none: no SNI), without
+    /// verifying its certificate: why the handshake failed, if it did
+    pub async fn handshake_error(&self, port: u16, server_name: Option<&str>) -> Option<String> {
+        let server_name = server_name.map(ToString::to_string);
+        tokio::task::spawn_blocking(move || {
+            let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
+            connector.set_verify(openssl::ssl::SslVerifyMode::NONE);
+            let mut config = connector.build().configure().unwrap();
+            config.set_use_server_name_indication(server_name.is_some());
+            config.set_verify_hostname(false);
+            let stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            config
+                .connect(server_name.as_deref().unwrap_or("ignored"), stream)
+                .err()
+                .map(|err| err.to_string())
+        })
+        .await
+        .unwrap()
+    }
+
     /// The certificate proksi serves on `port` for `server_name`
     pub async fn served_certificate(&self, port: u16, server_name: &str) -> X509 {
         let server_name = server_name.to_string();
