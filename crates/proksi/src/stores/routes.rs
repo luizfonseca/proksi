@@ -180,10 +180,10 @@ mod tests {
         let backends = route_store.load_balancer.backends().get_backend();
         let sni = |addr: &str| {
             let backend = backends.iter().find(|b| b.addr.to_string() == addr)?;
-            route_store.upstream(backend)?.1.sni.clone()
+            route_store.upstream(backend)?.1.sni.as_deref()
         };
-        assert_eq!(sni("127.0.0.1:8080").as_deref(), Some("ip.test"));
-        assert_eq!(sni("127.0.0.1:9090").as_deref(), Some("hostname.test"));
+        assert_eq!(sni("127.0.0.1:8080"), Some("ip.test"));
+        assert_eq!(sni("127.0.0.1:9090"), Some("hostname.test"));
         assert!(sni("127.0.0.1:1234").is_none());
     }
 }

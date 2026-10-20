@@ -445,11 +445,11 @@ mod tests {
                     "proksi_requests_total{{host=\"metrics-a.test\",location=\"/api\",status=\"{status}\"}}"
                 ),
             )
-            .map(|line| line.rsplit(' ').next().unwrap().to_string())
+            .map(|line| line.rsplit(' ').next().unwrap())
         };
-        assert_eq!(requests("2xx").as_deref(), Some("2"));
-        assert_eq!(requests("4xx").as_deref(), Some("1"));
-        assert_eq!(requests("none").as_deref(), Some("1"));
+        assert_eq!(requests("2xx"), Some("2"));
+        assert_eq!(requests("4xx"), Some("1"));
+        assert_eq!(requests("none"), Some("1"));
         assert_eq!(
             line(
                 &text,

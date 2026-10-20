@@ -780,14 +780,6 @@ async fn test_compress() {
             "GET {path} HTTP/1.1\r\nHost: compressed.test\r\nAccept-Encoding: {accept}\r\nConnection: close\r\n\r\n"
         )
     };
-    let encoding = |res: &str| {
-        res.lines()
-            .take_while(|line| !line.is_empty())
-            .find_map(|line| {
-                let line = line.to_lowercase();
-                line.strip_prefix("content-encoding: ").map(str::to_string)
-            })
-    };
 
     for (path, accept, expected) in [
         ("/", "gzip", Some("gzip")),
@@ -814,7 +806,7 @@ async fn test_compress() {
             .unwrap();
         let res = String::from_utf8_lossy(&response);
         assert!(res.starts_with("HTTP/1.1 200"), "{path} {accept}: {res}");
-        assert_eq!(encoding(&res).as_deref(), expected, "{path} {accept}: {res}");
+        assert_eq!(header(&res, "content-encoding"), expected, "{path} {accept}: {res}");
     }
 
     proksi.assert_healthy();
@@ -861,29 +853,21 @@ host "moved.test" {
 async fn test_redirect_and_respond() {
     let mut proksi = Harness::start_without_https(HOSTS_WITH_REDIRECTS).await;
     let port = proksi.http_port;
-    let header = |res: &str, name: &str| {
-        res.lines()
-            .take_while(|line| !line.is_empty())
-            .find_map(|line| {
-                let (key, value) = line.split_once(": ")?;
-                key.eq_ignore_ascii_case(name).then(|| value.to_string())
-            })
-    };
 
     let res = proksi.get_http_on(port, "www.moved.test", "/a/b?c=d").await.unwrap();
     assert!(res.starts_with("HTTP/1.1 301"), "{res}");
-    assert_eq!(header(&res, "location").as_deref(), Some("https://moved.test/a/b?c=d"));
+    assert_eq!(header(&res, "location"), Some("https://moved.test/a/b?c=d"));
 
     let res = proksi.get_http_on(port, "moved.test", "/docs/intro?x=1").await.unwrap();
     assert!(res.starts_with("HTTP/1.1 302"), "{res}");
     assert_eq!(
-        header(&res, "location").as_deref(),
+        header(&res, "location"),
         Some("https://docs.moved.test/docs/intro?from=moved.test")
     );
 
     let res = proksi.get_http_on(port, "moved.test", "/maintenance").await.unwrap();
     assert!(res.starts_with("HTTP/1.1 503"), "{res}");
-    assert_eq!(header(&res, "content-type").as_deref(), Some("text/plain"));
+    assert_eq!(header(&res, "content-type"), Some("text/plain"));
     assert!(res.ends_with("Back soon"), "{res}");
     assert_eq!(proksi.http_upstream.hits("/maintenance"), 0);
 
@@ -994,14 +978,6 @@ async fn test_cors() {
         let proksi = &proksi;
         async move { proksi.raw_http_on(port, request.as_bytes()).await.unwrap() }
     };
-    let header = |res: &str, name: &str| {
-        res.lines()
-            .take_while(|line| !line.is_empty())
-            .find_map(|line| {
-                let (key, value) = line.split_once(": ")?;
-                key.eq_ignore_ascii_case(name).then(|| value.to_string())
-            })
-    };
     let preflight = |path: &str, origin: &str| {
         format!(
             "OPTIONS {path} HTTP/1.1\r\nHost: cors.test\r\nOrigin: {origin}\r\n\
@@ -1014,22 +990,22 @@ async fn test_cors() {
     let res = send(preflight("/items", "https://app.example.com")).await;
     assert!(res.starts_with("HTTP/1.1 204"), "{res}");
     assert_eq!(
-        header(&res, "access-control-allow-origin").as_deref(),
+        header(&res, "access-control-allow-origin"),
         Some("https://app.example.com")
     );
-    assert_eq!(header(&res, "access-control-allow-methods").as_deref(), Some("GET, POST"));
+    assert_eq!(header(&res, "access-control-allow-methods"), Some("GET, POST"));
     assert_eq!(
-        header(&res, "access-control-allow-headers").as_deref(),
+        header(&res, "access-control-allow-headers"),
         Some("content-type, x-custom")
     );
-    assert_eq!(header(&res, "access-control-allow-credentials").as_deref(), Some("true"));
-    assert_eq!(header(&res, "access-control-max-age").as_deref(), Some("600"));
+    assert_eq!(header(&res, "access-control-allow-credentials"), Some("true"));
+    assert_eq!(header(&res, "access-control-max-age"), Some("600"));
     assert_eq!(proksi.http_upstream.hits("/items"), 0);
 
     // A subdomain of the pattern
     let res = send(preflight("/items", "https://pr-12.preview.example.com")).await;
     assert_eq!(
-        header(&res, "access-control-allow-origin").as_deref(),
+        header(&res, "access-control-allow-origin"),
         Some("https://pr-12.preview.example.com")
     );
 
@@ -1048,11 +1024,11 @@ async fn test_cors() {
     .await;
     assert!(res.starts_with("HTTP/1.1 401"), "{res}");
     assert_eq!(
-        header(&res, "access-control-allow-origin").as_deref(),
+        header(&res, "access-control-allow-origin"),
         Some("https://app.example.com")
     );
-    assert_eq!(header(&res, "access-control-expose-headers").as_deref(), Some("X-Total-Count"));
-    assert_eq!(header(&res, "vary").as_deref(), Some("Origin"));
+    assert_eq!(header(&res, "access-control-expose-headers"), Some("X-Total-Count"));
+    assert_eq!(header(&res, "vary"), Some("Origin"));
 
     // Any origin, without credentials
     let res = send(
@@ -1061,7 +1037,7 @@ async fn test_cors() {
     )
     .await;
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
-    assert_eq!(header(&res, "access-control-allow-origin").as_deref(), Some("*"));
+    assert_eq!(header(&res, "access-control-allow-origin"), Some("*"));
     assert_eq!(header(&res, "access-control-allow-credentials"), None);
 
     proksi.assert_healthy();
@@ -1143,14 +1119,6 @@ async fn test_forward_auth() {
     let get = |path: &str, headers: &str| {
         format!("GET {path} HTTP/1.1\r\nHost: forward.test\r\n{headers}Connection: close\r\n\r\n")
     };
-    let header = |res: &str, name: &str| {
-        res.lines()
-            .take_while(|line| !line.is_empty())
-            .find_map(|line| {
-                let (key, value) = line.split_once(": ")?;
-                key.eq_ignore_ascii_case(name).then(|| value.to_string())
-            })
-    };
 
     // Signed in: proxied with the user the auth service answered (not the client's own)
     let request = get("/private?x=1", "Cookie: session=ok\r\nRemote-User: mallory\r\n");
@@ -1175,8 +1143,8 @@ async fn test_forward_auth() {
     // Not signed in: the auth service's answer
     let res = proksi.raw_http_on(port, get("/private", "").as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 302"), "{res}");
-    assert_eq!(header(&res, "location").as_deref(), Some("https://auth.test/login"));
-    assert_eq!(header(&res, "set-cookie").as_deref(), Some("flow=1"));
+    assert_eq!(header(&res, "location"), Some("https://auth.test/login"));
+    assert_eq!(header(&res, "set-cookie"), Some("flow=1"));
     assert!(res.ends_with("login"), "{res}");
     // Only the signed-in request reached the upstream
     assert_eq!(proksi.http_upstream.hits("/private?x=1"), 1);
@@ -1299,14 +1267,6 @@ async fn test_rules() {
             "{method} {path} HTTP/1.1\r\nHost: {host}\r\n{headers}Content-Length: 0\r\nConnection: close\r\n\r\n"
         )
     };
-    let header = |res: &str, name: &str| {
-        res.lines()
-            .take_while(|line| !line.is_empty())
-            .find_map(|line| {
-                let (key, value) = line.split_once(": ")?;
-                key.eq_ignore_ascii_case(name).then(|| value.to_string())
-            })
-    };
     let upstream = |res: &str| -> serde_json::Value {
         serde_json::from_str(res.split("\r\n\r\n").nth(1).unwrap_or_default()).unwrap_or_default()
     };
@@ -1314,7 +1274,7 @@ async fn test_rules() {
     // The server's rule, before any host: the old domain has no host of its own
     let res = send(request("GET", "old.rules.test", "/a?b=1", "")).await;
     assert!(res.starts_with("HTTP/1.1 301"), "{res}");
-    assert_eq!(header(&res, "location").as_deref(), Some("https://rules.test/a?b=1"));
+    assert_eq!(header(&res, "location"), Some("https://rules.test/a?b=1"));
 
     // The host's rule: maintenance, except for the office network
     let res = send(request("GET", "rules.test", "/shop/cart", "X-Forwarded-For: 198.51.100.7\r\n")).await;
@@ -1329,7 +1289,7 @@ async fn test_rules() {
     assert!(res.starts_with("HTTP/1.1 403"), "{res}");
     let res = send(request("GET", "rules.test", "/page", "Cookie: a=b; beta=1\r\n")).await;
     assert!(res.starts_with("HTTP/1.1 302"), "{res}");
-    assert_eq!(header(&res, "location").as_deref(), Some("https://beta.rules.test/page"));
+    assert_eq!(header(&res, "location"), Some("https://beta.rules.test/page"));
 
     // The method and headers changed for the upstream, and for the next rule
     let res = send(request("POST", "rules.test", "/items/1", "X-HTTP-Method-Override: DELETE\r\n")).await;
@@ -1340,7 +1300,7 @@ async fn test_rules() {
     assert!(seen["headers"].get("x-http-method-override").is_none(), "{res}");
     // The blocks of a matched rule take part in the later stages: its request id, its headers
     assert!(seen["headers"]["x-request-id"].as_str().is_some_and(|id| !id.is_empty()), "{res}");
-    assert_eq!(header(&res, "x-rule").as_deref(), Some("deletes"));
+    assert_eq!(header(&res, "x-rule"), Some("deletes"));
     assert!(header(&res, "x-request-id").is_some(), "{res}");
 
     // No rule matches: proxied as it is
@@ -3715,25 +3675,17 @@ async fn test_jwt() {
     weak_jwk.common.key_id = Some("k2".to_string());
     let jwks_port =
         jwks_server(serde_json::json!({ "keys": [jwk, weak_jwk] }).to_string()).await;
-    let mut header = Header::new(Algorithm::RS256);
-    header.kid = Some("k1".to_string());
-    let signed = encode(&header, &claims, &rsa_key).unwrap();
-    header.kid = Some("k2".to_string());
-    let weakly_signed = encode(&header, &claims, &weak_key).unwrap();
+    let mut jwt_header = Header::new(Algorithm::RS256);
+    jwt_header.kid = Some("k1".to_string());
+    let signed = encode(&jwt_header, &claims, &rsa_key).unwrap();
+    jwt_header.kid = Some("k2".to_string());
+    let weakly_signed = encode(&jwt_header, &claims, &weak_key).unwrap();
 
     let config = HOST_WITH_JWT.replace("{jwks_port}", &jwks_port.to_string());
     let mut proksi = Harness::start_without_https(&config).await;
     let port = proksi.http_port;
     let get = |path: &str, headers: &str| {
         format!("GET {path} HTTP/1.1\r\nHost: jwt.test\r\n{headers}Connection: close\r\n\r\n")
-    };
-    let header = |res: &str, name: &str| {
-        res.lines()
-            .take_while(|line| !line.is_empty())
-            .find_map(|line| {
-                let (key, value) = line.split_once(": ")?;
-                key.eq_ignore_ascii_case(name).then(|| value.to_string())
-            })
     };
 
     // A valid token: proxied with its claims (not the client's own headers)
@@ -3748,12 +3700,12 @@ async fn test_jwt() {
     // No token, and an invalid one
     let res = proksi.raw_http_on(port, get("/", "").as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 401"), "{res}");
-    assert_eq!(header(&res, "www-authenticate").as_deref(), Some("Bearer"));
+    assert_eq!(header(&res, "www-authenticate"), Some("Bearer"));
     let request = get("/", &format!("Authorization: Bearer {wrong_key}\r\n"));
     let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 401"), "{res}");
     assert_eq!(
-        header(&res, "www-authenticate").as_deref(),
+        header(&res, "www-authenticate"),
         Some("Bearer error=\"invalid_token\"")
     );
 
@@ -3845,28 +3797,20 @@ host "files.test" {{
     let send = |method: &str, path: &str, headers: &str| {
         format!("{method} {path} HTTP/1.1\r\nHost: files.test\r\n{headers}Connection: close\r\n\r\n")
     };
-    let header = |res: &str, name: &str| {
-        res.lines()
-            .take_while(|line| !line.is_empty())
-            .find_map(|line| {
-                let (key, value) = line.split_once(": ")?;
-                key.eq_ignore_ascii_case(name).then(|| value.to_string())
-            })
-    };
     let body = |res: &str| res.split_once("\r\n\r\n").map(|(_, body)| body.to_string()).unwrap_or_default();
 
     // A file, by its path below the location
     let res = proksi.raw_http_on(port, send("GET", "/static/app.js", "").as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     assert_eq!(body(&res), "console.log(1)");
-    assert_eq!(header(&res, "content-type").as_deref(), Some("text/javascript; charset=utf-8"));
-    assert_eq!(header(&res, "cache-control").as_deref(), Some("public, max-age=60"));
+    assert_eq!(header(&res, "content-type"), Some("text/javascript; charset=utf-8"));
+    assert_eq!(header(&res, "cache-control"), Some("public, max-age=60"));
     let etag = header(&res, "etag").unwrap();
 
     // Without its body, and not again while it's unchanged
     let res = proksi.raw_http_on(port, send("HEAD", "/static/app.js", "").as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
-    assert_eq!(header(&res, "content-length").as_deref(), Some("14"));
+    assert_eq!(header(&res, "content-length"), Some("14"));
     assert_eq!(body(&res), "");
     let request = send("GET", "/static/app.js", &format!("If-None-Match: {etag}\r\n"));
     let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
@@ -3877,7 +3821,7 @@ host "files.test" {{
     let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 206"), "{res}");
     assert_eq!(body(&res), "console");
-    assert_eq!(header(&res, "content-range").as_deref(), Some("bytes 0-6/14"));
+    assert_eq!(header(&res, "content-range"), Some("bytes 0-6/14"));
 
     // The index of a directory, and the fallback for paths with no file
     for path in ["/static", "/static/", "/static/settings/profile"] {
@@ -3913,7 +3857,7 @@ host "files.test" {{
     // Only read
     let res = proksi.raw_http_on(port, send("POST", "/static/app.js", "Content-Length: 0\r\n").as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 405"), "{res}");
-    assert_eq!(header(&res, "allow").as_deref(), Some("GET, HEAD"));
+    assert_eq!(header(&res, "allow"), Some("GET, HEAD"));
 
     proksi.assert_healthy();
 }
@@ -3998,14 +3942,6 @@ host "split.test" {
     let get = |path: &str, headers: &str| {
         format!("GET {path} HTTP/1.1\r\nHost: split.test\r\n{headers}Connection: close\r\n\r\n")
     };
-    let header = |res: &str, name: &str| {
-        res.lines()
-            .take_while(|line| !line.is_empty())
-            .find_map(|line| {
-                let (key, value) = line.split_once(": ")?;
-                key.eq_ignore_ascii_case(name).then(|| value.to_string())
-            })
-    };
     let body = |res: &str| res.split_once("\r\n\r\n").map(|(_, body)| body.to_string()).unwrap_or_default();
 
     // A new client gets the split, and a cookie telling nothing to keep it
@@ -4041,6 +3977,16 @@ host "split.test" {
     assert_ne!(body(&res), "v2");
 
     proksi.assert_healthy();
+}
+
+/// A header of a raw HTTP response, by name in any case
+fn header<'a>(res: &'a str, name: &str) -> Option<&'a str> {
+    res.lines()
+        .take_while(|line| !line.is_empty())
+        .find_map(|line| {
+            let (key, value) = line.split_once(": ")?;
+            key.eq_ignore_ascii_case(name).then_some(value)
+        })
 }
 
 /// A request's head (up to its blank line), and the part of its body read with it; `None` when
