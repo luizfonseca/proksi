@@ -41,53 +41,64 @@ pub fn merge(snapshots: &BTreeMap<RouteSourceKind, Vec<Host>>) -> MergeResult {
 
     // Highest priority first, so the first valid definition of a host wins
     for (source, hosts) in snapshots.iter().rev() {
-        let mut seen_in_source = HashSet::new();
-
-        for definition in hosts {
-            let host = definition.name.to_lowercase();
-
-            if let Err(error) = validate_host(definition) {
-                result.invalid.push(InvalidRoute {
-                    source: *source,
-                    host,
-                    error,
-                });
-                continue;
-            }
-
-            if !seen_in_source.insert(host.clone()) {
-                result.invalid.push(InvalidRoute {
-                    source: *source,
-                    host,
-                    error: "duplicate host".to_string(),
-                });
-                continue;
-            }
-
-            sources_by_host
-                .entry(host.clone())
-                .or_default()
-                .push(*source);
-            result
-                .hosts
-                .entry(host)
-                .or_insert_with(|| (*source, definition.clone()));
-        }
+        merge_source(*source, hosts, &mut result, &mut sources_by_host);
     }
 
     for (host, sources) in sources_by_host {
-        if let Some((winner, shadowed)) = sources.split_first() {
-            if !shadowed.is_empty() {
-                result.conflicts.push(Conflict {
-                    host,
-                    winner: *winner,
-                    shadowed: shadowed.to_vec(),
-                });
-            }
+        let shadowing = sources
+            .split_first()
+            .filter(|(_, shadowed)| !shadowed.is_empty());
+        if let Some((winner, shadowed)) = shadowing {
+            result.conflicts.push(Conflict {
+                host,
+                winner: *winner,
+                shadowed: shadowed.to_vec(),
+            });
         }
     }
 
     result
+}
+
+/// The hosts of a source, unless a source with a higher priority defined them
+fn merge_source(
+    source: RouteSourceKind,
+    hosts: &[Host],
+    result: &mut MergeResult,
+    sources_by_host: &mut BTreeMap<String, Vec<RouteSourceKind>>,
+) {
+    let mut seen_in_source = HashSet::new();
+
+    for definition in hosts {
+        let host = definition.name.to_lowercase();
+
+        if let Err(error) = validate_host(definition) {
+            result.invalid.push(InvalidRoute {
+                source,
+                host,
+                error,
+            });
+            continue;
+        }
+
+        if !seen_in_source.insert(host.clone()) {
+            result.invalid.push(InvalidRoute {
+                source,
+                host,
+                error: "duplicate host".to_string(),
+            });
+            continue;
+        }
+
+        sources_by_host
+            .entry(host.clone())
+            .or_default()
+            .push(source);
+        result
+            .hosts
+            .entry(host)
+            .or_insert_with(|| (source, definition.clone()));
+    }
 }
 
 #[cfg(test)]

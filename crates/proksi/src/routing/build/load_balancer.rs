@@ -160,6 +160,23 @@ fn system_lookup(name: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
     }
 }
 
+/// The addresses of `target` are now `resolved`
+fn follow(target: &Target, addresses: &mut Vec<SocketAddr>, resolved: Vec<SocketAddr>) {
+    if *addresses == resolved {
+        return;
+    }
+    if resolved.is_empty() {
+        tracing::info!("upstream {}:{} no longer exists", target.name, target.port);
+    } else {
+        tracing::info!(
+            "upstream {}:{} now resolves to {resolved:?}",
+            target.name,
+            target.port
+        );
+    }
+    *addresses = resolved;
+}
+
 /// An upstream to resolve
 struct Target {
     name: String,
@@ -258,22 +275,7 @@ impl Resolver {
             };
             let mut addresses = self.addresses.lock().unwrap_or_else(PoisonError::into_inner);
             if let Some(slot) = addresses.get_mut(index) {
-                if *slot != resolved {
-                    if resolved.is_empty() {
-                        tracing::info!(
-                            "upstream {}:{} no longer exists",
-                            target.name,
-                            target.port
-                        );
-                    } else {
-                        tracing::info!(
-                            "upstream {}:{} now resolves to {resolved:?}",
-                            target.name,
-                            target.port
-                        );
-                    }
-                    *slot = resolved;
-                }
+                follow(target, slot, resolved);
             }
         }
     }

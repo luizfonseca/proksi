@@ -16,37 +16,7 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
     // Pattern -> path of the location defining it
     let mut patterns: HashMap<String, &str> = HashMap::new();
     for location in &host.locations {
-        let in_location = |err: String| format!("location \"{}\": {err}", location.path);
-
-        validate_location_path(&location.path).map_err(in_location)?;
-        for pattern in location.patterns() {
-            if let Some(other) = patterns.insert(pattern, &location.path) {
-                return Err(in_location(format!(
-                    "matches the same paths as location \"{other}\""
-                )));
-            }
-        }
-        validate_upstreams(&location.upstreams).map_err(in_location)?;
-        validate_splits(location).map_err(in_location)?;
-        validate_mirror(location).map_err(in_location)?;
-        if let Some(retry) = &location.retry {
-            crate::routing::retry::Policy::new(retry).map_err(in_location)?;
-        }
-        validate_headers(location.headers.as_ref()).map_err(in_location)?;
-        let blocks = Blocks::build(location).map_err(in_location)?;
-        if !location.upstreams.is_empty()
-            && blocks
-                .iter()
-                .any(|block| block.kind == crate::blocks::Kind::StaticFiles)
-        {
-            return Err(in_location(
-                "static_files answers its requests, so it has no upstreams".to_string(),
-            ));
-        }
-        if let Some(rewrite) = &location.rewrite {
-            rewrite.compile().map_err(in_location)?;
-        }
-        crate::rules::Rules::compile(&location.rules).map_err(in_location)?;
+        validate_location(location, &mut patterns)?;
     }
     crate::rules::Rules::compile(&host.rules)?;
 
@@ -54,25 +24,64 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
 }
 
 /// Traffic splits: each with upstreams, taking 100% of the requests at most together, the rest
+/// A location of a host, whose paths aren't matched by another (`patterns`: those of the
+/// locations before it)
+fn validate_location<'a>(
+    location: &'a crate::config::host::Location,
+    patterns: &mut HashMap<String, &'a str>,
+) -> Result<(), String> {
+    let in_location = |err: String| format!("location \"{}\": {err}", location.path);
+
+    validate_location_path(&location.path).map_err(in_location)?;
+    for pattern in location.patterns() {
+        if let Some(other) = patterns.insert(pattern, &location.path) {
+            return Err(in_location(format!(
+                "matches the same paths as location \"{other}\""
+            )));
+        }
+    }
+    validate_upstreams(&location.upstreams).map_err(in_location)?;
+    validate_splits(location).map_err(in_location)?;
+    validate_mirror(location).map_err(in_location)?;
+    if let Some(retry) = &location.retry {
+        crate::routing::retry::Policy::new(retry).map_err(in_location)?;
+    }
+    validate_headers(location.headers.as_ref()).map_err(in_location)?;
+    let blocks = Blocks::build(location).map_err(in_location)?;
+    if !location.upstreams.is_empty()
+        && blocks
+            .iter()
+            .any(|block| block.kind == crate::blocks::Kind::StaticFiles)
+    {
+        return Err(in_location(
+            "static_files answers its requests, so it has no upstreams".to_string(),
+        ));
+    }
+    if let Some(rewrite) = &location.rewrite {
+        rewrite.compile().map_err(in_location)?;
+    }
+    crate::rules::Rules::compile(&location.rules).map_err(in_location)?;
+    Ok(())
+}
+
 /// going to the location's own upstreams
 fn validate_splits(location: &crate::config::host::Location) -> Result<(), String> {
     // Rules choose splits of their location
     for rule in &location.rules {
-        let chosen = rule
+        let missing = rule
             .0
             .pointer("/then/traffic_split")
-            .and_then(|name| name.as_str());
-        if let Some(name) = chosen {
-            if !location.splits.iter().any(|split| split.name == name) {
-                let rule_name = rule
-                    .0
-                    .get("name")
-                    .and_then(|name| name.as_str())
-                    .unwrap_or("");
-                return Err(format!(
-                    "rule \"{rule_name}\": no traffic_split \"{name}\" in the location"
-                ));
-            }
+            .and_then(|name| name.as_str())
+            .filter(|name| !location.splits.iter().any(|split| split.name == *name));
+        if let Some(name) = missing {
+            let rule_name = rule
+                .0
+                .get("name")
+                .and_then(|name| name.as_str())
+                .unwrap_or("");
+            return Err(format!(
+                "rule \"{rule_name}\": no traffic_split \"{name}\" in the location"
+            ));
         }
     }
     if location.splits.is_empty() {
@@ -92,15 +101,7 @@ fn validate_splits(location: &crate::config::host::Location) -> Result<(), Strin
         }
         validate_upstreams(&split.upstreams).map_err(in_split)?;
         if let Some(cookie) = &split.cookie {
-            let token = !cookie.is_empty()
-                && cookie
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte));
-            if !token {
-                return Err(in_split(format!(
-                    "cookie \"{cookie}\" is not a cookie name"
-                )));
-            }
+            validate_cookie_name(cookie).map_err(in_split)?;
         }
         total += u32::from(split.percent);
     }
@@ -108,6 +109,18 @@ fn validate_splits(location: &crate::config::host::Location) -> Result<(), Strin
         return Err(format!(
             "the traffic splits take {total}% of the requests, more than 100%"
         ));
+    }
+    Ok(())
+}
+
+/// A cookie's name: a token (RFC 6265)
+fn validate_cookie_name(cookie: &str) -> Result<(), String> {
+    let token = !cookie.is_empty()
+        && cookie
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte));
+    if !token {
+        return Err(format!("cookie \"{cookie}\" is not a cookie name"));
     }
     Ok(())
 }

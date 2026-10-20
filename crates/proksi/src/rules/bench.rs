@@ -112,12 +112,12 @@ fn bench_rules() {
         for (count, budget) in [10, 100, 1000].into_iter().zip(budgets) {
             let nanos = cost(&make(count));
             println!("{mix:>28}, {count:>4} rules: {nanos:>7.1}ns (budget {budget}ns)");
-            if !cfg!(debug_assertions) {
-                assert!(
-                    nanos <= budget,
-                    "{mix}, {count} rules: {nanos:.1}ns, over {budget}ns"
-                );
-            }
+            // Budgets hold for optimized builds only
+            let measured = !cfg!(debug_assertions);
+            assert!(
+                !measured || nanos <= budget,
+                "{mix}, {count} rules: {nanos:.1}ns, over {budget}ns"
+            );
         }
     }
 }

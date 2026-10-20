@@ -145,6 +145,22 @@ impl ForwardAuth {
 }
 
 /// One client for every `forward_auth` block, created with the first one (each client loads its
+/// The `names` headers of the auth service's answer, on the request sent to the upstream,
+/// instead of the client's own
+fn pass_headers(
+    request: &mut pingora::http::RequestHeader,
+    names: &[HeaderName],
+    answer: &HeaderMap,
+) -> pingora::Result<()> {
+    for name in names {
+        request.remove_header(name);
+        for value in answer.get_all(name) {
+            request.append_header(name.clone(), value.clone())?;
+        }
+    }
+    Ok(())
+}
+
 /// own copy of the system's trusted certificates)
 fn client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
@@ -189,13 +205,11 @@ impl Middleware for ForwardAuth {
 
         // Through, with the headers of the answer (never the client's own)
         if response.status().is_success() {
-            let request = session.req_header_mut();
-            for name in &self.response_headers {
-                request.remove_header(name);
-                for value in response.headers().get_all(name) {
-                    request.append_header(name.clone(), value.clone())?;
-                }
-            }
+            pass_headers(
+                session.req_header_mut(),
+                &self.response_headers,
+                response.headers(),
+            )?;
             return Ok(false);
         }
 

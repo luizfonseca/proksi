@@ -961,6 +961,18 @@ fn create_minimal_default_config() -> Config {
     config
 }
 
+/// A configuration file, read by its extension: YAML, HCL, or both formats for others
+fn merge_file(figment: Figment, path: &str) -> Figment {
+    let extension = std::path::Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str());
+    match extension {
+        Some("yml" | "yaml") => figment.merge(Yaml::file(path)),
+        Some("hcl") => figment.merge(Hcl::file(path)),
+        _ => figment.merge(Yaml::file(path)).merge(Hcl::file(path)),
+    }
+}
+
 /// Load configuration from a specific path, used for testing and internal logic
 #[allow(clippy::result_large_err)]
 pub(crate) fn load_from_path(
@@ -974,29 +986,7 @@ pub(crate) fn load_from_path(
 
     // Check if the path is a file or directory
     if std::path::Path::new(config_path).is_file() {
-        // If it's a file, load it directly based on its extension
-        let path_buf = std::path::PathBuf::from(config_path);
-        if let Some(extension) = path_buf.extension() {
-            match extension.to_str() {
-                Some("yml" | "yaml") => {
-                    figment = figment.merge(Yaml::file(config_path));
-                }
-                Some("hcl") => {
-                    figment = figment.merge(Hcl::file(config_path));
-                }
-                _ => {
-                    // Try to load as both formats for compatibility
-                    figment = figment
-                        .merge(Yaml::file(config_path))
-                        .merge(Hcl::file(config_path));
-                }
-            }
-        } else {
-            // No extension, try both formats
-            figment = figment
-                .merge(Yaml::file(config_path))
-                .merge(Hcl::file(config_path));
-        }
+        figment = merge_file(figment, config_path);
     } else {
         // If it's a directory, check if any config files exist
         let config_files = [

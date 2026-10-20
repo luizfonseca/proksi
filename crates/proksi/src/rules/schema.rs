@@ -108,7 +108,7 @@ pub fn schema() -> Value {
 mod tests {
     use serde_json::json;
 
-    use super::{FIELDS, OPERATORS};
+    use super::{Field, Operator, FIELDS, OPERATORS};
     use crate::rules::{Rule, Rules};
 
     /// A value each kind of field takes, for `operator`
@@ -125,16 +125,21 @@ mod tests {
         }
     }
 
+    /// A condition testing `field` with `operator`
+    fn condition(field: &Field, operator: &Operator) -> serde_json::Value {
+        let test = json!({ operator.name: value(field.name, operator.name) });
+        if field.named {
+            json!({ field.name: { "x-name": test } })
+        } else {
+            json!({ field.name: test })
+        }
+    }
+
     #[test]
     fn test_fields_take_exactly_their_operators() {
         for field in FIELDS {
             for operator in OPERATORS {
-                let test = json!({ operator.name: value(field.name, operator.name) });
-                let condition = if field.named {
-                    json!({ field.name: { "x-name": test } })
-                } else {
-                    json!({ field.name: test })
-                };
+                let condition = condition(field, operator);
                 let rule = Rule(json!({ "name": "a", "and": condition, "then": { "respond": {} } }));
 
                 let compiled = Rules::compile(&[rule]);

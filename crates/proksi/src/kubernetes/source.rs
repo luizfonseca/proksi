@@ -110,13 +110,7 @@ async fn watch(config: &KubernetesConfig, sender: &SnapshotSender) -> Result<(),
             certificates: wanted,
             invalid,
         } = hosts(&cluster, &config.ingress_class);
-        if invalid != reported {
-            for new in invalid.iter().filter(|invalid| !reported.contains(invalid)) {
-                tracing::warn!("ingress {}: {}", new.ingress, new.reason);
-                record(&recorder, &cluster, new).await;
-            }
-            reported = invalid;
-        }
+        report(&recorder, &cluster, invalid, &mut reported).await;
 
         // Before the hosts, so they're served with their certificate right away
         apply_certificates(&wanted, &mut certificates).await;
@@ -128,9 +122,11 @@ async fn watch(config: &KubernetesConfig, sender: &SnapshotSender) -> Result<(),
 
         if let Some(publish) = &config.publish_service {
             let served = of_class(&cluster, &config.ingress_class);
-            if let Err(err) = publish_status(&client, publish, &served).await {
-                tracing::warn!("kubernetes: failed to update the status of Ingresses: {err}");
-            }
+            publish_status(&client, publish, &served)
+                .await
+                .unwrap_or_else(|err| {
+                    tracing::warn!("kubernetes: failed to update the status of Ingresses: {err}");
+                });
         }
 
         // Also now and then, for a load balancer's address assigned later
@@ -178,6 +174,23 @@ async fn publish_status(
     Ok(())
 }
 
+/// Warns of the `Ingress`es that can't be served, once each (until they change)
+async fn report(
+    recorder: &Recorder,
+    cluster: &Cluster,
+    invalid: Vec<Invalid>,
+    reported: &mut Vec<Invalid>,
+) {
+    if invalid == *reported {
+        return;
+    }
+    for new in invalid.iter().filter(|invalid| !reported.contains(invalid)) {
+        tracing::warn!("ingress {}: {}", new.ingress, new.reason);
+        record(recorder, cluster, new).await;
+    }
+    *reported = invalid;
+}
+
 /// A warning `Event` on an `Ingress` that couldn't be served (`kubectl describe ingress`)
 async fn record(recorder: &Recorder, cluster: &Cluster, invalid: &Invalid) {
     let Some(ingress) = cluster.ingresses.iter().find(|ingress| {
@@ -215,19 +228,32 @@ async fn apply_certificates(
         if applied.get(&host) == Some(&version) {
             continue;
         }
-        match parse(&certificate.certificate, &certificate.key) {
-            Ok(parsed) => {
-                if let Err(err) = store.set_certificate(&host, parsed).await {
-                    tracing::warn!("failed to store the certificate for {host}: {err}");
-                    continue;
-                }
-                tracing::info!("certificate for {host} from secret {}", certificate.secret);
-            }
-            Err(err) => tracing::warn!("secret {} (for {host}): {err}", certificate.secret),
+        // Not tried again until the secret changes, unless it couldn't be stored
+        if apply_certificate(store, &host, certificate).await {
+            applied.insert(host, version);
         }
-        // Not retried until the secret changes
-        applied.insert(host, version);
     }
+}
+
+/// Puts a host's certificate in the store: `false` when the store failed (tried again)
+async fn apply_certificate(
+    store: &Arc<dyn crate::stores::store_trait::Store>,
+    host: &str,
+    certificate: &HostCertificate,
+) -> bool {
+    let parsed = match parse(&certificate.certificate, &certificate.key) {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            tracing::warn!("secret {} (for {host}): {err}", certificate.secret);
+            return true;
+        }
+    };
+    if let Err(err) = store.set_certificate(host, parsed).await {
+        tracing::warn!("failed to store the certificate for {host}: {err}");
+        return false;
+    }
+    tracing::info!("certificate for {host} from secret {}", certificate.secret);
+    true
 }
 
 /// The objects of a kind, kept up to date by watching them

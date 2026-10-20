@@ -66,21 +66,31 @@ async fn run_health_check_loop() {
                 .any(|(_, load_balancer)| Arc::as_ptr(load_balancer) as usize == *id)
         });
         for (host, load_balancer) in load_balancers {
-            let Some(frequency) = load_balancer.health_check_frequency else {
-                continue;
-            };
-            let last = checked_at.entry(Arc::as_ptr(&load_balancer) as usize);
-            let last = last.or_insert_with(Instant::now);
-            if last.elapsed() < frequency {
-                continue;
-            }
-            *last = Instant::now();
-            tracing::trace!("Running health check for host {}", host);
-            load_balancer.backends().run_health_check(false).await;
+            check_when_due(&host, &load_balancer, &mut checked_at).await;
         }
 
         record_health();
     }
+}
+
+/// Checks a load balancer's upstreams, if its interval passed since it was last checked
+async fn check_when_due(
+    host: &str,
+    load_balancer: &Arc<LoadBalancer<RoundRobin>>,
+    checked_at: &mut HashMap<usize, Instant>,
+) {
+    let Some(frequency) = load_balancer.health_check_frequency else {
+        return;
+    };
+    let last = checked_at
+        .entry(Arc::as_ptr(load_balancer) as usize)
+        .or_insert_with(Instant::now);
+    if last.elapsed() < frequency {
+        return;
+    }
+    *last = Instant::now();
+    tracing::trace!("Running health check for host {}", host);
+    load_balancer.backends().run_health_check(false).await;
 }
 
 /// Resolves upstream names again, replacing their addresses when they changed
@@ -102,14 +112,19 @@ async fn run_resolve_loop() {
 fn record_health() {
     for (_, host) in &stores::get_routes() {
         for location in &host.locations {
-            let Some(metrics) = &location.metrics else {
-                continue;
-            };
-            for (index, healthy) in location.upstream_health().into_iter().enumerate() {
-                if let Some(upstream) = metrics.upstream(index) {
-                    upstream.set_healthy(healthy);
-                }
-            }
+            record_location_health(location);
+        }
+    }
+}
+
+/// Sets the health of a location's upstreams
+fn record_location_health(location: &stores::routes::RouteStoreContainer) {
+    let Some(metrics) = &location.metrics else {
+        return;
+    };
+    for (index, healthy) in location.upstream_health().into_iter().enumerate() {
+        if let Some(upstream) = metrics.upstream(index) {
+            upstream.set_healthy(healthy);
         }
     }
 }

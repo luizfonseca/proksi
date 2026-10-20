@@ -59,22 +59,38 @@ fn client_hello(record: &[u8]) -> Option<Hello> {
     while let Some(kind) = extensions.u16() {
         let length = usize::from(extensions.u16()?);
         let data = extensions.take(length)?;
-        // server_name: a list of names, of which host_name (0) is the only kind
-        if kind == 0 {
-            let mut list = Reader(data);
-            let list_length = usize::from(list.u16()?);
-            let mut names = Reader(list.take(list_length)?);
-            while let Some(name_type) = names.u8() {
-                let name_length = usize::from(names.u16()?);
-                let name = names.take(name_length)?;
-                if name_type == 0 {
-                    let name = std::str::from_utf8(name).ok()?;
-                    return Some(Hello::ClientHello(Some(name.to_ascii_lowercase())));
-                }
-            }
+        // server_name
+        if kind != 0 {
+            continue;
+        }
+        if let ServerName::Host(name) = server_name(data)? {
+            return Some(Hello::ClientHello(Some(name)));
         }
     }
     Some(Hello::ClientHello(None))
+}
+
+/// What a `server_name` extension holds: a list of names, of which `host_name` (0) is the only
+/// kind
+enum ServerName {
+    Host(String),
+    Other,
+}
+
+/// The name of a `server_name` extension, or `None` when it's malformed
+fn server_name(data: &[u8]) -> Option<ServerName> {
+    let mut list = Reader(data);
+    let list_length = usize::from(list.u16()?);
+    let mut names = Reader(list.take(list_length)?);
+    while let Some(name_type) = names.u8() {
+        let name_length = usize::from(names.u16()?);
+        let name = names.take(name_length)?;
+        if name_type == 0 {
+            let name = std::str::from_utf8(name).ok()?;
+            return Some(ServerName::Host(name.to_ascii_lowercase()));
+        }
+    }
+    Some(ServerName::Other)
 }
 
 /// Reads big-endian numbers and slices, never past the end

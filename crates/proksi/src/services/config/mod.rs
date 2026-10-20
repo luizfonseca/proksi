@@ -156,42 +156,43 @@ impl Service for FileWatcherService {
         }
 
         // watch main config file:
-        if let Some(config_path) = &self.config.config_path {
-            tracing::info!("starting config watcher service");
+        let Some(config_path) = &self.config.config_path else {
+            // No config path provided, nothing to watch
+            tracing::info!("No config path provided, config watcher service not started");
+            return;
+        };
+        tracing::info!("starting config watcher service");
 
-            let handler = FileWatcherServiceHandler {
-                config: self.config.clone(),
-                config_path: config_path.to_string(),
-                sender: self.sender.clone(),
-            };
-            let Ok(mut watcher) = config_watcher(handler) else {
-                tracing::error!("could not create config watcher, auto_reload will not work");
-                return;
-            };
+        let handler = FileWatcherServiceHandler {
+            config: self.config.clone(),
+            config_path: config_path.to_string(),
+            sender: self.sender.clone(),
+        };
+        let Ok(mut watcher) = config_watcher(handler) else {
+            tracing::error!("could not create config watcher, auto_reload will not work");
+            return;
+        };
 
-            for config_file in config_files(Path::new(config_path.as_ref())) {
-                Self::watch_file_or_dir(&mut watcher, &config_file);
-            }
+        for config_file in config_files(Path::new(config_path.as_ref())) {
+            Self::watch_file_or_dir(&mut watcher, &config_file);
+        }
 
-            // Watch for paths in the config
-            for watch_path in &self.config.auto_reload.paths {
-                Self::watch_file_or_dir(&mut watcher, watch_path);
-            }
+        // Watch for paths in the config
+        for watch_path in &self.config.auto_reload.paths {
+            Self::watch_file_or_dir(&mut watcher, watch_path);
+        }
 
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(
-                self.config.auto_reload.interval_secs.unwrap_or(60),
-            ));
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+            self.config.auto_reload.interval_secs.unwrap_or(60),
+        ));
+        interval.tick().await;
+
+        loop {
             interval.tick().await;
-
-            loop {
-                interval.tick().await;
-                if watcher.poll().is_ok() {
-                    tracing::debug!("config watcher service tick");
-                }
+            if watcher.poll().is_ok() {
+                tracing::debug!("config watcher service tick");
             }
         }
-        // No config path provided, nothing to watch
-        tracing::info!("No config path provided, config watcher service not started");
     }
 
     fn name(&self) -> &'static str {

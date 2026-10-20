@@ -256,19 +256,26 @@ fn conditions(value: &Value) -> Result<Vec<Written<'_>>, String> {
             }
         }
         Value::Object(map) => {
-            for (key, value) in map {
-                let items: Vec<&Value> = match value {
-                    Value::Array(items) => items.iter().collect(),
-                    value => vec![value],
-                };
-                for item in items {
-                    found.extend(condition(key, item)?);
-                }
+            let items = map.iter().flat_map(|(key, value)| {
+                one_or_many(value)
+                    .into_iter()
+                    .map(move |item| (key.as_str(), item))
+            });
+            for (key, item) in items {
+                found.extend(condition(key, item)?);
             }
         }
         _ => return Err("must hold conditions".to_string()),
     }
     Ok(found)
+}
+
+/// The items of a list, or the value itself
+fn one_or_many(value: &Value) -> Vec<&Value> {
+    match value {
+        Value::Array(items) => items.iter().collect(),
+        value => vec![value],
+    }
 }
 
 fn condition<'a>(key: &'a str, value: &'a Value) -> Result<Vec<Written<'a>>, String> {
@@ -289,11 +296,7 @@ fn condition<'a>(key: &'a str, value: &'a Value) -> Result<Vec<Written<'a>>, Str
             };
             let mut found = vec![];
             for (name, test) in named {
-                let tests: Vec<&Value> = match test {
-                    Value::Array(tests) => tests.iter().collect(),
-                    test => vec![test],
-                };
-                found.extend(tests.into_iter().map(|test| Written::Field {
+                found.extend(one_or_many(test).into_iter().map(|test| Written::Field {
                     field: key,
                     name: Some(name),
                     test,
@@ -552,6 +555,19 @@ impl Builder {
     }
 }
 
+/// `exists`: for the fields a request can lack
+fn exists(field: &Field, value: &Value) -> Result<TextTest, String> {
+    if matches!(field, Field::Host | Field::Path) {
+        return Err(unsupported(
+            "host and path",
+            "all but `exists`: they're always there",
+        ));
+    }
+    Ok(TextTest::Exists(
+        value.as_bool().ok_or("must be true or false")?,
+    ))
+}
+
 /// What an operator checks, for a field
 fn parse_test(field: &Field, operator: &str, value: &Value) -> Result<Test, String> {
     let negate = matches!(operator, "neq" | "not_in");
@@ -605,15 +621,7 @@ fn parse_test(field: &Field, operator: &str, value: &Value) -> Result<Test, Stri
                     value.as_str().ok_or("must be a regular expression")?;
                     TextTest::Matches
                 }
-                "exists" => {
-                    if matches!(field, Field::Host | Field::Path) {
-                        return Err(unsupported(
-                            "host and path",
-                            "all but `exists`: they're always there",
-                        ));
-                    }
-                    TextTest::Exists(value.as_bool().ok_or("must be true or false")?)
-                }
+                "exists" => exists(field, value)?,
                 "gt" | "gte" | "lt" | "lte" => {
                     return Err("compares numbers, which this field isn't".to_string())
                 }

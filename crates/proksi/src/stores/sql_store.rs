@@ -192,6 +192,14 @@ where
     to_revision(row.try_get("value").map_err(invalid)?)
 }
 
+/// A stored certificate, unless it can't be read
+fn row_certificate(row: &sqlx::any::AnyRow) -> Option<(String, Certificate)> {
+    let domain = row.try_get::<String, _>("domain").ok()?;
+    let data = row.try_get::<String, _>("data").ok()?;
+    let certificate = serde_json::from_str::<SerializableCertificate>(&data).ok()?;
+    Some((domain, Certificate::from_serializable(certificate).ok()?))
+}
+
 #[async_trait]
 impl Store for SqlStore {
     async fn routes(&self) -> Result<RoutesSnapshot, StoreError> {
@@ -506,19 +514,8 @@ impl Store for SqlStore {
         match rows {
             Ok(rows) => {
                 let cache = self.cache.pin();
-                for row in rows {
-                    let (Ok(domain), Ok(data)) = (
-                        row.try_get::<String, _>("domain"),
-                        row.try_get::<String, _>("data"),
-                    ) else {
-                        continue;
-                    };
-                    let certificate = serde_json::from_str::<SerializableCertificate>(&data)
-                        .ok()
-                        .and_then(|cert| Certificate::from_serializable(cert).ok());
-                    if let Some(certificate) = certificate {
-                        cache.insert(domain, certificate);
-                    }
+                for (domain, certificate) in rows.iter().filter_map(row_certificate) {
+                    cache.insert(domain, certificate);
                 }
             }
             Err(err) => {

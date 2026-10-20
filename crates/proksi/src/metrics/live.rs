@@ -61,6 +61,18 @@ pub struct Sample {
     pub process: super::process::Reading,
 }
 
+impl Kept {
+    /// A reading, without what every reading of its series shares (histograms' bounds)
+    fn of(reading: &Reading) -> Self {
+        match reading {
+            Reading::Scalar(value) => Kept::Scalar(*value),
+            Reading::Histogram(buckets) => {
+                Kept::Histogram(buckets.iter().map(|(_, count)| *count).collect())
+            }
+        }
+    }
+}
+
 impl Sample {
     /// A sample of these readings, at `at`
     pub fn new(at: Instant, series: &[(Key, Reading)], process: super::process::Reading) -> Self {
@@ -73,12 +85,7 @@ impl Sample {
                 readings.resize(id + 1, Kept::Missing);
             }
             if let Some(slot) = readings.get_mut(id) {
-                *slot = match reading {
-                    Reading::Scalar(value) => Kept::Scalar(*value),
-                    Reading::Histogram(buckets) => {
-                        Kept::Histogram(buckets.iter().map(|(_, count)| *count).collect())
-                    }
-                };
+                *slot = Kept::of(reading);
             }
         }
         Self {
@@ -141,30 +148,38 @@ pub fn sample() -> Sample {
                 .collect::<Vec<_>>();
             labels.sort();
 
-            let reading = match family.get_field_type() {
-                prometheus::proto::MetricType::COUNTER => {
-                    Reading::Scalar(metric.get_counter().value())
-                }
-                prometheus::proto::MetricType::GAUGE => {
-                    Reading::Scalar(metric.get_gauge().value())
-                }
-                prometheus::proto::MetricType::HISTOGRAM => {
-                    let histogram = metric.get_histogram();
-                    let mut buckets = histogram
-                        .get_bucket()
-                        .iter()
-                        .map(|bucket| (bucket.upper_bound(), bucket.cumulative_count()))
-                        .collect::<Vec<_>>();
-                    // `+Inf` isn't listed: it's every observation
-                    buckets.push((f64::INFINITY, histogram.get_sample_count()));
-                    Reading::Histogram(buckets)
-                }
-                _ => continue,
+            let Some(reading) = reading_of(family.get_field_type(), metric) else {
+                continue;
             };
             series.push(((family.name().to_string(), labels), reading));
         }
     }
     Sample::new(Instant::now(), &series, super::process::read())
+}
+
+/// The reading of a metric of a counter, gauge or histogram family
+fn reading_of(
+    kind: prometheus::proto::MetricType,
+    metric: &prometheus::proto::Metric,
+) -> Option<Reading> {
+    match kind {
+        prometheus::proto::MetricType::COUNTER => {
+            Some(Reading::Scalar(metric.get_counter().value()))
+        }
+        prometheus::proto::MetricType::GAUGE => Some(Reading::Scalar(metric.get_gauge().value())),
+        prometheus::proto::MetricType::HISTOGRAM => {
+            let histogram = metric.get_histogram();
+            let mut buckets = histogram
+                .get_bucket()
+                .iter()
+                .map(|bucket| (bucket.upper_bound(), bucket.cumulative_count()))
+                .collect::<Vec<_>>();
+            // `+Inf` isn't listed: it's every observation
+            buckets.push((f64::INFINITY, histogram.get_sample_count()));
+            Some(Reading::Histogram(buckets))
+        }
+        _ => None,
+    }
 }
 
 /// Keeps a sample of the metrics, thinning out older ones
@@ -257,19 +272,25 @@ pub fn quantile(buckets: &[(f64, u64)], q: f64) -> Option<f64> {
     for &(upper, count) in buckets {
         #[allow(clippy::cast_precision_loss)]
         if count as f64 >= rank {
-            // Above the last finite bound, the last finite bound is all we know
-            if upper.is_infinite() {
-                return Some(lower.0);
-            }
-            let in_bucket = (count - lower.1) as f64;
-            if in_bucket == 0.0 {
-                return Some(upper);
-            }
-            return Some(lower.0 + (upper - lower.0) * (rank - lower.1 as f64) / in_bucket);
+            return Some(within(lower, (upper, count), rank));
         }
         lower = (upper, count);
     }
     Some(lower.0)
+}
+
+/// The value of `rank` in the bucket from `lower` to `upper` (bound, cumulative count)
+#[allow(clippy::cast_precision_loss)]
+fn within(lower: (f64, u64), upper: (f64, u64), rank: f64) -> f64 {
+    // Above the last finite bound, the last finite bound is all we know
+    if upper.0.is_infinite() {
+        return lower.0;
+    }
+    let in_bucket = (upper.1 - lower.1) as f64;
+    if in_bucket == 0.0 {
+        return upper.0;
+    }
+    lower.0 + (upper.0 - lower.0) * (rank - lower.1 as f64) / in_bucket
 }
 
 /// Stats between `earlier` and `latest`, grouped by host, location and upstream, and by `tcp`
@@ -326,86 +347,107 @@ fn collect(earlier: &Sample, latest: &Sample) -> (Hosts, BTreeMap<String, Tcp>) 
             .readings
             .get(id)
             .and_then(|kept| known.reading(id, kept));
-        let label = |label: &str| {
-            labels
-                .iter()
-                .find(|(name, _)| name == label)
-                .map_or("", |(_, value)| value.as_str())
-        };
-        let delta = || match (reading, before.as_ref()) {
-            (Reading::Scalar(latest), Some(Reading::Scalar(earlier))) => {
-                (latest - earlier).max(0.0)
-            }
-            (Reading::Scalar(latest), _) => *latest,
-            (Reading::Histogram(_), _) => 0.0,
-        };
-        let histogram = || match (reading, before.as_ref()) {
-            (Reading::Histogram(latest), Some(Reading::Histogram(earlier))) => latest
-                .iter()
-                .zip(earlier)
-                .map(|((bound, latest), (_, earlier))| (*bound, latest.saturating_sub(*earlier)))
-                .collect(),
-            (Reading::Histogram(latest), _) => latest.clone(),
-            (Reading::Scalar(_), _) => vec![],
-        };
-        let (host, path) = (label("host"), label("location"));
-
-        match name.as_str() {
-            "proksi_requests_total" => {
-                let location = location_mut(&mut hosts, host, path);
-                let delta = delta();
-                location.requests += delta;
-                if delta > 0.0 {
-                    location.responses.insert(label("status").to_string(), delta);
-                }
-            }
-            "proksi_request_duration_seconds" => {
-                location_mut(&mut hosts, host, path).duration = histogram();
-            }
-            "proksi_blocked_requests_total" => {
-                let delta = delta();
-                if delta > 0.0 {
-                    location_mut(&mut hosts, host, path)
-                        .blocked
-                        .insert(label("block").to_string(), delta);
-                }
-            }
-            "proksi_upstream_duration_seconds" => {
-                upstream_mut(&mut hosts, host, path, label("upstream")).duration = histogram();
-            }
-            "proksi_upstream_errors_total" => {
-                upstream_mut(&mut hosts, host, path, label("upstream")).errors = delta();
-            }
-            "proksi_upstream_healthy" => {
-                upstream_mut(&mut hosts, host, path, label("upstream")).healthy =
-                    matches!(reading, Reading::Scalar(value) if *value > 0.0);
-            }
-            "proksi_tcp_connections_total" => {
-                tcp.entry(label("block").to_string()).or_default().connections = delta();
-            }
-            "proksi_tcp_connections_active" => {
-                if let Reading::Scalar(active) = reading {
-                    tcp.entry(label("block").to_string()).or_default().active = *active;
-                }
-            }
-            "proksi_tcp_bytes_total" => {
-                let block = tcp.entry(label("block").to_string()).or_default();
-                if label("direction") == "in" {
-                    block.bytes_in = delta();
-                } else {
-                    block.bytes_out = delta();
-                }
-            }
-            "proksi_tcp_upstream_errors_total" => {
-                tcp.entry(label("block").to_string()).or_default().upstream_errors = delta();
-            }
-            "proksi_tcp_connection_duration_seconds" => {
-                tcp.entry(label("block").to_string()).or_default().duration = histogram();
-            }
-            _ => {}
-        }
+        add_reading(
+            &mut hosts,
+            &mut tcp,
+            (name, labels),
+            reading,
+            before.as_ref(),
+        );
     }
     (hosts, tcp)
+}
+
+/// A series' change between the samples, on its location, upstream or `tcp` block
+fn add_reading(
+    hosts: &mut Hosts,
+    tcp: &mut BTreeMap<String, Tcp>,
+    (name, labels): (&str, &[(String, String)]),
+    reading: &Reading,
+    before: Option<&Reading>,
+) {
+    let label = |label: &str| {
+        labels
+            .iter()
+            .find(|(name, _)| name == label)
+            .map_or("", |(_, value)| value.as_str())
+    };
+    let delta = || match (reading, before.as_ref()) {
+        (Reading::Scalar(latest), Some(Reading::Scalar(earlier))) => (latest - earlier).max(0.0),
+        (Reading::Scalar(latest), _) => *latest,
+        (Reading::Histogram(_), _) => 0.0,
+    };
+    let histogram = || match (reading, before.as_ref()) {
+        (Reading::Histogram(latest), Some(Reading::Histogram(earlier))) => latest
+            .iter()
+            .zip(earlier)
+            .map(|((bound, latest), (_, earlier))| (*bound, latest.saturating_sub(*earlier)))
+            .collect(),
+        (Reading::Histogram(latest), _) => latest.clone(),
+        (Reading::Scalar(_), _) => vec![],
+    };
+    let (host, path) = (label("host"), label("location"));
+
+    match name {
+        "proksi_requests_total" => {
+            let location = location_mut(hosts, host, path);
+            let delta = delta();
+            location.requests += delta;
+            if delta > 0.0 {
+                location
+                    .responses
+                    .insert(label("status").to_string(), delta);
+            }
+        }
+        "proksi_request_duration_seconds" => {
+            location_mut(hosts, host, path).duration = histogram();
+        }
+        "proksi_blocked_requests_total" => {
+            let delta = delta();
+            if delta > 0.0 {
+                location_mut(hosts, host, path)
+                    .blocked
+                    .insert(label("block").to_string(), delta);
+            }
+        }
+        "proksi_upstream_duration_seconds" => {
+            upstream_mut(hosts, host, path, label("upstream")).duration = histogram();
+        }
+        "proksi_upstream_errors_total" => {
+            upstream_mut(hosts, host, path, label("upstream")).errors = delta();
+        }
+        "proksi_upstream_healthy" => {
+            upstream_mut(hosts, host, path, label("upstream")).healthy =
+                matches!(reading, Reading::Scalar(value) if *value > 0.0);
+        }
+        "proksi_tcp_connections_total" => {
+            tcp.entry(label("block").to_string())
+                .or_default()
+                .connections = delta();
+        }
+        "proksi_tcp_connections_active" => {
+            if let Reading::Scalar(active) = reading {
+                tcp.entry(label("block").to_string()).or_default().active = *active;
+            }
+        }
+        "proksi_tcp_bytes_total" => {
+            let block = tcp.entry(label("block").to_string()).or_default();
+            if label("direction") == "in" {
+                block.bytes_in = delta();
+            } else {
+                block.bytes_out = delta();
+            }
+        }
+        "proksi_tcp_upstream_errors_total" => {
+            tcp.entry(label("block").to_string())
+                .or_default()
+                .upstream_errors = delta();
+        }
+        "proksi_tcp_connection_duration_seconds" => {
+            tcp.entry(label("block").to_string()).or_default().duration = histogram();
+        }
+        _ => {}
+    }
 }
 
 fn render(window: f64, hosts: Hosts, tcp: BTreeMap<String, Tcp>) -> Value {

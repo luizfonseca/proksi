@@ -223,47 +223,57 @@ mod tests {
             for (fence, file) in [("```hcl\n", "proksi.hcl"), ("```yaml\n", "proksi.yaml")] {
                 for example in readme.split(fence).skip(1) {
                     let example = example.split("```").next().unwrap_or_default();
-                    // A Docker Compose file, not proksi's
-                    if example.starts_with("services:") {
-                        continue;
-                    }
-                    for variable in example.split("env(\"").skip(1) {
-                        let name = variable.split('"').next().unwrap_or_default();
-                        jail.set_env(name, "secret");
-                    }
-                    let first = example.lines().next().unwrap_or_default();
-                    if let Some(path) = first.strip_prefix("# file: ") {
-                        if let Some((dir, _)) = path.rsplit_once('/') {
-                            jail.create_dir(dir)?;
-                        }
-                        jail.create_file(path, example)?;
-                        continue;
-                    }
-
-                    // A `location` outside a `host` would be ignored, not loaded
-                    let value: Result<serde_json::Value, String> = if file.ends_with(".hcl") {
-                        crate::config::hcl::HclFormat::from_str(example).map_err(|e| e.to_string())
-                    } else {
-                        figment::providers::Yaml::from_str(example).map_err(|e| e.to_string())
-                    };
-                    let value = value.unwrap_or_else(|err| panic!("{err}\n{example}"));
-                    for key in value.as_object().into_iter().flat_map(|map| map.keys()) {
-                        assert!(
-                            SETTINGS.contains(&key.as_str()),
-                            "`{key}` isn't a setting\n{example}"
-                        );
-                    }
-
-                    jail.create_file(file, example)?;
-                    let config = crate::config::load_for_test(file)
-                        .unwrap_or_else(|err| panic!("{err}\n{example}"));
-                    check_config(&config).unwrap_or_else(|err| panic!("{err}\n{example}"));
-                    count += 1;
+                    count += usize::from(readme_example(jail, example, file)?);
                 }
             }
             assert!(count >= 15, "{count} examples");
             Ok(())
         });
+    }
+
+    /// Loads an example of the README as `file`: `false` for one that isn't loaded itself (a
+    /// Docker Compose file, a file another example imports)
+    fn readme_example(
+        jail: &mut figment::Jail,
+        example: &str,
+        file: &str,
+    ) -> figment::error::Result<bool> {
+        // A Docker Compose file, not proksi's
+        if example.starts_with("services:") {
+            return Ok(false);
+        }
+        for variable in example.split("env(\"").skip(1) {
+            let name = variable.split('"').next().unwrap_or_default();
+            jail.set_env(name, "secret");
+        }
+        let first = example.lines().next().unwrap_or_default();
+        if let Some(path) = first.strip_prefix("# file: ") {
+            if let Some((dir, _)) = path.rsplit_once('/') {
+                jail.create_dir(dir)?;
+            }
+            jail.create_file(path, example)?;
+            return Ok(false);
+        }
+
+        // A `location` outside a `host` would be ignored, not loaded
+        let value: Result<serde_json::Value, String> = if file.ends_with(".hcl") {
+            crate::config::hcl::HclFormat::from_str(example).map_err(|e| e.to_string())
+        } else {
+            figment::providers::Yaml::from_str(example).map_err(|e| e.to_string())
+        };
+        let value = value.unwrap_or_else(|err| panic!("{err}\n{example}"));
+        for key in value.as_object().into_iter().flat_map(|map| map.keys()) {
+            assert!(
+                SETTINGS.contains(&key.as_str()),
+                "`{key}` isn't a setting\n{example}"
+            );
+        }
+
+        jail.create_file(file, example)?;
+        let config =
+            crate::config::load_for_test(file).unwrap_or_else(|err| panic!("{err}\n{example}"));
+        check_config(&config).unwrap_or_else(|err| panic!("{err}\n{example}"));
+        Ok(true)
     }
 
     #[test]

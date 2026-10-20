@@ -337,15 +337,20 @@ mod tests {
         match value {
             serde_json::Value::Object(map) => {
                 for (key, value) in map {
-                    if key == "rule" {
-                        found.push(one_or_many(value.clone()).unwrap());
-                    } else {
-                        rules(value, found);
-                    }
+                    rules_at(key, value, found);
                 }
             }
             serde_json::Value::Array(items) => items.iter().for_each(|item| rules(item, found)),
             _ => {}
+        }
+    }
+
+    /// The rules of `key`, or the ones within it
+    fn rules_at(key: &str, value: &serde_json::Value, found: &mut Vec<Vec<super::Rule>>) {
+        if key == "rule" {
+            found.push(one_or_many(value.clone()).unwrap());
+        } else {
+            rules(value, found);
         }
     }
 

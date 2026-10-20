@@ -77,15 +77,55 @@ type Locations = BTreeMap<(String, bool), (Location, String)>;
 pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
     let ingresses = of_class(cluster, class);
 
-    // Locations by host, with the `Ingress` defining each path, and whether the host has TLS
-    // (as set by the oldest `Ingress` of the host)
-    let mut hosts: BTreeMap<String, Locations> = BTreeMap::new();
-    let mut tls: BTreeMap<String, bool> = BTreeMap::new();
-    // The certificate of each host, from the oldest `Ingress` listing it
-    let mut certificates: BTreeMap<String, HostCertificate> = BTreeMap::new();
-    let mut invalid = vec![];
-
+    let mut collected = Collected::default();
     for ingress in ingresses {
+        collected.add(cluster, ingress);
+    }
+    let Collected {
+        hosts,
+        tls,
+        certificates,
+        invalid,
+    } = collected;
+
+    let hosts = hosts
+        .into_iter()
+        .map(|(name, locations)| Host {
+            listen: vec![],
+            rules: vec![],
+            tls: HostTls {
+                enabled: tls.get(&name).copied().unwrap_or(true),
+                ..HostTls::default()
+            },
+            locations: locations
+                .into_values()
+                .map(|(location, _)| location)
+                .collect(),
+            name,
+        })
+        .collect();
+    Converted {
+        hosts,
+        certificates: certificates.into_values().collect(),
+        invalid,
+    }
+}
+
+/// What the `Ingress`es add up to, oldest first
+#[derive(Default)]
+struct Collected {
+    /// Locations by host, with the `Ingress` defining each path
+    hosts: BTreeMap<String, Locations>,
+    /// Whether each host has TLS (as set by the oldest `Ingress` of the host)
+    tls: BTreeMap<String, bool>,
+    /// The certificate of each host, from the oldest `Ingress` listing it
+    certificates: BTreeMap<String, HostCertificate>,
+    invalid: Vec<Invalid>,
+}
+
+impl Collected {
+    /// The paths of an `Ingress`, unless an older one defined them
+    fn add(&mut self, cluster: &Cluster, ingress: &Ingress) {
         let namespace = ingress.metadata.namespace.clone().unwrap_or_default();
         let id = format!(
             "{namespace}/{}",
@@ -97,17 +137,23 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
         let blocks = match blocks(cluster, ingress, &namespace) {
             Ok(blocks) => blocks,
             Err(reason) => {
-                invalid.push(Invalid { ingress: id, reason });
-                continue;
+                self.invalid.push(Invalid { ingress: id, reason });
+                return;
             }
         };
 
-        tls_certificates(cluster, ingress, &id, &mut certificates, &mut invalid);
+        tls_certificates(
+            cluster,
+            ingress,
+            &id,
+            &mut self.certificates,
+            &mut self.invalid,
+        );
 
         for (host, path, exact, backend) in paths(ingress) {
-            tls.entry(host.clone()).or_insert(!plain);
+            self.tls.entry(host.clone()).or_insert(!plain);
             let Some(service) = &backend.service else {
-                invalid.push(Invalid {
+                self.invalid.push(Invalid {
                     ingress: id.clone(),
                     reason: format!(
                         "path {path} of host {host}: only service backends are supported"
@@ -116,9 +162,9 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
                 continue;
             };
 
-            let locations = hosts.entry(host.clone()).or_default();
+            let locations = self.hosts.entry(host.clone()).or_default();
             if let Some((_, owner)) = locations.get(&(path.clone(), exact)) {
-                invalid.push(Invalid {
+                self.invalid.push(Invalid {
                     ingress: id.clone(),
                     reason: format!("path {path} of host {host} is already defined by {owner}"),
                 });
@@ -144,28 +190,6 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
             };
             locations.insert((path, exact), (location, id.clone()));
         }
-    }
-
-    let hosts = hosts
-        .into_iter()
-        .map(|(name, locations)| Host {
-            listen: vec![],
-            rules: vec![],
-            tls: HostTls {
-                enabled: tls.get(&name).copied().unwrap_or(true),
-                ..HostTls::default()
-            },
-            locations: locations
-                .into_values()
-                .map(|(location, _)| location)
-                .collect(),
-            name,
-        })
-        .collect();
-    Converted {
-        hosts,
-        certificates: certificates.into_values().collect(),
-        invalid,
     }
 }
 
@@ -226,29 +250,53 @@ fn tls_certificates(
         let Some(name) = &entry.secret_name else {
             continue;
         };
-        let secret = format!("{namespace}/{name}");
-        for host in entry.hosts.iter().flatten() {
-            if certificates.contains_key(host) {
-                continue;
+        let hosts = entry.hosts.iter().flatten();
+        let secret = TlsSecret {
+            cluster,
+            namespace: &namespace,
+            name,
+        };
+        secret_certificates(&secret, hosts, id, certificates, invalid);
+    }
+}
+
+/// A TLS `Secret` of an `Ingress`
+struct TlsSecret<'a> {
+    cluster: &'a Cluster,
+    namespace: &'a str,
+    name: &'a str,
+}
+
+/// The certificate of a TLS `Secret`, for its `hosts` that don't have one yet
+fn secret_certificates<'a>(
+    secret: &TlsSecret<'_>,
+    hosts: impl Iterator<Item = &'a String>,
+    id: &str,
+    certificates: &mut BTreeMap<String, HostCertificate>,
+    invalid: &mut Vec<Invalid>,
+) {
+    let path = format!("{}/{}", secret.namespace, secret.name);
+    for host in hosts {
+        if certificates.contains_key(host) {
+            continue;
+        }
+        match tls_secret(secret.cluster, secret.namespace, secret.name) {
+            Some((version, certificate, key)) => {
+                certificates.insert(
+                    host.clone(),
+                    HostCertificate {
+                        host: host.clone(),
+                        secret: path.clone(),
+                        version,
+                        certificate,
+                        key,
+                    },
+                );
             }
-            match tls_secret(cluster, &namespace, name) {
-                Some((version, certificate, key)) => {
-                    certificates.insert(
-                        host.clone(),
-                        HostCertificate {
-                            host: host.clone(),
-                            secret: secret.clone(),
-                            version,
-                            certificate,
-                            key,
-                        },
-                    );
-                }
-                None => invalid.push(Invalid {
-                    ingress: id.to_string(),
-                    reason: format!("TLS secret {secret} (for {host}) not found"),
-                }),
-            }
+            None => invalid.push(Invalid {
+                ingress: id.to_string(),
+                reason: format!("TLS secret {path} (for {host}) not found"),
+            }),
         }
     }
 }
@@ -282,22 +330,27 @@ fn blocks(cluster: &Cluster, ingress: &Ingress, namespace: &str) -> Result<Optio
             .ok_or_else(|| {
                 format!("auth secret {namespace}/{name} not found (it needs the label {AUTH_LABEL})")
             })?;
-        let auth = location
-            .plugins
-            .iter_mut()
-            .flatten()
-            .filter(|plugin| plugin.name == "basic_auth" || plugin.name == "oauth2");
-        for plugin in auth {
-            let config = plugin.config.get_or_insert_with(Default::default);
-            for (key, value) in data {
-                let value = String::from_utf8_lossy(&value.0).into_owned();
-                config
-                    .entry(key.clone().into())
-                    .or_insert(serde_json::Value::String(value));
-            }
-        }
+        add_auth_settings(&mut location, data);
     }
     Ok(Some(location))
+}
+
+/// The settings of an auth secret, in the location's `basic_auth` and `oauth2` (theirs win)
+fn add_auth_settings(location: &mut Location, data: &BTreeMap<String, k8s_openapi::ByteString>) {
+    let auth = location
+        .plugins
+        .iter_mut()
+        .flatten()
+        .filter(|plugin| plugin.name == "basic_auth" || plugin.name == "oauth2");
+    for plugin in auth {
+        let config = plugin.config.get_or_insert_with(Default::default);
+        for (key, value) in data {
+            let value = String::from_utf8_lossy(&value.0).into_owned();
+            config
+                .entry(key.clone().into())
+                .or_insert(serde_json::Value::String(value));
+        }
+    }
 }
 
 fn annotation<'a>(ingress: &'a Ingress, name: &str) -> Option<&'a str> {
@@ -344,15 +397,19 @@ fn paths(ingress: &Ingress) -> Vec<(String, String, bool, &IngressBackend)> {
             .unwrap_or_else(|| "*".to_string());
         for path in rule.http.iter().flat_map(|http| &http.paths) {
             let exact = path.path_type == "Exact";
-            let mut value = path.path.clone().unwrap_or_else(|| "/".to_string());
-            // `Prefix` ignores a trailing slash (`/api/` is `/api`)
-            if path.path_type == "Prefix" && value.len() > 1 {
-                value = value.trim_end_matches('/').to_string();
-            }
-            paths.push((host.clone(), value, exact, &path.backend));
+            paths.push((host.clone(), path_of(path), exact, &path.backend));
         }
     }
     paths
+}
+
+/// The path of an `Ingress` path: `Prefix` ignores a trailing slash (`/api/` is `/api`)
+fn path_of(path: &k8s_openapi::api::networking::v1::HTTPIngressPath) -> String {
+    let value = path.path.clone().unwrap_or_else(|| "/".to_string());
+    if path.path_type == "Prefix" && value.len() > 1 {
+        return value.trim_end_matches('/').to_string();
+    }
+    value
 }
 
 /// The ready endpoints of a service's port, in `namespace` (none if it doesn't exist)
@@ -426,32 +483,33 @@ fn upstreams(
         else {
             continue;
         };
-        for endpoint in &slice.endpoints {
+        let ready = slice.endpoints.iter().filter(|endpoint| {
             // Ready unless said otherwise
-            let ready = endpoint
+            endpoint
                 .conditions
                 .as_ref()
                 .and_then(|conditions| conditions.ready)
-                .unwrap_or(true);
-            if !ready {
-                continue;
-            }
-            for address in &endpoint.addresses {
-                let ip = if address.contains(':') {
-                    format!("[{address}]")
-                } else {
-                    address.clone()
-                };
-                upstreams.push(RouteUpstream {
-                    ip: ip.into(),
-                    port: target,
-                    name: Some(name.clone()),
-                    ..RouteUpstream::default()
-                });
-            }
+                .unwrap_or(true)
+        });
+        for address in ready.flat_map(|endpoint| &endpoint.addresses) {
+            upstreams.push(RouteUpstream {
+                ip: upstream_ip(address).into(),
+                port: target,
+                name: Some(name.clone()),
+                ..RouteUpstream::default()
+            });
         }
     }
     upstreams
+}
+
+/// An endpoint's address as an upstream's: IPv6 in brackets
+fn upstream_ip(address: &str) -> String {
+    if address.contains(':') {
+        format!("[{address}]")
+    } else {
+        address.to_string()
+    }
 }
 
 #[cfg(test)]

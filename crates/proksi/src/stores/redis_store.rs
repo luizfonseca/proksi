@@ -98,6 +98,13 @@ impl RedisStore {
     }
 }
 
+/// The certificate stored at `key`, unless it can't be read
+fn stored_certificate(connection: &mut impl redis::Commands, key: &str) -> Option<Certificate> {
+    let data = connection.get::<_, String>(key).ok()?;
+    let certificate = serde_json::from_str::<SerializableCertificate>(&data).ok()?;
+    Certificate::from_serializable(certificate).ok()
+}
+
 #[async_trait]
 impl Store for RedisStore {
     async fn routes(&self) -> Result<RoutesSnapshot, StoreError> {
@@ -356,28 +363,20 @@ impl Store for RedisStore {
         let keys = conn_guard
             .scan_match::<_, String>(&pattern)
             .and_then(Iterator::collect::<Result<Vec<_>, _>>);
-        if let Ok(keys) = keys {
-            for key in keys {
-                if let Some(domain) = key.strip_prefix("proksi:cert:") {
-                    let domain = domain.to_string();
-                    // Skip if we already have it from cache
-                    if TEMP_MAP.pin().contains_key(&domain) {
-                        continue;
-                    }
-
-                    if let Ok(cert_data) = conn_guard.get::<_, String>(&key) {
-                        if let Ok(serializable_cert) =
-                            serde_json::from_str::<SerializableCertificate>(&cert_data)
-                        {
-                            if let Ok(cert) = Certificate::from_serializable(serializable_cert) {
-                                TEMP_MAP.pin().insert(domain.clone(), cert.clone());
-                                // Update cache with newly found certificate
-                                self.cache.pin().insert(domain, cert);
-                            }
-                        }
-                    }
-                }
+        for key in keys.unwrap_or_default() {
+            let Some(domain) = key.strip_prefix("proksi:cert:") else {
+                continue;
+            };
+            // Skip if we already have it from cache
+            if TEMP_MAP.pin().contains_key(domain) {
+                continue;
             }
+            let Some(cert) = stored_certificate(&mut *conn_guard, &key) else {
+                continue;
+            };
+            TEMP_MAP.pin().insert(domain.to_string(), cert.clone());
+            // Update cache with newly found certificate
+            self.cache.pin().insert(domain.to_string(), cert);
         }
 
         TEMP_MAP.pin()

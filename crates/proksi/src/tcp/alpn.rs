@@ -22,14 +22,16 @@ impl AlpnProtocols {
     pub fn new<'a>(targets: impl IntoIterator<Item = &'a TcpTarget>) -> Self {
         let mut by_host: HashMap<String, Vec<String>> = HashMap::new();
         for target in targets {
-            if let (TcpTls::Terminate, Some(host)) = (target.tls, &target.host) {
-                if !target.alpn.is_empty() {
-                    by_host
-                        .entry(host.to_lowercase())
-                        .or_default()
-                        .extend(target.alpn.iter().cloned());
-                }
+            let (TcpTls::Terminate, Some(host)) = (target.tls, &target.host) else {
+                continue;
+            };
+            if target.alpn.is_empty() {
+                continue;
             }
+            by_host
+                .entry(host.to_lowercase())
+                .or_default()
+                .extend(target.alpn.iter().cloned());
         }
         Self { by_host }
     }

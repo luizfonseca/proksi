@@ -80,20 +80,21 @@ pub(super) fn evaluate(group: &Group, request: &impl Request, mut set: impl FnMu
         Field::Method => {
             let method = request.method();
             for (index, test) in &group.tests {
-                if let Test::Method { methods, negate } = test {
-                    set(*index, methods.contains(method) != *negate);
-                }
+                let Test::Method { methods, negate } = test else {
+                    continue;
+                };
+                set(*index, methods.contains(method) != *negate);
             }
         }
         Field::Client => {
             let client = client(request);
             for (index, test) in &group.tests {
-                if let Test::Client { networks, negate } = test {
-                    let listed = client.is_some_and(|client| {
-                        networks.iter().any(|network| network.contains(client))
-                    });
-                    set(*index, listed != *negate);
-                }
+                let Test::Client { networks, negate } = test else {
+                    continue;
+                };
+                let listed = client
+                    .is_some_and(|client| networks.iter().any(|network| network.contains(client)));
+                set(*index, listed != *negate);
             }
         }
         Field::Host => {
@@ -186,23 +187,26 @@ fn decode(text: &str) -> Cow<'_, str> {
         rest = tail;
         match byte {
             b'+' => decoded.push(b' '),
-            b'%' => {
-                let hex = rest
-                    .get(..2)
-                    .and_then(|hex| std::str::from_utf8(hex).ok())
-                    .and_then(|hex| u8::from_str_radix(hex, 16).ok());
-                match hex {
-                    Some(byte) => {
-                        decoded.push(byte);
-                        rest = rest.get(2..).unwrap_or_default();
-                    }
-                    None => decoded.push(b'%'),
-                }
-            }
+            b'%' => decode_percent(&mut rest, &mut decoded),
             byte => decoded.push(byte),
         }
     }
     Cow::Owned(String::from_utf8_lossy(&decoded).into_owned())
+}
+
+/// After a `%`: the byte of the two hex digits in `rest` (taken), or the `%` itself
+fn decode_percent(rest: &mut &[u8], decoded: &mut Vec<u8>) {
+    let hex = rest
+        .get(..2)
+        .and_then(|hex| std::str::from_utf8(hex).ok())
+        .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+    match hex {
+        Some(byte) => {
+            decoded.push(byte);
+            *rest = rest.get(2..).unwrap_or_default();
+        }
+        None => decoded.push(b'%'),
+    }
 }
 
 /// The value of cookie `name` in a `Cookie` header

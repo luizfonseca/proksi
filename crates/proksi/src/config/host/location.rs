@@ -165,6 +165,16 @@ pub struct PathRewrite {
 /// Compiled patterns are limited, as they can come from a store anyone with access writes to
 const PATTERN_SIZE_LIMIT: usize = 1 << 20;
 
+/// `strip_prefix` and `add_prefix` are paths
+fn check_prefix(name: &str, prefix: &str) -> Result<(), String> {
+    if !prefix.starts_with('/') || prefix.contains(['?', '#']) {
+        return Err(format!(
+            "`{name}` must be a path starting with `/`, not {prefix:?}"
+        ));
+    }
+    Ok(())
+}
+
 impl PathRewrite {
     /// Checks the settings and compiles the pattern, once (when the location is built)
     pub fn compile(&self) -> Result<CompiledRewrite, String> {
@@ -173,11 +183,7 @@ impl PathRewrite {
             ("add_prefix", &self.add_prefix),
         ] {
             if let Some(prefix) = prefix {
-                if !prefix.starts_with('/') || prefix.contains(['?', '#']) {
-                    return Err(format!(
-                        "`{name}` must be a path starting with `/`, not {prefix:?}"
-                    ));
-                }
+                check_prefix(name, prefix)?;
             }
         }
         let prefixes = self.strip_prefix.is_some() || self.add_prefix.is_some();
@@ -219,6 +225,15 @@ pub struct CompiledRewrite {
     pattern: Option<regex::Regex>,
 }
 
+/// `path` without `prefix`, removed at a segment boundary only (`/api` from `/api/users`, not
+/// from `/apis`)
+fn strip_segments<'a>(path: &'a str, prefix: &str) -> &'a str {
+    match path.strip_prefix(prefix) {
+        Some(rest) if rest.is_empty() || rest.starts_with('/') => rest,
+        _ => path,
+    }
+}
+
 impl CompiledRewrite {
     /// The path (and query) sent to upstreams for `path` and `query`
     pub fn apply(&self, path: &str, query: Option<&str>) -> String {
@@ -248,11 +263,7 @@ impl CompiledRewrite {
             .as_deref()
             .map(|p| p.trim_end_matches('/'))
         {
-            if let Some(rest) = path.strip_prefix(prefix) {
-                if rest.is_empty() || rest.starts_with('/') {
-                    path = rest;
-                }
-            }
+            path = strip_segments(path, prefix);
         }
         match self
             .settings

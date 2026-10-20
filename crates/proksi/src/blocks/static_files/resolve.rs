@@ -68,15 +68,21 @@ pub fn find(directory: &Path, segments: &[String], index: &[String]) -> Found {
         return Found::File(path);
     }
     if file_type.is_dir() {
-        for name in index {
-            if let Some((file, kind)) = entry(directory, path.join(name)) {
-                if kind.is_file() {
-                    return Found::File(file);
-                }
-            }
-        }
+        return index_file(directory, &path, index);
     }
     Found::Missing
+}
+
+/// The first of `index` that's a file in the directory at `path`
+fn index_file(directory: &Path, path: &Path, index: &[String]) -> Found {
+    index
+        .iter()
+        .find_map(|name| {
+            entry(directory, path.join(name))
+                .filter(|(_, kind)| kind.is_file())
+                .map(|(file, _)| file)
+        })
+        .map_or(Found::Missing, Found::File)
 }
 
 /// `path` and what it is, a symlink resolved, if it's in `directory`

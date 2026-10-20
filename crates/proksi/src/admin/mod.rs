@@ -394,15 +394,7 @@ async fn read_body(session: &mut ServerSession) -> Result<Vec<u8>, Reply> {
     let mut body = vec![];
     loop {
         match session.read_request_body().await {
-            Ok(Some(chunk)) => {
-                if body.len() + chunk.len() > MAX_BODY {
-                    return Err(Reply::error(
-                        StatusCode::PAYLOAD_TOO_LARGE,
-                        "the body is larger than 1 MiB",
-                    ));
-                }
-                body.extend_from_slice(&chunk);
-            }
+            Ok(Some(chunk)) => append_body(&mut body, &chunk)?,
             Ok(None) => return Ok(body),
             Err(err) => {
                 return Err(Reply::error(
@@ -412,6 +404,18 @@ async fn read_body(session: &mut ServerSession) -> Result<Vec<u8>, Reply> {
             }
         }
     }
+}
+
+/// Adds a part of the request body, unless the body grows over `MAX_BODY`
+fn append_body(body: &mut Vec<u8>, chunk: &[u8]) -> Result<(), Reply> {
+    if body.len() + chunk.len() > MAX_BODY {
+        return Err(Reply::error(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "the body is larger than 1 MiB",
+        ));
+    }
+    body.extend_from_slice(chunk);
+    Ok(())
 }
 
 /// Writes a whole reply; returns whether it was written

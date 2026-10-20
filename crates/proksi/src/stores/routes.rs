@@ -105,13 +105,7 @@ impl RouteStoreContainer {
     pub fn upstream_health(&self) -> Vec<bool> {
         let mut healthy = vec![false; self.upstreams.len()];
         for load_balancer in self.load_balancers() {
-            let backends = load_balancer.backends();
-            for backend in backends.get_backend().iter() {
-                if let Some(slot) = upstream_index(backend).and_then(|index| healthy.get_mut(index))
-                {
-                    *slot |= backends.ready(backend);
-                }
-            }
+            mark_healthy(&mut healthy, load_balancer);
         }
         healthy
     }
@@ -141,6 +135,16 @@ impl RouteStoreContainer {
     pub fn upstream(&self, backend: &Backend) -> Option<(usize, &RouteUpstream)> {
         let index = upstream_index(backend)?;
         Some((index, self.upstreams.get(index)?))
+    }
+}
+
+/// Marks the upstreams with a healthy address in `load_balancer`
+fn mark_healthy(healthy: &mut [bool], load_balancer: &LoadBalancer<RoundRobin>) {
+    let backends = load_balancer.backends();
+    for backend in backends.get_backend().iter() {
+        if let Some(slot) = upstream_index(backend).and_then(|index| healthy.get_mut(index)) {
+            *slot |= backends.ready(backend);
+        }
     }
 }
 
