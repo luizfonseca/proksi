@@ -68,6 +68,13 @@ pub struct RouterContext {
     pub mirror_rule: Option<bool>,
     /// The copy of the request for the location's mirror
     pub mirror: crate::routing::mirror::State,
+    /// Times the request was sent to an upstream, and the upstreams it was sent to
+    pub tries: u8,
+    pub tried: crate::routing::balance::Tried,
+    /// Whether a rule allows retries (`then { retry = false }`)
+    pub retry_rule: Option<bool>,
+    /// The requests in progress to the upstream chosen, counted (least connections)
+    pub in_flight: Option<Arc<std::sync::atomic::AtomicUsize>>,
 
     pub timings: RouterTimings,
 }
@@ -99,6 +106,10 @@ impl ProxyHttp for Router {
             split_cookies: vec![],
             mirror_rule: None,
             mirror: crate::routing::mirror::State::default(),
+            tries: 0,
+            tried: crate::routing::balance::Tried::default(),
+            retry_rule: None,
+            in_flight: None,
 
             timings: RouterTimings {
                 request_filter_start: std::time::Instant::now(),
@@ -296,11 +307,21 @@ impl ProxyHttp for Router {
             session.cache.set_max_file_size_bytes(100 * 1024 * 1024);
         }
 
+        // Tried again: the upstream tried last no longer counts this request
+        release_in_flight(ctx);
+        ctx.tries = ctx.tries.saturating_add(1);
+
         let Some(healthy_upstream) =
             crate::routing::split::select(session, ctx, &route_container).await
         else {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
+        if route_container.load_balancing == crate::config::host::LoadBalancing::LeastConnections {
+            if let Some(count) = crate::routing::build::in_flight(&healthy_upstream) {
+                count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                ctx.in_flight = Some(count.clone());
+            }
+        }
 
         let Some(healthy_addr) = healthy_upstream.addr.as_inet() else {
             return Err(pingora::Error::new(HTTPStatus(503)));
@@ -312,6 +333,7 @@ impl ProxyHttp for Router {
         };
 
         ctx.upstream_index = Some(index);
+        ctx.tried.add(index);
         ctx.upstream_start = Some(std::time::Instant::now());
 
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
@@ -489,6 +511,23 @@ impl ProxyHttp for Router {
             if let (Some(upstream), Some(start)) = (upstream_metrics(ctx), ctx.upstream_start) {
                 upstream.record(start.elapsed());
             }
+            // Tried again on another upstream (`retry { on = ["502"] }`): idempotent requests
+            // whose body was kept, before anything is sent to the client
+            let status = upstream_response.status.as_u16();
+            let retried = location
+                .retry
+                .as_ref()
+                .is_some_and(|retry| retry.on_status(status, ctx.tries, ctx.retry_rule))
+                && session.req_header().method.is_idempotent()
+                && !session.as_ref().retry_buffer_truncated();
+            if retried {
+                let mut e = pingora::Error::explain(
+                    HTTPStatus(status),
+                    format!("the upstream answered {status}: tried again"),
+                );
+                e.set_retry(true);
+                return Err(e);
+            }
             location
                 .blocks
                 .upstream_response(session, upstream_response, ctx);
@@ -509,6 +548,7 @@ impl ProxyHttp for Router {
         _: Option<&pingora::Error>,
         ctx: &mut Self::CTX,
     ) {
+        release_in_flight(ctx);
         if ctx.health_check {
             return;
         }
@@ -694,10 +734,19 @@ impl ProxyHttp for Router {
         if let Some(upstream) = upstream_metrics(ctx) {
             upstream.error();
         }
+        let mut e = e;
         // The upstream's name may point elsewhere now (ADR 0006)
         if let Some(route) = &ctx.route_container {
             let load_balancer = route.load_balancer.clone();
             tokio::spawn(async move { load_balancer.update().await });
+            // Another upstream may be reached (`retry { on = ["connect"] }`)
+            if route
+                .retry
+                .as_ref()
+                .is_some_and(|retry| retry.on_connect(ctx.tries, ctx.retry_rule))
+            {
+                e.set_retry(true);
+            }
         }
         e
     }
@@ -901,5 +950,12 @@ mod tests {
 
         // Created for every request: the location is only shared once it's found
         assert!(router.new_ctx().route_container.is_none());
+    }
+}
+
+/// The upstream chosen no longer counts the request as in progress (least connections)
+fn release_in_flight(ctx: &mut RouterContext) {
+    if let Some(count) = ctx.in_flight.take() {
+        count.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
     }
 }

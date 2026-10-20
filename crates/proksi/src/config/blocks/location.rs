@@ -6,7 +6,10 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    host::{HealthCheck, Location, LocationTimeouts, Mirror, PathRewrite, Sticky, TrafficSplit},
+    host::{
+        HealthCheck, LoadBalancing, Location, LocationTimeouts, Mirror, PathRewrite, Retry, Sticky,
+        TrafficSplit,
+    },
     RouteCache, RoutePlugin,
 };
 
@@ -50,6 +53,35 @@ pub struct LocationBlock {
     pub traffic_split: BTreeMap<String, TrafficSplitBlock>,
     /// `mirror { ... }`
     pub mirror: Option<MirrorBlock>,
+    /// `round_robin` (default) or `least_connections`
+    pub load_balancing: Option<LoadBalancing>,
+    /// `retry { ... }`
+    pub retry: Option<RetryBlock>,
+}
+
+/// `retry { ... }` in a location
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RetryBlock {
+    pub attempts: Option<u8>,
+    /// `"connect"`, and statuses (as `"502"` or `502`)
+    pub on: Option<Vec<serde_json::Value>>,
+}
+
+impl RetryBlock {
+    fn to_retry(&self) -> Retry {
+        Retry {
+            attempts: self.attempts.unwrap_or_else(Retry::default_attempts),
+            on: self.on.as_ref().map_or_else(Retry::default_on, |on| {
+                on.iter()
+                    .map(|value| match value {
+                        serde_json::Value::String(text) => text.clone(),
+                        other => other.to_string(),
+                    })
+                    .collect()
+            }),
+        }
+    }
 }
 
 /// `mirror { ... }` in a location
@@ -176,6 +208,8 @@ impl LocationBlock {
                 .as_ref()
                 .map(MirrorBlock::to_mirror)
                 .transpose()?,
+            load_balancing: self.load_balancing.unwrap_or_default(),
+            retry: self.retry.as_ref().map(RetryBlock::to_retry),
         })
     }
 

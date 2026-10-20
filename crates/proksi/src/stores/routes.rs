@@ -42,6 +42,10 @@ pub struct RouteStoreContainer {
     pub splits: Arc<Vec<crate::routing::split::Split>>,
     /// Where copies of the requests go, its upstreams numbered after the splits' in `upstreams`
     pub mirror: Option<Arc<crate::routing::mirror::Mirror>>,
+    /// How each request's upstream is chosen
+    pub load_balancing: crate::config::host::LoadBalancing,
+    /// When requests are sent to another upstream
+    pub retry: Option<crate::routing::retry::Policy>,
 }
 
 impl Default for RouteStoreContainer {
@@ -60,6 +64,8 @@ impl Default for RouteStoreContainer {
             rules: None,
             splits: Arc::default(),
             mirror: None,
+            load_balancing: crate::config::host::LoadBalancing::RoundRobin,
+            retry: None,
         }
     }
 }
@@ -78,6 +84,8 @@ impl RouteStoreContainer {
             rules: None,
             splits: Arc::default(),
             mirror: None,
+            load_balancing: crate::config::host::LoadBalancing::RoundRobin,
+            retry: None,
         }
     }
 

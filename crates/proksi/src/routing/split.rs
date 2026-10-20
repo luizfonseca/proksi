@@ -118,11 +118,12 @@ pub async fn select(
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
     location: &crate::stores::routes::RouteStoreContainer,
 ) -> Option<pingora::lb::Backend> {
-    use crate::routing::build::select_or_resolve;
+    use crate::routing::balance::{pick, pick_or_resolve};
 
+    let (balancing, tried) = (location.load_balancing, ctx.tried);
     if let Some(split) = chosen(session, ctx, location) {
         // Only its healthy upstreams: if none is, the location's take the request
-        if let Some(backend) = split.load_balancer.select(b"", 32) {
+        if let Some(backend) = pick(&split.load_balancer, balancing, tried) {
             return Some(backend);
         }
         tracing::debug!(
@@ -130,7 +131,7 @@ pub async fn select(
             "traffic split without upstreams up: the location's instead"
         );
     }
-    select_or_resolve(&location.load_balancer).await
+    pick_or_resolve(&location.load_balancer, balancing, tried).await
 }
 
 fn chosen<'a>(

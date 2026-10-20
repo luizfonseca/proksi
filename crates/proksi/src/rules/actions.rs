@@ -34,6 +34,7 @@ struct ThenBlock {
     method: Option<MethodChange>,
     traffic_split: Option<String>,
     mirror: Option<bool>,
+    retry: Option<bool>,
 }
 
 /// `headers`: changes the request's headers, or the response's
@@ -96,6 +97,13 @@ pub fn schema() -> serde_json::Map<String, serde_json::Value> {
             "description": "Copies the request to its location's mirror (true), or doesn't (false), whatever its share",
         }),
     );
+    actions.insert(
+        "retry".to_string(),
+        serde_json::json!({
+            "type": "boolean",
+            "description": "Whether the request can be sent to another upstream when one fails (false: never, such as for payments)",
+        }),
+    );
     actions
 }
 
@@ -137,6 +145,8 @@ fn blocks_location(
         rules: vec![],
         splits: vec![],
         mirror: None,
+        load_balancing: crate::config::host::LoadBalancing::RoundRobin,
+        retry: None,
     }
 }
 
@@ -173,6 +183,8 @@ pub(crate) struct Then {
     pub(super) split: Option<std::sync::Arc<str>>,
     /// Whether the request is copied to its location's mirror
     pub(super) mirror: Option<bool>,
+    /// Whether the request can be tried again on another upstream
+    pub(super) retry: Option<bool>,
     add: Vec<(HeaderName, HeaderValue)>,
     remove: Vec<HeaderName>,
 }
@@ -234,6 +246,7 @@ impl Then {
             method,
             split,
             mirror: then.mirror,
+            retry: then.retry,
             add,
             remove,
         };
@@ -241,6 +254,7 @@ impl Then {
             && then.method.is_none()
             && then.split.is_none()
             && then.mirror.is_none()
+            && then.retry.is_none()
             && then.add.is_empty()
             && then.remove.is_empty()
         {
@@ -278,6 +292,13 @@ mod tests {
 
     fn err(then: serde_json::Value) -> String {
         Then::build(&then).err().unwrap_or_default()
+    }
+
+    #[test]
+    fn test_then_turns_retries_off() {
+        let then = Then::build(&json!({ "retry": false })).unwrap();
+        assert_eq!(then.retry, Some(false));
+        assert!(Then::build(&json!({ "retry": 2 })).is_err());
     }
 
     #[test]

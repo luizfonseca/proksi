@@ -29,6 +29,9 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
         validate_upstreams(&location.upstreams).map_err(in_location)?;
         validate_splits(location).map_err(in_location)?;
         validate_mirror(location).map_err(in_location)?;
+        if let Some(retry) = &location.retry {
+            crate::routing::retry::Policy::new(retry).map_err(in_location)?;
+        }
         validate_headers(location.headers.as_ref()).map_err(in_location)?;
         let blocks = Blocks::build(location).map_err(in_location)?;
         if !location.upstreams.is_empty()

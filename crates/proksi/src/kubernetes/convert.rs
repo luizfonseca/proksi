@@ -139,6 +139,8 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
                 rules: vec![],
                 splits: vec![],
                 mirror: None,
+                load_balancing: crate::config::host::LoadBalancing::RoundRobin,
+                retry: None,
             };
             locations.insert((path, exact), (location, id.clone()));
         }

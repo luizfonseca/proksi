@@ -140,6 +140,9 @@ impl Rules {
             if let Some(mirror) = rule.then.mirror {
                 ctx.mirror_rule = Some(mirror);
             }
+            if let Some(retry) = rule.then.retry {
+                ctx.retry_rule = Some(retry);
+            }
             if rule.then.blocks.request(session, ctx).await.is_some() {
                 return true;
             }

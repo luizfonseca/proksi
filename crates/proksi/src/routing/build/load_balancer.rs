@@ -6,7 +6,7 @@ use std::{
     future::Future,
     net::{IpAddr, SocketAddr},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, PoisonError,
     },
     task::{Context, Waker},
@@ -46,6 +46,16 @@ struct UpstreamIndex(usize);
 /// The index of the upstream `backend` came from
 pub fn upstream_index(backend: &Backend) -> Option<usize> {
     backend.ext.get::<UpstreamIndex>().map(|index| index.0)
+}
+
+/// The requests in progress to a backend's address (least connections). Kept while the
+/// load balancer's addresses don't change.
+#[derive(Clone, Default)]
+pub struct InFlight(pub Arc<AtomicUsize>);
+
+/// The requests in progress to `backend`
+pub fn in_flight(backend: &Backend) -> Option<&Arc<AtomicUsize>> {
+    backend.ext.get::<InFlight>().map(|in_flight| &in_flight.0)
 }
 
 /// The addresses each of `upstreams` upstreams resolved to in `load_balancer`, and whether
@@ -276,6 +286,7 @@ impl Resolver {
             for addr in addresses {
                 let mut ext = Extensions::new();
                 ext.insert(UpstreamIndex(self.first + index));
+                ext.insert(InFlight::default());
                 // The first upstream with an address keeps it
                 backends.insert(Backend {
                     addr: BackendAddr::Inet(*addr),

@@ -34,6 +34,53 @@ pub struct Location {
     /// Copies of the requests sent to other upstreams, whose answers are dropped (`mirror`)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mirror: Option<Mirror>,
+    /// How each request's upstream is chosen
+    #[serde(default, skip_serializing_if = "LoadBalancing::is_round_robin")]
+    pub load_balancing: LoadBalancing,
+    /// Requests sent to another upstream when one fails (`retry { ... }`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry: Option<Retry>,
+}
+
+/// How a location's upstream is chosen for each request
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LoadBalancing {
+    /// In turn, in proportion to their weight
+    #[default]
+    RoundRobin,
+    /// The one with the fewest requests in progress, for its weight
+    LeastConnections,
+}
+
+impl LoadBalancing {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn is_round_robin(&self) -> bool {
+        *self == LoadBalancing::RoundRobin
+    }
+}
+
+/// `retry { ... }`: requests sent to another upstream when one can't be reached, or answers
+/// with one of the statuses of `on`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Retry {
+    /// Tries after the first
+    #[serde(default = "Retry::default_attempts")]
+    pub attempts: u8,
+    /// `connect` (the upstream can't be reached), and statuses such as `502`
+    #[serde(default = "Retry::default_on")]
+    pub on: Vec<String>,
+}
+
+impl Retry {
+    pub fn default_attempts() -> u8 {
+        1
+    }
+    pub fn default_on() -> Vec<String> {
+        ["connect", "502", "503", "504"]
+            .map(str::to_string)
+            .to_vec()
+    }
 }
 
 /// `mirror { ... }`: copies of a location's requests, sent to upstreams of their own. Their
@@ -353,6 +400,8 @@ mod tests {
             rules: vec![],
             splits: vec![],
             mirror: None,
+            load_balancing: crate::config::host::LoadBalancing::RoundRobin,
+            retry: None,
         }
     }
 

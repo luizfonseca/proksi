@@ -56,6 +56,8 @@ impl Host {
                     rules: vec![],
                     splits: vec![],
                     mirror: None,
+                    load_balancing: crate::config::host::LoadBalancing::RoundRobin,
+                    retry: None,
                 })
                 .collect(),
         }
