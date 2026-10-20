@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.15.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.15.0...proksi-v0.15.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* pick upstreams and run rules without allocating ([#519](https://github.com/luizfonseca/proksi/issues/519)) ([5c075d4](https://github.com/luizfonseca/proksi/commit/5c075d441d16470628625d3e48892f22754b5b19))
+* refuse TLS handshakes for unknown names ([#518](https://github.com/luizfonseca/proksi/issues/518)) ([defd7f1](https://github.com/luizfonseca/proksi/commit/defd7f18c2b4ead6eb914531ff8f0ae5794934ff))
+* TLS handshakes for unknown names refused before looking for a certificate ([defd7f1](https://github.com/luizfonseca/proksi/commit/defd7f18c2b4ead6eb914531ff8f0ae5794934ff))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.15.0 to 0.15.1
+
 ## [0.15.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.14.2...proksi-v0.15.0) (2026-10-20)
 
 
