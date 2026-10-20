@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.15.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.14.2...proksi-v0.15.0) (2026-10-20)
+
+
+### Features
+
+* request mirroring ([#508](https://github.com/luizfonseca/proksi/issues/508)) ([3d09f3e](https://github.com/luizfonseca/proksi/commit/3d09f3e189b30ec4f1d322d90a1e68adaad1632d))
+* retries and least connections ([#509](https://github.com/luizfonseca/proksi/issues/509)) ([8c3237e](https://github.com/luizfonseca/proksi/commit/8c3237e4db8418bc228d40a6dde1a12e615e1d81))
+* traffic splits ([#504](https://github.com/luizfonseca/proksi/issues/504)) ([e3e0255](https://github.com/luizfonseca/proksi/commit/e3e02557ddc142ae56ade6b104f774d26debb52c))
+
+
+### Bug Fixes
+
+* conditionals and loops nested twice at most ([#511](https://github.com/luizfonseca/proksi/issues/511)) ([377d9e5](https://github.com/luizfonseca/proksi/commit/377d9e5a94d185be59e4b18bf0bd975a8be5a35f))
+* deny unwrap, expect, panic, todo and unimplemented ([#512](https://github.com/luizfonseca/proksi/issues/512)) ([7bb8066](https://github.com/luizfonseca/proksi/commit/7bb8066e4bfb95a64c3fa71b8097cb6ef800d346))
+* jwt checks signatures with ring ([#506](https://github.com/luizfonseca/proksi/issues/506)) ([c68f306](https://github.com/luizfonseca/proksi/commit/c68f3068c1058cdcffbdd5b4c33d358c1b2e20c7))
+* no extra work for splits' returning clients and hosts without wildcards ([#507](https://github.com/luizfonseca/proksi/issues/507)) ([61d7df6](https://github.com/luizfonseca/proksi/commit/61d7df646d197cfed7667eae710a5aec5bb98cfe))
+* static_files reads files on the request's thread ([#505](https://github.com/luizfonseca/proksi/issues/505)) ([7071843](https://github.com/luizfonseca/proksi/commit/7071843f2b6e2030e3c03ac8a9ba6c64bd5b4689))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.14.2 to 0.15.0
+
+## [0.1.2](https://github.com/luizfonseca/proksi/compare/plugins_api-v0.1.1...plugins_api-v0.1.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* deny unwrap, expect, panic, todo and unimplemented ([#512](https://github.com/luizfonseca/proksi/issues/512)) ([7bb8066](https://github.com/luizfonseca/proksi/commit/7bb8066e4bfb95a64c3fa71b8097cb6ef800d346))
+
 ## [0.14.2](https://github.com/luizfonseca/proksi/compare/proksi-v0.14.1...proksi-v0.14.2) (2026-10-19)
 
 
