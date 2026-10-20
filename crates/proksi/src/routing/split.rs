@@ -16,6 +16,8 @@ pub struct Split {
     /// The cookie of `sticky = "cookie"`
     pub cookie: String,
     pub load_balancer: Arc<LoadBalancer<RoundRobin>>,
+    /// Whose turn it is among its upstreams
+    pub turn: crate::routing::balance::Turn,
     /// Its buckets: `start..end`
     start: u8,
     end: u8,
@@ -50,6 +52,7 @@ impl Split {
                         .clone()
                         .unwrap_or_else(|| default_cookie(host, path)),
                     load_balancer: Arc::new(load_balancer),
+                    turn: crate::routing::balance::Turn::default(),
                     start,
                     end,
                     first,
@@ -117,21 +120,21 @@ pub async fn select(
     session: &pingora::proxy::Session,
     ctx: &mut crate::proxy_server::https_proxy::RouterContext,
     location: &crate::stores::routes::RouteStoreContainer,
-) -> Option<pingora::lb::Backend> {
+) -> Option<crate::routing::balance::Picked> {
     use crate::routing::balance::{pick, pick_or_resolve};
 
     let (balancing, tried) = (location.load_balancing, ctx.tried);
     if let Some(split) = chosen(session, ctx, location) {
         // Only its healthy upstreams: if none is, the location's take the request
-        if let Some(backend) = pick(&split.load_balancer, balancing, tried) {
-            return Some(backend);
+        if let Some(picked) = pick(&split.load_balancer, &split.turn, balancing, tried) {
+            return Some(picked);
         }
         tracing::debug!(
             split = split.name,
             "traffic split without upstreams up: the location's instead"
         );
     }
-    pick_or_resolve(&location.load_balancer, balancing, tried).await
+    pick_or_resolve(&location.load_balancer, &location.turn, balancing, tried).await
 }
 
 fn chosen<'a>(

@@ -15,6 +15,8 @@ use pingora::server::configuration::{Opt, ServerConf};
 use services::{logger::ProxyLoggerReceiver, BackgroundFunctionService};
 
 mod admin;
+#[cfg(test)]
+mod allocations;
 mod blocks;
 mod cache;
 mod channel;
@@ -37,8 +39,14 @@ mod wasm;
 
 // Faster than the system allocators (notably musl's) for the many small allocations
 // of each request
+#[cfg(not(test))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+// The same, counting the allocations of the hot path's tests
+#[cfg(test)]
+#[global_allocator]
+static GLOBAL: allocations::Counting = allocations::Counting;
 
 #[deny(
     clippy::all,

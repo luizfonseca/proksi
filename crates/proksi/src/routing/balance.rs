@@ -1,8 +1,17 @@
-//! Choosing a request's upstream: in turn (round robin), or the one with the fewest requests
-//! in progress for its weight (least connections). A request tried again goes to an upstream
-//! it wasn't sent to yet, while one is healthy.
+//! Choosing a request's upstream: in turn, in proportion to their weight (round robin), or the
+//! one with the fewest requests in progress for its weight (least connections). A request tried
+//! again goes to an upstream it wasn't sent to yet, while one is healthy. Nothing is allocated:
+//! the backends are read where the load balancer keeps them, and only what the request needs of
+//! the chosen one is copied.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{
+    collections::BTreeSet,
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
 use pingora::lb::{selection::RoundRobin, Backend, LoadBalancer};
 
@@ -29,56 +38,114 @@ impl Tried {
     }
 }
 
+/// Whose turn it is among a load balancer's backends (round robin), and where the search for
+/// the least loaded one starts, so ties are taken in turn
+#[derive(Debug, Default)]
+pub struct Turn(AtomicUsize);
+
+impl Turn {
+    fn next(&self) -> usize {
+        self.0.fetch_add(1, Ordering::Relaxed)
+    }
+}
+
+/// The backend chosen for a request: its address, the upstream it came from, and its requests
+/// in progress (least connections)
+#[derive(Debug)]
+pub struct Picked {
+    pub addr: SocketAddr,
+    pub index: Option<usize>,
+    pub in_flight: Option<Arc<AtomicUsize>>,
+}
+
+impl Picked {
+    fn of(backend: &Backend) -> Option<Self> {
+        Some(Self {
+            addr: *backend.addr.as_inet()?,
+            index: upstream_index(backend),
+            in_flight: in_flight(backend).cloned(),
+        })
+    }
+}
+
 /// A healthy backend, by `balancing`: of an upstream not `tried` yet, else of any
 pub fn pick(
     load_balancer: &LoadBalancer<RoundRobin>,
+    turn: &Turn,
     balancing: LoadBalancing,
     tried: Tried,
-) -> Option<Backend> {
-    match balancing {
-        LoadBalancing::RoundRobin if tried == Tried::default() => load_balancer.select(b"", 32),
-        LoadBalancing::RoundRobin => load_balancer
-            .select_with(b"", 32, |backend, healthy| healthy && !tried.holds(backend))
-            .or_else(|| load_balancer.select(b"", 32)),
-        LoadBalancing::LeastConnections => {
-            least_connections(load_balancer, |backend| !tried.holds(backend))
-                .or_else(|| least_connections(load_balancer, |_| true))
+) -> Option<Picked> {
+    let backends = load_balancer.backends();
+    let all = backends.get_backend();
+    let healthy = |backend: &Backend| backends.ready(backend);
+    let untried = |backend: &Backend| healthy(backend) && !tried.holds(backend);
+    let chosen = match balancing {
+        LoadBalancing::RoundRobin => {
+            round_robin(&all, turn, untried).or_else(|| round_robin(&all, turn, healthy))
         }
-    }
+        LoadBalancing::LeastConnections => least_connections(&all, turn, untried)
+            .or_else(|| least_connections(&all, turn, healthy)),
+    };
+    chosen.and_then(Picked::of)
 }
 
 /// Like [`pick`], resolving the upstreams' names again when none is healthy, then trying them
 /// anyway (see [`crate::routing::build::select_or_resolve`])
 pub async fn pick_or_resolve(
     load_balancer: &LoadBalancer<RoundRobin>,
+    turn: &Turn,
     balancing: LoadBalancing,
     tried: Tried,
-) -> Option<Backend> {
-    if let Some(backend) = pick(load_balancer, balancing, tried) {
-        return Some(backend);
+) -> Option<Picked> {
+    if let Some(picked) = pick(load_balancer, turn, balancing, tried) {
+        return Some(picked);
     }
     let _ = load_balancer.update().await;
-    pick(load_balancer, balancing, tried)
-        .or_else(|| load_balancer.select_with(b"", 32, |_, _| true))
+    if let Some(picked) = pick(load_balancer, turn, balancing, tried) {
+        return Some(picked);
+    }
+    let all = load_balancer.backends().get_backend();
+    round_robin(&all, turn, |_| true).and_then(Picked::of)
 }
 
-/// Where the search for the least loaded backend starts, so ties are taken in turn
-static NEXT: AtomicUsize = AtomicUsize::new(0);
-
-/// The healthy backend `accept`ed with the fewest requests in progress for its weight
-fn least_connections(
-    load_balancer: &LoadBalancer<RoundRobin>,
+/// The backend whose turn it is, each taking turns in proportion to its weight, or the next one
+/// `accept`ed after it
+fn round_robin<'a>(
+    all: &'a BTreeSet<Backend>,
+    turn: &Turn,
     accept: impl Fn(&Backend) -> bool,
-) -> Option<Backend> {
-    let backends = load_balancer.backends();
-    let all = backends.get_backend();
+) -> Option<&'a Backend> {
+    let total: usize = all.iter().map(|backend| backend.weight.max(1)).sum();
+    if total == 0 {
+        return None;
+    }
+    let mut slot = turn.next() % total;
+    let start = all.iter().position(|backend| {
+        let weight = backend.weight.max(1);
+        let here = slot < weight;
+        slot = slot.saturating_sub(weight);
+        here
+    })?;
+    all.iter()
+        .cycle()
+        .skip(start)
+        .take(all.len())
+        .find(|backend| accept(backend))
+}
+
+/// The backend `accept`ed with the fewest requests in progress for its weight
+fn least_connections<'a>(
+    all: &'a BTreeSet<Backend>,
+    turn: &Turn,
+    accept: impl Fn(&Backend) -> bool,
+) -> Option<&'a Backend> {
     if all.is_empty() {
         return None;
     }
-    let start = NEXT.fetch_add(1, Ordering::Relaxed) % all.len();
+    let start = turn.next() % all.len();
     let mut best: Option<(&Backend, usize)> = None;
     for backend in all.iter().cycle().skip(start).take(all.len()) {
-        if !backends.ready(backend) || !accept(backend) {
+        if !accept(backend) {
             continue;
         }
         let load = in_flight(backend).map_or(0, |count| count.load(Ordering::Relaxed));
@@ -91,7 +158,7 @@ fn least_connections(
             best = Some((backend, load));
         }
     }
-    best.map(|(backend, _)| backend.clone())
+    best.map(|(backend, _)| backend)
 }
 
 #[cfg(test)]
@@ -101,7 +168,10 @@ mod tests {
     use crate::config::{host::LoadBalancing, RouteUpstream};
     use crate::routing::build::{in_flight, load_balancer, upstream_index};
 
-    use super::{pick, Tried};
+    use super::{pick, Tried, Turn};
+
+    /// One turn for the tests' picks, as a location has
+    static TURN: Turn = Turn(std::sync::atomic::AtomicUsize::new(0));
 
     fn upstreams(weights: &[i8]) -> Vec<RouteUpstream> {
         weights
@@ -121,7 +191,10 @@ mod tests {
         balancing: LoadBalancing,
         tried: Tried,
     ) -> usize {
-        upstream_index(&pick(load_balancer, balancing, tried).unwrap()).unwrap()
+        pick(load_balancer, &TURN, balancing, tried)
+            .unwrap()
+            .index
+            .unwrap()
     }
 
     #[test]
@@ -198,7 +271,7 @@ mod tests {
             }
             // All tried: any
             tried.add(1);
-            assert!(pick(&load_balancer, balancing, tried).is_some());
+            assert!(pick(&load_balancer, &TURN, balancing, tried).is_some());
         }
     }
 }

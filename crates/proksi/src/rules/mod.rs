@@ -288,6 +288,46 @@ mod tests {
     use super::{one_or_many, Rule, Rules};
 
     #[test]
+    fn test_running_rules_allocates_nothing() {
+        let rule = |condition: serde_json::Value| {
+            let mut rule = condition;
+            rule["name"] = serde_json::json!(format!("rule {}", rule.to_string().len()));
+            rule["then"] = serde_json::json!({ "respond": { "status": 403 } });
+            Rule(rule)
+        };
+        let rules = [
+            rule(serde_json::json!({ "and": {
+                "method": { "eq": "POST" },
+                "path": { "prefix": "/api/" },
+            } })),
+            rule(serde_json::json!({ "and": {
+                "host": { "eq": "www.example.com" },
+                "not": { "path": { "eq": "/health" } },
+            } })),
+            rule(serde_json::json!({ "or": {
+                "header": { "x-client": { "eq": "legacy" } },
+                "cookie": { "beta": { "eq": "1" } },
+            } })),
+            rule(serde_json::json!({ "and": {
+                "client": { "in": ["10.0.0.0/8"] },
+                "query": { "ref": { "eq": "home" } },
+            } })),
+        ];
+        let rules = Rules::compile(&rules).unwrap().unwrap();
+        let request =
+            super::eval::tests::TestRequest::new("GET", "www.example.com", "/products/42?ref=home")
+                .header("x-client", "web")
+                .header("cookie", "session=abc; theme=dark");
+
+        crate::allocations::assert_no_allocations("running rules", || rules.matching(&request));
+
+        // Scopes with many rules: more tests than fit in a word
+        let many = super::bench::rules(100);
+        let many = Rules::compile(&many).unwrap().unwrap();
+        crate::allocations::assert_no_allocations("running 100 rules", || many.matching(&request));
+    }
+
+    #[test]
     fn test_rules_as_written_with_the_admin_api() {
         crate::admin::enable();
         let rules = vec![Rule(serde_json::json!({
