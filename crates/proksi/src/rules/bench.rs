@@ -130,14 +130,11 @@ fn bench_rules() {
 fn bench_text_lists() {
     let request = TestRequest::new("GET", "www.example.com", "/products/42/reviews?page=2");
     for count in [1, 5, 50, 500, 5000, 100_000] {
-        for operator in ["prefix", "suffix", "contains"] {
-            let values = (0..count)
-                .map(|i| format!("/probe-{i}.x"))
-                .collect::<Vec<_>>();
-            let rule = named(json!({ "and": { "path": { operator: values } } }), 0);
+        for operator in ["prefix", "suffix", "contains", "in", "client in"] {
+            let rule = named(list_condition(operator, count), 0);
             let rules = Rules::compile(&[rule]).unwrap().unwrap();
             let nanos = time(&rules, &request, 2_000_000 / count + 1_000);
-            println!("{operator:>8}, {count:>6} values: {nanos:>9.1}ns");
+            println!("{operator:>9}, {count:>6} values: {nanos:>9.1}ns");
         }
     }
 }
@@ -154,4 +151,23 @@ fn time(rules: &Rules, request: &TestRequest, iterations: usize) -> f64 {
     }
     assert_eq!(matched, 0);
     start.elapsed().as_nanos() as f64 / iterations as f64
+}
+
+/// A condition with a list of `count` values, none of which the benchmark's request matches
+fn list_condition(operator: &str, count: usize) -> serde_json::Value {
+    if operator == "client in" {
+        // Addresses that aren't the request's client (203.0.113.9), with gaps between them so
+        // none are merged into one range
+        let networks = (0..count)
+            .map(|i| {
+                let address = 0x0A00_0000_u32 + 2 * u32::try_from(i).unwrap_or(0);
+                std::net::Ipv4Addr::from(address).to_string()
+            })
+            .collect::<Vec<_>>();
+        return json!({ "and": { "client": { "in": networks } } });
+    }
+    let values = (0..count)
+        .map(|i| format!("/probe-{i}.x"))
+        .collect::<Vec<_>>();
+    json!({ "and": { "path": { operator: values } } })
 }

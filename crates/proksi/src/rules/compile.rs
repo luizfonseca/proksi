@@ -12,7 +12,7 @@ use serde_json::Value;
 use super::{
     actions::Then,
     model::Rule,
-    text_set::{Ends, Parts},
+    text_set::{Ends, Exact, Parts},
 };
 
 /// Rules in a scope (the server, a host or a location)
@@ -66,45 +66,15 @@ pub(super) enum Test {
         negate: bool,
     },
     Client {
-        networks: Vec<Network>,
+        networks: crate::ip_set::IpSet,
         negate: bool,
     },
-}
-
-/// A network as a prefix and its mask, over IPv6 (IPv4 as `::ffff:a.b.c.d`): checking an address
-/// is one comparison
-#[derive(Debug, Clone, Copy)]
-pub(super) struct Network {
-    prefix: u128,
-    mask: u128,
-}
-
-impl Network {
-    fn new(network: IpNet) -> Self {
-        let (address, length) = match network {
-            IpNet::V4(v4) => (
-                u128::from(v4.network().to_ipv6_mapped()),
-                96 + u32::from(v4.prefix_len()),
-            ),
-            IpNet::V6(v6) => (u128::from(v6.network()), u32::from(v6.prefix_len())),
-        };
-        let mask = u128::MAX.checked_shl(128 - length).unwrap_or(0);
-        Self {
-            prefix: address & mask,
-            mask,
-        }
-    }
-
-    #[inline]
-    pub fn contains(&self, address: u128) -> bool {
-        address & self.mask == self.prefix
-    }
 }
 
 #[derive(Debug)]
 pub(super) enum TextTest {
     Eq(String),
-    In(Vec<String>),
+    In(Exact),
     /// Any of them
     Prefix(Ends),
     Suffix(Ends),
@@ -587,13 +557,11 @@ fn parse_test(field: &Field, operator: &str, value: &Value) -> Result<Test, Stri
         }
         Field::Client => {
             let networks = match operator {
-                "eq" | "neq" => vec![Network::new(network(value)?)],
-                "in" | "not_in" => list(value)?
-                    .iter()
-                    .map(|value| network(value).map(Network::new))
-                    .collect::<Result<_, _>>()?,
+                "eq" | "neq" => vec![network(value)?],
+                "in" | "not_in" => list(value)?.iter().map(network).collect::<Result<_, _>>()?,
                 _ => return Err(unsupported("client", "`eq`, `neq`, `in` and `not_in`")),
             };
+            let networks = crate::ip_set::IpSet::new(networks);
             Ok(Test::Client { networks, negate })
         }
         Field::Host | Field::Path | Field::Query(_) | Field::Header(_) | Field::Cookie(_) => {
@@ -607,12 +575,12 @@ fn parse_test(field: &Field, operator: &str, value: &Value) -> Result<Test, Stri
             };
             let test = match operator {
                 "eq" | "neq" => TextTest::Eq(fold(text(value)?)),
-                "in" | "not_in" => TextTest::In(
+                "in" | "not_in" => TextTest::In(Exact::new(
                     list(value)?
                         .iter()
                         .map(|value| text(value).map(fold))
                         .collect::<Result<_, _>>()?,
-                ),
+                )),
                 "prefix" => TextTest::Prefix(Ends::new(texts(value, fold)?)),
                 "suffix" => TextTest::Suffix(Ends::new(texts(value, fold)?)),
                 "contains" => TextTest::Contains(Parts::new(texts(value, fold)?)?),

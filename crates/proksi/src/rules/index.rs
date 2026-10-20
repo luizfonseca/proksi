@@ -136,7 +136,7 @@ fn test_requirements(field: &Field, test: &Test) -> Requires {
         ) => {
             requires.hosts = match test {
                 TextTest::Eq(host) => Some(vec![host.clone()]),
-                TextTest::In(hosts) => Some(hosts.clone()),
+                TextTest::In(hosts) => Some(hosts.values()),
                 _ => None,
             };
         }

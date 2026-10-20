@@ -21,6 +21,7 @@ mod blocks;
 mod cache;
 mod channel;
 mod config;
+mod ip_set;
 #[cfg(feature = "kubernetes")]
 mod kubernetes;
 mod metrics;

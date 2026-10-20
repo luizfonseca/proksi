@@ -27,8 +27,7 @@ pub(super) fn evaluate_one(field: &Field, test: &Test, request: &impl Request) -
             methods.contains(request.method()) != *negate
         }
         (Field::Client, Test::Client { networks, negate }) => {
-            let listed = client(request)
-                .is_some_and(|client| networks.iter().any(|network| network.contains(client)));
+            let listed = client(request).is_some_and(|client| networks.contains_address(client));
             listed != *negate
         }
         (Field::Host, Test::Text { test, negate }) => {
@@ -45,10 +44,7 @@ pub(super) fn evaluate_one(field: &Field, test: &Test, request: &impl Request) -
 
 /// IPv4 as `::ffff:a.b.c.d`, as networks are: an IPv4 client over IPv6 is the same
 fn client(request: &impl Request) -> Option<u128> {
-    request.client().map(|ip| match ip {
-        IpAddr::V4(v4) => u128::from(v4.to_ipv6_mapped()),
-        IpAddr::V6(v6) => u128::from(v6),
-    })
+    request.client().map(crate::ip_set::address)
 }
 
 pub(super) fn lowercase(host: &str) -> Cow<'_, str> {
@@ -66,7 +62,7 @@ fn text_test(test: &TextTest, value: Option<&str>) -> bool {
         // `matches` runs with the group's set
         (TextTest::Matches, _) | (_, None) => false,
         (TextTest::Eq(expected), Some(value)) => value == expected,
-        (TextTest::In(expected), Some(value)) => expected.iter().any(|expected| value == expected),
+        (TextTest::In(expected), Some(value)) => expected.holds(value),
         (TextTest::Prefix(prefixes), Some(value)) => prefixes.starts(value),
         (TextTest::Suffix(suffixes), Some(value)) => suffixes.ends(value),
         (TextTest::Contains(parts), Some(value)) => parts.found_in(value),
@@ -92,8 +88,7 @@ pub(super) fn evaluate(group: &Group, request: &impl Request, mut set: impl FnMu
                 let Test::Client { networks, negate } = test else {
                     continue;
                 };
-                let listed = client
-                    .is_some_and(|client| networks.iter().any(|network| network.contains(client)));
+                let listed = client.is_some_and(|client| networks.contains_address(client));
                 set(*index, listed != *negate);
             }
         }

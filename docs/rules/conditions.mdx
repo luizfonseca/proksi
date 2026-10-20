@@ -76,7 +76,7 @@ Each test has exactly one operator.
 
 Text fields are `host`, `path`, `query`, `header` and `cookie`.
 
-Lists can be as long as you need: a list of 100,000 values costs about the same as a list of 5, since the values are searched all at once.
+Lists can be as long as you need: a list of 100,000 values or networks costs about the same as a list of 5, for every operator taking a list (`in`, `not_in`, `prefix`, `suffix`, `contains`).
 
 **When a value isn't there** (no such header, cookie or query parameter): `eq`, `in`, `prefix`, `suffix`, `contains`, `wildcard` and `matches` don't hold, and `neq` and `not_in` do.
 

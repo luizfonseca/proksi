@@ -70,6 +70,38 @@ impl Ends {
     }
 }
 
+/// The values a text is one of (`in`, `not_in`)
+#[derive(Debug)]
+pub(super) enum Exact {
+    Few(Vec<String>),
+    Many(HashSet<String>),
+}
+
+impl Exact {
+    pub fn new(values: Vec<String>) -> Self {
+        if values.len() <= FEW {
+            return Exact::Few(values);
+        }
+        Exact::Many(values.into_iter().collect())
+    }
+
+    /// Whether `text` is one of the values
+    pub fn holds(&self, text: &str) -> bool {
+        match self {
+            Exact::Few(values) => values.iter().any(|value| value == text),
+            Exact::Many(values) => values.contains(text),
+        }
+    }
+
+    /// The values, in no particular order
+    pub fn values(&self) -> Vec<String> {
+        match self {
+            Exact::Few(values) => values.clone(),
+            Exact::Many(values) => values.iter().cloned().collect(),
+        }
+    }
+}
+
 /// The values a text contains
 #[derive(Debug)]
 pub(super) enum Parts {
@@ -99,7 +131,7 @@ impl Parts {
 
 #[cfg(test)]
 mod tests {
-    use super::{Ends, Parts};
+    use super::{Ends, Exact, Parts};
 
     fn values(count: usize) -> Vec<String> {
         let mut values = (0..count)
@@ -123,6 +155,10 @@ mod tests {
             // Lengths falling inside a character (`é` is 2 bytes, as is `ë`)
             assert!(!ends.starts("ëx"));
             assert!(!ends.ends("xë"));
+
+            let exact = Exact::new(values(count));
+            assert!(exact.holds("/.env") && exact.holds("é"));
+            assert!(!exact.holds("/.env.local"));
 
             let parts = Parts::new(values(count)).unwrap();
             assert!(parts.found_in("/app/.env.local"));
