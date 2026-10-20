@@ -104,14 +104,19 @@ Mind the defaults that differ:
 | `access_log` | JSON access logs on stdout (see [Logging](/configuration/logging)) |
 | `stub_status` | The [admin API](/configuration/admin): Prometheus metrics and live stats |
 | `max_fails`, `fail_timeout` | [`health_check { interval_secs }`](/routing/upstreams#health-checks): a TCP connection to each upstream, unhealthy after 2 failures |
-| `least_conn`, `ip_hash`, `hash` | Not available (weighted round robin only) |
+| `least_conn` | [`load_balancing = "least_connections"`](/routing/upstreams#least-connections), with `weight` |
+| `ip_hash`, `hash` | Not available (weighted round robin or least connections) |
+| `proxy_next_upstream`, `proxy_next_upstream_tries` | [`retry { on, attempts }`](/routing/upstreams#retries) (`error` and `timeout`: `connect`; `http_502`: `"502"`) |
+| `split_clients` | [`traffic_split`](/routing/traffic-split) blocks, each client kept on its side by a cookie or its address |
+| `mirror` | [`mirror { upstream ... }`](/routing/mirror), with `percent` and a limit on body sizes |
+| `auth_jwt` (NGINX Plus) | [`jwt { ... }`](/plugins/jwt): a secret, a public key or a JWKS, claims as headers |
 | `rewrite ^/old/(.*)$ /new/$1 break;` | [`rewrite`](/routing/upstreams#rewriting-paths) `{ match = "^/old/(.*)$", replace = "/new/$1" }` (redirecting rewrites, `last`/`redirect`/`permanent`, aren't supported) |
 | `gzip on`, `brotli on` | [`compress { }`](/plugins/compress), with `level` for `gzip_comp_level` (`gzip_types`: text, JSON, JavaScript, fonts and SVG are compressed) |
 | `return 301 https://example.com$request_uri;` | [`redirect`](/plugins/redirect) with `to = "https://example.com{uri}"` and `status = 301` |
 | `return 503 "Back soon";` | [`respond`](/plugins/respond) with `status = 503` and `body = "Back soon"` |
 | `auth_request /auth;` with `auth_request_set` | [`forward_auth { url, response_headers }`](/plugins/forward-auth) |
 | `allow`/`deny` | [`ip_filter { allow, deny }`](/plugins/ip-filter): `deny` wins, whatever the order |
-| `root`, `try_files` | Not available: Proksi only proxies |
+| `root`, `alias`, `index`, `try_files $uri /index.html` | [`static_files { directory, index, fallback }`](/plugins/static-files) |
 
 ## TCP (`stream`)
 

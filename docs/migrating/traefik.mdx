@@ -74,7 +74,8 @@ host "app.example.com" {
 | `redirectRegex` | [`redirect { to }`](/plugins/redirect) in a location, with `{uri}`, `{path}`, `{query}` and `{host}` |
 | `compress` | [`compress { }`](/plugins/compress) |
 | `ipAllowList` | [`ip_filter { allow }`](/plugins/ip-filter) (`ipStrategy`: `server.trusted_proxies`) |
-| `retry`, `circuitBreaker` | Not available |
+| `retry` | [`retry { attempts }`](/routing/upstreams#retries) in the location (also on `502`, `503`, `504` by default) |
+| `circuitBreaker` | Not available |
 
 ## Docker labels
 
@@ -154,4 +155,6 @@ TLS is terminated with the host's certificate; `tls = "passthrough"` forwards it
 - **TLS options**: `server.tls { min_version, ciphers }` for every host, instead of `tls.options` (`minVersion`, `cipherSuites`). The defaults refuse DHE, as Traefik's do (see [TLS versions and ciphers](/configuration/hcl#tls-versions-and-ciphers)).
 - **Stopping**: open connections get `server.shutdown_timeout_secs` (30) to finish, instead of `lifeCycle.graceTimeOut`. On Linux, settings changes take effect without dropping connections (see [Restarts and upgrades](/configuration/upgrades)).
 - **Health checks** are TCP connections to each upstream, every 15 seconds by default (`health_check { interval_secs, enabled }`); there are no HTTP health check paths.
-- **Not available**: DNS-01 challenges, wildcard hosts (`*.example.com`), sticky sessions, HTTP/3.
+- **Weighted services** (canaries) are [`traffic_split`](/routing/traffic-split) blocks, and **mirroring** services a [`mirror`](/routing/mirror) block, in the location.
+- **DNS challenges and wildcard hosts**: `lets_encrypt { dns { provider = "cloudflare" } }`, and `host "*.example.com"` (see [wildcard hosts](/configuration/hcl#hosts-and-locations)). Cloudflare is the only DNS provider for now.
+- **Not available**: sticky sessions to one upstream, HTTP/3.
