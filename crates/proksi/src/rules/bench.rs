@@ -121,3 +121,37 @@ fn bench_rules() {
         }
     }
 }
+
+/// Where lists of values (`contains = [...]`) stop being cheap: one rule testing the path
+/// against a list, on a request matching none of its values (every value is tried).
+/// `cargo test --release -p proksi --bin proksi bench_text_lists -- --ignored --nocapture`
+#[test]
+#[ignore = "a benchmark: run with --release"]
+fn bench_text_lists() {
+    let request = TestRequest::new("GET", "www.example.com", "/products/42/reviews?page=2");
+    for count in [1, 5, 50, 500, 5000, 100_000] {
+        for operator in ["prefix", "suffix", "contains"] {
+            let values = (0..count)
+                .map(|i| format!("/probe-{i}.x"))
+                .collect::<Vec<_>>();
+            let rule = named(json!({ "and": { "path": { operator: values } } }), 0);
+            let rules = Rules::compile(&[rule]).unwrap().unwrap();
+            let nanos = time(&rules, &request, 2_000_000 / count + 1_000);
+            println!("{operator:>8}, {count:>6} values: {nanos:>9.1}ns");
+        }
+    }
+}
+
+/// Nanoseconds to run `rules` on `request` (matching none), once warm
+fn time(rules: &Rules, request: &TestRequest, iterations: usize) -> f64 {
+    let mut matched = 0;
+    for _ in 0..iterations {
+        matched += rules.matching(request);
+    }
+    let start = Instant::now();
+    for _ in 0..iterations {
+        matched += rules.matching(request);
+    }
+    assert_eq!(matched, 0);
+    start.elapsed().as_nanos() as f64 / iterations as f64
+}

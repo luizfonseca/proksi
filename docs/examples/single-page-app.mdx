@@ -1,0 +1,47 @@
+---
+title: "Single-page app with an API"
+description: "Serve a built frontend and its API from one host, with the API behind JSON Web Tokens."
+---
+
+The app's build is served by Proksi itself, and its API by its upstreams, under the same name, so the browser needs no CORS.
+
+```hcl
+host "app.example.com" {
+  # The app: its files, and its index.html for the paths it routes itself
+  location "/" {
+    static_files {
+      directory = "/var/www/app/dist"
+      fallback  = "/index.html"
+    }
+    compress {}
+  }
+
+  # Fingerprinted assets, cached by browsers for a year
+  location "/assets" {
+    static_files {
+      directory     = "/var/www/app/dist/assets"
+      cache_control = "public, max-age=31536000, immutable"
+    }
+    compress {}
+  }
+
+  # The API, for signed-in users
+  location "/api" {
+    upstream "api-1:8080" {}
+    upstream "api-2:8080" {}
+    load_balancing = "least_connections"
+
+    jwt {
+      jwks_url = "https://auth.example.com/.well-known/jwks.json"
+      audience = ["api"]
+      claims_to_headers = { sub = "X-User-Id" }
+    }
+
+    retry {}
+  }
+}
+```
+
+- [`static_files`](/plugins/static-files) answers with `304`s and ranges, and never serves hidden files or anything outside its directory.
+- [`jwt`](/plugins/jwt) checks the token's signature and expiry, and sends who the user is to the API (`X-User-Id`), which doesn't have to check tokens itself.
+- [Retries](/routing/upstreams#retries) send a request to the other API server when one is down or answers `502`, `503` or `504`.

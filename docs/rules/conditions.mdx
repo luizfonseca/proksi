@@ -69,12 +69,14 @@ Each test has exactly one operator.
 | --- | --- | --- |
 | `eq`, `neq` | is, isn't, this value | all |
 | `in`, `not_in` | is one of, none of, a list | all; for `client`, addresses and networks (`["10.0.0.0/8", "203.0.113.9"]`) |
-| `prefix`, `suffix`, `contains` | starts with, ends with, contains this text | text fields |
+| `prefix`, `suffix`, `contains` | starts with, ends with, contains this text, or one of a list (`contains = ["/.env", "/.git"]`) | text fields |
 | `wildcard` | matches a pattern where `*` is any text (`"/api/*/items"`, `"*.example.com"`) | text fields |
 | `matches` | matches a regular expression (`"(?i)bot"` ignores case) | text fields |
 | `exists` | is there (`exists = true`), or isn't (`exists = false`) | `query`, `header`, `cookie` |
 
 Text fields are `host`, `path`, `query`, `header` and `cookie`.
+
+Lists can be as long as you need: a list of 100,000 values costs about the same as a list of 5, since the values are searched all at once.
 
 **When a value isn't there** (no such header, cookie or query parameter): `eq`, `in`, `prefix`, `suffix`, `contains`, `wildcard` and `matches` don't hold, and `neq` and `not_in` do.
 

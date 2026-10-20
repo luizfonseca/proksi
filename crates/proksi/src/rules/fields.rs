@@ -67,9 +67,9 @@ fn text_test(test: &TextTest, value: Option<&str>) -> bool {
         (TextTest::Matches, _) | (_, None) => false,
         (TextTest::Eq(expected), Some(value)) => value == expected,
         (TextTest::In(expected), Some(value)) => expected.iter().any(|expected| value == expected),
-        (TextTest::Prefix(prefix), Some(value)) => value.starts_with(prefix.as_str()),
-        (TextTest::Suffix(suffix), Some(value)) => value.ends_with(suffix.as_str()),
-        (TextTest::Contains(part), Some(value)) => value.contains(part.as_str()),
+        (TextTest::Prefix(prefixes), Some(value)) => prefixes.starts(value),
+        (TextTest::Suffix(suffixes), Some(value)) => suffixes.ends(value),
+        (TextTest::Contains(parts), Some(value)) => parts.found_in(value),
         (TextTest::Wildcard(parts), Some(value)) => wildcard(parts, value),
     }
 }

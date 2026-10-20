@@ -9,7 +9,11 @@ use ipnet::IpNet;
 use regex::RegexSet;
 use serde_json::Value;
 
-use super::{actions::Then, model::Rule};
+use super::{
+    actions::Then,
+    model::Rule,
+    text_set::{Ends, Parts},
+};
 
 /// Rules in a scope (the server, a host or a location)
 const MAX_RULES: usize = 1000;
@@ -101,9 +105,10 @@ impl Network {
 pub(super) enum TextTest {
     Eq(String),
     In(Vec<String>),
-    Prefix(String),
-    Suffix(String),
-    Contains(String),
+    /// Any of them
+    Prefix(Ends),
+    Suffix(Ends),
+    Contains(Parts),
     /// The parts between `*`s
     Wildcard(Vec<String>),
     /// Tested with the regex set of its field
@@ -608,9 +613,9 @@ fn parse_test(field: &Field, operator: &str, value: &Value) -> Result<Test, Stri
                         .map(|value| text(value).map(fold))
                         .collect::<Result<_, _>>()?,
                 ),
-                "prefix" => TextTest::Prefix(fold(text(value)?)),
-                "suffix" => TextTest::Suffix(fold(text(value)?)),
-                "contains" => TextTest::Contains(fold(text(value)?)),
+                "prefix" => TextTest::Prefix(Ends::new(texts(value, fold)?)),
+                "suffix" => TextTest::Suffix(Ends::new(texts(value, fold)?)),
+                "contains" => TextTest::Contains(Parts::new(texts(value, fold)?)?),
                 "wildcard" => TextTest::Wildcard(
                     fold(text(value)?)
                         .split('*')
@@ -641,6 +646,17 @@ fn list(value: &Value) -> Result<&Vec<Value>, String> {
         .as_array()
         .filter(|values| !values.is_empty())
         .ok_or_else(|| "must be a list of values".to_string())
+}
+
+/// A text, or a list of them, each changed with `fold`
+fn texts(value: &Value, fold: impl Fn(String) -> String) -> Result<Vec<String>, String> {
+    match value {
+        Value::Array(_) => list(value)?
+            .iter()
+            .map(|value| text(value).map(&fold))
+            .collect(),
+        value => Ok(vec![fold(text(value)?)]),
+    }
 }
 
 fn text(value: &Value) -> Result<String, String> {

@@ -294,6 +294,37 @@ pub(super) mod tests {
     }
 
     #[test]
+    fn test_text_operators_take_lists() {
+        let rules = [
+            rule(
+                "scanners",
+                json!({ "path": { "contains": ["/.env", "/.git", "/wp-"] } }),
+            ),
+            rule("assets", json!({ "path": { "prefix": ["/css/", "/js/"] } })),
+            rule("images", json!({ "path": { "suffix": [".png", ".jpg"] } })),
+            // One value in a list is the same as the value
+            rule("one", json!({ "path": { "prefix": ["/blog/"] } })),
+        ];
+        let request = |path: &str| TestRequest::new("GET", "example.com", path);
+
+        for probe in [
+            "/.env",
+            "/app/.env.local",
+            "/.git/config",
+            "/blog/wp-login.php",
+        ] {
+            assert!(
+                matching(&rules, &request(probe)).contains(&"scanners".to_string()),
+                "{probe}"
+            );
+        }
+        assert_eq!(matching(&rules, &request("/js/app.js")), ["assets"]);
+        assert_eq!(matching(&rules, &request("/logo.png")), ["images"]);
+        assert_eq!(matching(&rules, &request("/blog/post")), ["one"]);
+        assert!(matching(&rules, &request("/environment")).is_empty());
+    }
+
+    #[test]
     fn test_and_or_not() {
         let rules = [rule(
             "legacy",

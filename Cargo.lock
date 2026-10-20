@@ -3557,6 +3557,7 @@ version = "0.15.1"
 dependencies = [
  "TinyUFO",
  "acme-v2",
+ "aho-corasick",
  "anyhow",
  "arc-swap",
  "async-trait",

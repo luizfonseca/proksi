@@ -149,7 +149,10 @@ fn test_requirements(field: &Field, test: &Test) -> Requires {
         ) => {
             let segment = match test {
                 TextTest::Eq(path) => first_segment(path, true),
-                TextTest::Prefix(prefix) => first_segment(prefix, false),
+                // One prefix: requests need its first segment (several: any of theirs)
+                TextTest::Prefix(prefixes) => prefixes
+                    .single()
+                    .and_then(|prefix| first_segment(prefix, false)),
                 TextTest::Wildcard(parts) if parts.len() > 1 => {
                     parts.first().and_then(|first| first_segment(first, false))
                 }
