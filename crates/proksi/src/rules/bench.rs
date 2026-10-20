@@ -40,7 +40,7 @@ fn named(condition: serde_json::Value, i: usize) -> Rule {
 
 /// Rules that also read headers, a cookie and regular expressions, each rule testing one to
 /// three fields
-fn rules(count: usize) -> Vec<Rule> {
+pub(super) fn rules(count: usize) -> Vec<Rule> {
     (0..count)
         .map(|i| {
             let condition = match i % 5 {

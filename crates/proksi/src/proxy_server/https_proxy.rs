@@ -293,24 +293,21 @@ impl ProxyHttp for Router {
         release_in_flight(ctx);
         ctx.tries = ctx.tries.saturating_add(1);
 
-        let Some(healthy_upstream) =
-            crate::routing::split::select(session, ctx, &route_container).await
+        let Some(picked) = crate::routing::split::select(session, ctx, &route_container).await
         else {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
-        if route_container.load_balancing == crate::config::host::LoadBalancing::LeastConnections {
-            if let Some(count) = crate::routing::build::in_flight(&healthy_upstream) {
-                count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                ctx.in_flight = Some(count.clone());
-            }
+        let least =
+            route_container.load_balancing == crate::config::host::LoadBalancing::LeastConnections;
+        if let Some(count) = picked.in_flight.filter(|_| least) {
+            count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            ctx.in_flight = Some(count);
         }
 
-        let Some(healthy_addr) = healthy_upstream.addr.as_inet() else {
-            return Err(pingora::Error::new(HTTPStatus(503)));
-        };
-        let healthy_port = healthy_addr.port();
-
-        let Some((index, upstream)) = route_container.upstream(&healthy_upstream) else {
+        let Some((index, upstream)) = picked
+            .index
+            .and_then(|index| Some((index, route_container.upstreams.get(index)?)))
+        else {
             return Err(pingora::Error::new(HTTPStatus(503)));
         };
 
@@ -320,9 +317,9 @@ impl ProxyHttp for Router {
 
         // https://github.com/cloudflare/pingora/blob/main/docs/user_guide/peer.md?plain=1#L17
         let mut peer = HttpPeer::new(
-            healthy_upstream,
-            healthy_port == 443,
-            upstream.sni.clone().unwrap_or(String::new()),
+            picked.addr,
+            picked.addr.port() == 443,
+            upstream.sni.clone().unwrap_or_default(),
         );
         let timeouts = route_container
             .timeouts

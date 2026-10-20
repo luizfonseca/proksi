@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, sync::Arc};
 
-use pingora::lb::{discovery::Static, selection::RoundRobin, Backend, Backends, LoadBalancer};
+use pingora::lb::{discovery::Static, selection::RoundRobin, Backends, LoadBalancer};
 
 use crate::{
     blocks::Blocks,
@@ -44,6 +44,8 @@ pub struct RouteStoreContainer {
     pub mirror: Option<Arc<crate::routing::mirror::Mirror>>,
     /// How each request's upstream is chosen
     pub load_balancing: crate::config::host::LoadBalancing,
+    /// Whose turn it is among the location's own upstreams
+    pub turn: Arc<crate::routing::balance::Turn>,
     /// When requests are sent to another upstream
     pub retry: Option<crate::routing::retry::Policy>,
 }
@@ -65,6 +67,7 @@ impl Default for RouteStoreContainer {
             splits: Arc::default(),
             mirror: None,
             load_balancing: crate::config::host::LoadBalancing::RoundRobin,
+            turn: Arc::default(),
             retry: None,
         }
     }
@@ -85,6 +88,7 @@ impl RouteStoreContainer {
             splits: Arc::default(),
             mirror: None,
             load_balancing: crate::config::host::LoadBalancing::RoundRobin,
+            turn: Arc::default(),
             retry: None,
         }
     }
@@ -130,12 +134,6 @@ impl RouteStoreContainer {
     pub fn split_of(&self, index: usize) -> Option<&crate::routing::split::Split> {
         self.splits.iter().find(|split| split.holds(index))
     }
-
-    /// The upstream a backend of the load balancer came from
-    pub fn upstream(&self, backend: &Backend) -> Option<(usize, &RouteUpstream)> {
-        let index = upstream_index(backend)?;
-        Some((index, self.upstreams.get(index)?))
-    }
 }
 
 /// Marks the upstreams with a healthy address in `load_balancer`
@@ -180,7 +178,8 @@ mod tests {
         let backends = route_store.load_balancer.backends().get_backend();
         let sni = |addr: &str| {
             let backend = backends.iter().find(|b| b.addr.to_string() == addr)?;
-            route_store.upstream(backend)?.1.sni.as_deref()
+            let index = upstream_index(backend)?;
+            route_store.upstreams.get(index)?.sni.as_deref()
         };
         assert_eq!(sni("127.0.0.1:8080"), Some("ip.test"));
         assert_eq!(sni("127.0.0.1:9090"), Some("hostname.test"));

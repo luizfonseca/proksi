@@ -7,53 +7,69 @@ use super::{
     fields::{self, Request},
 };
 
+/// Words of bits kept on the stack: scopes with up to 1024 tests (and field groups), so a
+/// request's evaluation allocates nothing
+const INLINE_WORDS: usize = 16;
+
 /// One word covers scopes with up to 64 tests (and field groups), which most are; larger ones
-/// use a list of words
+/// use more words, on the stack up to `INLINE_WORDS`, then in a list
 enum Bits {
     Word(u64),
+    Inline([u64; INLINE_WORDS]),
     Words(Vec<u64>),
 }
 
 impl Bits {
     fn new(len: usize) -> Self {
-        if len <= 64 {
+        let words = len.div_ceil(64);
+        if words <= 1 {
             Bits::Word(0)
+        } else if words <= INLINE_WORDS {
+            Bits::Inline([0; INLINE_WORDS])
         } else {
-            Bits::Words(vec![0; len.div_ceil(64)])
+            Bits::Words(vec![0; words])
+        }
+    }
+
+    #[inline]
+    fn words(&self) -> &[u64] {
+        match self {
+            Bits::Word(word) => std::slice::from_ref(word),
+            Bits::Inline(words) => words,
+            Bits::Words(words) => words,
+        }
+    }
+
+    #[inline]
+    fn words_mut(&mut self) -> &mut [u64] {
+        match self {
+            Bits::Word(word) => std::slice::from_mut(word),
+            Bits::Inline(words) => words,
+            Bits::Words(words) => words,
         }
     }
 
     #[inline]
     fn get(&self, index: usize) -> bool {
-        match self {
-            Bits::Word(word) => word & (1 << index) != 0,
-            Bits::Words(words) => words
-                .get(index / 64)
-                .is_some_and(|word| word & (1 << (index % 64)) != 0),
-        }
+        self.words()
+            .get(index / 64)
+            .is_some_and(|word| word & (1 << (index % 64)) != 0)
     }
 
     #[inline]
     fn set(&mut self, index: usize, value: bool) {
-        let (word, bit) = match self {
-            Bits::Word(word) => (word, index),
-            Bits::Words(words) => match words.get_mut(index / 64) {
-                Some(word) => (word, index % 64),
-                None => return,
-            },
+        let Some(word) = self.words_mut().get_mut(index / 64) else {
+            return;
         };
         if value {
-            *word |= 1 << bit;
+            *word |= 1 << (index % 64);
         } else {
-            *word &= !(1 << bit);
+            *word &= !(1 << (index % 64));
         }
     }
 
     fn clear(&mut self) {
-        match self {
-            Bits::Word(word) => *word = 0,
-            Bits::Words(words) => words.fill(0),
-        }
+        self.words_mut().fill(0);
     }
 }
 
