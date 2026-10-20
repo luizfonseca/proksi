@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.15.2](https://github.com/luizfonseca/proksi/compare/proksi-v0.15.1...proksi-v0.15.2) (2026-10-20)
+
+
+### Miscellaneous Chores
+
+* **proksi:** Synchronize proksi versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.15.1 to 0.15.2
+
 ## [0.15.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.15.0...proksi-v0.15.1) (2026-10-20)
 
 
