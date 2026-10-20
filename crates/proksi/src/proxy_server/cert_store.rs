@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use openssl::ssl::{SniError, SslRef};
+use openssl::ssl::{SniError, SslAlert, SslRef};
 use pingora::listeners::TlsAccept;
 use pingora::tls::ext;
 use pingora::tls::ssl::NameType;
@@ -19,21 +19,19 @@ impl CertStore {
         CertStore {}
     }
 
-    // This function is called when the servername callback executes
-    // It is used to check if the server name is in the certificate store
-    // If it is, the handshake continues, otherwise it is aborted
-    // and the client is disconnected
-    #[allow(clippy::unnecessary_wraps)]
-    pub fn sni_callback(ssl_ref: &mut SslRef) -> Result<(), SniError> {
-        let servername = ssl_ref.servername(NameType::HOST_NAME).unwrap_or("");
-        tracing::debug!("Received SNI: {}", servername);
-
-        // if stores::get_certificate_by_key(servername).is_some() {
-        Ok(())
-        // }
-
-        // Abort the handshake
-        // Err(SniError::ALERT_FATAL)
+    /// The name a client asks for (SNI): handshakes for names no host with TLS serves (or none)
+    /// end here, with `unrecognized_name`, before a certificate is looked for. Scanners and
+    /// names pointed at the server by mistake cost nothing, and don't reach the store.
+    pub fn sni_callback(ssl_ref: &mut SslRef, alert: &mut SslAlert) -> Result<(), SniError> {
+        let name = ssl_ref.servername(NameType::HOST_NAME).unwrap_or_default();
+        let served = !name.is_empty()
+            && stores::lookup::named_host(name).is_some_and(|host| host.tls_enabled);
+        if served {
+            return Ok(());
+        }
+        tracing::debug!("TLS handshake for {name:?}, which no host with TLS serves: refused");
+        *alert = SslAlert::UNRECOGNIZED_NAME;
+        Err(SniError::ALERT_FATAL)
     }
 }
 
@@ -54,7 +52,8 @@ impl TlsAccept for CertStore {
             .get_certificate(&stores::lookup::certificate_name(&host_name))
             .await
         else {
-            tracing::info!("No certificate found for host: {:?}", host_name);
+            // A host with TLS, whose certificate isn't there yet (or failed to be issued)
+            tracing::warn!("no certificate for host {host_name:?}");
             return;
         };
 

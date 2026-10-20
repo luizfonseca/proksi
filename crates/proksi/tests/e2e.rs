@@ -55,6 +55,40 @@ async fn test_host_header_is_case_insensitive() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_unknown_names_are_refused_in_the_tls_handshake() {
+    let mut proksi = Harness::start(vec![Route::new("app.test", Upstream::Http)]).await;
+    let port = proksi.https_port;
+
+    // A name no host serves, or none: refused before any certificate is looked for
+    let refused = proksi.handshake_error(port, Some("unknown.test")).await;
+    assert!(
+        refused
+            .as_deref()
+            .is_some_and(|err| err.contains("unrecognized name")),
+        "{refused:?}"
+    );
+    let refused = proksi.handshake_error(port, None).await;
+    assert!(
+        refused
+            .as_deref()
+            .is_some_and(|err| err.contains("unrecognized name")),
+        "{refused:?}"
+    );
+
+    // The hosts', whatever their case
+    assert_eq!(proksi.handshake_error(port, Some("app.test")).await, None);
+    assert_eq!(proksi.handshake_error(port, Some("App.Test")).await, None);
+
+    // Scanners asking for other names aren't worth a line in the logs
+    assert!(
+        !proksi.logs().contains("No certificate found"),
+        "{}",
+        proksi.logs()
+    );
+    proksi.assert_healthy();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_unmatched_path_returns_404_and_unknown_host_is_rejected() {
     let mut proksi = Harness::start(vec![
         Route::new("app.test", Upstream::Http).paths(&["/api/*"])
@@ -236,7 +270,22 @@ async fn test_config_reload_applies_route_changes() {
     proksi.rewrite_routes(vec![Route::new("b.test", Upstream::Http)]);
 
     assert_eq!(proksi.wait_for("b.test", "/", 200).await, Some(200));
-    assert_eq!(proksi.wait_for("a.test", "/", 404).await, Some(404));
+    // No host serves a.test anymore: its handshakes are refused
+    let mut refused = None;
+    for _ in 0..50 {
+        refused = proksi
+            .handshake_error(proksi.https_port, Some("a.test"))
+            .await;
+        if refused.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        refused.is_some_and(|err| err.contains("unrecognized name")),
+        "{}",
+        proksi.logs()
+    );
     // Applied without restarting
     assert_eq!(
         proksi

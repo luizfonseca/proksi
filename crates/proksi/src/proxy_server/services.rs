@@ -152,7 +152,7 @@ pub fn set_server_tls(tls: ServerTls) {
 
 fn configure_tls(builder: &mut SslAcceptorBuilder) -> Result<(), anyhow::Error> {
     // tls_settings.set_session_cache_mode(SslSessionCacheMode::SERVER);
-    builder.set_servername_callback(move |ssl_ref, _| CertStore::sni_callback(ssl_ref));
+    builder.set_servername_callback(CertStore::sni_callback);
     builder.set_client_hello_callback(|ssl, _| {
         super::handshakes::started(ssl);
         Ok(pingora::tls::ssl::ClientHelloResponse::SUCCESS)
