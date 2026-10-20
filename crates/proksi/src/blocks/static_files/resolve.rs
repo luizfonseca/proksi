@@ -44,33 +44,54 @@ fn percent_decode(segment: &str) -> Option<String> {
 }
 
 /// The file `segments` name in `directory` (its canonical path), or one of `index` in the
-/// directory they name
+/// directory they name. Each segment is looked at once (`lstat`): only symlinks are resolved
+/// in full, to see where they lead.
 pub fn find(directory: &Path, segments: &[String], index: &[String]) -> Found {
     let mut path = directory.to_path_buf();
-    path.extend(segments);
-    let Ok(path) = path.canonicalize() else {
-        return Found::Missing;
-    };
-    // A symlink inside may lead out of it
-    if !path.starts_with(directory) {
-        return Found::Missing;
+    let mut file_type = None;
+    for segment in segments {
+        path.push(segment);
+        let Some((resolved, kind)) = entry(directory, path) else {
+            return Found::Missing;
+        };
+        (path, file_type) = (resolved, Some(kind));
     }
-    if path.is_file() {
+    // No segments: the directory itself
+    let file_type = match file_type {
+        Some(file_type) => file_type,
+        None => match std::fs::metadata(&path) {
+            Ok(metadata) => metadata.file_type(),
+            Err(_) => return Found::Missing,
+        },
+    };
+    if file_type.is_file() {
         return Found::File(path);
     }
-    if path.is_dir() {
+    if file_type.is_dir() {
         for name in index {
-            let file = path.join(name);
-            if file.is_file()
-                && file
-                    .canonicalize()
-                    .is_ok_and(|file| file.starts_with(directory))
-            {
-                return Found::File(file);
+            if let Some((file, kind)) = entry(directory, path.join(name)) {
+                if kind.is_file() {
+                    return Found::File(file);
+                }
             }
         }
     }
     Found::Missing
+}
+
+/// `path` and what it is, a symlink resolved, if it's in `directory`
+fn entry(directory: &Path, path: PathBuf) -> Option<(PathBuf, std::fs::FileType)> {
+    let file_type = std::fs::symlink_metadata(&path).ok()?.file_type();
+    if !file_type.is_symlink() {
+        return Some((path, file_type));
+    }
+    // A symlink inside may lead out of it
+    let path = path.canonicalize().ok()?;
+    if !path.starts_with(directory) {
+        return None;
+    }
+    let file_type = std::fs::metadata(&path).ok()?.file_type();
+    Some((path, file_type))
 }
 
 #[cfg(test)]
@@ -150,6 +171,25 @@ mod tests {
         assert_eq!(
             find(&directory, &["alias.txt".into()], &[]),
             Found::File(directory.join("real.txt"))
+        );
+
+        // Directories too: the files below one leading out aren't served
+        fs::create_dir_all(directory.join("docs")).unwrap();
+        fs::write(directory.join("docs/a.txt"), "a").unwrap();
+        std::os::unix::fs::symlink(root.path(), directory.join("up")).unwrap();
+        std::os::unix::fs::symlink(directory.join("docs"), directory.join("guides")).unwrap();
+        assert_eq!(
+            find(&directory, &["up".into(), "secret.txt".into()], &[]),
+            Found::Missing
+        );
+        assert_eq!(
+            find(&directory, &["guides".into(), "a.txt".into()], &[]),
+            Found::File(directory.join("docs/a.txt"))
+        );
+        // Not a directory
+        assert_eq!(
+            find(&directory, &["real.txt".into(), "x".into()], &[]),
+            Found::Missing
         );
     }
 }
