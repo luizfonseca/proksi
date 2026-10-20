@@ -168,48 +168,63 @@ fn tcp_routes(
         }
         let https = http_and_https.https.contains(address);
         if https {
-            if route.tls == TcpTls::None {
-                return Err(format!(
-                    "{label}: address {address} is also used by HTTPS hosts (only tcp blocks in a host with TLS can share it, chosen by SNI)"
-                ));
-            }
-            // The host's connections go to the block, unless it is chosen by its protocols
-            let has_locations = hosts
-                .iter()
-                .any(|host| Some(&host.name) == route.host.as_ref() && !host.locations.is_empty());
-            if has_locations && route.tls == TcpTls::Passthrough {
-                return Err(format!(
-                    "{label}: the host also has locations on {address} (TLS passthrough is chosen by name only, so the host is either HTTPS or TCP there)"
-                ));
-            }
-            if has_locations && route.alpn.is_empty() {
-                return Err(format!(
-                    "{label}: the host also has locations on {address}, so the block needs `alpn` to tell them apart"
-                ));
-            }
+            shares_https(route, hosts)?;
         }
 
         let sharing = by_address.entry(address).or_default();
         for other in sharing.iter() {
-            let tls = |route: &TcpRoute| route.tls != TcpTls::None;
-            if !tls(other) || !tls(route) || other.host == route.host {
-                return Err(format!(
-                    "{} and {label} can't share address {address} (only tcp blocks of different hosts with TLS can, chosen by SNI)",
-                    other.label()
-                ));
-            }
-            // Telling them apart takes reading the name before the handshake, which proksi
-            // does on HTTPS addresses only
-            if other.tls != route.tls && !https {
-                return Err(format!(
-                    "{} and {label} can't share address {address} (TLS passthrough and TLS terminated by proksi only share the HTTPS address)",
-                    other.label()
-                ));
-            }
+            shares_with(route, other, https)?;
         }
         sharing.push(route);
     }
     Ok(routes)
+}
+
+/// A `tcp` block on the address of HTTPS hosts: in a host with TLS, told apart from the host's
+/// locations by its protocols (`alpn`)
+fn shares_https(route: &TcpRoute, hosts: &[Host]) -> Result<(), String> {
+    let (label, address) = (route.label(), route.listen.as_str());
+    if route.tls == TcpTls::None {
+        return Err(format!(
+            "{label}: address {address} is also used by HTTPS hosts (only tcp blocks in a host with TLS can share it, chosen by SNI)"
+        ));
+    }
+    // The host's connections go to the block, unless it is chosen by its protocols
+    let has_locations = hosts
+        .iter()
+        .any(|host| Some(&host.name) == route.host.as_ref() && !host.locations.is_empty());
+    if has_locations && route.tls == TcpTls::Passthrough {
+        return Err(format!(
+            "{label}: the host also has locations on {address} (TLS passthrough is chosen by name only, so the host is either HTTPS or TCP there)"
+        ));
+    }
+    if has_locations && route.alpn.is_empty() {
+        return Err(format!(
+            "{label}: the host also has locations on {address}, so the block needs `alpn` to tell them apart"
+        ));
+    }
+    Ok(())
+}
+
+/// Two `tcp` blocks on one address: of different hosts with TLS, chosen by SNI
+fn shares_with(route: &TcpRoute, other: &TcpRoute, https: bool) -> Result<(), String> {
+    let (label, address) = (route.label(), route.listen.as_str());
+    let tls = |route: &TcpRoute| route.tls != TcpTls::None;
+    if !tls(other) || !tls(route) || other.host == route.host {
+        return Err(format!(
+            "{} and {label} can't share address {address} (only tcp blocks of different hosts with TLS can, chosen by SNI)",
+            other.label()
+        ));
+    }
+    // Telling them apart takes reading the name before the handshake, which proksi does on
+    // HTTPS addresses only
+    if other.tls != route.tls && !https {
+        return Err(format!(
+            "{} and {label} can't share address {address} (TLS passthrough and TLS terminated by proksi only share the HTTPS address)",
+            other.label()
+        ));
+    }
+    Ok(())
 }
 
 /// The default HTTPS and HTTP addresses (`server.https_address`, `server.http_address`),

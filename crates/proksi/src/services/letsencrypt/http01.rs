@@ -296,11 +296,10 @@ impl LetsencryptService {
                 .collect::<std::collections::HashSet<_>>();
 
             // Hosts without TLS (and `*`) don't get certificates
-            for host in stores::lookup::tls_hosts() {
-                if existing.contains(&host.name) {
-                    continue;
-                }
-
+            let missing = stores::lookup::tls_hosts()
+                .into_iter()
+                .filter(|host| !existing.contains(&host.name));
+            for host in missing {
                 // Another replica may have just created it
                 let outcome = with_lease(
                     store.as_ref(),
@@ -328,46 +327,46 @@ impl LetsencryptService {
         loop {
             tracing::debug!("checking for certificates to renew");
             for host in stores::lookup::tls_hosts() {
-                let domain = host.name.as_str();
-                let Ok(Some(cert)) = account.certificate(domain) else {
-                    continue;
-                };
-
-                let valid_days_left = cert.valid_days_left();
-                tracing::info!("certificate for domain {domain} expires in {valid_days_left} days",);
-
-                // Nothing to do before the renewal interval
-                if valid_days_left > DEFAULT_RENEW_INTERVAL_DAYS {
-                    continue;
-                }
-
-                // Another replica may have just renewed it
-                let still_expiring = async {
-                    account
-                        .certificate(domain)
-                        .ok()
-                        .flatten()
-                        .is_some_and(|cert| cert.valid_days_left() <= DEFAULT_RENEW_INTERVAL_DAYS)
-                };
-                let outcome = with_lease(
-                    stores::global::get_store().as_ref(),
-                    stores::replica_id(),
-                    &format!("acme:{domain}"),
-                    LEASE_TTL,
-                    still_expiring,
-                    Self::create_order_for_domain(
-                        domain,
-                        account,
-                        host.challenge,
-                        self.dns.as_deref(),
-                    ),
-                )
-                .await;
-                log_outcome(domain, "renewing", &outcome);
+                self.renew_if_expiring(account, &host).await;
             }
 
             interval.tick().await;
         }
+    }
+
+    /// Renews a host's certificate when it expires soon
+    async fn renew_if_expiring(&self, account: &Account<PersistType>, host: &TlsHost) {
+        let domain = host.name.as_str();
+        let Ok(Some(cert)) = account.certificate(domain) else {
+            return;
+        };
+
+        let valid_days_left = cert.valid_days_left();
+        tracing::info!("certificate for domain {domain} expires in {valid_days_left} days",);
+
+        // Nothing to do before the renewal interval
+        if valid_days_left > DEFAULT_RENEW_INTERVAL_DAYS {
+            return;
+        }
+
+        // Another replica may have just renewed it
+        let still_expiring = async {
+            account
+                .certificate(domain)
+                .ok()
+                .flatten()
+                .is_some_and(|cert| cert.valid_days_left() <= DEFAULT_RENEW_INTERVAL_DAYS)
+        };
+        let outcome = with_lease(
+            stores::global::get_store().as_ref(),
+            stores::replica_id(),
+            &format!("acme:{domain}"),
+            LEASE_TTL,
+            still_expiring,
+            Self::create_order_for_domain(domain, account, host.challenge, self.dns.as_deref()),
+        )
+        .await;
+        log_outcome(domain, "renewing", &outcome);
     }
 
     /// Saves the domain's certificate in the store: the one Let's Encrypt already issued, a

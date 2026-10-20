@@ -46,19 +46,24 @@ fn check_duplicate_blocks(body: &hcl::Body, parent: &str) -> Result<(), hcl::Err
 
         let repeatable = matches!(block.identifier(), "header" | "query" | "cookie");
         if !block.labels().is_empty() && !repeatable && !seen.insert(name.clone()) {
-            let parent = if parent.is_empty() {
-                String::new()
-            } else {
-                format!(" in `{parent}`")
-            };
             return Err(hcl::Error::Message(format!(
-                "duplicate block `{name}`{parent}"
+                "duplicate block `{name}`{}",
+                in_parent(parent)
             )));
         }
 
         check_duplicate_blocks(block.body(), &name)?;
     }
     Ok(())
+}
+
+/// Where a block is, for errors: in its parent block, or nothing at the top level
+fn in_parent(parent: &str) -> String {
+    if parent.is_empty() {
+        String::new()
+    } else {
+        format!(" in `{parent}`")
+    }
 }
 
 /// Function to retrieve the number of CPUs available on the system.

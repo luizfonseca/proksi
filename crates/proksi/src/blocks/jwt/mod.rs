@@ -89,23 +89,24 @@ impl Jwt {
         let request = session.req_header_mut();
         for (claim, name) in &self.claims_to_headers {
             request.remove_header(name);
-            let value = match claims.get(claim) {
-                None | Some(Value::Null) => continue,
-                Some(Value::String(text)) => text.clone(),
-                Some(Value::Array(values)) => values
-                    .iter()
-                    .map(|value| match value {
-                        Value::String(text) => text.clone(),
-                        other => other.to_string(),
-                    })
-                    .collect::<Vec<_>>()
-                    .join(","),
-                Some(other) => other.to_string(),
-            };
-            if let Ok(value) = HeaderValue::from_str(&value) {
+            let value = claims.get(claim).and_then(header_value);
+            if let Some(value) = value.and_then(|value| HeaderValue::from_str(&value).ok()) {
                 let _ = request.insert_header(name.clone(), value);
             }
         }
+    }
+}
+
+/// A claim as a header's value: lists joined with commas, nothing for `null`
+fn header_value(claim: &Value) -> Option<String> {
+    let text = |value: &Value| match value {
+        Value::String(text) => text.clone(),
+        other => other.to_string(),
+    };
+    match claim {
+        Value::Null => None,
+        Value::Array(values) => Some(values.iter().map(text).collect::<Vec<_>>().join(",")),
+        other => Some(text(other)),
     }
 }
 

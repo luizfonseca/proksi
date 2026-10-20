@@ -58,17 +58,22 @@ impl StoreSource {
         if self.applied_revision != Some(revision) {
             let stored = self.store.routes().await?;
 
-            let mut routes = Vec::with_capacity(stored.routes.len());
-            for route in stored.routes {
-                match route {
-                    Ok(stored) => routes.push(stored.host),
-                    Err(err) => tracing::warn!(
-                        "skipping route for host {} from the store: {}",
-                        err.host,
-                        err.error
-                    ),
-                }
-            }
+            let routes = stored
+                .routes
+                .into_iter()
+                .filter_map(|route| {
+                    route
+                        .map_err(|err| {
+                            tracing::warn!(
+                                "skipping route for host {} from the store: {}",
+                                err.host,
+                                err.error
+                            );
+                        })
+                        .ok()
+                })
+                .map(|stored| stored.host)
+                .collect::<Vec<_>>();
 
             let mut snapshot = RouteSnapshot::new(RouteSourceKind::Store, routes);
             snapshot.revision = Some(stored.revision);

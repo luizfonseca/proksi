@@ -80,20 +80,7 @@ where
 pub async fn wait_until_visible(record: &DnsRecord, timeout: Duration) -> Result<(), String> {
     let servers = name_server_addresses(&record.name_servers).await?;
     let wait = async {
-        loop {
-            let mut visible = true;
-            for server in &servers {
-                let answered = query::txt_records(*server, &record.name)
-                    .await
-                    .is_ok_and(|records| records.contains(&record.value));
-                if !answered {
-                    visible = false;
-                    break;
-                }
-            }
-            if visible {
-                return;
-            }
+        while !visible(&servers, record).await {
             tokio::time::sleep(PROPAGATION_CHECK).await;
         }
     };
@@ -103,6 +90,19 @@ pub async fn wait_until_visible(record: &DnsRecord, timeout: Duration) -> Result
             record.name
         )
     })
+}
+
+/// Whether every one of `servers` answers the record
+async fn visible(servers: &[SocketAddr], record: &DnsRecord) -> bool {
+    for server in servers {
+        let answered = query::txt_records(*server, &record.name)
+            .await
+            .is_ok_and(|records| records.contains(&record.value));
+        if !answered {
+            return false;
+        }
+    }
+    true
 }
 
 /// The addresses of name servers given as names (port 53) or `ip:port`

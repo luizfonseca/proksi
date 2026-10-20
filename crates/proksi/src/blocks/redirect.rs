@@ -59,19 +59,22 @@ impl Redirect {
         for part in &self.to {
             match part {
                 Part::Text(text) => location.push_str(text),
-                Part::Uri => {
-                    location.push_str(path);
-                    if let Some(query) = query {
-                        location.push('?');
-                        location.push_str(query);
-                    }
-                }
+                Part::Uri => push_uri(&mut location, path, query),
                 Part::Path => location.push_str(path),
                 Part::Query => location.push_str(query.unwrap_or_default()),
                 Part::Host => location.push_str(host),
             }
         }
         location
+    }
+}
+
+/// `path`, then `?query` if there's one
+fn push_uri(location: &mut String, path: &str, query: Option<&str>) {
+    location.push_str(path);
+    if let Some(query) = query {
+        location.push('?');
+        location.push_str(query);
     }
 }
 

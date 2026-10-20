@@ -1097,19 +1097,11 @@ async fn auth_service() -> (u16, Arc<Mutex<Vec<String>>>) {
             };
             let seen = seen.clone();
             tokio::spawn(async move {
-                use tokio::io::{AsyncReadExt, AsyncWriteExt};
-                let mut request = vec![];
-                let mut buffer = [0u8; 4096];
-                while !request.ends_with(b"\r\n\r\n") {
-                    let Ok(read) = stream.read(&mut buffer).await else {
-                        return;
-                    };
-                    if read == 0 {
-                        return;
-                    }
-                    request.extend_from_slice(&buffer[..read]);
-                }
-                let request = String::from_utf8_lossy(&request).to_lowercase();
+                use tokio::io::AsyncWriteExt;
+                let Some((head, _)) = read_head(&mut stream).await else {
+                    return;
+                };
+                let request = head.to_lowercase();
                 seen.lock().unwrap().push(request.clone());
                 if request.contains("x-forwarded-uri: /slow") {
                     tokio::time::sleep(Duration::from_secs(3)).await;
@@ -3540,18 +3532,22 @@ host "app.test" {
             let (version, status) = (res.version(), res.status());
             let body = res.text().await;
             assert!(body.is_ok(), "{version:?} {path} {status}: {body:?}");
-            let expected = match path {
-                "/" => 200,
-                "/answered" => 403,
-                _ => 502,
-            };
-            assert_eq!(status, expected, "{version:?} {path}");
+            assert_eq!(status, expected(path), "{version:?} {path}");
         }
     }
     let res = proksi.client_h2().get(url("/")).send().await.unwrap();
     assert_eq!(res.version(), reqwest::Version::HTTP_2);
 
     proksi.assert_healthy();
+}
+
+/// The status of each path of `test_unreachable_upstreams_answer_502_over_http2`
+fn expected(path: &str) -> u16 {
+    match path {
+        "/" => 200,
+        "/answered" => 403,
+        _ => 502,
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -4039,6 +4035,44 @@ host "split.test" {
     proksi.assert_healthy();
 }
 
+/// A request's head (up to its blank line), and the part of its body read with it; `None` when
+/// the connection ends first
+async fn read_head(stream: &mut tokio::net::TcpStream) -> Option<(String, Vec<u8>)> {
+    use tokio::io::AsyncReadExt;
+    let mut data = vec![];
+    let mut buffer = [0u8; 4096];
+    loop {
+        let read = stream
+            .read(&mut buffer)
+            .await
+            .ok()
+            .filter(|read| *read > 0)?;
+        data.extend_from_slice(&buffer[..read]);
+        if let Some(end) = data.windows(4).position(|window| window == b"\r\n\r\n") {
+            let head = String::from_utf8_lossy(&data[..end]).to_string();
+            return Some((head, data[end + 4..].to_vec()));
+        }
+    }
+}
+
+/// The rest of a body of `length` bytes, until the connection ends; `None` when reading fails
+async fn read_body(
+    stream: &mut tokio::net::TcpStream,
+    body: &mut Vec<u8>,
+    length: usize,
+) -> Option<()> {
+    use tokio::io::AsyncReadExt;
+    let mut buffer = [0u8; 4096];
+    while body.len() < length {
+        let read = stream.read(&mut buffer).await.ok()?;
+        if read == 0 {
+            break;
+        }
+        body.extend_from_slice(&buffer[..read]);
+    }
+    Some(())
+}
+
 /// An upstream keeping the requests it gets: request line, headers (lowercase) and body
 async fn recording() -> (u16, Arc<Mutex<Vec<(String, Vec<(String, String)>, String)>>>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -4052,21 +4086,9 @@ async fn recording() -> (u16, Arc<Mutex<Vec<(String, Vec<(String, String)>, Stri
             };
             let kept = kept.clone();
             tokio::spawn(async move {
-                use tokio::io::{AsyncReadExt, AsyncWriteExt};
-                let mut data = vec![];
-                let mut buffer = [0u8; 4096];
-                let (head, mut body) = loop {
-                    let Ok(read) = stream.read(&mut buffer).await else {
-                        return;
-                    };
-                    if read == 0 {
-                        return;
-                    }
-                    data.extend_from_slice(&buffer[..read]);
-                    if let Some(end) = data.windows(4).position(|window| window == b"\r\n\r\n") {
-                        let head = String::from_utf8_lossy(&data[..end]).to_string();
-                        break (head, data[end + 4..].to_vec());
-                    }
+                use tokio::io::AsyncWriteExt;
+                let Some((head, mut body)) = read_head(&mut stream).await else {
+                    return;
                 };
                 let mut lines = head.lines();
                 let line = lines.next().unwrap_or_default().to_string();
@@ -4079,14 +4101,8 @@ async fn recording() -> (u16, Arc<Mutex<Vec<(String, Vec<(String, String)>, Stri
                     .find(|(name, _)| name == "content-length")
                     .and_then(|(_, value)| value.parse::<usize>().ok())
                     .unwrap_or(0);
-                while body.len() < length {
-                    let Ok(read) = stream.read(&mut buffer).await else {
-                        return;
-                    };
-                    if read == 0 {
-                        break;
-                    }
-                    body.extend_from_slice(&buffer[..read]);
+                if read_body(&mut stream, &mut body, length).await.is_none() {
+                    return;
                 }
                 kept.lock().unwrap().push((
                     line,

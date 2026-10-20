@@ -158,46 +158,59 @@ mod tests {
         let log = received.clone();
         tokio::spawn(async move {
             loop {
-                let (mut stream, _) = listener.accept().await.unwrap();
-                let mut request = vec![];
-                let mut buffer = [0u8; 4096];
-                // Headers, then the body they announce
-                let (head, body) = loop {
-                    let read = stream.read(&mut buffer).await.unwrap();
-                    request.extend_from_slice(&buffer[..read]);
-                    let text = String::from_utf8_lossy(&request).to_string();
-                    if let Some((head, body)) = text.split_once("\r\n\r\n") {
-                        let length = head
-                            .lines()
-                            .find_map(|line| {
-                                line.to_lowercase()
-                                    .strip_prefix("content-length: ")
-                                    .map(|value| value.trim().parse::<usize>().unwrap())
-                            })
-                            .unwrap_or(0);
-                        if body.len() >= length {
-                            break (head.to_string(), body.to_string());
-                        }
-                    }
-                };
-                let mut line = head.lines().next().unwrap().split(' ');
-                let (method, path) = (line.next().unwrap(), line.next().unwrap());
-                assert!(head.contains("authorization: Bearer token"), "{head}");
-                let body = serde_json::from_str(&body).unwrap_or(Value::Null);
-                log.lock()
-                    .unwrap()
-                    .push((method.to_string(), path.to_string(), body));
-
-                let (status, answer) = respond(method, path);
-                let answer = answer.to_string();
-                let response = format!(
-                    "HTTP/1.1 {status} OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{answer}",
-                    answer.len()
-                );
-                stream.write_all(response.as_bytes()).await.unwrap();
+                let (stream, _) = listener.accept().await.unwrap();
+                answer(stream, respond, &log).await;
             }
         });
         (format!("http://{address}"), received)
+    }
+
+    /// Answers one request of the fake API
+    async fn answer(
+        mut stream: tokio::net::TcpStream,
+        respond: fn(&str, &str) -> (u16, Value),
+        log: &Received,
+    ) {
+        let mut request = vec![];
+        let mut buffer = [0u8; 4096];
+        // Headers, then the body they announce
+        let (head, body) = loop {
+            let read = stream.read(&mut buffer).await.unwrap();
+            request.extend_from_slice(&buffer[..read]);
+            if let Some(whole) = whole_request(&request) {
+                break whole;
+            }
+        };
+        let mut line = head.lines().next().unwrap().split(' ');
+        let (method, path) = (line.next().unwrap(), line.next().unwrap());
+        assert!(head.contains("authorization: Bearer token"), "{head}");
+        let body = serde_json::from_str(&body).unwrap_or(Value::Null);
+        log.lock()
+            .unwrap()
+            .push((method.to_string(), path.to_string(), body));
+
+        let (status, answer) = respond(method, path);
+        let answer = answer.to_string();
+        let response = format!(
+            "HTTP/1.1 {status} OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{answer}",
+            answer.len()
+        );
+        stream.write_all(response.as_bytes()).await.unwrap();
+    }
+
+    /// The headers and body of a request, once the body they announce arrived
+    fn whole_request(request: &[u8]) -> Option<(String, String)> {
+        let text = String::from_utf8_lossy(request).to_string();
+        let (head, body) = text.split_once("\r\n\r\n")?;
+        let length = head
+            .lines()
+            .find_map(|line| {
+                line.to_lowercase()
+                    .strip_prefix("content-length: ")
+                    .map(|value| value.trim().parse::<usize>().unwrap())
+            })
+            .unwrap_or(0);
+        (body.len() >= length).then(|| (head.to_string(), body.to_string()))
     }
 
     fn zones(path: &str) -> (u16, Value) {

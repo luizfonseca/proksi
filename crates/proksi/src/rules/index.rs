@@ -110,61 +110,65 @@ fn first_segment(prefix: &str, whole: bool) -> Option<String> {
     }
 }
 
+/// What a request needs to pass a test (unless it's negated)
+fn test_requirements(field: &Field, test: &Test) -> Requires {
+    let mut requires = Requires::default();
+    match (field, test) {
+        (
+            Field::Method,
+            Test::Method {
+                methods,
+                negate: false,
+            },
+        ) => {
+            requires.methods = Some(
+                methods
+                    .iter()
+                    .fold(0, |mask, method| mask | 1 << slot(method)),
+            );
+        }
+        (
+            Field::Host,
+            Test::Text {
+                test,
+                negate: false,
+            },
+        ) => {
+            requires.hosts = match test {
+                TextTest::Eq(host) => Some(vec![host.clone()]),
+                TextTest::In(hosts) => Some(hosts.clone()),
+                _ => None,
+            };
+        }
+        (
+            Field::Path,
+            Test::Text {
+                test,
+                negate: false,
+            },
+        ) => {
+            let segment = match test {
+                TextTest::Eq(path) => first_segment(path, true),
+                TextTest::Prefix(prefix) => first_segment(prefix, false),
+                TextTest::Wildcard(parts) if parts.len() > 1 => {
+                    parts.first().and_then(|first| first_segment(first, false))
+                }
+                _ => None,
+            };
+            requires.segments = segment.map(|segment| vec![segment]);
+        }
+        _ => {}
+    }
+    requires
+}
+
 fn requirements(compiled: &Compiled, node: &Node) -> Requires {
     match node {
-        Node::Test(test) => {
-            let mut requires = Requires::default();
-            let Some((_, group, test)) = compiled.test(*test) else {
-                return requires;
-            };
-            match (&group.field, test) {
-                (
-                    Field::Method,
-                    Test::Method {
-                        methods,
-                        negate: false,
-                    },
-                ) => {
-                    requires.methods = Some(
-                        methods
-                            .iter()
-                            .fold(0, |mask, method| mask | 1 << slot(method)),
-                    );
-                }
-                (
-                    Field::Host,
-                    Test::Text {
-                        test,
-                        negate: false,
-                    },
-                ) => {
-                    requires.hosts = match test {
-                        TextTest::Eq(host) => Some(vec![host.clone()]),
-                        TextTest::In(hosts) => Some(hosts.clone()),
-                        _ => None,
-                    };
-                }
-                (
-                    Field::Path,
-                    Test::Text {
-                        test,
-                        negate: false,
-                    },
-                ) => {
-                    let segment = match test {
-                        TextTest::Eq(path) => first_segment(path, true),
-                        TextTest::Prefix(prefix) => first_segment(prefix, false),
-                        TextTest::Wildcard(parts) if parts.len() > 1 => {
-                            parts.first().and_then(|first| first_segment(first, false))
-                        }
-                        _ => None,
-                    };
-                    requires.segments = segment.map(|segment| vec![segment]);
-                }
-                _ => {}
-            }
-            requires
-        }
+        Node::Test(test) => compiled
+            .test(*test)
+            .map_or_else(Requires::default, |(_, group, test)| {
+                test_requirements(&group.field, test)
+            }),
         // Every condition holds: any of their requirements applies
         Node::All(nodes) => {
             let mut requires = Requires::default();
@@ -239,39 +243,41 @@ impl Index {
             segments: HashMap::new(),
         };
         for (rule, compiled_rule) in compiled.rules.iter().enumerate() {
-            let requires = requirements(compiled, &compiled_rule.condition);
-            let methods = requires.methods.unwrap_or(u16::MAX);
-            for (slot, set) in index.methods.iter_mut().enumerate() {
-                if methods & (1 << slot) != 0 {
-                    set.insert(rule);
-                }
-            }
-            match requires.hosts {
-                Some(hosts) => {
-                    for host in hosts {
-                        index
-                            .hosts
-                            .entry(host)
-                            .or_insert_with(RuleSet::none)
-                            .insert(rule);
-                    }
-                }
-                None => index.any_host.insert(rule),
-            }
-            match requires.segments {
-                Some(segments) => {
-                    for segment in segments {
-                        index
-                            .segments
-                            .entry(segment)
-                            .or_insert_with(RuleSet::none)
-                            .insert(rule);
-                    }
-                }
-                None => index.any_segment.insert(rule),
-            }
+            index.add(rule, requirements(compiled, &compiled_rule.condition));
         }
         Some(index)
+    }
+
+    /// Rule `rule`, under what it requires
+    fn add(&mut self, rule: usize, requires: Requires) {
+        let methods = requires.methods.unwrap_or(u16::MAX);
+        for (slot, set) in self.methods.iter_mut().enumerate() {
+            if methods & (1 << slot) != 0 {
+                set.insert(rule);
+            }
+        }
+        match requires.hosts {
+            Some(hosts) => {
+                for host in hosts {
+                    self.hosts
+                        .entry(host)
+                        .or_insert_with(RuleSet::none)
+                        .insert(rule);
+                }
+            }
+            None => self.any_host.insert(rule),
+        }
+        match requires.segments {
+            Some(segments) => {
+                for segment in segments {
+                    self.segments
+                        .entry(segment)
+                        .or_insert_with(RuleSet::none)
+                        .insert(rule);
+                }
+            }
+            None => self.any_segment.insert(rule),
+        }
     }
 
     /// The rules a request with this method, host (lowercase) and path (normalized) can match

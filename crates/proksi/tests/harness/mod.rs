@@ -793,6 +793,41 @@ async fn read_chunked_body(reader: &mut BufReader<TcpStream>) -> Option<usize> {
     }
 }
 
+/// A request's headers, by lowercase name (`None` if the connection closed)
+async fn read_headers(
+    reader: &mut BufReader<TcpStream>,
+) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let mut headers = serde_json::Map::new();
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line).await.unwrap_or(0) == 0 {
+            return None;
+        }
+        let line = line.trim_end();
+        if line.is_empty() {
+            return Some(headers);
+        }
+        if let Some((name, value)) = line.split_once(':') {
+            headers.insert(name.trim().to_lowercase(), value.trim().into());
+        }
+    }
+}
+
+/// Reads a request body, chunked or of `content_length` bytes, returning its length (`None`
+/// if the connection closed)
+async fn read_body(
+    reader: &mut BufReader<TcpStream>,
+    chunked: bool,
+    content_length: usize,
+) -> Option<usize> {
+    if chunked {
+        return read_chunked_body(reader).await;
+    }
+    let mut body = vec![0; content_length];
+    reader.read_exact(&mut body).await.ok()?;
+    Some(content_length)
+}
+
 async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<String, u32>>>) {
     let mut reader = BufReader::new(stream);
 
@@ -806,30 +841,14 @@ async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<Strin
         let method = parts.next().unwrap_or_default().to_string();
         let path = parts.next().unwrap_or_default().to_string();
 
-        let mut headers = serde_json::Map::new();
-        let mut content_length = 0;
-        let mut chunked = false;
-        loop {
-            let mut line = String::new();
-            if reader.read_line(&mut line).await.unwrap_or(0) == 0 {
-                return;
-            }
-            let line = line.trim_end();
-            if line.is_empty() {
-                break;
-            }
-            if let Some((name, value)) = line.split_once(':') {
-                let name = name.trim().to_lowercase();
-                let value = value.trim().to_string();
-                if name == "content-length" {
-                    content_length = value.parse().unwrap_or(0);
-                }
-                if name == "transfer-encoding" && value.contains("chunked") {
-                    chunked = true;
-                }
-                headers.insert(name, value.into());
-            }
-        }
+        let Some(headers) = read_headers(&mut reader).await else {
+            return;
+        };
+        let header = |name: &str| headers.get(name).and_then(serde_json::Value::as_str);
+        let content_length = header("content-length")
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(0);
+        let chunked = header("transfer-encoding").is_some_and(|value| value.contains("chunked"));
         // Counted once the headers arrive, so requests ended while sending their body count too
         let hit_count = {
             let mut hits = hits.lock().unwrap();
@@ -838,17 +857,8 @@ async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<Strin
             *count
         };
 
-        let body_length = if chunked {
-            let Some(length) = read_chunked_body(&mut reader).await else {
-                return;
-            };
-            length
-        } else {
-            let mut body = vec![0; content_length];
-            if reader.read_exact(&mut body).await.is_err() {
-                return;
-            }
-            content_length
+        let Some(body_length) = read_body(&mut reader, chunked, content_length).await else {
+            return;
         };
 
         let body = serde_json::json!({
@@ -944,18 +954,25 @@ async fn handle_websocket_connection(
     };
     record("open".to_string());
 
+    let closed = echo(&mut ws, &record).await;
+    record(closed);
+}
+
+/// Echoes text and binary messages until the connection ends: why it did
+async fn echo(ws: &mut WebSocketStream<TcpStream>, record: &impl Fn(String)) -> String {
     loop {
-        match ws.next().await {
-            Some(Ok(message)) if message.is_text() || message.is_binary() => {
-                if let Err(err) = ws.send(message).await {
-                    return record(format!("send failed: {err}"));
-                }
-                record("echoed".to_string());
-            }
-            Some(Ok(_)) => {}
-            Some(Err(err)) => return record(format!("read failed: {err}")),
-            None => return record("closed by proksi".to_string()),
+        let message = match ws.next().await {
+            Some(Ok(message)) => message,
+            Some(Err(err)) => return format!("read failed: {err}"),
+            None => return "closed by proksi".to_string(),
+        };
+        if !(message.is_text() || message.is_binary()) {
+            continue;
         }
+        if let Err(err) = ws.send(message).await {
+            return format!("send failed: {err}");
+        }
+        record("echoed".to_string());
     }
 }
 

@@ -166,28 +166,10 @@ impl ProxyHttp for Router {
             // Hosts with TLS (and unknown hosts): ACME challenges, then redirect to HTTPS.
             // Hosts without TLS get no certificates, so all their paths are proxied.
             if host_container.is_none() {
-                let path = session.req_header().uri.path().to_string();
-                let req_host = get_host(session).to_string();
-                if path.starts_with(http_proxy::ACME_CHALLENGES) {
-                    if http_proxy::serve_acme_challenge(session, &req_host).await? {
-                        return Ok(true);
-                    }
-                    // Challenges answered by an upstream, in a location of their own (e.g.
-                    // cert-manager's HTTP-01 solver): proxied, over HTTP
-                    host_container = stores::lookup::find_host(host_without_port, |host| {
-                        host.location_for(&path).is_some_and(|location| {
-                            location.path.starts_with(http_proxy::ACME_CHALLENGES)
-                        })
-                    });
-                    if host_container.is_none() {
-                        respond_error(session, ctx, 404).await?;
-                        return Ok(true);
-                    }
-                } else {
-                    let port = stores::lookup::named_host(host_without_port)
-                        .and_then(|host| host.https_redirect_port());
-                    return http_proxy::redirect_to_https(session, &req_host, port).await;
-                }
+                let Some(found) = acme_or_redirect(session, ctx).await? else {
+                    return Ok(true);
+                };
+                host_container = Some(found);
             }
         }
 
@@ -453,11 +435,7 @@ impl ProxyHttp for Router {
         if let Some(location) = ctx.route_container.clone() {
             // The location's path rewrite
             if let Some(rewrite) = &location.rewrite {
-                let uri = &upstream_request.uri;
-                let rewritten = rewrite.apply(uri.path(), uri.query());
-                if let Ok(uri) = rewritten.parse::<http::Uri>() {
-                    upstream_request.set_uri(uri);
-                }
+                rewrite_uri(upstream_request, rewrite);
             }
 
             location
@@ -950,6 +928,43 @@ mod tests {
 
         // Created for every request: the location is only shared once it's found
         assert!(router.new_ctx().route_container.is_none());
+    }
+}
+
+/// A plain HTTP request for a host with TLS, or an unknown one: an ACME challenge, answered by
+/// proksi or proxied to a location of its own (e.g. cert-manager's HTTP-01 solver), else a
+/// redirect to HTTPS. The host to proxy it to, or `None` once answered.
+async fn acme_or_redirect(
+    session: &mut Session,
+    ctx: &mut RouterContext,
+) -> pingora::Result<Option<Arc<stores::host_container::HostContainer>>> {
+    let path = session.req_header().uri.path().to_string();
+    let req_host = get_host(session).to_string();
+    if !path.starts_with(http_proxy::ACME_CHALLENGES) {
+        let port =
+            stores::lookup::named_host(&ctx.host).and_then(|host| host.https_redirect_port());
+        http_proxy::redirect_to_https(session, &req_host, port).await?;
+        return Ok(None);
+    }
+    if http_proxy::serve_acme_challenge(session, &req_host).await? {
+        return Ok(None);
+    }
+    let found = stores::lookup::find_host(&ctx.host, |host| {
+        host.location_for(&path)
+            .is_some_and(|location| location.path.starts_with(http_proxy::ACME_CHALLENGES))
+    });
+    if found.is_none() {
+        respond_error(session, ctx, 404).await?;
+    }
+    Ok(found)
+}
+
+/// The path sent to the upstream, rewritten (its query kept)
+fn rewrite_uri(request: &mut RequestHeader, rewrite: &crate::config::host::CompiledRewrite) {
+    let uri = &request.uri;
+    let rewritten = rewrite.apply(uri.path(), uri.query());
+    if let Ok(uri) = rewritten.parse::<http::Uri>() {
+        request.set_uri(uri);
     }
 }
 
