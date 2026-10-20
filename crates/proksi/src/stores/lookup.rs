@@ -13,18 +13,18 @@ pub fn find_host(
     name: &str,
     serves: impl Fn(&Arc<HostContainer>) -> bool,
 ) -> Option<Arc<HostContainer>> {
-    find_host_in(name, get_route_by_key, serves)
+    find_host_in(name, super::has_wildcard_hosts(), get_route_by_key, serves)
 }
 
 /// The host with that name, or the wildcard host of its parent, without the catch-all `*`
 pub fn named_host(name: &str) -> Option<Arc<HostContainer>> {
-    named_host_in(name, get_route_by_key)
+    named_host_in(name, super::has_wildcard_hosts(), get_route_by_key)
 }
 
 /// The name the certificate for `name` (a TLS server name) is stored under: the name of the
 /// host serving it, so a wildcard host's for names it serves
 pub fn certificate_name(name: &str) -> std::borrow::Cow<'_, str> {
-    certificate_name_in(name, get_route_by_key)
+    certificate_name_in(name, super::has_wildcard_hosts(), get_route_by_key)
 }
 
 /// A host served over HTTPS, needing a certificate
@@ -41,17 +41,19 @@ pub fn tls_hosts() -> Vec<TlsHost> {
     tls_hosts_in(get_routes().iter())
 }
 
+/// `wildcards`: whether there are wildcard hosts to look for
 fn find_host_in<T>(
     name: &str,
+    wildcards: bool,
     get: impl Fn(&str) -> Option<T>,
     serves: impl Fn(&T) -> bool,
 ) -> Option<T> {
-    named_host_in(name, &get)
+    named_host_in(name, wildcards, &get)
         .or_else(|| get("*"))
         .filter(|host| serves(host))
 }
 
-fn named_host_in<T>(name: &str, get: impl Fn(&str) -> Option<T>) -> Option<T> {
+fn named_host_in<T>(name: &str, wildcards: bool, get: impl Fn(&str) -> Option<T>) -> Option<T> {
     // Names are lowercase already, as clients send them
     let lowercase;
     let name = if name.chars().any(char::is_uppercase) {
@@ -60,11 +62,16 @@ fn named_host_in<T>(name: &str, get: impl Fn(&str) -> Option<T>) -> Option<T> {
     } else {
         name
     };
-    get(name).or_else(|| with_wildcard_parent(name, |wildcard| get(wildcard)))
+    get(name).or_else(|| {
+        wildcards
+            .then(|| with_wildcard_parent(name, |wildcard| get(wildcard)))
+            .flatten()
+    })
 }
 
 fn certificate_name_in<T>(
     name: &str,
+    wildcards: bool,
     get: impl Fn(&str) -> Option<T>,
 ) -> std::borrow::Cow<'_, str> {
     use std::borrow::Cow;
@@ -73,7 +80,7 @@ fn certificate_name_in<T>(
     } else {
         Cow::Borrowed(name)
     };
-    if get(&name).is_some() {
+    if !wildcards || get(&name).is_some() {
         return name;
     }
     with_wildcard_parent(&name, |wildcard| {
@@ -144,7 +151,7 @@ mod tests {
         let get = |name: &str| hosts.get(name).cloned();
 
         assert!(Arc::ptr_eq(
-            &find_host_in("A.Test", get, |_| true).unwrap(),
+            &find_host_in("A.Test", true, get, |_| true).unwrap(),
             &named
         ));
     }
@@ -156,7 +163,7 @@ mod tests {
         let get = |name: &str| hosts.get(name).cloned();
 
         assert!(Arc::ptr_eq(
-            &find_host_in("other.test", get, |_| true).unwrap(),
+            &find_host_in("other.test", true, get, |_| true).unwrap(),
             &catch_all
         ));
     }
@@ -170,13 +177,16 @@ mod tests {
             ("*".to_string(), catch_all.clone()),
         ]);
         let get = |name: &str| hosts.get(name).cloned();
-        let found = |name: &str| find_host_in(name, get, |_| true).unwrap();
+        let found = |name: &str| find_host_in(name, true, get, |_| true).unwrap();
 
         assert!(Arc::ptr_eq(&found("a.example.test"), &wildcard));
         assert!(Arc::ptr_eq(&found("B.Example.Test"), &wildcard));
         // Not the parent itself, nor two more labels
         assert!(Arc::ptr_eq(&found("example.test"), &catch_all));
         assert!(Arc::ptr_eq(&found("a.b.example.test"), &catch_all));
+        // Not looked for while no host has a wildcard name
+        let found = find_host_in("a.example.test", false, get, |_| true).unwrap();
+        assert!(Arc::ptr_eq(&found, &catch_all));
     }
 
     #[test]
@@ -189,7 +199,7 @@ mod tests {
         let get = |name: &str| hosts.get(name).cloned();
 
         assert!(Arc::ptr_eq(
-            &find_host_in("a.example.test", get, |_| true).unwrap(),
+            &find_host_in("a.example.test", true, get, |_| true).unwrap(),
             &exact
         ));
     }
@@ -204,10 +214,10 @@ mod tests {
         let get = |name: &str| hosts.get(name).cloned();
 
         assert!(Arc::ptr_eq(
-            &named_host_in("a.example.test", get).unwrap(),
+            &named_host_in("a.example.test", true, get).unwrap(),
             &wildcard
         ));
-        assert!(named_host_in("other.test", get).is_none());
+        assert!(named_host_in("other.test", true, get).is_none());
     }
 
     #[test]
@@ -218,11 +228,20 @@ mod tests {
         ]);
         let get = |name: &str| hosts.get(name).cloned();
 
-        assert_eq!(certificate_name_in("a.example.test", get), "a.example.test");
-        assert_eq!(certificate_name_in("b.example.test", get), "*.example.test");
-        assert_eq!(certificate_name_in("B.Example.Test", get), "*.example.test");
+        assert_eq!(
+            certificate_name_in("a.example.test", true, get),
+            "a.example.test"
+        );
+        assert_eq!(
+            certificate_name_in("b.example.test", true, get),
+            "*.example.test"
+        );
+        assert_eq!(
+            certificate_name_in("B.Example.Test", true, get),
+            "*.example.test"
+        );
         // Names no host serves keep their own (nothing is found for them)
-        assert_eq!(certificate_name_in("other.test", get), "other.test");
+        assert_eq!(certificate_name_in("other.test", true, get), "other.test");
     }
 
     #[test]
@@ -230,6 +249,7 @@ mod tests {
         let hosts: HashMap<String, Arc<HostContainer>> = HashMap::new();
         assert!(find_host_in(
             "other.test",
+            true,
             |name: &str| hosts.get(name).cloned(),
             |_| true
         )
@@ -277,7 +297,7 @@ mod tests {
 
         // e.g. a request on the HTTP port for a host with TLS: not served (it's redirected),
         // even though `*` would serve it
-        assert!(find_host_in("a.test", get, plain_http).is_none());
-        assert!(find_host_in("b.test", get, plain_http).is_some());
+        assert!(find_host_in("a.test", true, get, plain_http).is_none());
+        assert!(find_host_in("b.test", true, get, plain_http).is_some());
     }
 }
