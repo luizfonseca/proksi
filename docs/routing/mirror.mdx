@@ -1,0 +1,77 @@
+---
+title: "Mirror"
+description: "Sends copies of a location's requests to other upstreams, dropping their answers."
+---
+
+A `mirror` sends copies of a location's requests to upstreams of its own: a new version tested with real traffic before it takes any (shadow traffic), a staging environment, or a service recording requests. The requests are answered by the location's upstreams as before, and the mirror's answers are dropped.
+
+```hcl
+host "api.example.com" {
+  location "/" {
+    upstream "api-v1:8080" {}
+
+    mirror {
+      percent = 10
+      upstream "api-v2:8080" {}
+    }
+  }
+}
+```
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `upstream "<host:port>"` | Its upstreams, as a location's (`weight`, `sni`, `headers`); at least one |
+| `percent` | The share of requests copied, from `0` to `100` (default `100`) |
+| `max_body_size` | Requests with a larger body aren't copied, such as `"1MiB"` (default `"64KiB"`). `0` copies requests without a body only |
+| `max_in_flight` | Copies being sent at most; others are dropped (default `100`) |
+| `timeout_secs` | How long a copy can take, from connecting to its answer (default `5`) |
+
+## What the mirror gets
+
+The request as sent to the location's upstream: its method, path and query (after `rewrite`), its headers, with the `Host` the client sent, the `X-Forwarded-*` headers and the location's header changes, and its body. The `headers` of the location's upstream it went to are left out, and the mirror upstream's own are added.
+
+## Requests never wait on the mirror
+
+- A copy is sent in the background once the request's body has been proxied, over connections of its own. The request's answer is never delayed, and a mirror that's slow, down or failing changes nothing for it.
+- Bodies are kept for the copy as they're proxied, up to `max_body_size`: a request with a larger body isn't copied, so the mirror never gets part of a body.
+- Copies over `max_in_flight` are dropped, and each takes `timeout_secs` at most: a slow mirror can't hold more memory or connections than that.
+- Copies are counted: answered, failed, dropped, and not copied for their body. The admin UI shows them with the location.
+
+## Choosing requests with rules
+
+A [rule](/rules) copies the requests it matches (`mirror = true`), or keeps them from the mirror (`mirror = false`), whatever its share: only the checkout, only beta testers, never requests with personal data.
+
+```hcl
+location "/" {
+  upstream "api-v1:8080" {}
+
+  mirror {
+    percent = 0      # only what the rules choose
+    upstream "api-v2:8080" {}
+  }
+
+  rule "checkout" {
+    and {
+      method {
+        eq = "POST"
+      }
+      path {
+        prefix = "/checkout"
+      }
+    }
+    then {
+      mirror = true
+    }
+  }
+}
+```
+
+A rule of a location copying requests (`mirror = true`) needs a mirror in that location. Rules of the host or of the server can choose for any location: in locations without a mirror, they do nothing.
+
+### Good to know
+
+- Only proxied requests are copied: the location needs upstreams of its own, and requests answered by Proksi (a `401`, a redirect, a cached response) aren't copied.
+- The mirror's upstreams are health checked as the location's; copies go to its healthy ones, and fail while none is.
+- Copies to `:443` upstreams use HTTPS, as the location's.

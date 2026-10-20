@@ -54,6 +54,7 @@ Each block of a rule is its own: a `rate_limit` in a rule counts that rule's req
 | `method { set = "DELETE" }` | changes the method sent to the upstream |
 | `headers { request { add = { ... }, remove = [...] } }` | adds (replacing) and removes request headers |
 | `traffic_split = "<name>"` | sends the request to a [traffic split](/routing/traffic-split) of its location |
+| `mirror = true` / `false` | copies the request to its location's [mirror](/routing/mirror), or keeps it from it, whatever its share |
 
 The change applies when the rule matches, so the rules after it see the changed request, and so does the upstream.
 

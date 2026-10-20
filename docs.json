@@ -159,6 +159,10 @@
           "href": "/routing/traffic-split"
         },
         {
+          "title": "Mirror",
+          "href": "/routing/mirror"
+        },
+        {
           "title": "TCP",
           "href": "/routing/tcp"
         }

@@ -28,6 +28,7 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
         }
         validate_upstreams(&location.upstreams).map_err(in_location)?;
         validate_splits(location).map_err(in_location)?;
+        validate_mirror(location).map_err(in_location)?;
         validate_headers(location.headers.as_ref()).map_err(in_location)?;
         let blocks = Blocks::build(location).map_err(in_location)?;
         if !location.upstreams.is_empty()
@@ -106,6 +107,47 @@ fn validate_splits(location: &crate::config::host::Location) -> Result<(), Strin
         ));
     }
     Ok(())
+}
+
+/// A mirror: of a location proxying its requests, with upstreams of its own
+fn validate_mirror(location: &crate::config::host::Location) -> Result<(), String> {
+    // Rules copy requests to their location's mirror
+    for rule in &location.rules {
+        let mirrors = rule
+            .0
+            .pointer("/then/mirror")
+            .and_then(serde_json::Value::as_bool);
+        if mirrors == Some(true) && location.mirror.is_none() {
+            let rule_name = rule
+                .0
+                .get("name")
+                .and_then(|name| name.as_str())
+                .unwrap_or("");
+            return Err(format!("rule \"{rule_name}\": no mirror in the location"));
+        }
+    }
+    let Some(mirror) = &location.mirror else {
+        return Ok(());
+    };
+    let in_mirror = |err: &str| format!("mirror: {err}");
+    if location.upstreams.is_empty() {
+        return Err(in_mirror(
+            "copies the requests proxied to the location's upstreams, and it has none",
+        ));
+    }
+    if mirror.upstreams.is_empty() {
+        return Err(in_mirror("needs an upstream"));
+    }
+    if mirror.percent > 100 {
+        return Err(in_mirror("percent is 0 to 100"));
+    }
+    if mirror.max_in_flight == 0 {
+        return Err(in_mirror("max_in_flight is 1 or more"));
+    }
+    if mirror.timeout_secs == 0 {
+        return Err(in_mirror("timeout_secs is 1 or more"));
+    }
+    validate_upstreams(&mirror.upstreams).map_err(|err| in_mirror(&err))
 }
 
 /// `*` serves requests for any other name, over plain HTTP (certificates are issued per name).
@@ -361,6 +403,63 @@ mod tests {
                 "location \"/*\": traffic splits need the location's own upstreams too".to_string()
             )
         );
+    }
+
+    #[test]
+    fn test_mirrors() {
+        let mirror = || {
+            serde_json::from_value::<crate::config::host::Mirror>(serde_json::json!({
+                "upstreams": [{ "ip": "10.0.0.9", "port": 80 }],
+            }))
+            .unwrap()
+        };
+        let with = |change: &dyn Fn(&mut crate::config::host::Mirror)| {
+            let mut host = host("a.test", "10.0.0.1");
+            let mut mirror = mirror();
+            change(&mut mirror);
+            host.locations[0].mirror = Some(mirror);
+            validate_host(&host)
+        };
+
+        assert_eq!(with(&|_| {}), Ok(()));
+        let error = |message: &str| Err(format!("location \"/*\": mirror: {message}"));
+        assert_eq!(
+            with(&|mirror| mirror.upstreams.clear()),
+            error("needs an upstream")
+        );
+        assert_eq!(
+            with(&|mirror| mirror.percent = 101),
+            error("percent is 0 to 100")
+        );
+        assert_eq!(
+            with(&|mirror| mirror.max_in_flight = 0),
+            error("max_in_flight is 1 or more")
+        );
+        assert_eq!(
+            with(&|mirror| mirror.timeout_secs = 0),
+            error("timeout_secs is 1 or more")
+        );
+
+        // Only proxied requests are copied
+        let mut files = host("a.test", "10.0.0.1");
+        files.locations[0].upstreams.clear();
+        files.locations[0].mirror = Some(mirror());
+        assert_eq!(
+            validate_host(&files),
+            error("copies the requests proxied to the location's upstreams, and it has none")
+        );
+
+        // Rules copy requests to their location's mirror
+        let mut rules = host("a.test", "10.0.0.1");
+        rules.locations[0].rules = vec![crate::rules::Rule(serde_json::json!({
+            "name": "checkout", "and": { "method": { "eq": "POST" } }, "then": { "mirror": true },
+        }))];
+        assert_eq!(
+            validate_host(&rules),
+            Err("location \"/*\": rule \"checkout\": no mirror in the location".to_string())
+        );
+        rules.locations[0].mirror = Some(mirror());
+        assert_eq!(validate_host(&rules), Ok(()));
     }
 
     #[test]

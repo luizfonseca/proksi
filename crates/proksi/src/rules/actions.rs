@@ -33,6 +33,7 @@ struct ThenBlock {
     headers: Option<HeaderChanges>,
     method: Option<MethodChange>,
     traffic_split: Option<String>,
+    mirror: Option<bool>,
 }
 
 /// `headers`: changes the request's headers, or the response's
@@ -88,6 +89,13 @@ pub fn schema() -> serde_json::Map<String, serde_json::Value> {
             "description": "Sends the request to this traffic split of its location, whatever its share",
         }),
     );
+    actions.insert(
+        "mirror".to_string(),
+        serde_json::json!({
+            "type": "boolean",
+            "description": "Copies the request to its location's mirror (true), or doesn't (false), whatever its share",
+        }),
+    );
     actions
 }
 
@@ -128,6 +136,7 @@ fn blocks_location(
         health_check: None,
         rules: vec![],
         splits: vec![],
+        mirror: None,
     }
 }
 
@@ -162,6 +171,8 @@ pub(crate) struct Then {
     method: Option<Method>,
     /// The traffic split the request goes to
     pub(super) split: Option<std::sync::Arc<str>>,
+    /// Whether the request is copied to its location's mirror
+    pub(super) mirror: Option<bool>,
     add: Vec<(HeaderName, HeaderValue)>,
     remove: Vec<HeaderName>,
 }
@@ -222,12 +233,14 @@ impl Then {
             blocks,
             method,
             split,
+            mirror: then.mirror,
             add,
             remove,
         };
         if then.blocks.iter().next().is_none()
             && then.method.is_none()
             && then.split.is_none()
+            && then.mirror.is_none()
             && then.add.is_empty()
             && then.remove.is_empty()
         {
@@ -265,6 +278,15 @@ mod tests {
 
     fn err(then: serde_json::Value) -> String {
         Then::build(&then).err().unwrap_or_default()
+    }
+
+    #[test]
+    fn test_then_chooses_to_mirror() {
+        let then = Then::build(&json!({ "mirror": true })).unwrap();
+        assert_eq!(then.mirror, Some(true));
+        let then = Then::build(&json!({ "mirror": false })).unwrap();
+        assert_eq!(then.mirror, Some(false));
+        assert!(Then::build(&json!({ "mirror": "yes" })).is_err());
     }
 
     #[test]

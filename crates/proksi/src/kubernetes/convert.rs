@@ -138,6 +138,7 @@ pub fn hosts(cluster: &Cluster, class: &str) -> Converted {
                 // Rules aren't read from annotations (ADR 0007)
                 rules: vec![],
                 splits: vec![],
+                mirror: None,
             };
             locations.insert((path, exact), (location, id.clone()));
         }

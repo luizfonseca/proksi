@@ -33,7 +33,7 @@ use request_id::RequestId;
 use static_files::StaticFiles;
 
 mod basic_auth;
-mod body_limit;
+pub(crate) mod body_limit;
 mod cache;
 mod compress;
 mod cors;

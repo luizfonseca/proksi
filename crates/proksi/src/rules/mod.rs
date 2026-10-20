@@ -137,6 +137,9 @@ impl Rules {
             if let Some(split) = &rule.then.split {
                 ctx.traffic_split = Some(split.clone());
             }
+            if let Some(mirror) = rule.then.mirror {
+                ctx.mirror_rule = Some(mirror);
+            }
             if rule.then.blocks.request(session, ctx).await.is_some() {
                 return true;
             }

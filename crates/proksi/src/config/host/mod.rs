@@ -9,8 +9,8 @@ mod location;
 mod upstream_address;
 
 pub use location::{
-    CompiledRewrite, HealthCheck, Location, LocationTimeouts, PathRewrite, Sticky, TrafficSplit,
-    UpstreamTimeouts,
+    CompiledRewrite, HealthCheck, Location, LocationTimeouts, Mirror, PathRewrite, Sticky,
+    TrafficSplit, UpstreamTimeouts,
 };
 pub use upstream_address::parse_upstream_address;
 

@@ -4038,3 +4038,214 @@ host "split.test" {
 
     proksi.assert_healthy();
 }
+
+/// An upstream keeping the requests it gets: request line, headers (lowercase) and body
+async fn recording() -> (u16, Arc<Mutex<Vec<(String, Vec<(String, String)>, String)>>>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let requests = Arc::new(Mutex::new(vec![]));
+    let kept = requests.clone();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                return;
+            };
+            let kept = kept.clone();
+            tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut data = vec![];
+                let mut buffer = [0u8; 4096];
+                let (head, mut body) = loop {
+                    let Ok(read) = stream.read(&mut buffer).await else {
+                        return;
+                    };
+                    if read == 0 {
+                        return;
+                    }
+                    data.extend_from_slice(&buffer[..read]);
+                    if let Some(end) = data.windows(4).position(|window| window == b"\r\n\r\n") {
+                        let head = String::from_utf8_lossy(&data[..end]).to_string();
+                        break (head, data[end + 4..].to_vec());
+                    }
+                };
+                let mut lines = head.lines();
+                let line = lines.next().unwrap_or_default().to_string();
+                let headers = lines
+                    .filter_map(|line| line.split_once(": "))
+                    .map(|(name, value)| (name.to_lowercase(), value.to_string()))
+                    .collect::<Vec<_>>();
+                let length = headers
+                    .iter()
+                    .find(|(name, _)| name == "content-length")
+                    .and_then(|(_, value)| value.parse::<usize>().ok())
+                    .unwrap_or(0);
+                while body.len() < length {
+                    let Ok(read) = stream.read(&mut buffer).await else {
+                        return;
+                    };
+                    if read == 0 {
+                        break;
+                    }
+                    body.extend_from_slice(&buffer[..read]);
+                }
+                kept.lock().unwrap().push((
+                    line,
+                    headers,
+                    String::from_utf8_lossy(&body).to_string(),
+                ));
+                let _ = stream
+                    .write_all(b"HTTP/1.1 204 No Content\r\nconnection: close\r\n\r\n")
+                    .await;
+            });
+        }
+    });
+    (port, requests)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_mirror() {
+    let (mirror_port, mirrored) = recording().await;
+    let config = r#"
+host "mirror.test" {
+  tls = false
+
+  location "/all" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    mirror {
+      max_body_size = "16B"
+      upstream "127.0.0.1:{mirror_port}" {}
+    }
+
+    rule "private" {
+      and {
+        header "x-private" {
+          exists = true
+        }
+      }
+      then {
+        mirror = false
+      }
+    }
+  }
+
+  location "/chosen" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    mirror {
+      percent = 0
+      upstream "127.0.0.1:{mirror_port}" {}
+    }
+
+    rule "shadow" {
+      and {
+        header "x-shadow" {
+          exists = true
+        }
+      }
+      then {
+        mirror = true
+      }
+    }
+  }
+
+  location "/down" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    mirror {
+      upstream "127.0.0.1:1" {}
+    }
+  }
+}
+"#
+    .replace("{mirror_port}", &mirror_port.to_string());
+    let mut proksi = Harness::start_without_https(&config).await;
+    let port = proksi.http_port;
+    let send = |method: &str, path: &str, headers: &str, body: &str| {
+        format!(
+            "{method} {path} HTTP/1.1\r\nHost: mirror.test\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    };
+    // The paths mirrored, once `path` was
+    let mirrored_until = |path: &'static str| {
+        let mirrored = mirrored.clone();
+        async move {
+            for _ in 0..50 {
+                let paths = mirrored
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .map(|(line, _, _)| line.split(' ').nth(1).unwrap_or_default().to_string())
+                    .collect::<Vec<_>>();
+                if paths.iter().any(|seen| seen == path) {
+                    return paths;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            panic!("{path} wasn't mirrored");
+        }
+    };
+
+    // A copy of the request, as proxied: method, path, headers and body
+    let request = send("POST", "/all/orders?id=1", "X-Client: 7\r\n", "hello");
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    mirrored_until("/all/orders?id=1").await;
+    {
+        let mirrored = mirrored.lock().unwrap();
+        let (line, headers, body) = &mirrored[0];
+        assert_eq!(line, "POST /all/orders?id=1 HTTP/1.1");
+        assert_eq!(body, "hello");
+        let header = |name: &str| {
+            headers
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(header("host"), Some("mirror.test"));
+        assert_eq!(header("x-client"), Some("7"));
+        assert_eq!(header("x-forwarded-for"), Some("127.0.0.1"));
+    }
+
+    // Not copied: bodies over max_body_size, and requests a rule keeps
+    let request = send("POST", "/all/large", "", "a body of more than 16 bytes");
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    let request = send("GET", "/all/private", "X-Private: 1\r\n", "");
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+
+    // At 0%, only the requests a rule copies
+    let request = send("GET", "/chosen/plain", "", "");
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    let request = send("GET", "/chosen/shadow", "X-Shadow: 1\r\n", "");
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+
+    let paths = mirrored_until("/chosen/shadow").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let paths_now = mirrored
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(line, _, _)| line.split(' ').nth(1).unwrap_or_default().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(paths.len(), paths_now.len(), "{paths_now:?}");
+    for path in ["/all/large", "/all/private", "/chosen/plain"] {
+        assert!(
+            !paths_now.iter().any(|seen| seen == path),
+            "{path}: {paths_now:?}"
+        );
+    }
+
+    // A mirror that can't be reached changes nothing for the requests
+    let started = std::time::Instant::now();
+    let request = send("POST", "/down", "", "hello");
+    let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(started.elapsed() < Duration::from_secs(2));
+
+    proksi.assert_healthy();
+}

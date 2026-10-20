@@ -81,6 +81,23 @@ pub struct LocationStatus {
     /// Rules of the location's requests, as written, without secrets
     pub rules: Vec<Value>,
     pub upstreams: Vec<UpstreamStatus>,
+    /// Where copies of its requests go, and what became of them
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mirror: Option<MirrorStatus>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MirrorStatus {
+    /// The share of requests copied
+    pub percent: u8,
+    /// Copies answered
+    pub sent: u64,
+    /// Copies not answered (no upstream up, an error, out of time)
+    pub failed: u64,
+    /// Copies not sent: too many were being sent
+    pub dropped: u64,
+    /// Requests not copied: their body was too large
+    pub too_large: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -97,6 +114,9 @@ pub struct UpstreamStatus {
     /// The traffic split it's in, if any
     #[serde(skip_serializing_if = "Option::is_none")]
     pub split: Option<SplitStatus>,
+    /// Whether it's an upstream of the location's mirror
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mirror: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -197,7 +217,23 @@ pub fn hosts() -> Vec<HostStatus> {
                             name: split.name.clone(),
                             percent: split.percent(),
                         });
+                        upstream.mirror = location
+                            .mirror
+                            .as_ref()
+                            .is_some_and(|mirror| mirror.holds(index));
                     }
+                    let mirror = location.mirror.as_ref().map(|mirror| {
+                        let count = |count: &std::sync::atomic::AtomicU64| {
+                            count.load(std::sync::atomic::Ordering::Relaxed)
+                        };
+                        MirrorStatus {
+                            percent: mirror.percent(),
+                            sent: count(&mirror.counts.sent),
+                            failed: count(&mirror.counts.failed),
+                            dropped: count(&mirror.counts.dropped),
+                            too_large: count(&mirror.counts.too_large),
+                        }
+                    });
                     LocationStatus {
                         location: location.path.clone(),
                         blocks: location
@@ -207,6 +243,7 @@ pub fn hosts() -> Vec<HostStatus> {
                             .collect(),
                         rules: written_rules(location.rules.as_deref()),
                         upstreams,
+                        mirror,
                     }
                 })
                 .collect();
@@ -279,6 +316,7 @@ fn upstreams(
                 healthy: addresses.iter().any(|address| address.healthy),
                 addresses,
                 split: None,
+                mirror: false,
             }
         })
         .collect()
