@@ -4249,3 +4249,158 @@ host "mirror.test" {
 
     proksi.assert_healthy();
 }
+
+/// An upstream answering `status` with `body` after `delay`, counting the requests it gets
+async fn answering_after(
+    status: u16,
+    body: &'static str,
+    delay: Duration,
+) -> (u16, Arc<std::sync::atomic::AtomicUsize>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = count.clone();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                return;
+            };
+            let counted = counted.clone();
+            tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut buffer = [0u8; 4096];
+                let _ = stream.read(&mut buffer).await;
+                counted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                tokio::time::sleep(delay).await;
+                let response = format!(
+                    "HTTP/1.1 {status} X\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+            });
+        }
+    });
+    (port, count)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_retries() {
+    let (failing, _) = answering_after(502, "failing", Duration::ZERO).await;
+    let (working, _) = answering_after(200, "working", Duration::ZERO).await;
+    let config = r#"
+host "retry.test" {
+  tls = false
+
+  location "/status" {
+    upstream "127.0.0.1:{failing}" {}
+    upstream "127.0.0.1:{working}" {}
+
+    retry {
+      on = ["502"]
+    }
+
+    rule "no retries" {
+      and {
+        header "x-no-retry" {
+          exists = true
+        }
+      }
+      then {
+        retry = false
+      }
+    }
+  }
+
+  location "/connect" {
+    upstream "127.0.0.1:1" {}
+    upstream "127.0.0.1:{working}" {}
+    health_check {
+      enabled = false
+    }
+
+    retry {}
+  }
+}
+"#
+    .replace("{failing}", &failing.to_string())
+    .replace("{working}", &working.to_string());
+    let proksi = Harness::start_without_https(&config).await;
+    let port = proksi.http_port;
+    let send = |method: &str, path: &str, headers: &str| {
+        format!("{method} {path} HTTP/1.1\r\nHost: retry.test\r\n{headers}Content-Length: 0\r\nConnection: close\r\n\r\n")
+    };
+    let statuses = |method: &'static str, path: &'static str, headers: &'static str| {
+        let request = send(method, path, headers);
+        let proksi = &proksi;
+        async move {
+            let mut statuses = vec![];
+            // Round robin: both upstreams, whichever comes first
+            for _ in 0..4 {
+                let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+                statuses.push(res.split(' ').nth(1).unwrap_or_default().to_string());
+            }
+            statuses
+        }
+    };
+
+    // A 502: tried again on the other upstream, for idempotent requests
+    assert_eq!(statuses("GET", "/status", "").await, ["200"; 4]);
+    assert!(statuses("POST", "/status", "")
+        .await
+        .contains(&"502".to_string()));
+    // Unless a rule says otherwise
+    assert!(statuses("GET", "/status", "X-No-Retry: 1\r\n")
+        .await
+        .contains(&"502".to_string()));
+
+    // An upstream that can't be reached: tried again, whatever the method (nothing was sent)
+    assert_eq!(statuses("GET", "/connect", "").await, ["200"; 4]);
+    assert_eq!(statuses("POST", "/connect", "").await, ["200"; 4]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_least_connections() {
+    let (slow, slow_count) = answering_after(200, "slow", Duration::from_millis(1500)).await;
+    let (fast, fast_count) = answering_after(200, "fast", Duration::ZERO).await;
+    let config = r#"
+host "least.test" {
+  tls = false
+
+  location "/" {
+    load_balancing = "least_connections"
+    upstream "127.0.0.1:{slow}" {}
+    upstream "127.0.0.1:{fast}" {}
+  }
+}
+"#
+    .replace("{slow}", &slow.to_string())
+    .replace("{fast}", &fast.to_string());
+    let proksi = Harness::start_without_https(&config).await;
+    let port = proksi.http_port;
+    let request = "GET / HTTP/1.1\r\nHost: least.test\r\nConnection: close\r\n\r\n";
+
+    // While the slow upstream holds a request, the fast one takes the others
+    let mut requests = vec![];
+    for _ in 0..20 {
+        requests.push(tokio::spawn(async move {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .unwrap();
+            stream.write_all(request.as_bytes()).await.unwrap();
+            let mut res = String::new();
+            stream.read_to_string(&mut res).await.unwrap();
+            res
+        }));
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    for res in futures_util::future::join_all(requests).await {
+        assert!(res.unwrap().starts_with("HTTP/1.1 200"));
+    }
+    let (slow, fast) = (
+        slow_count.load(std::sync::atomic::Ordering::Relaxed),
+        fast_count.load(std::sync::atomic::Ordering::Relaxed),
+    );
+    // Round robin would have sent it 10
+    assert!(slow <= 2 && slow + fast == 20, "slow {slow}, fast {fast}");
+}

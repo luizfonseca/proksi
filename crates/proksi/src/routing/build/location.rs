@@ -46,6 +46,19 @@ pub(super) fn build_location_container(
         &location.splits,
         location.health_check,
     ));
+    container.load_balancing = location.load_balancing;
+    container.retry = match location
+        .retry
+        .as_ref()
+        .map(crate::routing::retry::Policy::new)
+        .transpose()
+    {
+        Ok(retry) => retry,
+        Err(err) => {
+            tracing::warn!("invalid location {} of host {host}: {err}", location.path);
+            return None;
+        }
+    };
     container.cache.clone_from(&location.cache);
     container.timeouts = location.timeouts;
     container.rewrite = match location

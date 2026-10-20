@@ -7,6 +7,7 @@ use serde::Serialize;
 
 use crate::config::host::Host;
 
+pub mod balance;
 pub mod build;
 pub mod file_source;
 pub mod merge;
@@ -14,6 +15,7 @@ pub mod mirror;
 pub mod paths;
 pub mod readiness;
 pub mod reconciler;
+pub mod retry;
 pub mod service;
 pub mod split;
 pub mod store_source;

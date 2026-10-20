@@ -213,6 +213,8 @@ host:
                     rules: vec![],
                     splits: vec![],
                     mirror: None,
+                    load_balancing: crate::config::host::LoadBalancing::RoundRobin,
+                    retry: None,
                 },
                 Location {
                     path: "/v1/session".to_string(),
@@ -235,6 +237,8 @@ host:
                     rules: vec![],
                     splits: vec![],
                     mirror: None,
+                    load_balancing: crate::config::host::LoadBalancing::RoundRobin,
+                    retry: None,
                 },
             ],
         }
@@ -346,6 +350,62 @@ host "a.test" {
         // Sticky by cookie unless said otherwise
         assert_eq!(splits[1].sticky, crate::config::host::Sticky::Cookie);
         assert_eq!(crate::routing::validate::validate_host(&host), Ok(()));
+    }
+
+    #[test]
+    fn test_load_balancing_and_retry() {
+        let parse = |location: &str| {
+            let doc = HclFormat::from_str::<Doc>(&format!(
+                r#"
+host "a.test" {{
+  location "/" {{
+    upstream "a:8080" {{}}
+    upstream "b:8080" {{}}
+    {location}
+  }}
+}}
+"#
+            ))
+            .unwrap();
+            doc.host.get("a.test").unwrap().to_host("a.test").unwrap()
+        };
+
+        let host = parse("");
+        assert_eq!(
+            host.locations[0].load_balancing,
+            crate::config::host::LoadBalancing::RoundRobin
+        );
+        assert_eq!(host.locations[0].retry, None);
+
+        let host = parse(
+            r#"load_balancing = "least_connections"
+    retry {
+      attempts = 2
+      on       = ["connect", 503]
+    }"#,
+        );
+        let location = &host.locations[0];
+        assert_eq!(
+            location.load_balancing,
+            crate::config::host::LoadBalancing::LeastConnections
+        );
+        let retry = location.retry.as_ref().unwrap();
+        assert_eq!(retry.attempts, 2);
+        assert_eq!(retry.on, vec!["connect".to_string(), "503".to_string()]);
+        assert_eq!(crate::routing::validate::validate_host(&host), Ok(()));
+
+        // Defaults: once more, when the upstream can't be reached or answers 502, 503 or 504
+        let retry = parse("retry {}").locations[0].retry.clone().unwrap();
+        assert_eq!((retry.attempts, retry.on.len()), (1, 4));
+
+        let host = parse(r#"retry { on = ["sometimes"] }"#);
+        assert_eq!(
+            crate::routing::validate::validate_host(&host),
+            Err(
+                "location \"/\": retry: on \"sometimes\" is not \"connect\" or a status from 400 to 599"
+                    .to_string()
+            )
+        );
     }
 
     #[test]

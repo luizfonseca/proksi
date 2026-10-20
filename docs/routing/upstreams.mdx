@@ -24,6 +24,43 @@ location "/" {
 }
 ```
 
+## Least connections
+
+With `load_balancing = "least_connections"`, each request goes to the healthy upstream with the fewest requests in progress for its `weight`: an upstream that answers slowly (a long report, a busy instance) gets fewer new requests while it works. Upstreams with as many are taken in turn.
+
+```hcl
+location "/" {
+  load_balancing = "least_connections"   # "round_robin" by default
+  upstream "10.0.0.1:3000" {}
+  upstream "10.0.0.2:3000" { weight = 2 }   # up to twice as many in progress
+}
+```
+
+Requests in progress are counted by each Proksi server (and each worker) on its own, for each address of an upstream.
+
+## Retries
+
+A request whose upstream can't be reached, or answers with a status of `on`, can be sent to another upstream:
+
+```hcl
+location "/" {
+  upstream "10.0.0.1:3000" {}
+  upstream "10.0.0.2:3000" {}
+
+  retry {
+    attempts = 2                              # tries after the first (default 1, at most 10)
+    on       = ["connect", "502", "503", "504"]  # the default
+  }
+}
+```
+
+- `connect`: the upstream couldn't be reached (refused, timed out, its TLS handshake failed). Nothing was sent to it, so any request is tried again.
+- Statuses (`400` to `599`): only idempotent requests (`GET`, `HEAD`, `PUT`, `DELETE`, `OPTIONS`) are tried again, whose body was 64 KiB at most (kept to be sent again). Others get the upstream's answer.
+- Each try goes to an upstream the request wasn't sent to yet, while one is healthy. The last try's answer is sent to the client, whatever it is.
+- Without `retry`, requests are sent once (only a reused connection the upstream had closed is tried again).
+
+A [rule](/rules) turns retries off for the requests it matches (`then { retry = false }`), such as payments that must never be sent twice.
+
 ## Names
 
 An upstream can be a name instead of an address (`app:3000`, `api.example.com:443`), resolved by the system's resolver (`/etc/hosts`, Docker's DNS, the cluster's DNS):
