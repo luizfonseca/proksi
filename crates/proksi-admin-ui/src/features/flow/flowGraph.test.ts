@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Host } from './api';
-import { layout, ROW, tone } from './flow';
-import type { HostStats } from './live';
+import type { Host } from '../../api';
+import { layout, ROW, tone } from './flowGraph';
+import type { HostStats } from '../live/live';
 
 const host: Host = {
   host: 'shop.test',

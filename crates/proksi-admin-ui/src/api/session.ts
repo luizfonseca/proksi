@@ -1,6 +1,6 @@
 import { createContext } from 'preact';
 import { useContext } from 'preact/hooks';
-import type { Session } from './api';
+import type { Session } from '.';
 
 export const SessionContext = createContext<Session>({ name: null, access: 'read' });
 

@@ -1,4 +1,4 @@
-import { actions, type Condition, condition, type Rule } from '../rules';
+import { actions, type Condition, condition, type Rule } from './ruleTree';
 
 const GROUP_LABEL = { all: 'all of', any: 'any of', none: 'none of' };
 

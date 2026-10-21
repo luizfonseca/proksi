@@ -1,4 +1,4 @@
-import type { Rule } from './rules';
+import type { Rule } from '../features/rules/ruleTree';
 
 // The admin API. Signing in exchanges a token for a session cookie (HttpOnly): the page never
 // keeps the token.

@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import { input, type JsonSchema, resolve } from '../schema';
+import { input, type JsonSchema, resolve } from './schema';
 
 type Value = Record<string, unknown>;
 type Props = { schema: JsonSchema; root?: JsonSchema; value: Value; onChange: (value: Value) => void };

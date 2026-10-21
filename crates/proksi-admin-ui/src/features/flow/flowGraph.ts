@@ -1,9 +1,9 @@
 // A host's traffic as a graph: clients → host → locations → upstreams, laid out in columns,
 // each line toned by what flows through it over the last seconds
 
-import type { Host } from './api';
-import { ms, percent, rate } from './format';
-import type { HostStats, LocationStats } from './live';
+import type { Host } from '../../api';
+import { ms, percent, rate } from '../../lib/format';
+import type { HostStats, LocationStats } from '../live/live';
 
 export type Tone = 'idle' | 'ok' | 'warn' | 'bad';
 

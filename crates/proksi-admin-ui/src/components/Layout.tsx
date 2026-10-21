@@ -1,8 +1,8 @@
 import type { ComponentChildren } from 'preact';
 import { session as api, type Session, type Status } from '../api';
 import { onLink } from '../router';
-import { useData } from '../useData';
-import { Globe, Pulse, Server, Shield } from './icons';
+import { useData } from '../api/useData';
+import { Globe, Pulse, Server, Shield } from './ui/icons';
 
 const NAV = [
   { href: '/overview', label: 'Overview', icon: Pulse },

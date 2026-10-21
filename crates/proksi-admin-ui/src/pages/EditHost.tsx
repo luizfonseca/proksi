@@ -9,9 +9,9 @@ import {
   type LocationForm,
   type UpstreamForm,
   toForm,
-} from '../hostForm';
+} from '../features/hosts/hostForm';
 import { navigate, onLink } from '../router';
-import { RulesEditor } from '../components/RuleEditor';
+import { RulesEditor } from '../features/rules/RuleEditor';
 
 /** A scope's rules: shown once there are some, or when asked for */
 function RulesSection({ title, hint, rules, onChange }: { title: string; hint: string; rules: unknown[]; onChange: (rules: unknown[]) => void }) {

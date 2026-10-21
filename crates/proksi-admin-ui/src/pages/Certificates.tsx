@@ -1,6 +1,6 @@
 import type { Certificate } from '../api';
-import { Loaded } from '../components/State';
-import { useData } from '../useData';
+import { Loaded } from '../components/ui/State';
+import { useData } from '../api/useData';
 
 function Expiry({ days }: { days: number | null }) {
   if (days === null) return <span class="none">unknown</span>;

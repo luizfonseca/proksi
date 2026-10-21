@@ -1,18 +1,18 @@
 import { useState } from 'preact/hooks';
 import { type Host as HostData, routes, type TcpBlock, type Upstream } from '../api';
-import { Lock, Unlock } from '../components/icons';
-import { LineChart } from '../components/Chart';
-import { Flow } from '../components/Flow';
-import { RequestLog } from '../components/RequestLog';
-import { Rules } from '../components/Rules';
-import { TcpBlocks } from '../components/Tcp';
-import { layout } from '../flow';
-import { ms, rate } from '../format';
-import { useLive } from '../live';
-import { Loaded, ProtocolBadge, SourceBadge } from '../components/State';
+import { Lock, Unlock } from '../components/ui/icons';
+import { LineChart } from '../components/ui/Chart';
+import { Flow } from '../features/flow/Flow';
+import { RequestLog } from '../features/live/RequestLog';
+import { Rules } from '../features/rules/Rules';
+import { TcpBlocks } from '../features/tcp/Tcp';
+import { layout } from '../features/flow/flowGraph';
+import { ms, rate } from '../lib/format';
+import { useLive } from '../features/live/live';
+import { Loaded, ProtocolBadge, SourceBadge } from '../components/ui/State';
 import { navigate, onLink } from '../router';
-import { useCanWrite } from '../session';
-import { useData } from '../useData';
+import { useCanWrite } from '../api/session';
+import { useData } from '../api/useData';
 
 function UpstreamRow({ upstream }: { upstream: Upstream }) {
   // Addresses worth showing: a name's, or a service's

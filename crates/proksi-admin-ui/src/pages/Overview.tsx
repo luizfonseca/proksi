@@ -1,13 +1,13 @@
 import { useState } from 'preact/hooks';
 import type { Status, TcpBlock } from '../api';
-import { LineChart, Sparkline } from '../components/Chart';
-import { RequestLog } from '../components/RequestLog';
-import { Loaded, ProtocolBadge } from '../components/State';
-import { TcpBlocks } from '../components/Tcp';
-import { bytes, ms, percent, rate } from '../format';
-import { activeHosts, type Point, type Stats, useLive } from '../live';
+import { LineChart, Sparkline } from '../components/ui/Chart';
+import { RequestLog } from '../features/live/RequestLog';
+import { Loaded, ProtocolBadge } from '../components/ui/State';
+import { TcpBlocks } from '../features/tcp/Tcp';
+import { bytes, ms, percent, rate } from '../lib/format';
+import { activeHosts, type Point, type Stats, useLive } from '../features/live/live';
 import { onLink } from '../router';
-import { useData } from '../useData';
+import { useData } from '../api/useData';
 
 const SPANS = [
   { label: '1m', points: 60 },

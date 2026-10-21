@@ -1,4 +1,4 @@
-import type { StoredHost, StoredLocation, StoredUpstream } from './api';
+import type { StoredHost, StoredLocation, StoredUpstream } from '../../api';
 
 // The host editor's form: the settings it edits, and everything else kept as it was
 

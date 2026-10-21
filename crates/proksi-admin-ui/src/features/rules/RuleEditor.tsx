@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
-import { emptyRule, emptyTest, fromRule, type Group, type GroupName, type Node, type RuleModel, type Test, type TestValue, toRule } from '../ruleModel';
-import { type Schema, useSchema } from '../schema';
-import { ListInput, SchemaForm } from './SchemaForm';
+import { emptyRule, emptyTest, fromRule, type Group, type GroupName, type Node, type RuleModel, type Test, type TestValue, toRule } from './ruleModel';
+import { type Schema, useSchema } from '../blocks/schema';
+import { ListInput, SchemaForm } from '../blocks/SchemaForm';
 
 type Rules = Schema['rules'];
 
