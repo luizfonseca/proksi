@@ -214,7 +214,8 @@ Wasmtime is a large dependency: with the WASI and `wasi:http` hosts, it adds abo
 
 - Plugins are written and built outside proksi, with the standard Rust toolchain, and added with a path in the configuration.
 - A plugin can't read files, open sockets, or call hosts the configuration doesn't allow, and a faulty one fails its requests, as configured, without stopping others.
-- A request through a plugin crosses into WebAssembly once per stage it implements, expected to take a few microseconds for a Rust plugin (to be measured), plus whatever it calls out to. Locations without plugins pay nothing.
+- A request through a plugin crosses into WebAssembly once per stage it implements, expected to take a few microseconds for a Rust plugin (to be measured), plus whatever it calls out to.
+- A configuration without plugins pays nothing at runtime: the Wasmtime engine and its instance pool are only created when a `plugin` block is loaded, and locations without one run exactly as before, with no check per request. Only the binary is larger; its unused code isn't loaded into memory.
 - The interface is proksi's own: plugins for Envoy or Traefik have to be converted.
 - JavaScript components can load, but aren't documented or tested; they need more memory per instance, and their code runs slower.
 
