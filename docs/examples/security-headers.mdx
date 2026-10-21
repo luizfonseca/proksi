@@ -1,0 +1,47 @@
+---
+title: "Security headers"
+description: "Add the headers browsers use to protect a site's visitors, for every response of a host."
+---
+
+Browsers protect a site's visitors better when its responses ask them to: always use HTTPS, don't guess file types, don't show the site in other sites' frames. Set them once on the host, and every response gets them, including proksi's own errors.
+
+```hcl
+host "example.com" {
+  headers {
+    response {
+      add = {
+        "Strict-Transport-Security" = "max-age=31536000; includeSubDomains"
+        "X-Content-Type-Options"    = "nosniff"
+        "X-Frame-Options"           = "DENY"
+        "Referrer-Policy"           = "strict-origin-when-cross-origin"
+        "Permissions-Policy"        = "camera=(), microphone=(), geolocation=()"
+        "Content-Security-Policy"   = "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
+      }
+      # What the app runs on is nobody's business
+      remove = ["Server", "X-Powered-By"]
+    }
+  }
+
+  location "/" {
+    upstream "app:3000" {}
+  }
+
+  # The embeddable widget is shown in other sites' frames
+  location "/embed" {
+    upstream "app:3000" {}
+
+    headers {
+      response {
+        add    = { "Content-Security-Policy" = "default-src 'self'; frame-ancestors *" }
+        remove = ["X-Frame-Options"]
+      }
+    }
+  }
+}
+```
+
+- A location's headers apply after its host's, so `/embed` replaces the policy and drops `X-Frame-Options`.
+- An added header replaces the upstream's header of the same name, so the app can't send a weaker one.
+- Start `Strict-Transport-Security` with a short `max-age`, such as `300`, and raise it once every subdomain serves HTTPS. Browsers remember it for that long and refuse plain HTTP.
+- Hosts with TLS already redirect HTTP to HTTPS, so there's no need for a [`redirect`](/plugins/redirect) for that.
+- To try a `Content-Security-Policy` without breaking the site, send it as `Content-Security-Policy-Report-Only` first, and watch the browser's console.

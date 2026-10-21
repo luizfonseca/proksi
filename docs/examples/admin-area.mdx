@@ -1,0 +1,74 @@
+---
+title: "Locking down an admin area"
+description: "Keep an admin area to the office and the VPN, behind a password, and slow down password guessing."
+---
+
+An app's admin pages need more than the rest of it. This keeps them to known networks, asks for a password, and limits how fast anyone can try passwords.
+
+```hcl
+host "shop.example.com" {
+  location "/" {
+    upstream "shop:3000" {}
+  }
+
+  location "/admin" {
+    upstream "shop:3000" {}
+
+    # The office and the VPN only. Everyone else gets a 403.
+    ip_filter {
+      allow = ["203.0.113.0/24", "10.8.0.0/16"]
+    }
+
+    # Checked before the password, so guessing is slow too
+    rate_limit {
+      requests = 60
+      per      = "1m"
+    }
+
+    basic_auth {
+      user = "admin"
+      pass = env("ADMIN_PASSWORD")
+    }
+
+    headers {
+      response {
+        add = {
+          "Cache-Control" = "no-store"
+          "X-Robots-Tag"  = "noindex"
+        }
+      }
+    }
+  }
+}
+```
+
+- Blocks run in their order of priority: `ip_filter` and `rate_limit` first, then `basic_auth`. Refused networks never get to try a password.
+- The password comes from the environment (see [functions](/configuration/hcl/functions)), so it stays out of the file.
+- `no-store` keeps admin pages out of browser and shared caches.
+
+## With single sign-on
+
+For a team, [`forward_auth`](/plugins/forward-auth) with Authelia or Authentik replaces the shared password. Each person signs in, and the app gets who they are.
+
+```hcl
+host "shop.example.com" {
+  location "/" {
+    upstream "shop:3000" {}
+  }
+
+  location "/admin" {
+    upstream "shop:3000" {}
+
+    ip_filter {
+      allow = ["203.0.113.0/24", "10.8.0.0/16"]
+    }
+
+    forward_auth {
+      url              = "http://authelia:9091/api/authz/forward-auth"
+      response_headers = ["Remote-User", "Remote-Email"]
+    }
+  }
+}
+```
+
+Behind a load balancer, list it in `server.trusted_proxies` so `ip_filter` sees the visitor's address. See [Behind Cloudflare or a load balancer](/examples/behind-a-load-balancer).

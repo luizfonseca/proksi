@@ -1,0 +1,82 @@
+---
+title: "Public API"
+description: "An API that browsers on other sites can call, with fair limits per client and room for uploads."
+---
+
+One host serves an API to your own frontend, to other sites' pages, and to scripts. Every client gets a fair share, writes are limited more than reads, and uploads get more room than the rest.
+
+```hcl
+host "api.example.com" {
+  location "/" {
+    upstream "api-1:4000" {}
+    upstream "api-2:4000" {}
+    load_balancing = "least_connections"
+    retry {}
+
+    # Pages of other sites can call it from the browser
+    cors {
+      origins        = ["https://example.com", "https://*.example.com"]
+      credentials    = true
+      expose_headers = ["X-Request-Id", "X-Total-Count"]
+      max_age_secs   = 600
+    }
+
+    # Follow a request through the logs of proksi and the API
+    request_id {}
+
+    rate_limit {
+      requests = 600
+      per      = "1m"
+    }
+
+    body_limit {
+      max = "1MiB"
+    }
+
+    # Creating, changing and deleting, on top of the limit above
+    rule "writes" {
+      and {
+        method {
+          not_in = ["GET", "HEAD", "OPTIONS"]
+        }
+      }
+      then {
+        rate_limit {
+          requests = 60
+          per      = "1m"
+        }
+      }
+    }
+  }
+
+  location "/uploads" {
+    upstream "api-1:4000" {}
+    upstream "api-2:4000" {}
+
+    cors {
+      origins     = ["https://example.com", "https://*.example.com"]
+      credentials = true
+    }
+
+    rate_limit {
+      requests = 30
+      per      = "1m"
+    }
+
+    body_limit {
+      max = "100MiB"
+    }
+
+    # Slow connections take a while to send 100MiB
+    timeouts {
+      read_secs = 120
+      body_secs = 1800
+    }
+  }
+}
+```
+
+- `rate_limit` runs first, so a client over its limit costs no more than a `429`.
+- The rule's limit applies to writes only, and counts separately from the location's. A client can make 600 requests a minute, of which 60 writes.
+- [Retries](/routing/upstreams#retries) send a request to the other server when one is down. A `POST` is tried again only when it couldn't reach a server at all, so it's never sent twice.
+- A larger body than `max` gets a `413` before reaching the API when the client announces its size.

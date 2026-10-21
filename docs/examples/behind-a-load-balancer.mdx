@@ -1,0 +1,67 @@
+---
+title: "Behind Cloudflare or a load balancer"
+description: "See the visitor's real address, so rate limits, IP filters and logs work per visitor."
+---
+
+Behind a CDN or a load balancer, every connection comes from its addresses. Rate limits would then count all visitors together, and logs and upstreams would show the load balancer. List its addresses in `server.trusted_proxies`, and proksi uses the address it forwards in `X-Forwarded-For` instead.
+
+## Cloudflare
+
+Cloudflare publishes its ranges at [cloudflare.com/ips](https://www.cloudflare.com/ips/). Check them there, since they change from time to time.
+
+```hcl
+server {
+  trusted_proxies = [
+    "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
+    "141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+    "197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+    "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+    "2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32",
+    "2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
+  ]
+}
+
+host "shop.example.com" {
+  location "/" {
+    upstream "shop:3000" {}
+
+    # Per visitor, not per Cloudflare server
+    rate_limit {
+      requests = 300
+      per      = "1m"
+    }
+  }
+}
+```
+
+## A load balancer in your network
+
+An AWS ALB, a Hetzner load balancer or a Kubernetes ingress usually connects from a private network. Trust that network only.
+
+```hcl
+server {
+  trusted_proxies = ["10.0.0.0/8"]
+}
+
+host "app.example.com" {
+  location "/admin" {
+    upstream "app:3000" {}
+
+    # The office's address, as forwarded by the load balancer
+    ip_filter {
+      allow = ["203.0.113.0/24"]
+    }
+  }
+
+  location "/" {
+    upstream "app:3000" {}
+  }
+}
+```
+
+## Good to know
+
+- Only addresses forwarded by trusted proxies are used. A visitor who sends `X-Forwarded-For` themselves can't pass for another address.
+- The same address is used everywhere: [`rate_limit`](/plugins/rate-limit), [`ip_filter`](/plugins/ip-filter), the `client` of [rules](/rules), access logs, and `X-Real-IP` for upstreams.
+- Don't trust networks that visitors can connect from directly. Anyone in them could choose their own address.
+- To accept only Cloudflare's connections, allow its ranges in the server's firewall. Proksi checks the forwarded address, not the connection's.
