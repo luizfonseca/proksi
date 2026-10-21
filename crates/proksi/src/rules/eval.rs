@@ -173,7 +173,8 @@ pub(super) mod tests {
             Self {
                 method: Method::from_bytes(method.as_bytes()).unwrap(),
                 host: host.to_string(),
-                path: path.to_string(),
+                // Normalized, as the proxy's
+                path: crate::routing::paths::normalize_path(path).into_owned(),
                 query,
                 headers: HeaderMap::new(),
                 client: Some("203.0.113.9".parse().unwrap()),
@@ -329,6 +330,24 @@ pub(super) mod tests {
                 "{probe}"
             );
         }
+    }
+
+    #[test]
+    fn test_many_path_tests_read_the_normalized_path() {
+        // Enough tests on `path` that each one is checked on its own
+        let rules: Vec<_> = (0..10)
+            .map(|at| {
+                rule(
+                    &format!("r{at}"),
+                    json!({ "path": { "prefix": format!("/p{at}/") } }),
+                )
+            })
+            .collect();
+        let request = |path: &str| TestRequest::new("GET", "example.com", path);
+        assert_eq!(matching(&rules, &request("/p3/x")), ["r3"]);
+        assert_eq!(matching(&rules, &request("//p3/./x")), ["r3"]);
+        assert_eq!(matching(&rules, &request("/%703/x")), ["r3"]);
+        assert!(matching(&rules, &request("/p3%2Fx")).is_empty());
     }
 
     #[test]
