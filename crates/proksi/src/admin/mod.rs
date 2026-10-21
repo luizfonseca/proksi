@@ -21,6 +21,7 @@ use crate::{
 
 mod access;
 mod endpoint;
+mod router;
 pub mod routes;
 pub mod server;
 pub mod status;
