@@ -96,9 +96,10 @@ location "/" {
 
   plugin "fetch_profile" {
     file     = "plugins/fetch_profile.wasm"
-    on_error = "fail"
-    allow    = ["profiles.internal.example.com:8080"]
-    options  = {
+    on_error      = "fail"
+    allowed_hosts = ["profiles.internal.example.com:8080"]
+    priority      = 30
+    options       = {
       api   = "http://profiles.internal.example.com:8080"
       token = env("PROFILES_TOKEN")
     }
@@ -110,8 +111,8 @@ location "/" {
 - **`file`**: the component. Each file is compiled once, whatever the number of blocks using it, and compiled again when the configuration reloads and the file has changed.
 - **`options`**: any value, passed to the plugin as JSON. Secrets come from `env()`, as for the built-in plugins.
 - **`on_error`**: required, `"fail"` or `"continue"` (below).
-- **`allow`**: the hosts the plugin may call (below).
-- **`priority`**: when it runs among the location's blocks, as for any block. The default is `30`, after authentication and before `compress`.
+- **`allowed_hosts`**: the hosts the plugin may call (below). Anything else a plugin may be granted later gets its own `allowed_*` setting.
+- **`priority`**: when it runs among the location's blocks, from `1` to `99`, `30` by default: after authentication (`20`) and before `compress` (`40`). `0` and `100` are kept for built-in blocks, so a plugin never runs before `request_id`, `ip_filter`, `cors` and `rate_limit`.
 
 It goes where the built-in plugins go: in a location, and in a rule's `then`.
 
@@ -121,7 +122,7 @@ It goes where the built-in plugins go: in a location, and in a rule's `then`.
 
 - **Its options**, as a JSON Schema derived from the `Options` type. proksi checks `options` against it when the configuration loads, with the block's name in the error, and the admin UI builds the block's form from it, as for the built-in plugins.
 - **The stages it implements.** proksi doesn't call the others, so they cost nothing.
-- **The hosts it expects to call**, shown next to `allow` to help write it. Only `allow` grants them.
+- **The hosts it expects to call**, shown next to `allowed_hosts` to help write it. Only `allowed_hosts` grants them.
 - **The interface version it was built for.** A component built for an interface proksi doesn't know is refused.
 
 `new` then receives the options already parsed, and can still refuse them (`"timeout must be above 0"`). Either way, the configuration doesn't load.
@@ -148,7 +149,7 @@ Bodies aren't readable or changeable.
 Plugins call out with `wasi:http`, the standard WASI interface for HTTP, implemented by proksi with `wasmtime-wasi-http`. `proksi_plugin::http` is a small client on top of it, and other crates built for `wasi:http` work too.
 
 - proksi makes the request: it reuses connections, does TLS, and applies a timeout.
-- Only hosts in `allow` can be called; any other is refused, as an error the plugin can handle.
+- Only hosts in `allowed_hosts` can be called; any other is refused, as an error the plugin can handle.
 - Each request has a limit on the number of calls a plugin makes.
 
 Plugins have no sockets, so they can't reach databases or other services except over HTTP.
