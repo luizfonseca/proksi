@@ -46,8 +46,6 @@ struct MemoryRoutes {
 struct HostState {
     /// The version in use, if the host is in the store
     active: Option<u64>,
-    /// The revision of its last change
-    changed: u64,
     versions: BTreeMap<u64, RouteVersion>,
     /// Newest first
     history: VecDeque<HistoryEntry>,
@@ -56,25 +54,22 @@ struct HostState {
 impl HostState {
     /// Refuses a change the host doesn't expect
     fn check(&self, expect: Expect) -> Result<(), StoreError> {
-        let present = self.active.is_some();
         let expected = match expect {
             Expect::Any => true,
-            Expect::Absent => !present,
-            Expect::Changed(changed) => changed == self.changed,
+            Expect::Absent => self.active.is_none(),
+            Expect::Version(version) => self.active.unwrap_or_default() == version,
         };
         if expected {
             return Ok(());
         }
         Err(StoreError::Conflict {
-            changed: self.changed,
-            present,
+            version: self.active.unwrap_or_default(),
         })
     }
 
     /// Records a change at `revision`, keeping the last `keep` changes and versions (and the
     /// active version)
     fn record(&mut self, revision: u64, change: Change, write: &Write, keep: usize) {
-        self.changed = revision;
         self.history.push_front(HistoryEntry {
             revision,
             at: unix_timestamp(),
@@ -141,13 +136,10 @@ impl MemoryStore {
 impl Store for MemoryStore {
     async fn routes(&self) -> Result<RoutesSnapshot, StoreError> {
         let routes = self.routes();
-        let records = routes.hosts.values().filter_map(|state| {
-            let version = state.versions.get(&state.active?)?;
-            Some(RouteRecord {
-                changed: state.changed,
-                ..version.record.clone()
-            })
-        });
+        let records = routes
+            .hosts
+            .values()
+            .filter_map(|state| Some(state.versions.get(&state.active?)?.record.clone()));
         Ok(RoutesSnapshot {
             revision: routes.revision,
             routes: records.collect(),
@@ -168,7 +160,6 @@ impl Store for MemoryStore {
         let record = RouteRecord {
             host,
             version: revision,
-            changed: revision,
             ..route
         };
         let version = RouteVersion {

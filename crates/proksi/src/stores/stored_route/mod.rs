@@ -48,15 +48,14 @@ pub struct StoredRoutes {
     pub routes: Vec<Result<StoredHost, StoredRouteError>>,
 }
 
-/// A host read from the store, with its active version and the revision of its last change
+/// A host read from the store, with its active version
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StoredHost {
     #[serde(flatten)]
     pub route: StoredRoute,
-    /// The revision its active definition was saved at (0 if saved before versions were kept)
+    /// The revision its active definition was saved at (0 if saved before versions were
+    /// kept), which a change can expect (`If-Match`)
     pub version: u64,
-    /// The revision of its last change, which a change can expect (`If-Match`)
-    pub changed: u64,
 }
 
 impl StoredRoute {
@@ -90,7 +89,6 @@ impl<S: Store + ?Sized> HostStore for S {
                     decode_stored_route(&record.host, &record.data).map(|route| StoredHost {
                         route,
                         version: record.version,
-                        changed: record.changed,
                     })
                 })
                 .collect(),

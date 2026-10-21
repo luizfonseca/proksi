@@ -231,7 +231,7 @@ Hosts can be added, changed and removed through the API. They're written to the 
 | Endpoint | |
 | --- | --- |
 | `GET /api/v1/routes` | The hosts in the store, with the store's revision |
-| `GET /api/v1/routes/<host>` | One host, as stored, with the store's revision, its `version` and `changed` |
+| `GET /api/v1/routes/<host>` | One host, as stored, with the store's revision and its `version` |
 | `PUT /api/v1/routes/<host>` | Adds or replaces a host, as a new version. Returns the new revision |
 | `POST /api/v1/validate` | Checks a host as `PUT` would, without writing it: `{"valid": true}`, or `400` with the reason |
 | `DELETE /api/v1/routes/<host>` | Removes a host, keeping its versions. Returns the revision |
@@ -261,7 +261,7 @@ Before rolling back, the version is checked by this version of Proksi: if it's n
 
 ### Concurrent changes
 
-To make sure nobody changed a host since you read it, send its `changed` revision (from `GET /api/v1/routes/<host>`) as `If-Match`. If someone changed it in between, the change is refused with `412`, and the host's current `changed`:
+To make sure a change applies to the version you read, send its `version` (from `GET /api/v1/routes/<host>`) as `If-Match`. If the host is on another version by then, the change is refused with `412`, and the host's current `version`:
 
 ```bash
 curl -X PUT -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" -H 'If-Match: "57"' \

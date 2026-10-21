@@ -21,10 +21,8 @@ CREATE TABLE IF NOT EXISTS proksi_route_changes (
     PRIMARY KEY (host, revision)
 );
 
--- The active version of each host (0: none, or saved before versions were kept) and the
--- revision of its last change
+-- The active version of each host (0: none, or saved before versions were kept)
 CREATE TABLE IF NOT EXISTS proksi_route_state (
     host TEXT PRIMARY KEY,
-    version BIGINT NOT NULL,
-    changed BIGINT NOT NULL
+    version BIGINT NOT NULL
 );

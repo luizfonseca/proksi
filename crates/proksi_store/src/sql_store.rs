@@ -222,8 +222,7 @@ impl Store for SqlStore {
             for _ in 0..ROUTES_READ_ATTEMPTS {
                 let current = revision(&pool).await?;
                 let rows = sqlx::query(
-                    "SELECT r.host, r.schema_version, r.data, \
-                     COALESCE(s.version, 0) AS version, COALESCE(s.changed, 0) AS changed \
+                    "SELECT r.host, r.schema_version, r.data, COALESCE(s.version, 0) AS version \
                      FROM proksi_routes r LEFT JOIN proksi_route_state s ON s.host = r.host",
                 )
                     .fetch_all(&pool)
@@ -239,13 +238,11 @@ impl Store for SqlStore {
                     let schema_version: i64 = row.try_get("schema_version").map_err(invalid)?;
                     let data: String = row.try_get("data").map_err(invalid)?;
                     let version: i64 = row.try_get("version").map_err(invalid)?;
-                    let changed: i64 = row.try_get("changed").map_err(invalid)?;
                     routes.push(RouteRecord {
                         host,
                         schema_version: u32::try_from(schema_version).unwrap_or_default(),
                         data,
                         version: u64::try_from(version).unwrap_or_default(),
-                        changed: u64::try_from(changed).unwrap_or_default(),
                     });
                 }
                 return Ok(RoutesSnapshot {

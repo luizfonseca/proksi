@@ -18,9 +18,9 @@ pub enum Refused {
     Unavailable(String),
     /// No such host in the store (404)
     NotFound(String),
-    /// The host isn't as the change expected (412): someone else changed it at `changed` (0
-    /// if it never existed), and it's in the store (`present`) or not
-    Conflict { changed: u64, present: bool },
+    /// The host isn't on the version the change was made from (412): it's on `version` (0 if
+    /// it isn't in the store)
+    Conflict { version: u64 },
     /// A version this version of proksi can't use (422)
     Unusable(String),
 }
@@ -40,11 +40,9 @@ pub struct OneRoute {
     pub host: Host,
     /// The store's revision when it was read
     pub revision: u64,
-    /// The revision its definition was saved at (0 if saved before versions were kept)
+    /// The revision its definition was saved at (0 if saved before versions were kept), sent
+    /// back as `If-Match` so a change is refused if the host is on another version by then
     pub version: u64,
-    /// The revision of its last change, sent back as `If-Match` so a change made since is
-    /// refused
-    pub changed: u64,
 }
 
 /// `GET /api/v1/routes/<host>/history`
@@ -118,7 +116,6 @@ pub async fn get(store: &dyn Store, name: &str) -> Result<OneRoute, Refused> {
             host: stored.route.host,
             revision: snapshot.revision,
             version: stored.version,
-            changed: stored.changed,
         }),
         Some(Err(err)) => Err(Refused::Unavailable(err.error)),
         None => Err(Refused::NotFound(format!(
@@ -228,7 +225,7 @@ fn unavailable(err: impl std::fmt::Display) -> Refused {
 /// Why the store refused a change
 fn refused(err: StoreError) -> Refused {
     match err {
-        StoreError::Conflict { changed, present } => Refused::Conflict { changed, present },
+        StoreError::Conflict { version } => Refused::Conflict { version },
         StoreError::NoVersion(version) => Refused::NotFound(format!("no version {version}")),
         StoreError::Invalid(err) => Refused::Invalid(err),
         StoreError::Unavailable(err) => Refused::Unavailable(err),
@@ -331,7 +328,7 @@ mod tests {
         assert!(listed.unreadable.is_empty());
         let one = get(&store, "API.test").await.unwrap();
         assert_eq!(one.host.name, "api.test");
-        assert_eq!((one.revision, one.version, one.changed), (1, 1, 1));
+        assert_eq!((one.revision, one.version), (1, 1));
         assert_eq!(
             get(&store, "nope.test").await.map(|_| ()),
             Err(Refused::NotFound(
@@ -375,7 +372,7 @@ mod tests {
         let first = put(&store, "api.test", &json("10.0.0.1"), &by("ana", Expect::Absent))
             .await
             .unwrap();
-        let second = put(&store, "api.test", &json("10.0.0.2"), &by("bo", Expect::Changed(first.revision)))
+        let second = put(&store, "api.test", &json("10.0.0.2"), &by("bo", Expect::Version(first.revision)))
             .await
             .unwrap();
 
@@ -390,27 +387,25 @@ mod tests {
 
         // Rolling back, expecting the host's last change
         let body = format!(r#"{{"revision": {}}}"#, first.revision);
-        let rolled = rollback(&store, "api.test", body.as_bytes(), &by("cy", Expect::Changed(second.revision)))
+        rollback(&store, "api.test", body.as_bytes(), &by("cy", Expect::Version(second.revision)))
             .await
             .unwrap();
         let one = get(&store, "api.test").await.unwrap();
-        assert_eq!((one.version, one.changed), (first.revision, rolled.revision));
+        assert_eq!(one.version, first.revision);
         let changes = history(&store, "api.test").await.unwrap().changes;
         assert_eq!(changes[0].change, Change::RolledBack { to: first.revision });
         assert_eq!(changes[0].author.as_deref(), Some("cy"));
         assert_eq!(changes.len(), 3);
 
         // A change made from an older state is refused
-        let stale = put(&store, "api.test", &json("10.0.0.9"), &by("bo", Expect::Changed(second.revision))).await;
-        assert_eq!(
-            stale,
-            Err(Refused::Conflict {
-                changed: rolled.revision,
-                present: true
-            })
-        );
-        let stale = rollback(&store, "api.test", body.as_bytes(), &by("bo", Expect::Changed(second.revision))).await;
+        let stale = put(&store, "api.test", &json("10.0.0.9"), &by("bo", Expect::Version(second.revision))).await;
+        assert_eq!(stale, Err(Refused::Conflict { version: first.revision }));
+        let stale = rollback(&store, "api.test", body.as_bytes(), &by("bo", Expect::Version(second.revision))).await;
         assert!(matches!(stale, Err(Refused::Conflict { .. })));
+        // A change made from the active version goes through
+        put(&store, "api.test", &json("10.0.0.3"), &by("ana", Expect::Version(first.revision)))
+            .await
+            .unwrap();
 
         // Bad bodies, unknown versions and hosts
         let invalid = rollback(&store, "api.test", b"{}", &Write::default()).await;

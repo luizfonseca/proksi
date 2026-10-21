@@ -302,18 +302,22 @@ fn routes_reply(result: Result<impl Serialize, routes::Refused>) -> Reply {
         Err(routes::Refused::Unusable(reason)) => {
             Reply::error(StatusCode::UNPROCESSABLE_ENTITY, &reason)
         }
-        Err(routes::Refused::Conflict { changed, present }) => Reply::json(
-            StatusCode::PRECONDITION_FAILED,
-            &serde_json::json!({
-                "error": format!("the host was changed by someone else (revision {changed}): reload it"),
-                "changed": changed,
-                "present": present,
-            }),
-        ),
+        Err(routes::Refused::Conflict { version }) => {
+            let error = if version == 0 {
+                "the host isn't in the store".to_string()
+            } else {
+                format!("the host was changed by someone else: it's on version {version}, reload it")
+            };
+            Reply::json(
+                StatusCode::PRECONDITION_FAILED,
+                &serde_json::json!({ "error": error, "version": version }),
+            )
+        }
     }
 }
 
-/// Who makes a change, and what it expects of the host (`If-Match`, `If-None-Match: *`)
+/// Who makes a change, and the version it was made from (`If-Match`), or that the host
+/// doesn't exist (`If-None-Match: *`)
 fn write(caller: &access::Caller, request: Request<'_>) -> Result<proksi_store::Write, Reply> {
     use proksi_store::Expect;
 
@@ -322,12 +326,12 @@ fn write(caller: &access::Caller, request: Request<'_>) -> Result<proksi_store::
             let reason = "If-Match and If-None-Match can't be sent together";
             return Err(Reply::error(StatusCode::BAD_REQUEST, reason));
         }
-        (Some(changed), None) => {
-            let changed = changed.trim().trim_matches('"').parse().map_err(|_| {
-                let reason = "If-Match takes the host's `changed` revision (a number)";
+        (Some(version), None) => {
+            let version = version.trim().trim_matches('"').parse().map_err(|_| {
+                let reason = "If-Match takes the host's `version` (a number)";
                 Reply::error(StatusCode::BAD_REQUEST, reason)
             })?;
-            Expect::Changed(changed)
+            Expect::Version(version)
         }
         (None, Some(value)) if value.trim() == "*" => Expect::Absent,
         (None, Some(_)) => {
@@ -444,7 +448,7 @@ pub struct Request<'a> {
     pub cookie: Option<&'a str>,
     pub origin: Option<&'a str>,
     pub host: Option<&'a str>,
-    /// The host's last change a change expects (`changed` from `GET`), with or without quotes
+    /// The version a change was made from (`version` from `GET`), with or without quotes
     pub if_match: Option<&'a str>,
     /// `*`: the change creates the host, and is refused if it exists
     pub if_none_match: Option<&'a str>,
@@ -762,14 +766,14 @@ mod tests {
         let exists = reply(api.handle(put(None, Some("*"))).await);
         assert_eq!(exists.status, StatusCode::PRECONDITION_FAILED);
 
-        // Changed only if nobody changed it since `changed`
+        // Changed only from the active version
         let one = json(reply(api.handle(request(&Method::GET, path, None, Some("Bearer secret"))).await));
-        let changed = one["changed"].as_u64().unwrap();
-        let quoted: &'static str = Box::leak(format!("\"{changed}\"").into_boxed_str());
+        let version = one["version"].as_u64().unwrap();
+        let quoted: &'static str = Box::leak(format!("\"{version}\"").into_boxed_str());
         assert_eq!(reply(api.handle(put(Some(quoted), None)).await).status, StatusCode::OK);
         let stale = reply(api.handle(put(Some(quoted), None)).await);
         assert_eq!(stale.status, StatusCode::PRECONDITION_FAILED);
-        assert_eq!(json(stale)["changed"].as_u64(), Some(changed + 1));
+        assert_eq!(json(stale)["version"].as_u64(), Some(version + 1));
 
         // Bad headers
         let bad = reply(api.handle(put(Some("soon"), None)).await);

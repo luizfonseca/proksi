@@ -135,7 +135,6 @@ fn record(host: &str, data: String) -> RouteRecord {
         schema_version,
         data,
         version: 0,
-        changed: 0,
     }
 }
 
@@ -155,7 +154,7 @@ impl Store for RedisStore {
                 conn.mget(&keys).map_err(unavailable)?
             };
 
-            let metas = redis_history::metas(&mut conn, &hosts)?;
+            let versions = redis_history::versions(&mut conn, &hosts)?;
 
             if Self::get_revision(&mut conn)? != revision {
                 continue;
@@ -164,11 +163,10 @@ impl Store for RedisStore {
             let routes = hosts
                 .iter()
                 .zip(values)
-                .zip(metas)
-                .filter_map(|((host, value), (version, changed))| {
+                .zip(versions)
+                .filter_map(|((host, value), version)| {
                     Some(RouteRecord {
                         version,
-                        changed,
                         ..record(host, value?)
                     })
                 })
@@ -576,7 +574,6 @@ mod tests {
                 schema_version: 0,
                 data: "{ not json".to_string(),
                 version: 0,
-                changed: 0,
             }]
         );
     }

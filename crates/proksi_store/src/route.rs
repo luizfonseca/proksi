@@ -11,12 +11,10 @@ pub struct RouteRecord {
     pub host: String,
     pub schema_version: u32,
     pub data: String,
-    /// Read from the store: the revision this definition was saved at (0 if saved before
-    /// the store kept versions)
+    /// Read from the store: the active version, the revision this definition was saved at
+    /// (0 if saved before the store kept versions), which a change can expect
+    /// ([`Expect::Version`])
     pub version: u64,
-    /// Read from the store: the revision of the host's last change, which a write expects
-    /// to be unchanged ([`Expect::Changed`])
-    pub changed: u64,
 }
 
 impl RouteRecord {
@@ -28,7 +26,6 @@ impl RouteRecord {
             schema_version,
             data,
             version: 0,
-            changed: 0,
         }
     }
 }
@@ -44,8 +41,9 @@ pub enum Expect {
     Any,
     /// The host isn't in the store (it never was, or it was deleted)
     Absent,
-    /// The host's last change is this revision ([`RouteRecord::changed`])
-    Changed(u64),
+    /// The host's active version is this one ([`RouteRecord::version`]): the change was
+    /// made from it
+    Version(u64),
 }
 
 /// Who makes a change, and what it expects of the host
@@ -112,9 +110,9 @@ pub enum StoreError {
     Unavailable(String),
     /// The data is invalid
     Invalid(String),
-    /// The host isn't as the change expected ([`Expect`]): it changed at `changed` (0 if it
-    /// never existed), and is in the store (`present`) or not
-    Conflict { changed: u64, present: bool },
+    /// The host isn't as the change expected ([`Expect`]): its active version is `version`
+    /// (0 if it isn't in the store)
+    Conflict { version: u64 },
     /// There's no such version of the host (it was never saved, or is too old to be kept)
     NoVersion(u64),
 }
@@ -124,8 +122,9 @@ impl fmt::Display for StoreError {
         match self {
             StoreError::Unavailable(err) => write!(f, "store unavailable: {err}"),
             StoreError::Invalid(err) => write!(f, "invalid data: {err}"),
-            StoreError::Conflict { changed, .. } => {
-                write!(f, "the host was changed by someone else (revision {changed})")
+            StoreError::Conflict { version: 0 } => write!(f, "the host isn't in the store"),
+            StoreError::Conflict { version } => {
+                write!(f, "the host was changed by someone else: it's on version {version}")
             }
             StoreError::NoVersion(version) => write!(f, "no version {version} of the host"),
         }

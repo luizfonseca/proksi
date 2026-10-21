@@ -2,8 +2,8 @@
 //!
 //! `proksi_routes` keeps the active definition of each host, read by every replica (and by
 //! older Proksi versions, which know nothing else). `proksi_route_versions` keeps the versions,
-//! `proksi_route_changes` the changes, and `proksi_route_state` the active version and last
-//! change of each host.
+//! `proksi_route_changes` the changes, and `proksi_route_state` the active version of each
+//! host.
 //!
 //! A change first increments the store's revision: the row stays locked until the change
 //! commits, so changes run one at a time and what one expects can't change under it.
@@ -49,47 +49,51 @@ async fn next_revision(tx: &mut AnyConnection) -> Result<u64, StoreError> {
     to_u64(row.try_get("value").map_err(invalid)?)
 }
 
-/// The host's last change (0 if none) and whether it's in the store
-async fn state(tx: &mut AnyConnection, host: &str) -> Result<(u64, bool), StoreError> {
-    let changed = sqlx::query("SELECT changed FROM proksi_route_state WHERE host = $1")
-        .bind(host)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(unavailable)?
-        .map(|row| row.try_get::<i64, _>("changed"))
-        .transpose()
-        .map_err(invalid)?
-        .unwrap_or_default();
+/// The host's active version, if it's in the store (0 if saved before versions were kept)
+async fn active(tx: &mut AnyConnection, host: &str) -> Result<Option<u64>, StoreError> {
     let present = sqlx::query("SELECT 1 FROM proksi_routes WHERE host = $1")
         .bind(host)
         .fetch_optional(&mut *tx)
         .await
         .map_err(unavailable)?
         .is_some();
-    Ok((to_u64(changed)?, present))
+    if !present {
+        return Ok(None);
+    }
+    let version = sqlx::query("SELECT version FROM proksi_route_state WHERE host = $1")
+        .bind(host)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(unavailable)?
+        .map(|row| row.try_get::<i64, _>("version"))
+        .transpose()
+        .map_err(invalid)?
+        .unwrap_or_default();
+    to_u64(version).map(Some)
 }
 
 /// Refuses a change the host doesn't expect. Returns whether the host is in the store.
 async fn check(tx: &mut AnyConnection, host: &str, expect: Expect) -> Result<bool, StoreError> {
-    let (changed, present) = state(tx, host).await?;
+    let active = active(tx, host).await?;
     let expected = match expect {
         Expect::Any => true,
-        Expect::Absent => !present,
-        Expect::Changed(expected) => expected == changed,
+        Expect::Absent => active.is_none(),
+        Expect::Version(version) => active.unwrap_or_default() == version,
     };
     if !expected {
-        return Err(StoreError::Conflict { changed, present });
+        return Err(StoreError::Conflict {
+            version: active.unwrap_or_default(),
+        });
     }
-    Ok(present)
+    Ok(active.is_some())
 }
 
-/// Writes the active definition (read by replicas) and the host's state
+/// Writes the active definition (read by replicas) and the host's active version
 async fn activate(
     tx: &mut AnyConnection,
     host: &str,
     route: Option<(i64, &str)>,
     version: u64,
-    revision: u64,
 ) -> Result<(), StoreError> {
     match route {
         Some((schema_version, data)) => sqlx::query(
@@ -112,12 +116,11 @@ async fn activate(
             .map_err(unavailable)?,
     };
     sqlx::query(
-        "INSERT INTO proksi_route_state (host, version, changed) VALUES ($1, $2, $3) \
-         ON CONFLICT (host) DO UPDATE SET version = excluded.version, changed = excluded.changed",
+        "INSERT INTO proksi_route_state (host, version) VALUES ($1, $2) \
+         ON CONFLICT (host) DO UPDATE SET version = excluded.version",
     )
     .bind(host)
     .bind(to_i64(version)?)
-    .bind(to_i64(revision)?)
     .execute(&mut *tx)
     .await
     .map_err(unavailable)?;
@@ -220,7 +223,7 @@ pub(crate) async fn put(
     .execute(&mut *tx)
     .await
     .map_err(unavailable)?;
-    activate(&mut tx, &host, Some((schema_version, &route.data)), revision, revision).await?;
+    activate(&mut tx, &host, Some((schema_version, &route.data)), revision).await?;
     record(&mut tx, &host, revision, Change::Saved, &write, keep).await?;
     tx.commit().await.map_err(unavailable)?;
     Ok(revision)
@@ -239,7 +242,7 @@ pub(crate) async fn delete(
         // Nothing to delete: the revision is unchanged (the transaction is rolled back)
         return Ok(revision - 1);
     }
-    activate(&mut tx, &host, None, 0, revision).await?;
+    activate(&mut tx, &host, None, 0).await?;
     record(&mut tx, &host, revision, Change::Deleted, &write, keep).await?;
     tx.commit().await.map_err(unavailable)?;
     Ok(revision)
@@ -267,7 +270,7 @@ pub(crate) async fn rollback(
     check(&mut tx, &host, write.expect).await?;
     let schema_version: i64 = version.try_get("schema_version").map_err(invalid)?;
     let data: String = version.try_get("data").map_err(invalid)?;
-    activate(&mut tx, &host, Some((schema_version, &data)), to, revision).await?;
+    activate(&mut tx, &host, Some((schema_version, &data)), to).await?;
     record(&mut tx, &host, revision, Change::RolledBack { to }, &write, keep).await?;
     tx.commit().await.map_err(unavailable)?;
     Ok(revision)
@@ -328,7 +331,6 @@ pub(crate) async fn version(
             schema_version: u32::try_from(schema_version).map_err(invalid)?,
             data: row.try_get("data").map_err(invalid)?,
             version,
-            changed: 0,
         },
         at: to_u64(row.try_get("created_at").map_err(invalid)?)?,
         author: row.try_get("author").map_err(invalid)?,
