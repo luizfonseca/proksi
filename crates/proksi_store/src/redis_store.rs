@@ -1,13 +1,12 @@
 use async_trait::async_trait;
 use papaya::HashMapRef;
 use redis::{Client, Commands};
-use serde_json;
 use std::{error::Error, hash::RandomState, time::Duration};
 
-use super::certificates::{Certificate, SerializableCertificate};
-use super::store_trait::Store;
-use super::stored_route::{
-    decode_stored_route, ReplicaStatus, RoutesSnapshot, StoreError, StoredRoute,
+use crate::{
+    certificates::{Certificate, SerializableCertificate},
+    route::{ReplicaStatus, RouteRecord, RoutesSnapshot, StoreError},
+    store_trait::Store,
 };
 
 const CHALLENGE_TTL_SECONDS: u64 = 300;
@@ -41,6 +40,11 @@ pub struct RedisStore {
 }
 
 impl RedisStore {
+    /// A store on the Redis server at `redis_url`
+    ///
+    /// # Errors
+    ///
+    /// When the URL is invalid or the server can't be reached
     pub fn new(redis_url: &str) -> Result<Self, Box<dyn Error>> {
         let client = Client::open(redis_url)?;
         let pool = r2d2::Pool::builder().build(client)?;
@@ -105,6 +109,20 @@ fn stored_certificate(connection: &mut impl redis::Commands, key: &str) -> Optio
     Certificate::from_serializable(certificate).ok()
 }
 
+/// The record of a route kept as JSON, which includes its schema version
+fn record(host: &str, data: String) -> RouteRecord {
+    #[derive(serde::Deserialize)]
+    struct Version {
+        schema_version: u32,
+    }
+    let schema_version = serde_json::from_str::<Version>(&data).map_or(0, |v| v.schema_version);
+    RouteRecord {
+        host: host.to_string(),
+        schema_version,
+        data,
+    }
+}
+
 #[async_trait]
 impl Store for RedisStore {
     async fn routes(&self) -> Result<RoutesSnapshot, StoreError> {
@@ -128,7 +146,7 @@ impl Store for RedisStore {
             let routes = hosts
                 .iter()
                 .zip(values)
-                .filter_map(|(host, value)| Some(decode_stored_route(host, &value?)))
+                .filter_map(|(host, value)| Some(record(host, value?)))
                 .collect();
             return Ok(RoutesSnapshot { revision, routes });
         }
@@ -142,9 +160,9 @@ impl Store for RedisStore {
         Self::get_revision(&mut *self.connection()?)
     }
 
-    async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError> {
-        let host = route.key();
-        let json = serde_json::to_string(&route).map_err(|e| StoreError::Invalid(e.to_string()))?;
+    async fn put_route(&self, route: RouteRecord) -> Result<u64, StoreError> {
+        let host = route.host.to_lowercase();
+        let json = route.data;
 
         let (revision,): (u64,) = redis::pipe()
             .atomic()
@@ -343,8 +361,8 @@ impl Store for RedisStore {
     async fn get_certificates(
         &self,
     ) -> HashMapRef<'_, String, Certificate, RandomState, seize::LocalGuard<'_>> {
-        static TEMP_MAP: once_cell::sync::Lazy<papaya::HashMap<String, Certificate>> =
-            once_cell::sync::Lazy::new(papaya::HashMap::new);
+        static TEMP_MAP: std::sync::LazyLock<papaya::HashMap<String, Certificate>> =
+            std::sync::LazyLock::new(papaya::HashMap::new);
 
         TEMP_MAP.pin().clear();
 
@@ -450,21 +468,21 @@ mod tests {
     #[tokio::test]
     async fn test_routes_contract() {
         if let Some(store) = test_store(14) {
-            crate::stores::contract_tests::routes_contract(&store).await;
+            crate::contract_tests::routes_contract(&store).await;
         }
     }
 
     #[tokio::test]
     async fn test_replicas_contract() {
         if let Some(store) = test_store(15) {
-            crate::stores::contract_tests::replicas_contract(&store).await;
+            crate::contract_tests::replicas_contract(&store).await;
         }
     }
 
     #[tokio::test]
     async fn test_leases_contract() {
         if let Some(store) = test_store(11) {
-            crate::stores::contract_tests::leases_contract(&store).await;
+            crate::contract_tests::leases_contract(&store).await;
         }
     }
 
@@ -476,7 +494,7 @@ mod tests {
         // Another replica
         let url = std::env::var("PROKSI_TEST_REDIS_URL").unwrap();
         let other = RedisStore::new(&format!("{}/10", url.trim_end_matches('/'))).unwrap();
-        crate::stores::contract_tests::certificates_contract(&store, &other).await;
+        crate::contract_tests::certificates_contract(&store, &other).await;
     }
 
     #[tokio::test]
@@ -494,12 +512,12 @@ mod tests {
             .unwrap();
         leaf.sign(&key, openssl::hash::MessageDigest::sha256())
             .unwrap();
-        let certificate = crate::stores::certificates::Certificate {
+        let certificate = crate::certificates::Certificate {
             key,
             leaf: leaf.build(),
             chain: vec![],
         };
-        crate::stores::store_trait::Store::set_certificate(&store, "cert.test", certificate)
+        crate::store_trait::Store::set_certificate(&store, "cert.test", certificate)
             .await
             .unwrap();
 
@@ -509,13 +527,13 @@ mod tests {
             std::env::var("PROKSI_TEST_REDIS_URL").unwrap()
         ))
         .unwrap();
-        let certificates = crate::stores::store_trait::Store::get_certificates(&other).await;
+        let certificates = crate::store_trait::Store::get_certificates(&other).await;
 
         assert!(certificates.contains_key("cert.test"));
     }
 
     #[tokio::test]
-    async fn test_invalid_route_data_is_reported() {
+    async fn test_route_data_is_returned_as_written() {
         let Some(store) = test_store(13) else {
             return;
         };
@@ -523,11 +541,18 @@ mod tests {
         let _: () = conn.set("proksi:route:broken.test", "{ not json").unwrap();
         let _: () = conn.sadd("proksi:routes", "broken.test").unwrap();
 
-        let snapshot = crate::stores::store_trait::Store::routes(&store)
+        let snapshot = crate::store_trait::Store::routes(&store)
             .await
             .unwrap();
 
-        assert_eq!(snapshot.routes.len(), 1);
-        assert!(snapshot.routes[0].is_err());
+        // Proksi reports it as invalid: the store doesn't read it (schema version 0: unknown)
+        assert_eq!(
+            snapshot.routes,
+            vec![crate::RouteRecord {
+                host: "broken.test".to_string(),
+                schema_version: 0,
+                data: "{ not json".to_string(),
+            }]
+        );
     }
 }

@@ -412,7 +412,7 @@ mod tests {
 
     /// Writes a new certificate for `name` and its key to `pem` and `key`
     fn write_certificate(name: &str, pem: &std::path::Path, key: &std::path::Path) -> Vec<u8> {
-        let (certificate, private) = crate::stores::certificates::tests::signed(name, None);
+        let (certificate, private) = proksi_store::test_util::signed(name, None);
         std::fs::write(pem, certificate.to_pem().unwrap()).unwrap();
         std::fs::write(key, private.private_key_to_pem_pkcs8().unwrap()).unwrap();
         certificate.to_pem().unwrap()
@@ -471,7 +471,7 @@ mod tests {
             .await;
 
         // Only the certificate is written so far: the key is still the previous one
-        let (renewed, _) = crate::stores::certificates::tests::signed("rec-mismatch.test", None);
+        let (renewed, _) = proksi_store::test_util::signed("rec-mismatch.test", None);
         std::fs::write(&pem, renewed.to_pem().unwrap()).unwrap();
 
         assert!(reconciler.reload_certificate_files().await.is_empty());

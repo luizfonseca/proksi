@@ -2,7 +2,7 @@
 
 use openssl::{pkey::PKey, x509::X509};
 
-use crate::stores::certificates::Certificate;
+use proksi_store::Certificate;
 
 /// A certificate from a `Secret`: `tls.crt` (the certificate, then its chain) and `tls.key`
 pub fn parse(certificate: &[u8], key: &[u8]) -> Result<Certificate, String> {

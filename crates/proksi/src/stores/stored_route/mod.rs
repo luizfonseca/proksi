@@ -1,7 +1,7 @@
 //! Routes kept in a store, shared by every replica
 
-use std::fmt;
-
+use async_trait::async_trait;
+use proksi_store::{RouteRecord, Store, StoreError};
 use serde::{Deserialize, Serialize};
 
 use crate::config::host::Host;
@@ -41,42 +41,49 @@ pub struct StoredRouteError {
     pub error: String,
 }
 
-/// All routes in the store, at a given revision
+/// All routes in the store at a given revision, as this version of proksi reads them
 #[derive(Debug, Default)]
-pub struct RoutesSnapshot {
+pub struct StoredRoutes {
     pub revision: u64,
     pub routes: Vec<Result<StoredRoute, StoredRouteError>>,
 }
 
-/// Reported by each replica after applying the routes of a revision
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ReplicaStatus {
-    pub id: String,
-    pub revision: u64,
-    /// Unix timestamp (seconds)
-    pub applied_at: u64,
-    pub version: String,
-    pub hostname: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum StoreError {
-    /// The store couldn't be reached or failed
-    Unavailable(String),
-    /// The data is invalid
-    Invalid(String),
-}
-
-impl fmt::Display for StoreError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            StoreError::Unavailable(err) => write!(f, "store unavailable: {err}"),
-            StoreError::Invalid(err) => write!(f, "invalid data: {err}"),
-        }
+impl StoredRoute {
+    /// The route as the store keeps it
+    pub fn to_record(&self) -> Result<RouteRecord, StoreError> {
+        let data = serde_json::to_string(self).map_err(|err| StoreError::Invalid(err.to_string()))?;
+        Ok(RouteRecord::new(&self.key(), self.schema_version, data))
     }
 }
 
-impl std::error::Error for StoreError {}
+/// Hosts read from and written to a store, which keeps them as JSON records
+#[async_trait]
+pub trait HostStore {
+    /// The routes of the store, each read or reported as unreadable
+    async fn stored_routes(&self) -> Result<StoredRoutes, StoreError>;
+
+    /// Adds or replaces the route of a host, returning the new revision
+    async fn put_stored(&self, route: &StoredRoute) -> Result<u64, StoreError>;
+}
+
+#[async_trait]
+impl<S: Store + ?Sized> HostStore for S {
+    async fn stored_routes(&self) -> Result<StoredRoutes, StoreError> {
+        let snapshot = self.routes().await?;
+        Ok(StoredRoutes {
+            revision: snapshot.revision,
+            routes: snapshot
+                .routes
+                .iter()
+                .map(|record| decode_stored_route(&record.host, &record.data))
+                .collect(),
+        })
+    }
+
+    async fn put_stored(&self, route: &StoredRoute) -> Result<u64, StoreError> {
+        self.put_route(route.to_record()?).await
+    }
+}
 
 /// Reads a stored route, rejecting schema versions this version of proksi doesn't know
 pub fn decode_stored_route(host: &str, json: &str) -> Result<StoredRoute, StoredRouteError> {
@@ -99,17 +106,6 @@ pub fn decode_stored_route(host: &str, json: &str) -> Result<StoredRoute, Stored
     }
 }
 
-/// Checks that this version of proksi can read a stored route
-pub fn check_schema_version(stored: StoredRoute) -> Result<StoredRoute, StoredRouteError> {
-    if stored.schema_version > ROUTE_SCHEMA_VERSION {
-        return Err(StoredRouteError {
-            host: stored.key(),
-            error: unsupported_version(stored.schema_version),
-        });
-    }
-    Ok(stored)
-}
-
 #[derive(Deserialize)]
 struct SchemaVersion {
     schema_version: u32,
@@ -125,7 +121,7 @@ fn unsupported_version(version: u32) -> String {
 mod tests {
     use crate::routing::test_utils::host;
 
-    use super::{check_schema_version, decode_stored_route, StoredRoute};
+    use super::{decode_stored_route, StoredRoute};
 
     #[test]
     fn test_decode_stored_route() {
@@ -172,15 +168,6 @@ mod tests {
             err.error,
             "unsupported schema version 3 (this version of proksi supports up to 2)"
         );
-    }
-
-    #[test]
-    fn test_check_schema_version() {
-        let mut stored = StoredRoute::new(host("a.test", "10.0.0.1"));
-        assert!(check_schema_version(stored.clone()).is_ok());
-
-        stored.schema_version = 3;
-        assert!(check_schema_version(stored).is_err());
     }
 
     #[test]

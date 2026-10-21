@@ -596,7 +596,7 @@ mod tests {
 }
 
 /// When `certificate` expires, as a Unix timestamp
-pub fn expiry_timestamp(certificate: &crate::stores::certificates::Certificate) -> Option<i64> {
+pub fn expiry_timestamp(certificate: &proksi_store::Certificate) -> Option<i64> {
     let epoch = openssl::asn1::Asn1Time::from_unix(0).ok()?;
     let diff = epoch.diff(certificate.leaf.not_after()).ok()?;
     Some(i64::from(diff.days) * 86_400 + i64::from(diff.secs))
@@ -606,7 +606,7 @@ pub fn expiry_timestamp(certificate: &crate::stores::certificates::Certificate) 
 mod expiry_tests {
     #[test]
     fn test_expiry_timestamp() {
-        let certificate = crate::stores::contract_tests::certificate("a.test", 30);
+        let certificate = proksi_store::test_util::certificate("a.test", 30);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()

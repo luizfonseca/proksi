@@ -12,24 +12,11 @@ use papaya::HashMapRef;
 use routes::RouteStore;
 
 pub mod cache;
-pub mod certificates;
 pub mod global;
 pub mod host_container;
 pub mod lookup;
-pub mod memory_store;
-pub mod redis_store;
 pub mod routes;
-#[cfg(any(feature = "store-sqlite", feature = "store-postgres"))]
-pub mod sql_store;
-pub mod store_trait;
 pub mod stored_route;
-
-#[cfg(test)]
-pub(crate) mod contract_tests;
-
-// Re-export stores
-pub use memory_store::MemoryStore;
-pub use redis_store::RedisStore;
 
 // CHALLENGE store - DEPRECATED: Use global store instead
 // static CHALLENGE_STORE: Lazy<ChallengeStore> = Lazy::new(papaya::HashMap::new);

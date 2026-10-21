@@ -15,7 +15,7 @@ pub struct Certificate {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct SerializableCertificate {
+pub struct SerializableCertificate {
     key: String,
     leaf: String,
     /// The intermediates, concatenated (stored before they were all kept: only the first)
@@ -23,6 +23,11 @@ pub(crate) struct SerializableCertificate {
 }
 
 impl Certificate {
+    /// The certificate as stored: its key and certificates in PEM, base64-encoded
+    ///
+    /// # Errors
+    ///
+    /// When the key or a certificate can't be encoded
     pub fn to_serializable(&self) -> Result<SerializableCertificate, Box<dyn Error>> {
         Ok(SerializableCertificate {
             key: base64::encode_block(&self.key.private_key_to_pem_pkcs8()?),
@@ -40,6 +45,11 @@ impl Certificate {
         })
     }
 
+    /// The certificate as stored, read back
+    ///
+    /// # Errors
+    ///
+    /// When the key or a certificate is invalid
     pub fn from_serializable(cert: SerializableCertificate) -> Result<Self, Box<dyn Error>> {
         let key_data = base64::decode_block(&cert.key)?;
         let leaf_data = base64::decode_block(&cert.leaf)?;
@@ -54,46 +64,13 @@ impl Certificate {
         Ok(Certificate { key, leaf, chain })
     }
 }
+
 #[cfg(test)]
-pub(crate) mod tests {
-    use openssl::{
-        asn1::Asn1Time,
-        ec::{EcGroup, EcKey},
-        hash::MessageDigest,
-        nid::Nid,
-        pkey::{PKey, Private},
-        x509::{X509Name, X509},
-    };
+mod tests {
+    use openssl::x509::X509;
 
     use super::Certificate;
-
-    /// A certificate for `name`, signed by `issuer` (self-signed without one)
-    pub(crate) fn signed(
-        name: &str,
-        issuer: Option<&(X509, PKey<Private>)>,
-    ) -> (X509, PKey<Private>) {
-        let group = EcGroup::from_curve_name(Nid::X9_62_PRIME256V1).unwrap();
-        let key = PKey::from_ec_key(EcKey::generate(&group).unwrap()).unwrap();
-        let mut subject = X509Name::builder().unwrap();
-        subject.append_entry_by_text("CN", name).unwrap();
-        let subject = subject.build();
-        let mut builder = X509::builder().unwrap();
-        builder.set_subject_name(&subject).unwrap();
-        builder
-            .set_issuer_name(issuer.map_or(&subject, |(issuer, _)| issuer.subject_name()))
-            .unwrap();
-        builder.set_pubkey(&key).unwrap();
-        builder
-            .set_not_before(&Asn1Time::days_from_now(0).unwrap())
-            .unwrap();
-        builder
-            .set_not_after(&Asn1Time::days_from_now(30).unwrap())
-            .unwrap();
-        builder
-            .sign(issuer.map_or(&key, |(_, key)| key), MessageDigest::sha256())
-            .unwrap();
-        (builder.build(), key)
-    }
+    use crate::test_util::signed;
 
     fn pems(certificates: &[X509]) -> Vec<Vec<u8>> {
         certificates.iter().map(|c| c.to_pem().unwrap()).collect()

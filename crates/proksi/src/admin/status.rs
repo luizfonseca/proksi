@@ -12,8 +12,8 @@ use crate::{
         RouteUpstream,
     },
     routing::merge::{Conflict, InvalidRoute},
-    stores::{store_trait::Store, stored_route::ReplicaStatus},
 };
+use proksi_store::{ReplicaStatus, Store};
 
 /// What the admin API reports about this instance, set when it starts
 pub struct Instance {
@@ -469,8 +469,9 @@ mod tests {
 
     use crate::{
         routing::{build::build_host_container, test_utils::host},
-        stores::{self, contract_tests::certificate, store_trait::Store, MemoryStore},
+        stores,
     };
+    use proksi_store::{test_util::certificate, MemoryStore, Store};
 
     use super::Instance;
 

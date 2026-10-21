@@ -6,10 +6,10 @@ use async_trait::async_trait;
 use papaya::HashMapRef;
 use sqlx::{any::AnyPoolOptions, AnyPool, Row};
 
-use super::{
+use crate::{
     certificates::{Certificate, SerializableCertificate},
+    route::{ReplicaStatus, RouteRecord, RoutesSnapshot, StoreError},
     store_trait::Store,
-    stored_route::{decode_stored_route, ReplicaStatus, RoutesSnapshot, StoreError, StoredRoute},
 };
 
 const CHALLENGE_TTL_SECONDS: i64 = 300;
@@ -30,6 +30,10 @@ pub struct SqlStore {
 impl SqlStore {
     /// Connects to the database and creates/updates the tables.
     /// For sqlite, use `sqlite://<path>?mode=rwc` to create the file if needed.
+    ///
+    /// # Errors
+    ///
+    /// When the database can't be reached or its tables can't be created
     pub fn connect(database_url: &str) -> Result<Self, StoreError> {
         sqlx::any::install_default_drivers();
 
@@ -87,6 +91,10 @@ impl SqlStore {
 
 impl SqlStore {
     /// Reads Let's Encrypt data (blocking, as required by `acme_v2`)
+    ///
+    /// # Errors
+    ///
+    /// When the database can't be reached
     pub fn acme_get(&self, key: &str) -> Result<Option<String>, StoreError> {
         let Some(runtime) = self.runtime.as_ref() else {
             return Err(StoreError::Unavailable("store closed".to_string()));
@@ -105,6 +113,10 @@ impl SqlStore {
     }
 
     /// Writes Let's Encrypt data (blocking, as required by `acme_v2`)
+    ///
+    /// # Errors
+    ///
+    /// When the database can't be reached
     pub fn acme_put(&self, key: &str, value: String) -> Result<(), StoreError> {
         let Some(runtime) = self.runtime.as_ref() else {
             return Err(StoreError::Unavailable("store closed".to_string()));
@@ -208,7 +220,7 @@ impl Store for SqlStore {
             // Retried if the routes change while being read
             for _ in 0..ROUTES_READ_ATTEMPTS {
                 let current = revision(&pool).await?;
-                let rows = sqlx::query("SELECT host, data FROM proksi_routes")
+                let rows = sqlx::query("SELECT host, schema_version, data FROM proksi_routes")
                     .fetch_all(&pool)
                     .await
                     .map_err(unavailable)?;
@@ -219,8 +231,13 @@ impl Store for SqlStore {
                 let mut routes = Vec::with_capacity(rows.len());
                 for row in rows {
                     let host: String = row.try_get("host").map_err(invalid)?;
+                    let schema_version: i64 = row.try_get("schema_version").map_err(invalid)?;
                     let data: String = row.try_get("data").map_err(invalid)?;
-                    routes.push(decode_stored_route(&host, &data));
+                    routes.push(RouteRecord {
+                        host,
+                        schema_version: u32::try_from(schema_version).unwrap_or_default(),
+                        data,
+                    });
                 }
                 return Ok(RoutesSnapshot {
                     revision: current,
@@ -239,10 +256,10 @@ impl Store for SqlStore {
         self.run(async move { revision(&pool).await }).await
     }
 
-    async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError> {
+    async fn put_route(&self, route: RouteRecord) -> Result<u64, StoreError> {
         let pool = self.pool.clone();
-        let host = route.key();
-        let data = serde_json::to_string(&route).map_err(invalid)?;
+        let host = route.host.to_lowercase();
+        let data = route.data;
         let schema_version = i64::from(route.schema_version);
         self.run(async move {
             let mut tx = pool.begin().await.map_err(unavailable)?;
@@ -582,11 +599,11 @@ impl Store for SqlStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::stores::{certificates::Certificate, contract_tests, store_trait::Store};
+    use crate::{certificates::Certificate, contract_tests, store_trait::Store};
 
     use super::SqlStore;
 
-    #[cfg(feature = "store-sqlite")]
+    #[cfg(feature = "sqlite")]
     fn sqlite_store() -> (SqlStore, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
         let url = format!(
@@ -597,7 +614,7 @@ mod tests {
     }
 
     /// Postgres set in `PROKSI_TEST_POSTGRES_URL`, with a dedicated, emptied schema
-    #[cfg(feature = "store-postgres")]
+    #[cfg(feature = "postgres")]
     fn postgres_store(schema: &str) -> Option<SqlStore> {
         let Ok(url) = std::env::var("PROKSI_TEST_POSTGRES_URL") else {
             eprintln!("PROKSI_TEST_POSTGRES_URL not set, skipping postgres store test");
@@ -622,7 +639,7 @@ mod tests {
         Some(SqlStore::connect(&postgres_url(&url, schema)).unwrap())
     }
 
-    #[cfg(feature = "store-postgres")]
+    #[cfg(feature = "postgres")]
     fn postgres_url(url: &str, schema: &str) -> String {
         let separator = if url.contains('?') { '&' } else { '?' };
         format!("{url}{separator}options=-c search_path={schema}")
@@ -672,21 +689,21 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "store-sqlite")]
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_sqlite_routes_contract() {
         let (store, _dir) = sqlite_store();
         contract_tests::routes_contract(&store).await;
     }
 
-    #[cfg(feature = "store-sqlite")]
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_sqlite_replicas_contract() {
         let (store, _dir) = sqlite_store();
         contract_tests::replicas_contract(&store).await;
     }
 
-    #[cfg(feature = "store-sqlite")]
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_sqlite_certificates_and_challenges() {
         let (store, dir) = sqlite_store();
@@ -697,7 +714,7 @@ mod tests {
         certificates_and_challenges(&store, || SqlStore::connect(&url).unwrap()).await;
     }
 
-    #[cfg(feature = "store-postgres")]
+    #[cfg(feature = "postgres")]
     #[tokio::test]
     async fn test_postgres_routes_contract() {
         if let Some(store) = postgres_store("proksi_test_routes") {
@@ -705,7 +722,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "store-postgres")]
+    #[cfg(feature = "postgres")]
     #[tokio::test]
     async fn test_postgres_replicas_contract() {
         if let Some(store) = postgres_store("proksi_test_replicas") {
@@ -713,14 +730,14 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "store-sqlite")]
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_sqlite_leases_contract() {
         let (store, _dir) = sqlite_store();
         contract_tests::leases_contract(&store).await;
     }
 
-    #[cfg(feature = "store-sqlite")]
+    #[cfg(feature = "sqlite")]
     #[tokio::test]
     async fn test_sqlite_certificates_contract() {
         let (store, dir) = sqlite_store();
@@ -732,7 +749,7 @@ mod tests {
         contract_tests::certificates_contract(&store, &other).await;
     }
 
-    #[cfg(feature = "store-postgres")]
+    #[cfg(feature = "postgres")]
     #[tokio::test]
     async fn test_postgres_leases_contract() {
         if let Some(store) = postgres_store("proksi_test_leases") {
@@ -740,7 +757,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "store-postgres")]
+    #[cfg(feature = "postgres")]
     #[tokio::test]
     async fn test_postgres_certificates_contract() {
         if let Some(store) = postgres_store("proksi_test_certificates") {

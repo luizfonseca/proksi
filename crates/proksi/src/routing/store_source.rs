@@ -2,10 +2,9 @@
 
 use std::{sync::Arc, time::Duration};
 
-use crate::stores::{
-    store_trait::Store,
-    stored_route::{ReplicaStatus, StoreError},
-};
+use proksi_store::{ReplicaStatus, Store, StoreError};
+
+use crate::stores::stored_route::HostStore;
 
 use super::{RouteSnapshot, RouteSourceKind, SnapshotSender};
 
@@ -56,7 +55,7 @@ impl StoreSource {
 
         let revision = self.store.revision().await?;
         if self.applied_revision != Some(revision) {
-            let stored = self.store.routes().await?;
+            let stored = self.store.stored_routes().await?;
 
             let routes = stored
                 .routes
@@ -178,14 +177,13 @@ mod tests {
     use async_trait::async_trait;
     use papaya::HashMapRef;
 
+    use proksi_store::{
+        Certificate, MemoryStore, ReplicaStatus, RouteRecord, RoutesSnapshot, Store, StoreError,
+    };
+
     use crate::{
         routing::{test_utils::host, RouteSnapshot, RouteSourceKind},
-        stores::{
-            certificates::Certificate,
-            store_trait::Store,
-            stored_route::{ReplicaStatus, RoutesSnapshot, StoreError, StoredRoute},
-            MemoryStore,
-        },
+        stores::stored_route::{HostStore, StoredRoute},
     };
 
     use super::StoreSource;
@@ -227,7 +225,7 @@ mod tests {
             self.check()?;
             self.inner.revision().await
         }
-        async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError> {
+        async fn put_route(&self, route: RouteRecord) -> Result<u64, StoreError> {
             self.inner.put_route(route).await
         }
         async fn delete_route(&self, host: &str) -> Result<u64, StoreError> {
@@ -345,7 +343,7 @@ mod tests {
         store
             .set_certificate(
                 "a.test",
-                crate::stores::contract_tests::certificate("a.test", 10),
+                proksi_store::test_util::certificate("a.test", 10),
             )
             .await
             .unwrap();
@@ -357,7 +355,7 @@ mod tests {
     async fn test_store_source_sends_routes() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_route(StoredRoute::new(host("a.test", "10.0.0.1")))
+            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")))
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -389,7 +387,7 @@ mod tests {
         receiver.try_recv().unwrap();
 
         store
-            .put_route(StoredRoute::new(host("b.test", "10.0.0.1")))
+            .put_stored(&StoredRoute::new(host("b.test", "10.0.0.1")))
             .await
             .unwrap();
 
@@ -402,9 +400,9 @@ mod tests {
         let store = Arc::new(FlakyStore::default());
         let mut newer = StoredRoute::new(host("newer.test", "10.0.0.1"));
         newer.schema_version = crate::stores::stored_route::ROUTE_SCHEMA_VERSION + 1;
-        store.put_route(newer).await.unwrap();
+        store.put_stored(&newer).await.unwrap();
         store
-            .put_route(StoredRoute::new(host("a.test", "10.0.0.1")))
+            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")))
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -418,7 +416,7 @@ mod tests {
     async fn test_store_source_keeps_routes_when_store_fails() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_route(StoredRoute::new(host("a.test", "10.0.0.1")))
+            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")))
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -436,7 +434,7 @@ mod tests {
     async fn test_store_source_reports_the_applied_revision() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_route(StoredRoute::new(host("a.test", "10.0.0.1")))
+            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")))
             .await
             .unwrap();
         let (mut source, _receiver) = source(store.clone());

@@ -3593,6 +3593,7 @@ dependencies = [
  "pingora-limits",
  "proc-macro2",
  "proksi-admin-ui",
+ "proksi_store",
  "prometheus",
  "r2d2",
  "rand 0.8.8",
@@ -3620,6 +3621,24 @@ dependencies = [
 [[package]]
 name = "proksi-admin-ui"
 version = "0.15.1"
+
+[[package]]
+name = "proksi_store"
+version = "0.15.1"
+dependencies = [
+ "async-trait",
+ "openssl",
+ "papaya",
+ "r2d2",
+ "redis",
+ "seize 0.5.1",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "prometheus"

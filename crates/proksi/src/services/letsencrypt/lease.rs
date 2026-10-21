@@ -3,7 +3,7 @@
 
 use std::{future::Future, time::Duration};
 
-use crate::stores::store_trait::Store;
+use proksi_store::Store;
 
 /// How long a lease is held at most, if its holder dies before releasing it
 pub const LEASE_TTL: Duration = Duration::from_secs(600);
@@ -68,7 +68,7 @@ mod tests {
         time::Duration,
     };
 
-    use crate::stores::{contract_tests::certificate, store_trait::Store, MemoryStore};
+    use proksi_store::{test_util::certificate, MemoryStore, Store};
 
     use super::{with_lease, Outcome};
 
@@ -128,8 +128,8 @@ mod tests {
             "sqlite://{}?mode=rwc",
             dir.path().join("proksi.db").to_string_lossy()
         );
-        let replica_a = crate::stores::sql_store::SqlStore::connect(&url).unwrap();
-        let replica_b = crate::stores::sql_store::SqlStore::connect(&url).unwrap();
+        let replica_a = proksi_store::SqlStore::connect(&url).unwrap();
+        let replica_b = proksi_store::SqlStore::connect(&url).unwrap();
         let orders = AtomicUsize::new(0);
 
         let (a, b) = tokio::join!(
