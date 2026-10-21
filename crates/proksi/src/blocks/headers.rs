@@ -12,7 +12,9 @@ use crate::{config::RouteHeader, proxy_server::https_proxy::RouterContext};
 use super::Middleware;
 
 pub(super) struct Headers {
-    add: Vec<(HeaderName, HeaderValue)>,
+    /// Names as written: Pingora keeps their case for HTTP/1.1, and takes them without copying
+    /// them first (it does copy a `HeaderName` it doesn't know)
+    add: Vec<(bytes::Bytes, HeaderValue)>,
     remove: Vec<String>,
 }
 
@@ -27,7 +29,7 @@ impl Headers {
                 let name = HeaderName::from_str(&header.name);
                 let value = HeaderValue::from_str(&header.value);
                 match (name, value) {
-                    (Ok(name), Ok(value)) => Ok((name, value)),
+                    (Ok(_), Ok(value)) => Ok((bytes::Bytes::from(header.name.to_string()), value)),
                     _ => Err(format!("headers: {:?} is not a valid header", header.name)),
                 }
             })
@@ -55,7 +57,7 @@ impl Middleware for Headers {
         _ctx: &mut RouterContext,
     ) -> Result<()> {
         for (name, value) in &self.add {
-            response.insert_header(name, value)?;
+            response.insert_header(name.clone(), value.clone())?;
         }
         for name in &self.remove {
             response.remove_header(name);
