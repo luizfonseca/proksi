@@ -1,7 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, hint::black_box, sync::Arc};
 
 use arc_swap::ArcSwap;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use dashmap::DashMap;
 
 #[derive(Clone)]
@@ -42,7 +42,7 @@ fn arc_swap_read_from_hashmap(_dummy: usize) {
     // Read from the arcswap
     for i in 0..100 {
         let v = arc_swap.load();
-        v.get(&i.to_string()).unwrap();
+        black_box(v.get(&i.to_string()));
     }
 
     // Update the pointee through the arcswap
@@ -71,7 +71,7 @@ fn dashmap_arc_read_from_hashmap(_dummy: usize) {
     // Read from the arcswap
     for i in 0..100 {
         let v = arc_swap.clone();
-        v.get(&i.to_string()).unwrap();
+        black_box(v.get(&i.to_string()));
     }
 
     // Update the pointee through the arcswap
