@@ -172,19 +172,6 @@ mod tests {
     }
 
     #[test]
-    fn test_regex_locations_allocate_nothing() {
-        let matcher = LocationMatcher::new([
-            patterns(&["^/blog/[a-z]{8}/(posts|drafts)$"]),
-            patterns(&["/*"]),
-        ]);
-        matcher.find("/blog/abcdefgh/posts");
-        crate::allocations::assert_no_allocations("regex location", || {
-            matcher.find("/blog/abcdefgh/posts");
-            matcher.find("/static/site.css");
-        });
-    }
-
-    #[test]
     fn test_no_matching_location() {
         let matcher = LocationMatcher::new([patterns(&["/api/*"])]);
         assert_eq!(matcher.find("/other"), None);

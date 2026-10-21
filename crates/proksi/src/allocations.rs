@@ -126,6 +126,18 @@ mod tests {
     }
 
     #[test]
+    fn test_matching_regex_locations_allocates_nothing() {
+        let matcher = crate::routing::paths::LocationMatcher::new([
+            vec!["^/blog/[a-z]{8}/(posts|drafts)$".to_string()],
+            vec!["/*".to_string()],
+        ]);
+        assert_no_allocations("regex location", || {
+            matcher.find("/blog/abcdefgh/posts");
+            matcher.find("/static/site.css");
+        });
+    }
+
+    #[test]
     fn test_checking_ip_sets_allocates_nothing() {
         let networks = (0..1000)
             .filter_map(|i| crate::ip_set::network(&format!("10.{}.{}.0/24", i / 256, i % 256)));
