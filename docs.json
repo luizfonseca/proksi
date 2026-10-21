@@ -281,6 +281,26 @@
         {
           "title": "Single-page app with an API",
           "href": "/examples/single-page-app"
+        },
+        {
+          "title": "Public API",
+          "href": "/examples/public-api"
+        },
+        {
+          "title": "Locking down an admin area",
+          "href": "/examples/admin-area"
+        },
+        {
+          "title": "Self-hosted apps behind one sign-in",
+          "href": "/examples/self-hosted-apps"
+        },
+        {
+          "title": "Security headers",
+          "href": "/examples/security-headers"
+        },
+        {
+          "title": "Behind Cloudflare or a load balancer",
+          "href": "/examples/behind-a-load-balancer"
         }
       ]
     },

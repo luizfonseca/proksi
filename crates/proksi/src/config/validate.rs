@@ -202,8 +202,15 @@ mod tests {
             include_str!("../../../../docs/examples/blocking-url-scanners.mdx"),
             include_str!("../../../../docs/examples/canary-release.mdx"),
             include_str!("../../../../docs/examples/single-page-app.mdx"),
+            include_str!("../../../../docs/examples/behind-a-load-balancer.mdx"),
+            include_str!("../../../../docs/examples/admin-area.mdx"),
+            include_str!("../../../../docs/examples/public-api.mdx"),
+            include_str!("../../../../docs/examples/security-headers.mdx"),
+            include_str!("../../../../docs/examples/self-hosted-apps.mdx"),
         ];
         figment::Jail::expect_with(|jail| {
+            jail.set_env("ADMIN_PASSWORD", "secret");
+            jail.set_env("ACME_EMAIL", "ops@proksi.test");
             jail.create_dir("site")?;
             let site = jail.directory().join("site");
             let mut count = 0;
@@ -212,7 +219,7 @@ mod tests {
                 count += 1;
                 example_is_valid(jail, example, &site.to_string_lossy())?;
             }
-            assert!(count >= 7, "{count} examples");
+            assert!(count >= 14, "{count} examples");
             Ok(())
         });
     }

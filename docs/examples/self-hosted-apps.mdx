@@ -1,0 +1,67 @@
+---
+title: "Self-hosted apps behind one sign-in"
+description: "Put dashboards and tools on their own hosts, with one sign-in for all of them through Authelia."
+---
+
+Grafana, a wiki and Uptime Kuma each run in a container, on one server. Each gets its own host and certificate, and one sign-in with [Authelia](https://www.authelia.com) protects them all. Apps that have no sign-in of their own are protected too.
+
+```hcl
+lets_encrypt {
+  enabled = true
+  email   = env("ACME_EMAIL")
+}
+
+# Authelia's own pages: the sign-in form
+host "auth.example.com" {
+  location "/" {
+    upstream "authelia:9091" {}
+  }
+}
+
+host "grafana.example.com" {
+  location "/" {
+    upstream "grafana:3000" {}
+
+    forward_auth {
+      url              = "http://authelia:9091/api/authz/forward-auth"
+      response_headers = ["Remote-User", "Remote-Email", "Remote-Groups"]
+    }
+  }
+}
+
+host "wiki.example.com" {
+  location "/" {
+    upstream "wiki:8080" {}
+
+    forward_auth {
+      url              = "http://authelia:9091/api/authz/forward-auth"
+      response_headers = ["Remote-User", "Remote-Email"]
+    }
+  }
+
+  # Its uploads are public, so pages shared outside can show images
+  location "/uploads" {
+    upstream "wiki:8080" {}
+  }
+}
+
+host "status.example.com" {
+  location "/" {
+    upstream "uptime-kuma:3001" {}
+
+    forward_auth {
+      url = "http://authelia:9091/api/authz/forward-auth"
+    }
+
+    # Its websocket stays open while the dashboard is shown
+    timeouts {
+      read_secs = 300
+    }
+  }
+}
+```
+
+- Visitors without a session are sent to `auth.example.com`, and back to the app once signed in. Authelia's session cookie is set for `example.com`, so one sign-in covers every host.
+- `response_headers` tell the app who signed in. Grafana reads them with its auth proxy (`[auth.proxy]` with `enabled = true` and `header_name = Remote-User`), and creates the user on their first visit. A visitor can't send these headers themselves: proksi removes them from the request first.
+- Websockets go through as any request does, so dashboards with live updates work. Raise `read_secs` above the time the app goes quiet, or proksi closes the connection after 60 seconds without messages.
+- With Authentik, the `url` is `http://authentik:9000/outpost.goauthentik.io/auth/traefik`. With oauth2-proxy, it's `http://oauth2-proxy:4180/oauth2/auth`.
