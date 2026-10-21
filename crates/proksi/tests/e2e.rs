@@ -879,6 +879,56 @@ async fn test_request_ids_from_trusted_proxies_are_kept() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_EXACT_AND_REGEX_LOCATIONS: &str = r#"
+host "located.test" {
+  tls = false
+
+  location "/" {
+    exact = true
+    respond {
+      body = "home"
+    }
+  }
+
+  location "/space" {
+    respond {
+      body = "space"
+    }
+  }
+
+  location "^/space/[a-z]{8}/(entries|assets)$" {
+    respond {
+      body = "regex"
+    }
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_exact_and_regex_locations() {
+    let mut proksi = Harness::start_without_https(HOST_WITH_EXACT_AND_REGEX_LOCATIONS).await;
+
+    for (path, expected) in [
+        ("/", "home"),
+        ("/space/abcdefgh/entries", "regex"),
+        ("/space/abcdefgh/assets?page=2", "regex"),
+        ("//space/./abcdefgh/entries", "regex"),
+        // Below the regex's end, or not eight letters: the path location
+        ("/space/abcdefgh/entries/1", "space"),
+        ("/space/abc/entries", "space"),
+        ("/space", "space"),
+    ] {
+        let res = proksi.get_http_on(proksi.http_port, "located.test", path).await.unwrap();
+        assert!(res.starts_with("HTTP/1.1 200") && res.ends_with(expected), "{path}: {res}");
+    }
+
+    // Below the exact `/`: no location
+    let res = proksi.get_http_on(proksi.http_port, "located.test", "/other").await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 404"), "{res}");
+
+    proksi.assert_healthy();
+}
+
 const HOST_WITH_COMPRESSION: &str = r#"
 host "compressed.test" {
   tls = false

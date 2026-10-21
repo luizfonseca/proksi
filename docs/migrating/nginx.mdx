@@ -83,7 +83,7 @@ What you no longer write:
 Mind the defaults that differ:
 
 - **Body size**: nginx refuses bodies over 1 MB unless `client_max_body_size` says otherwise. Proksi has no limit unless a location has a `body_limit`.
-- **Locations** match their path and everything below it: `location "/api"` serves `/api` and `/api/users`, but not `/apis` (nginx's `location /api` serves `/apis` too). The most specific location wins. The `=`, `~`, `~*` and `^~` modifiers and regular expressions aren't supported.
+- **Locations** match their path and everything below it: `location "/api"` serves `/api` and `/api/users`, but not `/apis` (nginx's `location /api` serves `/apis` too). The most specific location wins. `location = /x` is `location "/x" { exact = true }`, and `location ~ ^/x` is `location "^/x"` (a [regex location](/routing/regex-locations), matched with case, tried in order before paths). `~*` and `^~` aren't supported: use `(?i)` in the regex to ignore case.
 - **`proxy_pass` with a path** (`location /api/ { proxy_pass http://app/v2/; }`) replaces the matched prefix; in Proksi, that's [`rewrite`](/routing/upstreams#rewriting-paths) with `strip_prefix = "/api"` and `add_prefix = "/v2"`. Without it, the path is forwarded unchanged.
 
 ## Directives

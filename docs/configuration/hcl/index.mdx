@@ -140,10 +140,13 @@ host "*.example.com" {
 **Matching paths**
 
 - A request goes to the **most specific** location of its host: a static path beats a parameter (`/users/:id`), which beats a wildcard (`/files/*`).
-- A location matches its path **and everything below it**: `location "/login"` serves `/login`, `/login/` and `/login/callback`, but not `/logins`. `location "/"` serves whatever no other location matches.
+- A location matches its path **and everything below it**: `location "/login"` serves `/login`, `/login/` and `/login/callback`, but not `/logins`. `location "/"` serves whatever no other location matches. With `exact = true`, it serves the path only.
+- A location starting with `^` is a regular expression (`location "^/space/[a-z]{8}/(entries|assets)$"`), tried before paths, in order. It costs more on every request of its host: see [regex locations](/routing/regex-locations).
 - Paths are compared after collapsing repeated slashes and resolving `.` and `..`, so `//login` is served by `location "/login"`. The request is forwarded unchanged.
 - A request matching no location gets a `404`.
-- nginx modifiers (`=`, `~`, `~*`, `^~`) and regular expressions aren't supported.
+- nginx modifiers (`=`, `~`, `~*`, `^~`) aren't supported: `=` is `exact = true`, and `~` is a location starting with `^`.
+
+See [paths](/routing/paths) for the details.
 
 **Inside a location**
 

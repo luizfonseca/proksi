@@ -207,6 +207,8 @@ mod tests {
             include_str!("../../../../docs/examples/public-api.mdx"),
             include_str!("../../../../docs/examples/security-headers.mdx"),
             include_str!("../../../../docs/examples/self-hosted-apps.mdx"),
+            include_str!("../../../../docs/routing/paths.mdx"),
+            include_str!("../../../../docs/routing/regex-locations.mdx"),
         ];
         figment::Jail::expect_with(|jail| {
             jail.set_env("ADMIN_PASSWORD", "secret");

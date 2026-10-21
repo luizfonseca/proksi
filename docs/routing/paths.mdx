@@ -1,0 +1,78 @@
+---
+title: "Paths"
+description: "How a request's path chooses its location, and exact paths."
+---
+
+A location's path chooses the requests it serves. It's the fastest way to route, whatever the number of locations, and the one to use unless a path can't say what you need (see [regex locations](/routing/regex-locations)).
+
+```hcl
+host "example.com" {
+  location "/" {
+    upstream "web:3000" {}
+  }
+
+  location "/api" {
+    upstream "api:4000" {}
+  }
+
+  location "/users/:id/avatar" {
+    upstream "images:5000" {}
+  }
+}
+```
+
+## Matching
+
+- A location serves its path **and everything below it**: `/api` serves `/api`, `/api/` and `/api/users`, but not `/apis`.
+- `/` serves whatever no other location matches.
+- The **most specific** location wins, whatever their order: a static path beats a parameter, which beats a wildcard. `/users/me` wins over `/users/:id`, which wins over `/users/*`.
+- Paths are compared after collapsing repeated slashes and resolving `.` and `..`, so `//api` and `/x/../api` are served by `/api`. The request is forwarded unchanged.
+- The query (`?page=2`) isn't part of the path.
+- A request matching no location gets a `404`.
+
+## Patterns
+
+| Pattern | Matches |
+| --- | --- |
+| `/api` | `/api` and everything below it |
+| `/users/:id` | one segment: `/users/42`, `/users/me` (and below them) |
+| `/files/*` | `/files/` followed by anything, including more segments |
+| `/files/+` | the same, with at least one character after `/files/` |
+
+Patterns say where a segment is, not what it holds: `:id` accepts any segment. To accept only some (eight letters, digits), use a [regex location](/routing/regex-locations).
+
+Two locations matching the same paths (`/api` and `/api/*`) stop the configuration from loading.
+
+## Exact paths
+
+`exact = true` serves the path itself, and nothing below it:
+
+```hcl
+host "example.com" {
+  # Only the home page
+  location "/" {
+    exact = true
+    upstream "home:3000" {}
+  }
+
+  # /space/a/entries, not /space/a/entries/1
+  location "/space/:id/entries" {
+    exact = true
+    upstream "app:3000" {}
+  }
+
+  location "/space" {
+    upstream "app:3000" {}
+  }
+}
+```
+
+A trailing slash is a different path: an exact `/login` doesn't serve `/login/`.
+
+## Performance
+
+Paths are kept in a tree, searched one segment at a time. Choosing the location takes about 35 nanoseconds, with 20 locations or with 10,000, and allocates nothing. Exact paths cost the same.
+
+## Several paths, one upstream
+
+There's no syntax for several paths in one location (`/entries` or `/assets`). Write a location for each, or a [regex location](/routing/regex-locations) such as `^/(entries|assets)(/.*)?$`, which costs more on every request of the host.

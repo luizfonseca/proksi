@@ -25,6 +25,9 @@ type PluginConfig = HashMap<Cow<'static, str>, serde_json::Value>;
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LocationBlock {
+    /// Only the path itself, not what's below it
+    #[serde(default)]
+    pub exact: bool,
     #[serde(default)]
     pub upstream: BTreeMap<String, UpstreamBlock>,
     pub headers: Option<HeadersBlock>,
@@ -163,7 +166,7 @@ impl LocationBlock {
 
         Ok(Location {
             path: path.to_string(),
-            exact: false,
+            exact: self.exact,
             upstreams,
             headers: Some(response_headers([host_headers, self.headers.as_ref()])),
             plugins: Some(self.plugins()),

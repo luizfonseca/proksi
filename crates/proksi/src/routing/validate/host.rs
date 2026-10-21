@@ -18,6 +18,13 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
     for location in &host.locations {
         validate_location(location, &mut patterns)?;
     }
+    let regexes = host
+        .locations
+        .iter()
+        .filter(|location| location.is_regex())
+        .map(|location| location.path.as_str())
+        .collect::<Vec<_>>();
+    crate::routing::paths::compile_regexes(&regexes)?;
     crate::rules::Rules::compile(&host.rules)?;
 
     Ok(())
@@ -32,7 +39,7 @@ fn validate_location<'a>(
 ) -> Result<(), String> {
     let in_location = |err: String| format!("location \"{}\": {err}", location.path);
 
-    validate_location_path(&location.path).map_err(in_location)?;
+    validate_location_path(location).map_err(in_location)?;
     for pattern in location.patterns() {
         if let Some(other) = patterns.insert(pattern, &location.path) {
             return Err(in_location(format!(
@@ -205,17 +212,28 @@ fn validate_listen(addresses: &[String]) -> Result<(), String> {
     }
 }
 
-/// Locations are paths: nginx modifiers are rejected rather than read as literal paths
-fn validate_location_path(path: &str) -> Result<(), String> {
+/// Locations are paths, or regexes starting with `^/` (ADR 0010): nginx modifiers are rejected
+/// rather than read as literal paths
+fn validate_location_path(location: &crate::config::host::Location) -> Result<(), String> {
+    let path = location.path.as_str();
     if path.starts_with('/') {
         return Ok(());
+    }
+    if path.starts_with("^/") {
+        if location.exact {
+            return Err("exact is for paths, a regex ends where it says (with $)".to_string());
+        }
+        return crate::routing::paths::compile_regex(path);
+    }
+    if path.starts_with('^') && !path.starts_with("^~") {
+        return Err("a regex location starts with ^/".to_string());
     }
     if ["=", "~", "^~"]
         .iter()
         .any(|modifier| path.starts_with(modifier))
     {
         return Err(
-            "nginx modifiers (=, ~, ~*, ^~) are not supported, locations match the most specific path"
+            "nginx modifiers (=, ~, ~*, ^~) are not supported: a location is a path, or a regex starting with ^/"
                 .to_string(),
         );
     }
@@ -252,11 +270,52 @@ mod tests {
     fn test_location_with_nginx_modifier() {
         assert_eq!(
             validate_host(&with_location("= /x")),
-            Err("location \"= /x\": nginx modifiers (=, ~, ~*, ^~) are not supported, locations match the most specific path".to_string())
+            Err("location \"= /x\": nginx modifiers (=, ~, ~*, ^~) are not supported: a location is a path, or a regex starting with ^/".to_string())
         );
         assert!(validate_host(&with_location("~ ^/x")).is_err());
         assert!(validate_host(&with_location("~* ^/x")).is_err());
         assert!(validate_host(&with_location("^~ /x")).is_err());
+        assert!(validate_host(&with_location("~* ^/x")).is_err());
+    }
+
+    #[test]
+    fn test_regex_locations() {
+        assert!(validate_host(&with_location("^/space/[a-z]{8}/(entries|assets)$")).is_ok());
+        assert_eq!(
+            validate_host(&with_location("^/space/[a-z")),
+            Err("location \"^/space/[a-z\": invalid regex: regex parse error:\n    ^/space/[a-z\n            ^\nerror: unclosed character class".to_string())
+        );
+        assert_eq!(
+            validate_host(&with_location("^/x{1000}{1000}")),
+            Err("location \"^/x{1000}{1000}\": the regex is too large".to_string())
+        );
+        // Paths start with `/`
+        assert_eq!(
+            validate_host(&with_location("^x")),
+            Err("location \"^x\": a regex location starts with ^/".to_string())
+        );
+        let mut exact = with_location("^/x$");
+        exact.locations[0].exact = true;
+        assert_eq!(
+            validate_host(&exact),
+            Err("location \"^/x$\": exact is for paths, a regex ends where it says (with $)".to_string())
+        );
+    }
+
+    #[test]
+    fn test_regex_locations_per_host_are_limited() {
+        let mut host = with_location("^/0$");
+        for index in 1..=crate::routing::paths::MAX_REGEXES {
+            let mut other = host.locations[0].clone();
+            other.path = format!("^/{index}$");
+            host.locations.push(other);
+        }
+        assert_eq!(
+            validate_host(&host),
+            Err("1001 regex locations, a host can have 1000 at most".to_string())
+        );
+        host.locations.pop();
+        assert!(validate_host(&host).is_ok());
     }
 
     #[test]
