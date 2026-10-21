@@ -7,6 +7,7 @@ use crate::{
     route::{Change, Expect, ReplicaStatus, RouteRecord, StoreError, Write},
     store_trait::Store,
     test_util::certificate,
+    waiting_room::{Admission, RoomLimits},
 };
 
 /// A route as Proksi writes it (the store doesn't read it), in schema version `version`
@@ -264,4 +265,62 @@ pub async fn certificates_contract(store: &dyn Store, other: &dyn Store) {
     other.reload_certificates().await.unwrap();
     let reloaded = other.get_certificate("renewed.test").await.unwrap();
     assert_eq!(pem(&reloaded), pem(&renewed));
+}
+
+/// Waiting rooms: slots given in the order visitors came, kept while they call, and freed when
+/// they expire; places lost by visitors who stop waiting
+pub async fn waiting_rooms_contract(store: &dyn Store) {
+    let limits = RoomLimits {
+        active: 2,
+        session: Duration::from_millis(1500),
+        abandon: Duration::from_secs(60),
+    };
+    let wait = |visitor: &'static str| store.wait_in_room("launch", visitor, limits);
+
+    assert_eq!(wait("a").await.unwrap(), Admission::Admitted);
+    assert_eq!(wait("b").await.unwrap(), Admission::Admitted);
+    assert_eq!(
+        wait("c").await.unwrap(),
+        Admission::Waiting { position: 1, waiting: 1 }
+    );
+    assert_eq!(
+        wait("d").await.unwrap(),
+        Admission::Waiting { position: 2, waiting: 2 }
+    );
+    // Calling again keeps a slot, or a place
+    assert_eq!(wait("a").await.unwrap(), Admission::Admitted);
+    assert_eq!(
+        wait("c").await.unwrap(),
+        Admission::Waiting { position: 1, waiting: 2 }
+    );
+    // Rooms are independent
+    assert_eq!(
+        store.wait_in_room("other", "c", limits).await.unwrap(),
+        Admission::Admitted
+    );
+
+    // Slots expire, and go to the visitors in line, in order: one is kept for `c`, who came
+    // before `e`
+    tokio::time::sleep(Duration::from_millis(1700)).await;
+    assert_eq!(wait("d").await.unwrap(), Admission::Admitted);
+    assert_eq!(wait("e").await.unwrap(), Admission::Waiting { position: 1, waiting: 2 });
+    assert_eq!(wait("c").await.unwrap(), Admission::Admitted);
+    assert_eq!(wait("e").await.unwrap(), Admission::Waiting { position: 1, waiting: 1 });
+
+    // Visitors who stop waiting lose their place
+    let impatient = RoomLimits {
+        active: 1,
+        session: Duration::from_secs(60),
+        abandon: Duration::from_secs(1),
+    };
+    let wait = |visitor: &'static str| store.wait_in_room("sale", visitor, impatient);
+    assert_eq!(wait("f").await.unwrap(), Admission::Admitted);
+    assert_eq!(wait("g").await.unwrap(), Admission::Waiting { position: 1, waiting: 1 });
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    assert_eq!(wait("h").await.unwrap(), Admission::Waiting { position: 1, waiting: 1 });
+
+    // One key, kept
+    let key = store.waiting_room_key().await.unwrap();
+    assert_ne!(key, [0; 32]);
+    assert_eq!(store.waiting_room_key().await.unwrap(), key);
 }

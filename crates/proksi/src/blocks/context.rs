@@ -1,12 +1,13 @@
 //! What plugins can ask of proksi about a request ([`RequestCtx`]), from its [`RouterContext`]
 
-use std::{borrow::Cow, net::IpAddr, time::Duration};
+use std::{borrow::Cow, net::IpAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use http::HeaderValue;
+use http::{HeaderName, HeaderValue};
 use pingora::{http::ResponseHeader, proxy::Session};
 use proksi_plugins::RequestCtx;
+use proksi_store::Store;
 
 use crate::proxy_server::{client, https_proxy::RouterContext};
 
@@ -46,6 +47,17 @@ impl RequestCtx for RouterContext {
             location.blocks.response(session, response, self).await;
         }
         crate::rules::response(session, response, self).await;
+        for (name, value) in std::mem::take(&mut self.response_headers) {
+            let _ = response.append_header(name, value);
+        }
+    }
+
+    fn add_response_header(&mut self, name: HeaderName, value: HeaderValue) {
+        self.response_headers.push((name, value));
+    }
+
+    fn store(&self) -> Arc<dyn Store> {
+        Arc::clone(crate::stores::global::get_store())
     }
 
     fn response_body_delay(&mut self, session: &Session, body: Option<&Bytes>) -> Option<Duration> {

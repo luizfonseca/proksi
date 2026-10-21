@@ -277,6 +277,19 @@ mod tests {
             self.check()?;
             self.inner.lock_holder(name).await
         }
+        async fn wait_in_room(
+            &self,
+            room: &str,
+            visitor: &str,
+            limits: proksi_store::RoomLimits,
+        ) -> Result<proksi_store::Admission, StoreError> {
+            self.check()?;
+            self.inner.wait_in_room(room, visitor, limits).await
+        }
+        async fn waiting_room_key(&self) -> Result<[u8; 32], StoreError> {
+            self.check()?;
+            self.inner.waiting_room_key().await
+        }
         async fn certificates_revision(&self) -> Result<u64, StoreError> {
             self.check()?;
             self.inner.certificates_revision().await

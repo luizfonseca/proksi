@@ -204,6 +204,10 @@
           "href": "/plugins/bandwidth-limit"
         },
         {
+          "title": "Waiting room",
+          "href": "/plugins/waiting-room"
+        },
+        {
           "title": "Body limit",
           "href": "/plugins/body-limit"
         },

@@ -66,6 +66,46 @@ pub struct BandwidthLimit {
     pub priority: Priority,
 }
 
+/// `waiting_room`: lets a number of visitors in at once, the others wait in line
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WaitingRoom {
+    /// Visitors let in at once (more than 0)
+    pub active: u64,
+    /// What to do when the store can't be reached: "admit" (let visitors through) or "wait"
+    pub on_store_error: OnStoreError,
+    /// How long a visitor's place is kept after their last request, such as "5m" (default)
+    pub session: Option<String>,
+    /// How often the waiting page refreshes, such as "10s" (default). Visitors who stop
+    /// refreshing for three times as long lose their place.
+    pub refresh: Option<String>,
+    /// An HTML file for the waiting page, with `{position}`, `{waiting}` and `{refresh}`
+    pub page: Option<String>,
+    /// The room's name: locations and rules of a host with the same name share it (default:
+    /// the location's path)
+    pub name: Option<String>,
+    /// A secret the visitors' cookies are encrypted with, the same on every server (default:
+    /// a key kept in the store)
+    pub secret: Option<String>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// What a waiting room does when the store can't be reached
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum OnStoreError {
+    /// Lets visitors through
+    Admit,
+    /// Keeps visitors on the waiting page
+    Wait,
+}
+
 /// `body_limit`: answers `413` to requests with a larger body
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -364,6 +404,7 @@ pub fn schemas() -> serde_json::Map<String, serde_json::Value> {
     [
         ("rate_limit", schema(schemars::schema_for!(RateLimit))),
         ("bandwidth_limit", schema(schemars::schema_for!(BandwidthLimit))),
+        ("waiting_room", schema(schemars::schema_for!(WaitingRoom))),
         ("body_limit", schema(schemars::schema_for!(BodyLimit))),
         ("redirect", schema(schemars::schema_for!(Redirect))),
         ("respond", schema(schemars::schema_for!(Respond))),
@@ -446,6 +487,6 @@ mod tests {
         );
         assert_eq!(limit["properties"]["priority"]["maximum"], 100);
         assert_eq!(schemas["jwt"]["additionalProperties"], false);
-        assert_eq!(schemas.len(), 14);
+        assert_eq!(schemas.len(), 15);
     }
 }

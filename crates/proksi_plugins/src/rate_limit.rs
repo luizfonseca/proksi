@@ -63,7 +63,7 @@ impl Middleware for RateLimit {
 }
 
 /// A duration like `10s`, `1m` or `1h`
-fn parse_duration(value: &str) -> Option<Duration> {
+pub(crate) fn parse_duration(value: &str) -> Option<Duration> {
     let unit = value.chars().last()?;
     let amount = value[..value.len() - unit.len_utf8()].parse::<u64>().ok()?;
     let seconds = match unit {

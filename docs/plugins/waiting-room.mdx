@@ -1,0 +1,77 @@
+---
+title: "Waiting Room"
+description: "Lets a number of visitors in at once; the others wait in line on a page that refreshes until it's their turn."
+---
+
+Lets `active` visitors use a location at once. Anyone else waits, in the order they came, on a page showing their place in line, which refreshes until a slot is free. It keeps an app usable during a launch, a sale or a spike, instead of slow for everyone.
+
+```hcl
+host "shop.example.com" {
+  location "/" {
+    upstream "shop:3000" {}
+
+    waiting_room {
+      active         = 500
+      on_store_error = "admit"
+    }
+  }
+}
+```
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `active` | Visitors let in at once (required) |
+| `on_store_error` | When the [store](/configuration/redis) can't be reached: `"admit"` lets visitors through, `"wait"` keeps them on the waiting page (required) |
+| `session` | How long a visitor's slot is kept after their last request, such as `"5m"` (default) |
+| `refresh` | How often the waiting page checks again, such as `"10s"` (default). Visitors who stop checking for three times as long lose their place. |
+| `page` | An HTML file for the waiting page (default: a built-in one) |
+| `name` | The room: locations and rules of a host with the same `name` share it (default: the location's path) |
+| `secret` | A secret the visitors' cookies are encrypted with (default: a key kept in the store) |
+| `priority` | When it runs among the blocks of the location (default: `0`) |
+
+## How visitors are let in
+
+- A visitor who's let in gets a slot, kept `session` after their last request. Slots are counted in the [store](/configuration/redis), so servers sharing a Redis or SQL store share one room and one line.
+- Waiting visitors get a `503 Service Unavailable` with the page, a `Retry-After` and `Cache-Control: no-store`. API clients and crawlers see the same `503`.
+- When a slot frees up, it goes to the first visitor in line who checks again.
+- Visitors are told apart by a cookie, not their address, so people behind the same address (an office, a mobile network) each have their place. The cookie is encrypted and authenticated (AES-256-GCM) for its host and room: changing it, or moving it to another site or room, makes it worthless, and its owner a new visitor at the end of the line.
+- A visitor who was let in is checked from their cookie alone, without asking the store, about 100 nanoseconds per request. The store is asked again in the last fifth of their `session`, to renew their slot.
+
+## The waiting page
+
+`page` replaces the built-in page with your own HTML file, read when the configuration loads. `{position}` is the visitor's place in line (1 is next), `{waiting}` how many are waiting, and `{refresh}` the seconds between checks, for its own `<meta http-equiv="refresh" content="{refresh}">`. When the store can't be reached and `on_store_error = "wait"`, `{position}` and `{waiting}` are `…`.
+
+## Only some requests
+
+A [rule](/rules) can put a room in front of part of a site, or only during a launch. In a rule, set `name`, since a rule has no path of its own:
+
+```hcl
+host "shop.example.com" {
+  location "/" {
+    upstream "shop:3000" {}
+
+    rule "checkout" {
+      and {
+        path {
+          prefix = "/checkout"
+        }
+      }
+      then {
+        waiting_room {
+          name           = "checkout"
+          active         = 200
+          on_store_error = "admit"
+        }
+      }
+    }
+  }
+}
+```
+
+## Several servers
+
+With a Redis or SQL [store](/configuration/redis), every server shares the room, the line and the cookies' key.
+
+Servers with the memory store (the default) each have their own room: `active = 500` on two servers lets in up to 1,000, and places in line are per server. Each also makes its own key, so a visitor sent to another server is a new visitor there. Set the same `secret` on every server to keep visitors' slots valid across them; rooms and lines stay per server.
