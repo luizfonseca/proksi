@@ -14,7 +14,7 @@ pub mod handshakes;
 pub mod http_proxy;
 pub mod https_proxy;
 pub mod listener;
-pub mod respond;
+pub use proksi_plugins::respond;
 pub mod services;
 pub mod timeouts;
 

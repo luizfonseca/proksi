@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     path::PathBuf,
 };
 
@@ -334,17 +334,7 @@ pub struct RouteMatcher {
     pub path: Option<RoutePathMatcher>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct RoutePlugin {
-    /// The name of the plugin (must be a valid plugin name)
-    pub name: Cow<'static, str>,
-
-    /// The configuration for the plugin - we are not enforcing a specific format.
-    /// Each plugin is in charge of parsing the configuration.
-    /// The configuration is a key-value pair where the key is a string and
-    /// the value is a JSON object (ex: `{ "key": "value" }`)
-    pub config: Option<HashMap<Cow<'static, str>, serde_json::Value>>,
-}
+pub use proksi_plugins::RoutePlugin;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RouteSslPath {

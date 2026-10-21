@@ -15,6 +15,8 @@ use pingora::server::configuration::{Opt, ServerConf};
 
 use services::{logger::ProxyLoggerReceiver, BackgroundFunctionService};
 
+use proksi_plugins::ip_set;
+
 mod admin;
 #[cfg(test)]
 mod allocations;
@@ -22,11 +24,9 @@ mod blocks;
 mod cache;
 mod channel;
 mod config;
-mod ip_set;
 #[cfg(feature = "kubernetes")]
 mod kubernetes;
 mod metrics;
-mod plugins;
 mod proxy_server;
 mod routing;
 mod rules;

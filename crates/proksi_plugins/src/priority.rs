@@ -1,0 +1,39 @@
+//! `priority = <0-100>`, which any block can set
+
+use crate::RoutePlugin;
+
+use super::Kind;
+
+/// The priority of a block: the one it sets, otherwise the default of its kind
+///
+/// # Errors
+///
+/// When the priority isn't between 0 and 100.
+pub fn priority(kind: Kind, set: Option<u64>) -> Result<u8, String> {
+    match set {
+        None => Ok(kind.default_priority()),
+        Some(priority) => u8::try_from(priority)
+            .ok()
+            .filter(|priority| *priority <= 100)
+            .ok_or_else(|| format!("{}: priority must be between 0 and 100", kind.name())),
+    }
+}
+
+/// The priority a plugin sets in its settings (`priority = 10`)
+///
+/// # Errors
+///
+/// When the priority isn't a number between 0 and 100.
+pub fn plugin_priority(kind: Kind, plugin: &RoutePlugin) -> Result<u8, String> {
+    let set = plugin
+        .config
+        .as_ref()
+        .and_then(|config| config.get("priority"))
+        .map(|value| {
+            value
+                .as_u64()
+                .ok_or_else(|| format!("{}: priority must be between 0 and 100", kind.name()))
+        })
+        .transpose()?;
+    priority(kind, set)
+}

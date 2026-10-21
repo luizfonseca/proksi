@@ -24,6 +24,7 @@ fn test_conditionals_and_loops_are_nested_twice_at_most() {
     for dir in [
         "proksi/src",
         "proksi/tests",
+        "proksi_plugins/src",
         "proksi_store/src",
         "plugins_api/src",
     ] {

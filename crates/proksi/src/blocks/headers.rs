@@ -7,7 +7,9 @@ use async_trait::async_trait;
 use http::{HeaderName, HeaderValue};
 use pingora::{http::ResponseHeader, proxy::Session};
 
-use crate::{config::RouteHeader, proxy_server::https_proxy::RouterContext};
+use crate::config::RouteHeader;
+
+use proksi_plugins::RequestCtx;
 
 use super::Middleware;
 
@@ -54,7 +56,7 @@ impl Middleware for Headers {
         &self,
         _session: &mut Session,
         response: &mut ResponseHeader,
-        _ctx: &mut RouterContext,
+        _ctx: &mut dyn RequestCtx,
     ) -> Result<()> {
         for (name, value) in &self.add {
             response.insert_header(name.clone(), value.clone())?;

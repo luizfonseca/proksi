@@ -2,5 +2,6 @@
   "crates/plugins_api": "0.1.2",
   "crates/proksi": "0.16.1",
   "crates/proksi-admin-ui": "0.16.1",
+  "crates/proksi_plugins": "0.16.1",
   "crates/proksi_store": "0.16.1"
 }

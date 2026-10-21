@@ -11,9 +11,10 @@ use pingora_cache::lock::CacheLock;
 use crate::{
     cache::disk::storage::DiskCache,
     config::{RouteCache, RouteCacheType},
-    proxy_server::https_proxy::RouterContext,
     stores,
 };
+
+use proksi_plugins::RequestCtx;
 
 use super::Middleware;
 
@@ -46,8 +47,8 @@ impl Cache {
 
 #[async_trait]
 impl Middleware for Cache {
-    async fn request(&self, session: &mut Session, ctx: &mut RouterContext) -> Result<bool> {
-        stores::insert_cache_routing(&ctx.host, &self.path);
+    async fn request(&self, session: &mut Session, ctx: &mut dyn RequestCtx) -> Result<bool> {
+        stores::insert_cache_routing(ctx.host(), &self.path);
         session.cache.enable(
             storage(&self.cache.cache_type),
             None,

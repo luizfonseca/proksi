@@ -112,7 +112,7 @@ impl MirrorBlock {
         let max_body_size = match &self.max_body_size {
             None => Mirror::default_max_body_size(),
             Some(serde_json::Value::Number(number)) if number.as_u64() == Some(0) => 0,
-            Some(serde_json::Value::String(size)) => crate::blocks::body_limit::parse_size(size)
+            Some(serde_json::Value::String(size)) => proksi_plugins::body_limit::parse_size(size)
                 .ok_or_else(|| {
                     in_mirror(format!(
                         "max_body_size \"{size}\" is not a size such as \"64KiB\" or \"1MiB\""
