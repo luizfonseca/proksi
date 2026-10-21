@@ -6,12 +6,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use async_trait::async_trait;
+use bytes::BytesMut;
 use http::{HeaderName, HeaderValue};
 use pingora::{
     http::{RequestHeader, ResponseHeader},
     proxy::Session,
 };
 use rand::RngCore;
+use uuid::Uuid;
 
 use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
 
@@ -64,28 +66,19 @@ impl RequestId {
         })
     }
 
-    /// A UUID v7 (its first part is the time, so IDs sort by when requests came), and the
-    /// suffix, formatted without an intermediate string
+    /// A UUID v7 (it starts with the time, so IDs sort by when requests came) and the suffix.
+    /// `Uuid::now_v7` would do, but it takes a global lock for each ID.
     fn generate(&self) -> HeaderValue {
-        let millis = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
-            .unwrap_or_default();
+        let since_epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+        let millis = u64::try_from(since_epoch.as_millis()).unwrap_or(u64::MAX);
         let mut random = [0u8; 10];
         rand::thread_rng().fill_bytes(&mut random);
         let uuid = uuid::Builder::from_unix_timestamp_millis(millis, &random).into_uuid();
 
-        let mut buffer = [0u8; UUID + 1 + MAX_SUFFIX];
-        let (text, rest) = buffer.split_at_mut(UUID);
-        uuid.hyphenated().encode_lower(text);
-        let suffix = self.suffix.as_bytes();
-        if let Some(target) = rest.get_mut(..suffix.len()) {
-            target.copy_from_slice(suffix);
-        }
-        buffer
-            .get(..UUID + suffix.len())
-            .and_then(|id| HeaderValue::from_bytes(id).ok())
-            .unwrap_or_else(|| HeaderValue::from_static(""))
+        let mut id = BytesMut::with_capacity(UUID + self.suffix.len());
+        id.extend_from_slice(uuid.hyphenated().encode_lower(&mut Uuid::encode_buffer()).as_bytes());
+        id.extend_from_slice(self.suffix.as_bytes());
+        HeaderValue::from_maybe_shared(id.freeze()).unwrap_or_else(|_| HeaderValue::from_static(""))
     }
 }
 
