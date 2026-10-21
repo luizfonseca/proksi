@@ -1,14 +1,12 @@
 //! `/api/v1/routes`: hosts written to the store (ADR 0004), applied by every instance through
 //! the store sync (ADR 0001). Hosts are JSON, in and out.
 
+use proksi_store::Store;
 use serde::Serialize;
 
 use crate::{
     config::host::Host,
-    stores::{
-        store_trait::Store,
-        stored_route::{StoredRoute, StoredRouteError},
-    },
+    stores::stored_route::{HostStore, StoredRoute, StoredRouteError},
 };
 
 /// Why a request was refused
@@ -49,7 +47,7 @@ pub struct Written {
 
 /// The routes in the store, and the ones this version can't read
 pub async fn list(store: &dyn Store) -> Result<RouteList, Refused> {
-    let snapshot = store.routes().await.map_err(unavailable)?;
+    let snapshot = store.stored_routes().await.map_err(unavailable)?;
     let mut routes = RouteList {
         revision: snapshot.revision,
         routes: vec![],
@@ -67,7 +65,7 @@ pub async fn list(store: &dyn Store) -> Result<RouteList, Refused> {
 /// The host `name`, as stored
 pub async fn get(store: &dyn Store, name: &str) -> Result<OneRoute, Refused> {
     let name = name.to_lowercase();
-    let snapshot = store.routes().await.map_err(unavailable)?;
+    let snapshot = store.stored_routes().await.map_err(unavailable)?;
     let route = snapshot.routes.into_iter().find(|route| match route {
         Ok(route) => route.key() == name,
         Err(err) => err.host == name,
@@ -89,7 +87,7 @@ pub async fn put(store: &dyn Store, name: &str, body: &[u8]) -> Result<Written, 
     let host = parse(&name.to_lowercase(), body).map_err(Refused::Invalid)?;
     let route = StoredRoute::new(host);
     let host = route.key();
-    let revision = store.put_route(route).await.map_err(unavailable)?;
+    let revision = store.put_stored(&route).await.map_err(unavailable)?;
     crate::routing::store_source::sync_now();
     Ok(Written { host, revision })
 }
@@ -145,9 +143,10 @@ fn parse(name: &str, body: &[u8]) -> Result<Host, String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::stores::{store_trait::Store, MemoryStore};
+    use proksi_store::MemoryStore;
 
     use super::{delete, get, list, parse, put, Refused, Written};
+    use crate::stores::stored_route::HostStore;
 
     const JSON: &str = r#"{
         "name": "api.test",
@@ -207,7 +206,7 @@ mod tests {
                 revision: 1
             }
         );
-        assert!(store.routes().await.unwrap().routes[0].is_ok());
+        assert!(store.stored_routes().await.unwrap().routes[0].is_ok());
 
         let listed = list(&store).await.unwrap();
         assert_eq!(listed.revision, 1);

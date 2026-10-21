@@ -5,7 +5,8 @@ use ::pingora::{server::Server, services::ServiceHandle};
 
 use clap::crate_version;
 use config::{load, LogFormat, LogLevel};
-use stores::{global::init_store, MemoryStore};
+use proksi_store::MemoryStore;
+use stores::global::init_store;
 use tracing_subscriber::EnvFilter;
 
 use std::sync::{atomic::AtomicU64, Arc};
@@ -141,7 +142,7 @@ fn main() -> Result<(), anyhow::Error> {
                     "Failed to get redis_url from configuration when store type is 'redis'"
                 )
             })?;
-            let redis_store = stores::RedisStore::new(redis_url)
+            let redis_store = proksi_store::RedisStore::new(redis_url)
                 .map_err(|err| anyhow::anyhow!("Failed to initialize Redis store: {err}"))?;
             tracing::info!("using Redis store for certificates");
             init_store(redis_store);
@@ -360,7 +361,7 @@ fn init_sql_store(store: &config::StoreConfig) -> Result<(), anyhow::Error> {
                 store.store_type
             )
         })?;
-        let sql_store = stores::sql_store::SqlStore::connect(database_url)
+        let sql_store = proksi_store::SqlStore::connect(database_url)
             .map_err(|err| anyhow::anyhow!("Failed to initialize the SQL store: {err}"))?;
         tracing::info!("using {:?} store", store.store_type);
         init_store(sql_store);

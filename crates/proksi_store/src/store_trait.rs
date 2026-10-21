@@ -2,9 +2,9 @@ use async_trait::async_trait;
 use papaya::HashMapRef;
 use std::{error::Error, hash::RandomState, time::Duration};
 
-use super::{
+use crate::{
     certificates::Certificate,
-    stored_route::{ReplicaStatus, RoutesSnapshot, StoreError, StoredRoute},
+    route::{ReplicaStatus, RouteRecord, RoutesSnapshot, StoreError},
 };
 
 // `async_trait` marks the generated methods as `#[must_use]`
@@ -19,7 +19,7 @@ pub trait Store: Send + Sync + 'static {
 
     /// Adds or replaces the route of a host, returning the new revision
     #[allow(dead_code)] // used by the admin API (#49)
-    async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError>;
+    async fn put_route(&self, route: RouteRecord) -> Result<u64, StoreError>;
 
     /// Removes the route of a host, returning the (possibly unchanged) revision
     #[allow(dead_code)] // used by the admin API (#49)

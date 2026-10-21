@@ -1,9 +1,10 @@
 use anyhow::anyhow;
 use openssl::{pkey::PKey, x509::X509};
+use proksi_store::Certificate;
 
 use crate::{
     config::{host::Host, RouteSslPath},
-    stores::{self, certificates::Certificate},
+    stores,
 };
 
 /// Loads the certificate of a host that has one in files (`tls.certificate`) into the store

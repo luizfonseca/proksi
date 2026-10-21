@@ -154,13 +154,13 @@ impl acme_v2::persist::Persist for RedisPersist {
 #[derive(Clone)]
 /// `SqlPersist` stores Let's Encrypt data in the SQL store, so all replicas share the same account
 pub struct SqlPersist {
-    store: Arc<crate::stores::sql_store::SqlStore>,
+    store: Arc<proksi_store::SqlStore>,
 }
 
 #[cfg(any(feature = "store-sqlite", feature = "store-postgres"))]
 impl SqlPersist {
     pub fn connect(database_url: &str) -> Result<Self, anyhow::Error> {
-        let store = crate::stores::sql_store::SqlStore::connect(database_url)
+        let store = proksi_store::SqlStore::connect(database_url)
             .map_err(|err| anyhow::anyhow!("failed to connect to the SQL store: {err}"))?;
         Ok(Self {
             store: Arc::new(store),

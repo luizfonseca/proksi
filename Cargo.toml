@@ -5,6 +5,7 @@ members = [
     "crates/plugins_api",
     "crates/proksi",
     "crates/proksi-admin-ui",
+    "crates/proksi_store",
 ]
 exclude = ["vendor"]
 resolver = "2"

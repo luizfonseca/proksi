@@ -9,12 +9,13 @@ use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::Service,
 };
+use proksi_store::Certificate;
 use tokio::time;
 use tracing::info;
 
 use crate::{
     config::{host::Challenge, Config},
-    stores::{self, certificates::Certificate, lookup::TlsHost},
+    stores::{self, lookup::TlsHost},
 };
 
 use super::{
@@ -450,7 +451,7 @@ impl Service for LetsencryptService {
 
 #[cfg(test)]
 mod tests {
-    use crate::stores::certificates::tests::signed;
+    use proksi_store::test_util::signed;
 
     #[tokio::test]
     async fn test_ordered_certificates_keep_their_whole_chain() {

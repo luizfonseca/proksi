@@ -237,7 +237,7 @@ async fn apply_certificates(
 
 /// Puts a host's certificate in the store: `false` when the store failed (tried again)
 async fn apply_certificate(
-    store: &Arc<dyn crate::stores::store_trait::Store>,
+    store: &Arc<dyn proksi_store::Store>,
     host: &str,
     certificate: &HostCertificate,
 ) -> bool {

@@ -11,10 +11,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::certificates::Certificate;
-use super::store_trait::Store;
-use super::stored_route::{
-    check_schema_version, ReplicaStatus, RoutesSnapshot, StoreError, StoredRoute,
+use crate::{
+    certificates::Certificate,
+    route::{ReplicaStatus, RouteRecord, RoutesSnapshot, StoreError},
+    store_trait::Store,
 };
 
 pub struct MemoryStore {
@@ -32,11 +32,19 @@ pub struct MemoryStore {
 #[derive(Default)]
 struct MemoryRoutes {
     revision: u64,
-    routes: BTreeMap<String, StoredRoute>,
+    routes: BTreeMap<String, RouteRecord>,
     replicas: HashMap<String, (ReplicaStatus, Instant)>,
 }
 
+impl Default for MemoryStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryStore {
+    /// An empty store, for this replica only
+    #[must_use]
     pub fn new() -> Self {
         MemoryStore {
             inner_certs: papaya::HashMap::new(),
@@ -61,12 +69,7 @@ impl Store for MemoryStore {
         let routes = self.routes();
         Ok(RoutesSnapshot {
             revision: routes.revision,
-            routes: routes
-                .routes
-                .values()
-                .cloned()
-                .map(check_schema_version)
-                .collect(),
+            routes: routes.routes.values().cloned().collect(),
         })
     }
 
@@ -74,9 +77,10 @@ impl Store for MemoryStore {
         Ok(self.routes().revision)
     }
 
-    async fn put_route(&self, route: StoredRoute) -> Result<u64, StoreError> {
+    async fn put_route(&self, mut route: RouteRecord) -> Result<u64, StoreError> {
         let mut routes = self.routes();
-        routes.routes.insert(route.key(), route);
+        route.host = route.host.to_lowercase();
+        routes.routes.insert(route.host.clone(), route);
         routes.revision += 1;
         Ok(routes.revision)
     }
@@ -186,9 +190,9 @@ impl Store for MemoryStore {
 #[cfg(test)]
 mod tests {
     // No need to import super since we're using specific imports
-    use crate::stores::certificates::Certificate;
-    use crate::stores::store_trait::Store;
-    use crate::stores::MemoryStore;
+    use crate::certificates::Certificate;
+    use crate::store_trait::Store;
+    use crate::MemoryStore;
     use openssl::hash::MessageDigest;
     use openssl::{
         pkey::PKey,
@@ -232,23 +236,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_routes_contract() {
-        crate::stores::contract_tests::routes_contract(&MemoryStore::new()).await;
+        crate::contract_tests::routes_contract(&MemoryStore::new()).await;
     }
 
     #[tokio::test]
     async fn test_replicas_contract() {
-        crate::stores::contract_tests::replicas_contract(&MemoryStore::new()).await;
+        crate::contract_tests::replicas_contract(&MemoryStore::new()).await;
     }
 
     #[tokio::test]
     async fn test_leases_contract() {
-        crate::stores::contract_tests::leases_contract(&MemoryStore::new()).await;
+        crate::contract_tests::leases_contract(&MemoryStore::new()).await;
     }
 
     #[tokio::test]
     async fn test_certificates_revision() {
         let store = MemoryStore::new();
-        let certificate = crate::stores::contract_tests::certificate("a.test", 10);
+        let certificate = crate::test_util::certificate("a.test", 10);
 
         assert_eq!(store.certificates_revision().await.unwrap(), 0);
         store.set_certificate("a.test", certificate).await.unwrap();
