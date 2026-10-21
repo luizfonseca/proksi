@@ -178,7 +178,8 @@ mod tests {
     use papaya::HashMapRef;
 
     use proksi_store::{
-        Certificate, MemoryStore, ReplicaStatus, RouteRecord, RoutesSnapshot, Store, StoreError,
+        Certificate, HistoryEntry, MemoryStore, ReplicaStatus, RouteRecord, RouteVersion,
+        RoutesSnapshot, Store, StoreError, Write,
     };
 
     use crate::{
@@ -225,11 +226,32 @@ mod tests {
             self.check()?;
             self.inner.revision().await
         }
-        async fn put_route(&self, route: RouteRecord) -> Result<u64, StoreError> {
-            self.inner.put_route(route).await
+        async fn put_route(&self, route: RouteRecord, write: &Write) -> Result<u64, StoreError> {
+            self.inner.put_route(route, write).await
         }
-        async fn delete_route(&self, host: &str) -> Result<u64, StoreError> {
-            self.inner.delete_route(host).await
+        async fn delete_route(&self, host: &str, write: &Write) -> Result<u64, StoreError> {
+            self.inner.delete_route(host, write).await
+        }
+        async fn rollback_route(
+            &self,
+            host: &str,
+            to: u64,
+            write: &Write,
+        ) -> Result<u64, StoreError> {
+            self.inner.rollback_route(host, to, write).await
+        }
+        async fn route_history(&self, host: &str) -> Result<Vec<HistoryEntry>, StoreError> {
+            self.inner.route_history(host).await
+        }
+        async fn route_version(
+            &self,
+            host: &str,
+            version: u64,
+        ) -> Result<Option<RouteVersion>, StoreError> {
+            self.inner.route_version(host, version).await
+        }
+        async fn deleted_routes(&self) -> Result<Vec<String>, StoreError> {
+            self.inner.deleted_routes().await
         }
         async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
             self.check()?;
@@ -355,7 +377,7 @@ mod tests {
     async fn test_store_source_sends_routes() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")))
+            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")), &Write::default())
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -387,7 +409,7 @@ mod tests {
         receiver.try_recv().unwrap();
 
         store
-            .put_stored(&StoredRoute::new(host("b.test", "10.0.0.1")))
+            .put_stored(&StoredRoute::new(host("b.test", "10.0.0.1")), &Write::default())
             .await
             .unwrap();
 
@@ -400,9 +422,9 @@ mod tests {
         let store = Arc::new(FlakyStore::default());
         let mut newer = StoredRoute::new(host("newer.test", "10.0.0.1"));
         newer.schema_version = crate::stores::stored_route::ROUTE_SCHEMA_VERSION + 1;
-        store.put_stored(&newer).await.unwrap();
+        store.put_stored(&newer, &Write::default()).await.unwrap();
         store
-            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")))
+            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")), &Write::default())
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -416,7 +438,7 @@ mod tests {
     async fn test_store_source_keeps_routes_when_store_fails() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")))
+            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")), &Write::default())
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -434,7 +456,7 @@ mod tests {
     async fn test_store_source_reports_the_applied_revision() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")))
+            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")), &Write::default())
             .await
             .unwrap();
         let (mut source, _receiver) = source(store.clone());

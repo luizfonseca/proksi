@@ -134,7 +134,7 @@ fn main() -> Result<(), anyhow::Error> {
     match proxy_config.store.store_type {
         config::StoreType::Memory => {
             tracing::info!("using Memory store for certificates");
-            init_store(MemoryStore::new());
+            init_store(MemoryStore::new().with_history(proxy_config.store.history_per_host));
         }
         config::StoreType::Redis => {
             let redis_url = proxy_config.store.redis_url.as_deref().ok_or_else(|| {
@@ -143,7 +143,8 @@ fn main() -> Result<(), anyhow::Error> {
                 )
             })?;
             let redis_store = proksi_store::RedisStore::new(redis_url)
-                .map_err(|err| anyhow::anyhow!("Failed to initialize Redis store: {err}"))?;
+                .map_err(|err| anyhow::anyhow!("Failed to initialize Redis store: {err}"))?
+                .with_history(proxy_config.store.history_per_host);
             tracing::info!("using Redis store for certificates");
             init_store(redis_store);
         }
@@ -362,7 +363,8 @@ fn init_sql_store(store: &config::StoreConfig) -> Result<(), anyhow::Error> {
             )
         })?;
         let sql_store = proksi_store::SqlStore::connect(database_url)
-            .map_err(|err| anyhow::anyhow!("Failed to initialize the SQL store: {err}"))?;
+            .map_err(|err| anyhow::anyhow!("Failed to initialize the SQL store: {err}"))?
+            .with_history(store.history_per_host);
         tracing::info!("using {:?} store", store.store_type);
         init_store(sql_store);
     }

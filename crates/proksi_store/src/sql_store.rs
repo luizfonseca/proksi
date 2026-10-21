@@ -8,7 +8,11 @@ use sqlx::{any::AnyPoolOptions, AnyPool, Row};
 
 use crate::{
     certificates::{Certificate, SerializableCertificate},
-    route::{ReplicaStatus, RouteRecord, RoutesSnapshot, StoreError},
+    route::{
+        HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write,
+        DEFAULT_HISTORY,
+    },
+    sql_history,
     store_trait::Store,
 };
 
@@ -25,6 +29,8 @@ pub struct SqlStore {
     runtime: Option<tokio::runtime::Runtime>,
     /// Certificates already loaded (also returned by `get_certificates`)
     cache: papaya::HashMap<String, Certificate>,
+    /// Versions kept per host (besides the active one)
+    history: usize,
 }
 
 impl SqlStore {
@@ -70,7 +76,15 @@ impl SqlStore {
             now_ms,
             runtime: Some(runtime),
             cache: papaya::HashMap::new(),
+            history: DEFAULT_HISTORY,
         })
+    }
+
+    /// Keeps the last `versions` versions of each host (at least 1)
+    #[must_use]
+    pub fn with_history(mut self, versions: usize) -> Self {
+        self.history = versions.max(1);
+        self
     }
 
     /// Runs a query on the store's runtime
@@ -191,19 +205,6 @@ where
     to_revision(row.try_get("value").map_err(invalid)?)
 }
 
-async fn increment_revision<'e, E>(executor: E) -> Result<u64, StoreError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Any>,
-{
-    let row = sqlx::query(
-        "UPDATE proksi_meta SET value = value + 1 WHERE key = 'revision' RETURNING value",
-    )
-    .fetch_one(executor)
-    .await
-    .map_err(unavailable)?;
-    to_revision(row.try_get("value").map_err(invalid)?)
-}
-
 /// A stored certificate, unless it can't be read
 fn row_certificate(row: &sqlx::any::AnyRow) -> Option<(String, Certificate)> {
     let domain = row.try_get::<String, _>("domain").ok()?;
@@ -220,7 +221,11 @@ impl Store for SqlStore {
             // Retried if the routes change while being read
             for _ in 0..ROUTES_READ_ATTEMPTS {
                 let current = revision(&pool).await?;
-                let rows = sqlx::query("SELECT host, schema_version, data FROM proksi_routes")
+                let rows = sqlx::query(
+                    "SELECT r.host, r.schema_version, r.data, \
+                     COALESCE(s.version, 0) AS version, COALESCE(s.changed, 0) AS changed \
+                     FROM proksi_routes r LEFT JOIN proksi_route_state s ON s.host = r.host",
+                )
                     .fetch_all(&pool)
                     .await
                     .map_err(unavailable)?;
@@ -233,10 +238,14 @@ impl Store for SqlStore {
                     let host: String = row.try_get("host").map_err(invalid)?;
                     let schema_version: i64 = row.try_get("schema_version").map_err(invalid)?;
                     let data: String = row.try_get("data").map_err(invalid)?;
+                    let version: i64 = row.try_get("version").map_err(invalid)?;
+                    let changed: i64 = row.try_get("changed").map_err(invalid)?;
                     routes.push(RouteRecord {
                         host,
                         schema_version: u32::try_from(schema_version).unwrap_or_default(),
                         data,
+                        version: u64::try_from(version).unwrap_or_default(),
+                        changed: u64::try_from(changed).unwrap_or_default(),
                     });
                 }
                 return Ok(RoutesSnapshot {
@@ -256,54 +265,36 @@ impl Store for SqlStore {
         self.run(async move { revision(&pool).await }).await
     }
 
-    async fn put_route(&self, route: RouteRecord) -> Result<u64, StoreError> {
-        let pool = self.pool.clone();
-        let host = route.host.to_lowercase();
-        let data = route.data;
-        let schema_version = i64::from(route.schema_version);
-        self.run(async move {
-            let mut tx = pool.begin().await.map_err(unavailable)?;
-            sqlx::query(
-                "INSERT INTO proksi_routes (host, schema_version, data, updated_at) \
-                 VALUES ($1, $2, $3, $4) \
-                 ON CONFLICT (host) DO UPDATE SET schema_version = excluded.schema_version, \
-                 data = excluded.data, updated_at = excluded.updated_at",
-            )
-            .bind(host)
-            .bind(schema_version)
-            .bind(data)
-            .bind(unix_timestamp())
-            .execute(&mut *tx)
-            .await
-            .map_err(unavailable)?;
-            let revision = increment_revision(&mut *tx).await?;
-            tx.commit().await.map_err(unavailable)?;
-            Ok(revision)
-        })
-        .await
+    async fn put_route(&self, route: RouteRecord, write: &Write) -> Result<u64, StoreError> {
+        let task = sql_history::put(self.pool.clone(), route, write.clone(), self.history);
+        self.run(task).await
     }
 
-    async fn delete_route(&self, host: &str) -> Result<u64, StoreError> {
-        let pool = self.pool.clone();
-        let host = host.to_lowercase();
-        self.run(async move {
-            let mut tx = pool.begin().await.map_err(unavailable)?;
-            let deleted = sqlx::query("DELETE FROM proksi_routes WHERE host = $1")
-                .bind(host)
-                .execute(&mut *tx)
-                .await
-                .map_err(unavailable)?
-                .rows_affected();
-            // The revision only changes when a route was deleted
-            let revision = if deleted > 0 {
-                increment_revision(&mut *tx).await?
-            } else {
-                revision(&mut *tx).await?
-            };
-            tx.commit().await.map_err(unavailable)?;
-            Ok(revision)
-        })
-        .await
+    async fn delete_route(&self, host: &str, write: &Write) -> Result<u64, StoreError> {
+        let task = sql_history::delete(self.pool.clone(), host.to_string(), write.clone(), self.history);
+        self.run(task).await
+    }
+
+    async fn rollback_route(&self, host: &str, to: u64, write: &Write) -> Result<u64, StoreError> {
+        let host = host.to_string();
+        let task = sql_history::rollback(self.pool.clone(), host, to, write.clone(), self.history);
+        self.run(task).await
+    }
+
+    async fn route_history(&self, host: &str) -> Result<Vec<HistoryEntry>, StoreError> {
+        self.run(sql_history::history(self.pool.clone(), host.to_string())).await
+    }
+
+    async fn route_version(
+        &self,
+        host: &str,
+        version: u64,
+    ) -> Result<Option<RouteVersion>, StoreError> {
+        self.run(sql_history::version(self.pool.clone(), host.to_string(), version)).await
+    }
+
+    async fn deleted_routes(&self) -> Result<Vec<String>, StoreError> {
+        self.run(sql_history::deleted(self.pool.clone())).await
     }
 
     async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
@@ -694,6 +685,21 @@ mod tests {
     async fn test_sqlite_routes_contract() {
         let (store, _dir) = sqlite_store();
         contract_tests::routes_contract(&store).await;
+    }
+
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_sqlite_history_contract() {
+        let (store, _dir) = sqlite_store();
+        contract_tests::history_contract(&store.with_history(3)).await;
+    }
+
+    #[cfg(feature = "postgres")]
+    #[tokio::test]
+    async fn test_postgres_history_contract() {
+        if let Some(store) = postgres_store("proksi_test_history") {
+            contract_tests::history_contract(&store.with_history(3)).await;
+        }
     }
 
     #[cfg(feature = "sqlite")]

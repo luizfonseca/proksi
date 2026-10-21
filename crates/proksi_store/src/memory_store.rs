@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use papaya::HashMapRef;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, VecDeque},
     error::Error,
     hash::RandomState,
     sync::{
@@ -13,7 +13,10 @@ use std::{
 
 use crate::{
     certificates::Certificate,
-    route::{ReplicaStatus, RouteRecord, RoutesSnapshot, StoreError},
+    route::{
+        Change, Expect, HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot,
+        StoreError, Write, DEFAULT_HISTORY,
+    },
     store_trait::Store,
 };
 
@@ -27,13 +30,76 @@ pub struct MemoryStore {
     /// Leases, by name: their holder and when they expire
     leases: Mutex<HashMap<String, (String, Instant)>>,
     certificates_revision: AtomicU64,
+    /// Versions kept per host (besides the active one)
+    history: usize,
 }
 
 #[derive(Default)]
 struct MemoryRoutes {
     revision: u64,
-    routes: BTreeMap<String, RouteRecord>,
+    hosts: BTreeMap<String, HostState>,
     replicas: HashMap<String, (ReplicaStatus, Instant)>,
+}
+
+/// A host, in the store or deleted, with its versions and changes
+#[derive(Default)]
+struct HostState {
+    /// The version in use, if the host is in the store
+    active: Option<u64>,
+    /// The revision of its last change
+    changed: u64,
+    versions: BTreeMap<u64, RouteVersion>,
+    /// Newest first
+    history: VecDeque<HistoryEntry>,
+}
+
+impl HostState {
+    /// Refuses a change the host doesn't expect
+    fn check(&self, expect: Expect) -> Result<(), StoreError> {
+        let present = self.active.is_some();
+        let expected = match expect {
+            Expect::Any => true,
+            Expect::Absent => !present,
+            Expect::Changed(changed) => changed == self.changed,
+        };
+        if expected {
+            return Ok(());
+        }
+        Err(StoreError::Conflict {
+            changed: self.changed,
+            present,
+        })
+    }
+
+    /// Records a change at `revision`, keeping the last `keep` changes and versions (and the
+    /// active version)
+    fn record(&mut self, revision: u64, change: Change, write: &Write, keep: usize) {
+        self.changed = revision;
+        self.history.push_front(HistoryEntry {
+            revision,
+            at: unix_timestamp(),
+            author: write.author.clone(),
+            change,
+        });
+        self.history.truncate(keep);
+        let removable = self
+            .versions
+            .keys()
+            .copied()
+            .filter(|version| Some(*version) != self.active)
+            .collect::<Vec<_>>();
+        let excess = self.versions.len().saturating_sub(keep);
+        for version in removable.into_iter().take(excess) {
+            self.versions.remove(&version);
+        }
+    }
+}
+
+fn unix_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or_default()
 }
 
 impl Default for MemoryStore {
@@ -52,7 +118,15 @@ impl MemoryStore {
             route_data: Mutex::new(MemoryRoutes::default()),
             leases: Mutex::new(HashMap::new()),
             certificates_revision: AtomicU64::new(0),
+            history: DEFAULT_HISTORY,
         }
+    }
+
+    /// Keeps the last `versions` versions of each host (at least 1)
+    #[must_use]
+    pub fn with_history(mut self, versions: usize) -> Self {
+        self.history = versions.max(1);
+        self
     }
 
     fn routes(&self) -> MutexGuard<'_, MemoryRoutes> {
@@ -67,9 +141,16 @@ impl MemoryStore {
 impl Store for MemoryStore {
     async fn routes(&self) -> Result<RoutesSnapshot, StoreError> {
         let routes = self.routes();
+        let records = routes.hosts.values().filter_map(|state| {
+            let version = state.versions.get(&state.active?)?;
+            Some(RouteRecord {
+                changed: state.changed,
+                ..version.record.clone()
+            })
+        });
         Ok(RoutesSnapshot {
             revision: routes.revision,
-            routes: routes.routes.values().cloned().collect(),
+            routes: records.collect(),
         })
     }
 
@@ -77,20 +158,83 @@ impl Store for MemoryStore {
         Ok(self.routes().revision)
     }
 
-    async fn put_route(&self, mut route: RouteRecord) -> Result<u64, StoreError> {
+    async fn put_route(&self, route: RouteRecord, write: &Write) -> Result<u64, StoreError> {
         let mut routes = self.routes();
-        route.host = route.host.to_lowercase();
-        routes.routes.insert(route.host.clone(), route);
+        let host = route.host.to_lowercase();
+        routes.hosts.entry(host.clone()).or_default().check(write.expect)?;
+        routes.revision += 1;
+        let revision = routes.revision;
+        let state = routes.hosts.entry(host.clone()).or_default();
+        let record = RouteRecord {
+            host,
+            version: revision,
+            changed: revision,
+            ..route
+        };
+        let version = RouteVersion {
+            record,
+            at: unix_timestamp(),
+            author: write.author.clone(),
+        };
+        state.versions.insert(revision, version);
+        state.active = Some(revision);
+        state.record(revision, Change::Saved, write, self.history);
+        Ok(revision)
+    }
+
+    async fn delete_route(&self, host: &str, write: &Write) -> Result<u64, StoreError> {
+        let mut routes = self.routes();
+        let revision = routes.revision;
+        let Some(state) = routes.hosts.get_mut(&host.to_lowercase()) else {
+            return HostState::default().check(write.expect).map(|()| revision);
+        };
+        state.check(write.expect)?;
+        if state.active.take().is_none() {
+            return Ok(revision);
+        }
+        state.record(revision + 1, Change::Deleted, write, self.history);
         routes.revision += 1;
         Ok(routes.revision)
     }
 
-    async fn delete_route(&self, host: &str) -> Result<u64, StoreError> {
+    async fn rollback_route(&self, host: &str, to: u64, write: &Write) -> Result<u64, StoreError> {
         let mut routes = self.routes();
-        if routes.routes.remove(&host.to_lowercase()).is_some() {
-            routes.revision += 1;
-        }
-        Ok(routes.revision)
+        let revision = routes.revision + 1;
+        let state = routes
+            .hosts
+            .get_mut(&host.to_lowercase())
+            .filter(|state| state.versions.contains_key(&to))
+            .ok_or(StoreError::NoVersion(to))?;
+        state.check(write.expect)?;
+        state.active = Some(to);
+        state.record(revision, Change::RolledBack { to }, write, self.history);
+        routes.revision = revision;
+        Ok(revision)
+    }
+
+    async fn route_history(&self, host: &str) -> Result<Vec<HistoryEntry>, StoreError> {
+        let routes = self.routes();
+        let state = routes.hosts.get(&host.to_lowercase());
+        Ok(state.map(|state| state.history.iter().cloned().collect()).unwrap_or_default())
+    }
+
+    async fn route_version(
+        &self,
+        host: &str,
+        version: u64,
+    ) -> Result<Option<RouteVersion>, StoreError> {
+        let routes = self.routes();
+        let state = routes.hosts.get(&host.to_lowercase());
+        Ok(state.and_then(|state| state.versions.get(&version).cloned()))
+    }
+
+    async fn deleted_routes(&self) -> Result<Vec<String>, StoreError> {
+        let routes = self.routes();
+        let deleted = routes
+            .hosts
+            .iter()
+            .filter(|(_, state)| state.active.is_none() && !state.versions.is_empty());
+        Ok(deleted.map(|(host, _)| host.clone()).collect())
     }
 
     async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
@@ -237,6 +381,11 @@ mod tests {
     #[tokio::test]
     async fn test_routes_contract() {
         crate::contract_tests::routes_contract(&MemoryStore::new()).await;
+    }
+
+    #[tokio::test]
+    async fn test_history_contract() {
+        crate::contract_tests::history_contract(&MemoryStore::new().with_history(3)).await;
     }
 
     #[tokio::test]

@@ -4,7 +4,7 @@ use std::{error::Error, hash::RandomState, time::Duration};
 
 use crate::{
     certificates::Certificate,
-    route::{ReplicaStatus, RouteRecord, RoutesSnapshot, StoreError},
+    route::{HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write},
 };
 
 // `async_trait` marks the generated methods as `#[must_use]`
@@ -17,13 +17,34 @@ pub trait Store: Send + Sync + 'static {
     /// Revision of the routes, incremented by every change
     async fn revision(&self) -> Result<u64, StoreError>;
 
-    /// Adds or replaces the route of a host, returning the new revision
-    #[allow(dead_code)] // used by the admin API (#49)
-    async fn put_route(&self, route: RouteRecord) -> Result<u64, StoreError>;
+    /// Saves a new version of a host and makes it the active one, returning the new revision.
+    /// The store keeps the last versions of each host (`with_history`), and the active one.
+    ///
+    /// Refused with [`StoreError::Conflict`] when the host isn't as `write` expects.
+    async fn put_route(&self, route: RouteRecord, write: &Write) -> Result<u64, StoreError>;
 
-    /// Removes the route of a host, returning the (possibly unchanged) revision
-    #[allow(dead_code)] // used by the admin API (#49)
-    async fn delete_route(&self, host: &str) -> Result<u64, StoreError>;
+    /// Removes a host, keeping its versions, and returns the new revision (unchanged if it
+    /// wasn't in the store and nothing was expected of it)
+    async fn delete_route(&self, host: &str, write: &Write) -> Result<u64, StoreError>;
+
+    /// Makes the version of `host` saved at revision `to` its active one again (also for a
+    /// deleted host), returning the new revision.
+    ///
+    /// Refused with [`StoreError::NoVersion`] when that version isn't kept.
+    async fn rollback_route(&self, host: &str, to: u64, write: &Write) -> Result<u64, StoreError>;
+
+    /// The changes to a host, newest first (the last ones, as many as versions are kept)
+    async fn route_history(&self, host: &str) -> Result<Vec<HistoryEntry>, StoreError>;
+
+    /// The version of `host` saved at revision `version`, if it's kept
+    async fn route_version(
+        &self,
+        host: &str,
+        version: u64,
+    ) -> Result<Option<RouteVersion>, StoreError>;
+
+    /// Hosts that were deleted and still have versions, which a rollback restores
+    async fn deleted_routes(&self) -> Result<Vec<String>, StoreError>;
 
     /// Reports the status of this replica (e.g. the applied revision), expiring after `ttl`
     async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError>;

@@ -1,7 +1,7 @@
 //! `/api/v1/routes`: hosts written to the store (ADR 0004), applied by every instance through
 //! the store sync (ADR 0001). Hosts are JSON, in and out.
 
-use proksi_store::Store;
+use proksi_store::{Store, Write};
 use serde::Serialize;
 
 use crate::{
@@ -87,7 +87,10 @@ pub async fn put(store: &dyn Store, name: &str, body: &[u8]) -> Result<Written, 
     let host = parse(&name.to_lowercase(), body).map_err(Refused::Invalid)?;
     let route = StoredRoute::new(host);
     let host = route.key();
-    let revision = store.put_stored(&route).await.map_err(unavailable)?;
+    let revision = store
+        .put_stored(&route, &Write::default())
+        .await
+        .map_err(unavailable)?;
     crate::routing::store_source::sync_now();
     Ok(Written { host, revision })
 }
@@ -111,7 +114,10 @@ pub fn validate(body: &[u8]) -> Result<Valid, Refused> {
 /// Removes the host `name` from the store (the revision is unchanged if it wasn't there)
 pub async fn delete(store: &dyn Store, name: &str) -> Result<Written, Refused> {
     let host = name.to_lowercase();
-    let revision = store.delete_route(&host).await.map_err(unavailable)?;
+    let revision = store
+        .delete_route(&host, &Write::default())
+        .await
+        .map_err(unavailable)?;
     crate::routing::store_source::sync_now();
     Ok(Written { host, revision })
 }

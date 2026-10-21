@@ -5,7 +5,11 @@ use std::{error::Error, hash::RandomState, time::Duration};
 
 use crate::{
     certificates::{Certificate, SerializableCertificate},
-    route::{ReplicaStatus, RouteRecord, RoutesSnapshot, StoreError},
+    redis_history,
+    route::{
+        HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write,
+        DEFAULT_HISTORY,
+    },
     store_trait::Store,
 };
 
@@ -37,6 +41,8 @@ pub struct RedisStore {
     pool: r2d2::Pool<redis::Client>,
     cache: papaya::HashMap<String, Certificate>,
     challenge_cache: papaya::HashMap<String, (String, String)>,
+    /// Versions kept per host (besides the active one)
+    history: usize,
 }
 
 impl RedisStore {
@@ -53,7 +59,15 @@ impl RedisStore {
             pool,
             cache: papaya::HashMap::new(),
             challenge_cache: papaya::HashMap::new(),
+            history: DEFAULT_HISTORY,
         })
+    }
+
+    /// Keeps the last `versions` versions of each host (at least 1)
+    #[must_use]
+    pub fn with_history(mut self, versions: usize) -> Self {
+        self.history = versions.max(1);
+        self
     }
 
     fn connection(&self) -> Result<r2d2::PooledConnection<redis::Client>, StoreError> {
@@ -120,6 +134,8 @@ fn record(host: &str, data: String) -> RouteRecord {
         host: host.to_string(),
         schema_version,
         data,
+        version: 0,
+        changed: 0,
     }
 }
 
@@ -139,6 +155,8 @@ impl Store for RedisStore {
                 conn.mget(&keys).map_err(unavailable)?
             };
 
+            let metas = redis_history::metas(&mut conn, &hosts)?;
+
             if Self::get_revision(&mut conn)? != revision {
                 continue;
             }
@@ -146,7 +164,14 @@ impl Store for RedisStore {
             let routes = hosts
                 .iter()
                 .zip(values)
-                .filter_map(|(host, value)| Some(record(host, value?)))
+                .zip(metas)
+                .filter_map(|((host, value), (version, changed))| {
+                    Some(RouteRecord {
+                        version,
+                        changed,
+                        ..record(host, value?)
+                    })
+                })
                 .collect();
             return Ok(RoutesSnapshot { revision, routes });
         }
@@ -160,41 +185,32 @@ impl Store for RedisStore {
         Self::get_revision(&mut *self.connection()?)
     }
 
-    async fn put_route(&self, route: RouteRecord) -> Result<u64, StoreError> {
-        let host = route.host.to_lowercase();
-        let json = route.data;
-
-        let (revision,): (u64,) = redis::pipe()
-            .atomic()
-            .set(route_key(&host), json)
-            .ignore()
-            .sadd(ROUTES_SET_KEY, &host)
-            .ignore()
-            .incr(REVISION_KEY, 1)
-            .query(&mut self.connection()?)
-            .map_err(unavailable)?;
-        Ok(revision)
+    async fn put_route(&self, route: RouteRecord, write: &Write) -> Result<u64, StoreError> {
+        redis_history::put(&mut *self.connection()?, &route, write, self.history)
     }
 
-    async fn delete_route(&self, host: &str) -> Result<u64, StoreError> {
-        let host = host.to_lowercase();
-        // The revision only changes when a route was deleted
-        let script = redis::Script::new(
-            r"
-            if redis.call('DEL', KEYS[1]) == 1 then
-                redis.call('SREM', KEYS[2], ARGV[1])
-                return redis.call('INCR', KEYS[3])
-            end
-            return tonumber(redis.call('GET', KEYS[3]) or '0')
-            ",
-        );
-        script
-            .key(route_key(&host))
-            .key(ROUTES_SET_KEY)
-            .key(REVISION_KEY)
-            .arg(&host)
-            .invoke(&mut *self.connection()?)
-            .map_err(unavailable)
+    async fn delete_route(&self, host: &str, write: &Write) -> Result<u64, StoreError> {
+        redis_history::delete(&mut *self.connection()?, host, write, self.history)
+    }
+
+    async fn rollback_route(&self, host: &str, to: u64, write: &Write) -> Result<u64, StoreError> {
+        redis_history::rollback(&mut *self.connection()?, host, to, write, self.history)
+    }
+
+    async fn route_history(&self, host: &str) -> Result<Vec<HistoryEntry>, StoreError> {
+        redis_history::history(&mut *self.connection()?, host)
+    }
+
+    async fn route_version(
+        &self,
+        host: &str,
+        version: u64,
+    ) -> Result<Option<RouteVersion>, StoreError> {
+        redis_history::version(&mut *self.connection()?, host, version)
+    }
+
+    async fn deleted_routes(&self) -> Result<Vec<String>, StoreError> {
+        redis_history::deleted(&mut *self.connection()?)
     }
 
     async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
@@ -473,6 +489,13 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_history_contract() {
+        if let Some(store) = test_store(9) {
+            crate::contract_tests::history_contract(&store.with_history(3)).await;
+        }
+    }
+
+    #[tokio::test]
     async fn test_replicas_contract() {
         if let Some(store) = test_store(15) {
             crate::contract_tests::replicas_contract(&store).await;
@@ -552,6 +575,8 @@ mod tests {
                 host: "broken.test".to_string(),
                 schema_version: 0,
                 data: "{ not json".to_string(),
+                version: 0,
+                changed: 0,
             }]
         );
     }
