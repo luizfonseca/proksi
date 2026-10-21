@@ -3557,7 +3557,6 @@ dependencies = [
  "bollard",
  "bytes",
  "clap",
- "cookie",
  "criterion",
  "dashmap 6.2.1",
  "dns-lookup",
@@ -3565,9 +3564,7 @@ dependencies = [
  "futures-util",
  "hcl-rs",
  "http",
- "httpdate",
  "ipnet",
- "itertools 0.15.0",
  "jsonwebtoken",
  "k8s-openapi",
  "kube",
@@ -3583,9 +3580,9 @@ dependencies = [
  "pingora",
  "pingora-cache",
  "pingora-error",
- "pingora-limits",
  "proc-macro2",
  "proksi-admin-ui",
+ "proksi_plugins",
  "proksi_store",
  "prometheus",
  "r2d2",
@@ -3594,12 +3591,10 @@ dependencies = [
  "regex",
  "regex-automata",
  "reqwest",
- "ring",
  "schemars",
  "seize 0.5.1",
  "serde",
  "serde_json",
- "short-crypt",
  "sqlx",
  "syn 2.0.119",
  "tempfile",
@@ -3614,6 +3609,38 @@ dependencies = [
 [[package]]
 name = "proksi-admin-ui"
 version = "0.16.1"
+
+[[package]]
+name = "proksi_plugins"
+version = "0.16.1"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "async-trait",
+ "bytes",
+ "cookie",
+ "http",
+ "httpdate",
+ "ipnet",
+ "itertools 0.15.0",
+ "jsonwebtoken",
+ "mimalloc",
+ "openssl",
+ "pingora",
+ "pingora-limits",
+ "rand 0.8.8",
+ "reqwest",
+ "ring",
+ "schemars",
+ "serde",
+ "serde_json",
+ "short-crypt",
+ "tempfile",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "proksi_store"

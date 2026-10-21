@@ -1,156 +1,28 @@
 //! Building blocks: everything in a location besides upstreams (see ADR 0003).
 //!
-//! Each block is built once per location, validated when the configuration loads, and takes
-//! part in the stages of a request it needs. Blocks run by priority, from 0 (first) to 100
-//! (last); the response stages run in reverse order.
+//! The plugins (`basic_auth`, `rate_limit`...) are in `proksi_plugins`; `headers` and `cache` are
+//! proksi's own. Each block is built once per location, validated when the configuration loads,
+//! and takes part in the stages of a request it needs. Blocks run by priority, from 0 (first) to
+//! 100 (last); the response stages run in reverse order.
 
 use std::sync::Arc;
 
-use anyhow::Result;
-use async_trait::async_trait;
 use bytes::Bytes;
 use pingora::{
     http::{RequestHeader, ResponseHeader},
     proxy::Session,
 };
+pub use proksi_plugins::{jwt, settings, Kind, Middleware};
+use proksi_plugins::priority;
 
 use crate::{config::host::Location, proxy_server::https_proxy::RouterContext};
 
-use basic_auth::BasicAuth;
-use body_limit::BodyLimit;
 use cache::Cache;
-use compress::Compress;
-use cors::Cors;
-use forward_auth::ForwardAuth;
 use headers::Headers;
-use ip_filter::IpFilter;
-use jwt::Jwt;
-use oauth2::Oauth2;
-use priority::{plugin_priority, priority};
-use rate_limit::RateLimit;
-use redirect::{Redirect, Respond};
-use request_id::RequestId;
-use static_files::StaticFiles;
 
-mod basic_auth;
-pub(crate) mod body_limit;
 mod cache;
-mod compress;
-mod cors;
-mod forward_auth;
+mod context;
 mod headers;
-mod ip_filter;
-pub mod jwt;
-mod oauth2;
-mod priority;
-mod rate_limit;
-pub mod settings;
-mod redirect;
-mod request_id;
-mod static_files;
-
-/// The stages of a request a block can take part in
-// `async_trait` marks the generated methods as `#[must_use]`
-#[allow(clippy::double_must_use)]
-#[async_trait]
-pub trait Middleware: Send + Sync {
-    /// Before the request is proxied. `true` when the block answered the request, which ends it.
-    async fn request(&self, _session: &mut Session, _ctx: &mut RouterContext) -> Result<bool> {
-        Ok(false)
-    }
-
-    /// Each part of the request body, as it's proxied. An error ends the request.
-    fn request_body(&self, _body: Option<&Bytes>, _ctx: &mut RouterContext) -> pingora::Result<()> {
-        Ok(())
-    }
-
-    /// Changes the request sent to the upstream
-    async fn upstream_request(
-        &self,
-        _session: &mut Session,
-        _request: &mut RequestHeader,
-        _ctx: &mut RouterContext,
-    ) -> Result<()> {
-        Ok(())
-    }
-
-    /// Changes the response of the upstream, before it's cached
-    fn upstream_response(
-        &self,
-        _session: &mut Session,
-        _response: &mut ResponseHeader,
-        _ctx: &mut RouterContext,
-    ) -> Result<()> {
-        Ok(())
-    }
-
-    /// Changes the response sent to the client (including responses served from the cache)
-    async fn response(
-        &self,
-        _session: &mut Session,
-        _response: &mut ResponseHeader,
-        _ctx: &mut RouterContext,
-    ) -> Result<()> {
-        Ok(())
-    }
-}
-
-/// The kinds of blocks. Blocks with the same priority run in this order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Kind {
-    RequestId,
-    IpFilter,
-    Cors,
-    RateLimit,
-    Redirect,
-    Respond,
-    BodyLimit,
-    BasicAuth,
-    Jwt,
-    Oauth2,
-    ForwardAuth,
-    Compress,
-    Headers,
-    Cache,
-    StaticFiles,
-}
-
-impl Kind {
-    pub fn name(self) -> &'static str {
-        match self {
-            Kind::RequestId => "request_id",
-            Kind::IpFilter => "ip_filter",
-            Kind::Cors => "cors",
-            Kind::RateLimit => "rate_limit",
-            Kind::Redirect => "redirect",
-            Kind::Respond => "respond",
-            Kind::BodyLimit => "body_limit",
-            Kind::BasicAuth => "basic_auth",
-            Kind::Jwt => "jwt",
-            Kind::Oauth2 => "oauth2",
-            Kind::ForwardAuth => "forward_auth",
-            Kind::Compress => "compress",
-            Kind::Headers => "headers",
-            Kind::Cache => "cache",
-            Kind::StaticFiles => "static_files",
-        }
-    }
-
-    /// Where the block runs unless it sets `priority`
-    pub fn default_priority(self) -> u8 {
-        match self {
-            Kind::RequestId | Kind::IpFilter | Kind::Cors | Kind::RateLimit => 0,
-            Kind::Redirect | Kind::Respond => 5,
-            Kind::BodyLimit => 10,
-            Kind::BasicAuth | Kind::Jwt | Kind::Oauth2 | Kind::ForwardAuth => 20,
-            Kind::Compress => 40,
-            Kind::Headers => 50,
-            Kind::Cache => 60,
-            // Last: the other blocks see the request before it's answered
-            Kind::StaticFiles => 90,
-        }
-    }
-}
 
 /// A block of a location
 #[derive(Clone)]
@@ -170,30 +42,15 @@ impl Blocks {
         let mut blocks = vec![];
 
         for plugin in location.plugins.iter().flatten() {
-            let (kind, middleware): (Kind, Arc<dyn Middleware>) = match plugin.name.as_ref() {
-                "request_id" => (Kind::RequestId, Arc::new(RequestId::new(plugin)?)),
-                "ip_filter" => (Kind::IpFilter, Arc::new(IpFilter::new(plugin)?)),
-                "cors" => (Kind::Cors, Arc::new(Cors::new(plugin)?)),
-                "rate_limit" => (Kind::RateLimit, Arc::new(RateLimit::new(plugin)?)),
-                "body_limit" => (Kind::BodyLimit, Arc::new(BodyLimit::new(plugin)?)),
-                "redirect" => (Kind::Redirect, Arc::new(Redirect::new(plugin)?)),
-                "respond" => (Kind::Respond, Arc::new(Respond::new(plugin)?)),
-                "basic_auth" => (Kind::BasicAuth, Arc::new(BasicAuth::new(plugin)?)),
-                "jwt" => (Kind::Jwt, Arc::new(Jwt::new(plugin)?)),
-                "oauth2" => (Kind::Oauth2, Arc::new(Oauth2::new(plugin)?)),
-                "forward_auth" => (Kind::ForwardAuth, Arc::new(ForwardAuth::new(plugin)?)),
-                "compress" => (Kind::Compress, Arc::new(Compress::new(plugin)?)),
-                "static_files" => (
-                    Kind::StaticFiles,
-                    Arc::new(StaticFiles::new(plugin, &location.path)?),
-                ),
-                // Other plugins of `routes = [...]` and docker labels are ignored, as before
-                _ => continue,
+            // Other plugins of `routes = [...]` and docker labels are ignored, as before
+            let Some(plugin) = proksi_plugins::build(plugin, &location.path) else {
+                continue;
             };
+            let plugin = plugin?;
             blocks.push(Block {
-                kind,
-                priority: plugin_priority(kind, plugin)?,
-                middleware,
+                kind: plugin.kind,
+                priority: plugin.priority,
+                middleware: plugin.middleware,
             });
         }
 
@@ -252,18 +109,7 @@ impl Blocks {
         self.0
             .iter()
             .map(|block| block.kind)
-            .filter(|kind| {
-                matches!(
-                    kind,
-                    Kind::IpFilter
-                        | Kind::RateLimit
-                        | Kind::BodyLimit
-                        | Kind::BasicAuth
-                        | Kind::Jwt
-                        | Kind::Oauth2
-                        | Kind::ForwardAuth
-                )
-            })
+            .filter(|kind| kind.answers())
             .map(Kind::name)
             .collect()
     }

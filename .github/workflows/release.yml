@@ -252,11 +252,12 @@ jobs:
         working-directory: crates/proksi-admin-ui
         run: npm ci && npm run build
 
-      # The admin UI and the store first, with Proksi's version: Proksi depends on them
+      # The admin UI, the plugins and the store first, with Proksi's version: Proksi depends on them
       - name: Publish to crates.io
         run: |
           # The UI's built files are ignored by git, and published with the crate
           cargo publish -p proksi-admin-ui --allow-dirty --token ${{ secrets.CRATES_IO_TOKEN }}
+          cargo publish -p proksi_plugins --token ${{ secrets.CRATES_IO_TOKEN }}
           cargo publish -p proksi_store --token ${{ secrets.CRATES_IO_TOKEN }}
           cargo publish -p proksi --token ${{ secrets.CRATES_IO_TOKEN }}
 
