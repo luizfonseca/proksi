@@ -225,3 +225,4 @@ Wasmtime is a large dependency: with the WASI and `wasi:http` hosts, it adds abo
 - **Databases and other protocols** than HTTP.
 - **A registry** of plugins. Plugins are files; a registry can later fetch and verify them.
 - **SDKs for other languages.**
+- **Native Rust plugins.** Loading a compiled library at runtime (`.so`, `.dylib`) isn't workable: Rust has no stable ABI, so a plugin would need the exact compiler and crate versions of each proksi release, and it would run unsandboxed in proksi's process. Building a custom proksi with plugins compiled in, as Caddy's `xcaddy` does, is possible later: it runs at native speed and can use any crate, but each user builds and ships their own binary, rebuilds it on each upgrade, and trusts the plugin completely, and proksi would have to keep a public Rust API stable.
