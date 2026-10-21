@@ -5,8 +5,28 @@ import type { Rule } from '../features/rules/ruleTree';
 
 export class Unauthorized extends Error {}
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = { accept: 'application/json' };
+/** The host is on another version than the change was made from (`412`): reload it */
+export class Conflict extends Error {
+  constructor(
+    message: string,
+    /** The host's active version now (0: it isn't in the store) */
+    readonly version: number,
+  ) {
+    super(message);
+  }
+}
+
+/** What a change was made from: the host's active version as read, or no host */
+export type Expect = { version: number } | 'absent';
+
+function conditions(expect?: Expect): Record<string, string> {
+  if (expect === undefined) return {};
+  if (expect === 'absent') return { 'if-none-match': '*' };
+  return { 'if-match': `"${expect.version}"` };
+}
+
+async function request<T>(method: string, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<T> {
+  const headers: Record<string, string> = { accept: 'application/json', ...extra };
   if (body !== undefined) headers['content-type'] = 'application/json';
   const response = await fetch(`/api/v1${path}`, {
     method,
@@ -16,6 +36,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   });
   if (response.status === 401) throw new Unauthorized();
   const json = await response.json().catch(() => ({}));
+  if (response.status === 412) throw new Conflict(json.error ?? 'changed by someone else', json.version ?? 0);
   if (!response.ok) throw new Error(json.error ?? `${response.status} ${response.statusText}`);
   return json as T;
 }
@@ -46,12 +67,33 @@ export type StoredHost = {
 
 const hostPath = (name: string) => `/routes/${encodeURIComponent(name)}`;
 
+/** A change to a host, newest first in its history */
+export type HistoryEntry = {
+  revision: number;
+  /** Unix timestamp (seconds) */
+  at: number;
+  author: string | null;
+} & ({ change: 'saved' } | { change: 'deleted' } | { change: 'rolled_back'; to: number });
+
+/** A saved definition of a host */
+export type SavedVersion = { host: StoredHost; version: number; at: number; author: string | null };
+
+type Written = { host: string; revision: number };
+
 export const routes = {
-  get: (name: string) => get<{ host: StoredHost; revision: number }>(hostPath(name)),
-  put: (host: StoredHost) => request<{ host: string; revision: number }>('PUT', hostPath(host.name), host),
-  delete: (name: string) => request<{ host: string; revision: number }>('DELETE', hostPath(name)),
+  /** The host, with its active version (the revision its definition was saved at) */
+  get: (name: string) => get<{ host: StoredHost; revision: number; version: number }>(hostPath(name)),
+  put: (host: StoredHost, expect?: Expect) => request<Written>('PUT', hostPath(host.name), host, conditions(expect)),
+  delete: (name: string, expect?: Expect) => request<Written>('DELETE', hostPath(name), undefined, conditions(expect)),
   /** Checks a host as saving would, without saving it */
   validate: (host: StoredHost) => request<{ valid: boolean }>('POST', '/validate', host),
+  history: (name: string) => get<{ host: string; changes: HistoryEntry[] }>(`${hostPath(name)}/history`),
+  version: (name: string, revision: number) => get<SavedVersion>(`${hostPath(name)}/history/${revision}`),
+  /** Makes a version active again (also restores a deleted host) */
+  rollback: (name: string, revision: number, expect?: Expect) =>
+    request<Written>('POST', `${hostPath(name)}/rollback`, { revision }, conditions(expect)),
+  /** Deleted hosts that still have versions */
+  deleted: () => get<{ hosts: string[] }>('/deleted-routes'),
 };
 
 export const session = {

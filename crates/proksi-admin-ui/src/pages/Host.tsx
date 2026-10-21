@@ -52,7 +52,7 @@ function UpstreamRow({ upstream }: { upstream: Upstream }) {
 function Actions({ name }: { name: string }) {
   const [error, setError] = useState<string | null>(null);
   async function remove() {
-    if (!confirm(`Remove ${name} from the store? Every instance stops serving it.`)) return;
+    if (!confirm(`Remove ${name} from the store? Every instance stops serving it. Its versions are kept, to restore it.`)) return;
     try {
       await routes.delete(name);
       navigate('/hosts');
@@ -64,6 +64,7 @@ function Actions({ name }: { name: string }) {
     <div class="actions">
       {error && <span class="error">{error}</span>}
       <button type="button" class="secondary danger" onClick={remove}>Remove</button>
+      <a class="button" href={`/hosts/${encodeURIComponent(name)}/history`} onClick={onLink}>History</a>
       <a class="button" href={`/hosts/${encodeURIComponent(name)}/edit`} onClick={onLink}>Edit</a>
     </div>
   );
