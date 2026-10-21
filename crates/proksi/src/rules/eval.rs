@@ -405,6 +405,32 @@ pub(super) mod tests {
     }
 
     #[test]
+    fn test_hotlinks() {
+        let rules = [rule(
+            "hotlinks",
+            json!({
+                "header": { "referer": { "exists": true } },
+                "not": { "header": { "referer": {
+                    "prefix": ["https://example.com/", "https://www.example.com/"]
+                } } },
+            }),
+        )];
+        let refused = |referer: Option<&str>| {
+            let mut request = TestRequest::new("GET", "example.com", "/images/a.png");
+            if let Some(referer) = referer {
+                request = request.header("referer", referer);
+            }
+            !matching(&rules, &request).is_empty()
+        };
+
+        assert!(!refused(None));
+        assert!(!refused(Some("https://example.com/blog/post")));
+        assert!(!refused(Some("https://www.example.com/")));
+        assert!(refused(Some("https://other.example.org/page")));
+        assert!(refused(Some("https://example.com.attacker.test/")));
+    }
+
+    #[test]
     fn test_and_or_not() {
         let rules = [rule(
             "legacy",
