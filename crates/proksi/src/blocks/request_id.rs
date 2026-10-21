@@ -1,53 +1,226 @@
-//! `request_id {}`: adds an `X-Request-Id` header to requests and responses
+//! `request_id { suffix = "ams1" }`: gives each request an ID, sent to the upstream and back to
+//! the client as `X-Request-Id` (or `header_name`), and logged. An ID sent by a trusted proxy is kept, so a request
+//! has one ID across the proxies it goes through.
+
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use async_trait::async_trait;
+use http::{HeaderName, HeaderValue};
 use pingora::{
     http::{RequestHeader, ResponseHeader},
     proxy::Session,
 };
+use rand::RngCore;
 
-use crate::{
-    config::RoutePlugin,
-    plugins::{MiddlewarePlugin, PLUGINS},
-    proxy_server::https_proxy::RouterContext,
-};
+use crate::{config::RoutePlugin, proxy_server::https_proxy::RouterContext};
 
 use super::Middleware;
 
+const HEADER: &str = "X-Request-Id";
+
+/// The longest ID kept from a trusted proxy
+const MAX_KEPT: usize = 200;
+
+/// The longest suffix
+const MAX_SUFFIX: usize = 32;
+
+/// A UUID's length, as text
+const UUID: usize = 36;
+
 pub(super) struct RequestId {
-    pub(super) plugin: RoutePlugin,
+    /// The header's name, as written (Pingora parses it once more when it's set)
+    header: bytes::Bytes,
+    /// The same, to read requests
+    name: HeaderName,
+    /// `-` and the suffix, or nothing
+    suffix: String,
+}
+
+impl RequestId {
+    pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
+        let settings: super::settings::RequestId = super::settings::read("request_id", plugin)?;
+        let header = settings.header_name.unwrap_or_else(|| HEADER.to_string());
+        let name = HeaderName::from_bytes(header.as_bytes())
+            .map_err(|_| format!("request_id: header_name {header:?} isn't a valid header name"))?;
+        let header = bytes::Bytes::from(header);
+        let Some(suffix) = settings.suffix else {
+            return Ok(Self {
+                header,
+                name,
+                suffix: String::new(),
+            });
+        };
+        let valid = |byte: &u8| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.');
+        if suffix.is_empty() || suffix.len() > MAX_SUFFIX || !suffix.bytes().all(|b| valid(&b)) {
+            return Err(format!(
+                "request_id: suffix {suffix:?} must be 1 to {MAX_SUFFIX} letters, digits, `-`, `_` or `.`"
+            ));
+        }
+        Ok(Self {
+            header,
+            name,
+            suffix: format!("-{suffix}"),
+        })
+    }
+
+    /// A UUID v7 (its first part is the time, so IDs sort by when requests came), and the
+    /// suffix, formatted without an intermediate string
+    fn generate(&self) -> HeaderValue {
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
+            .unwrap_or_default();
+        let mut random = [0u8; 10];
+        rand::thread_rng().fill_bytes(&mut random);
+        let uuid = uuid::Builder::from_unix_timestamp_millis(millis, &random).into_uuid();
+
+        let mut buffer = [0u8; UUID + 1 + MAX_SUFFIX];
+        let (text, rest) = buffer.split_at_mut(UUID);
+        uuid.hyphenated().encode_lower(text);
+        let suffix = self.suffix.as_bytes();
+        if let Some(target) = rest.get_mut(..suffix.len()) {
+            target.copy_from_slice(suffix);
+        }
+        buffer
+            .get(..UUID + suffix.len())
+            .and_then(|id| HeaderValue::from_bytes(id).ok())
+            .unwrap_or_else(|| HeaderValue::from_static(""))
+    }
+}
+
+/// The ID a trusted proxy sent in `name`, if it's one we can pass on
+fn kept(session: &Session, name: &HeaderName) -> Option<HeaderValue> {
+    let peer = session.client_addr()?.as_inet()?.ip();
+    if !crate::proxy_server::client::is_trusted(peer) {
+        return None;
+    }
+    let id = session.req_header().headers.get(name)?;
+    let printable = id
+        .as_bytes()
+        .iter()
+        .all(|byte| (0x21..=0x7e).contains(byte));
+    (printable && !id.is_empty() && id.len() <= MAX_KEPT).then(|| id.clone())
 }
 
 #[async_trait]
 impl Middleware for RequestId {
     async fn request(&self, session: &mut Session, ctx: &mut RouterContext) -> Result<bool> {
-        PLUGINS
-            .request_id
-            .request_filter(session, ctx, &self.plugin)
-            .await
+        ctx.request_id = Some(kept(session, &self.name).unwrap_or_else(|| self.generate()));
+        Ok(false)
     }
 
     async fn upstream_request(
         &self,
-        session: &mut Session,
+        _session: &mut Session,
         request: &mut RequestHeader,
         ctx: &mut RouterContext,
     ) -> Result<()> {
-        PLUGINS
-            .request_id
-            .upstream_request_filter(session, request, ctx)
-            .await
+        if let Some(id) = &ctx.request_id {
+            request.insert_header(self.header.clone(), id.clone())?;
+        }
+        Ok(())
     }
 
-    fn upstream_response(
+    async fn response(
         &self,
-        session: &mut Session,
+        _session: &mut Session,
         response: &mut ResponseHeader,
         ctx: &mut RouterContext,
     ) -> Result<()> {
-        PLUGINS
-            .request_id
-            .upstream_response_filter(session, response, ctx)
+        if let Some(id) = &ctx.request_id {
+            response.insert_header(self.header.clone(), id.clone())?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+
+    use super::RequestId;
+    use crate::config::RoutePlugin;
+
+    fn request_id(config: serde_json::Value) -> Result<RequestId, String> {
+        let config = config
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(key, value)| (Cow::Owned(key.clone()), value.clone()))
+            .collect();
+        RequestId::new(&RoutePlugin {
+            name: "request_id".into(),
+            config: Some(config),
+        })
+    }
+
+    #[test]
+    fn test_ids_are_uuid_v7() {
+        let block = request_id(serde_json::json!({})).unwrap();
+        let (first, second) = (block.generate(), block.generate());
+        let first = uuid::Uuid::parse_str(first.to_str().unwrap()).unwrap();
+        let second = uuid::Uuid::parse_str(second.to_str().unwrap()).unwrap();
+        assert_eq!(first.get_version_num(), 7);
+        assert_ne!(first, second);
+        // The time comes first
+        let (time, _) = first.get_timestamp().unwrap().to_unix();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        assert!(now.abs_diff(time) < 5, "{time} {now}");
+    }
+
+    #[test]
+    fn test_suffix() {
+        let block = request_id(serde_json::json!({ "suffix": "ams-1" })).unwrap();
+        let id = block.generate();
+        let id = id.to_str().unwrap();
+        assert_eq!(id.len(), 36 + 6, "{id}");
+        assert!(id.ends_with("-ams-1"), "{id}");
+        assert!(uuid::Uuid::parse_str(&id[..36]).is_ok(), "{id}");
+
+        let longest = "a".repeat(32);
+        let id = request_id(serde_json::json!({ "suffix": longest }))
+            .unwrap()
+            .generate();
+        assert!(id.to_str().unwrap().ends_with(&longest));
+    }
+
+    #[test]
+    fn test_invalid_suffixes() {
+        for suffix in ["", "a b", "ams/1", &"a".repeat(33)] {
+            let err = request_id(serde_json::json!({ "suffix": suffix })).err();
+            assert!(
+                err.is_some_and(|err| err.starts_with("request_id: suffix")),
+                "{suffix:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_header() {
+        let block = request_id(serde_json::json!({})).unwrap();
+        assert_eq!(&block.header[..], b"X-Request-Id");
+        let block = request_id(serde_json::json!({ "header_name": "X-Trace-Id" })).unwrap();
+        assert_eq!(
+            (&block.header[..], block.name.as_str()),
+            (&b"X-Trace-Id"[..], "x-trace-id")
+        );
+        let err = request_id(serde_json::json!({ "header_name": "x trace" })).err();
+        assert_eq!(
+            err.as_deref(),
+            Some("request_id: header_name \"x trace\" isn't a valid header name")
+        );
+    }
+
+    #[test]
+    fn test_generating_allocates_once() {
+        let block = request_id(serde_json::json!({ "suffix": "ams1" })).unwrap();
+        block.generate();
+        // The header value only
+        let (count, _) = crate::allocations::allocations(|| block.generate());
+        assert_eq!(count, 1);
     }
 }

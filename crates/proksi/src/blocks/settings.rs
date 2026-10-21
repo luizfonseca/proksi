@@ -317,10 +317,15 @@ pub struct Oauth2 {
     pub priority: Priority,
 }
 
-/// `request_id`: adds an `X-Request-Id` header to requests and responses
+/// `request_id`: gives each request an ID, as `X-Request-Id`
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RequestId {
+    /// Added to the IDs proksi makes, after a `-`, such as the server's name or region (1 to
+    /// 32 letters, digits, `-`, `_` or `.`)
+    pub suffix: Option<String>,
+    /// The header the ID is sent and kept in (default: `X-Request-Id`)
+    pub header_name: Option<String>,
     // Read by `plugin_priority`
     #[allow(dead_code)]
     #[schemars(

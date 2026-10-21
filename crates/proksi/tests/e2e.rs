@@ -801,6 +801,84 @@ async fn test_access_logs_name_the_upstream_connection() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_REQUEST_ID_SUFFIX: &str = r#"
+host "logged.test" {
+  tls = false
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    request_id {
+      suffix = "ams1"
+    }
+  }
+
+  location "/correlated" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    request_id {
+      header_name = "X-Correlation-Id"
+    }
+  }
+}
+"#;
+
+/// The `X-Request-Id` of a response to a request sending `id`, and the one its upstream got
+async fn request_ids(proksi: &Harness, id: &str) -> (String, String) {
+    let request = format!(
+        "GET /id HTTP/1.1\r\nHost: logged.test\r\nX-Request-Id: {id}\r\nConnection: close\r\n\r\n"
+    );
+    let res = proksi.raw_http_on(proksi.http_port, request.as_bytes()).await.unwrap();
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    let sent = res
+        .lines()
+        .find_map(|line| line.to_lowercase().strip_prefix("x-request-id: ").map(str::to_string))
+        .unwrap_or_else(|| panic!("no request id: {res}"));
+    let body = res.split("\r\n\r\n").nth(1).unwrap_or_default();
+    let echoed: serde_json::Value =
+        serde_json::from_str(body).unwrap_or_else(|_| panic!("{res}"));
+    let received = echoed["headers"]["x-request-id"].as_str().unwrap_or_default().to_string();
+    (sent, received)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_request_ids_from_clients_are_replaced() {
+    let mut proksi = Harness::start_without_https(HOST_WITH_REQUEST_ID_SUFFIX).await;
+
+    let (sent, received) = request_ids(&proksi, "chosen-by-the-client").await;
+    assert_eq!(sent, received);
+    assert!(sent.ends_with("-ams1"), "{sent}");
+    assert_eq!(sent.len(), 36 + 5, "{sent}");
+
+    proksi.assert_healthy();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_request_ids_from_trusted_proxies_are_kept() {
+    let mut proksi = Harness::start_with_server(
+        vec![],
+        "trusted_proxies = [\"127.0.0.1\"]",
+        HOST_WITH_REQUEST_ID_SUFFIX,
+    )
+    .await;
+
+    let (sent, received) = request_ids(&proksi, "edge-7f3a").await;
+    assert_eq!((sent.as_str(), received.as_str()), ("edge-7f3a", "edge-7f3a"));
+
+    // In a header of its own
+    let request = b"GET /correlated HTTP/1.1\r\nHost: logged.test\r\nX-Correlation-Id: edge-9c1d\r\nConnection: close\r\n\r\n";
+    let res = proksi.raw_http_on(proksi.http_port, request).await.unwrap();
+    assert!(res.contains("X-Correlation-Id: edge-9c1d\r\n"), "{res}");
+    assert!(res.contains("\"x-correlation-id\":\"edge-9c1d\""), "{res}");
+    assert!(!res.to_lowercase().contains("x-request-id"), "{res}");
+
+    // Too long to pass on: a new one
+    let (sent, _) = request_ids(&proksi, &"a".repeat(201)).await;
+    assert!(sent.ends_with("-ams1"), "{sent}");
+
+    proksi.assert_healthy();
+}
+
 const HOST_WITH_COMPRESSION: &str = r#"
 host "compressed.test" {
   tls = false

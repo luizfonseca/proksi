@@ -3,10 +3,7 @@ use std::{borrow::Cow, collections::HashMap};
 use async_trait::async_trait;
 use http::{header, StatusCode};
 use openssl::base64;
-use pingora::{
-    http::{RequestHeader, ResponseHeader},
-    proxy::Session,
-};
+use pingora::{http::ResponseHeader, proxy::Session};
 
 use crate::{
     config::RoutePlugin,
@@ -85,15 +82,6 @@ impl MiddlewarePlugin for BasicAuth {
         Ok(false)
     }
 
-    async fn upstream_request_filter(
-        &self,
-        _: &mut Session,
-        _: &mut RequestHeader,
-        _: &mut RouterContext,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     // Nothing to do after upstream response
     async fn response_filter(
         &self,
@@ -102,15 +90,5 @@ impl MiddlewarePlugin for BasicAuth {
         _: &RoutePlugin,
     ) -> anyhow::Result<bool> {
         Ok(false)
-    }
-
-    fn upstream_response_filter(
-        &self,
-        _: &mut Session,
-        _: &mut ResponseHeader,
-        _: &mut RouterContext,
-    ) -> anyhow::Result<()> {
-        //
-        Ok(())
     }
 }

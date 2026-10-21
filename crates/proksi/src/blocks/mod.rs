@@ -171,15 +171,7 @@ impl Blocks {
 
         for plugin in location.plugins.iter().flatten() {
             let (kind, middleware): (Kind, Arc<dyn Middleware>) = match plugin.name.as_ref() {
-                "request_id" => {
-                    let _: settings::RequestId = settings::read("request_id", plugin)?;
-                    (
-                        Kind::RequestId,
-                        Arc::new(RequestId {
-                            plugin: plugin.clone(),
-                        }),
-                    )
-                }
+                "request_id" => (Kind::RequestId, Arc::new(RequestId::new(plugin)?)),
                 "ip_filter" => (Kind::IpFilter, Arc::new(IpFilter::new(plugin)?)),
                 "cors" => (Kind::Cors, Arc::new(Cors::new(plugin)?)),
                 "rate_limit" => (Kind::RateLimit, Arc::new(RateLimit::new(plugin)?)),
