@@ -206,7 +206,7 @@ Each part has one job and can be built and tested without the others. Only the l
 
 Inside `proksi_wasm`, each concern is its own module (the engine and pool, the declaration, the limits, outbound HTTP, the stages), so a new stage or a new `allowed_*` grant changes one module.
 
-Wasmtime is a large dependency, so plugins are a Cargo feature of proksi, `wasm-plugins`, on by default. Built without it, proksi refuses a `plugin` block with a message saying so, and the rest is unchanged.
+Wasmtime is a large dependency: with the WASI and `wasi:http` hosts, it adds about 9.5 MB to a release binary (measured on 2026-10-21, against about 21 MB for proksi), most of it Cranelift, its compiler. Leaving the compiler out would need plugins compiled for the exact Wasmtime version and CPU, again after each upgrade, so it stays in. Plugins are a Cargo feature of proksi, `wasm-plugins`, on by default. Built without it, proksi refuses a `plugin` block with a message saying so, and the rest is unchanged.
 
 `plugin_request_id` is removed: request IDs are built in. An example plugin replaces it, built in CI to check that the SDK and `proksi_wasm` agree.
 
