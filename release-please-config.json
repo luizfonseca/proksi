@@ -11,7 +11,6 @@
       ]
     }
   ],
-  "commit-search-depth": 10,
   "packages": {
     "crates/proksi": {
       "changelog-path": "/CHANGELOG.md",

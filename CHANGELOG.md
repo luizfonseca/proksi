@@ -6,14 +6,17 @@
 ### Features
 
 * add exact paths and regex locations ([#529](https://github.com/luizfonseca/proksi/issues/529)) ([a660954](https://github.com/luizfonseca/proksi/commit/a660954603daca477413f319da227f23d099c926))
+* check IP and text lists at any size using Aho Corasick ([#525](https://github.com/luizfonseca/proksi/issues/525)) ([c5f2f7a](https://github.com/luizfonseca/proksi/commit/c5f2f7a97a21f867daea1d845a07cee23f681bce))
 * history and rollback in the admin API ([#535](https://github.com/luizfonseca/proksi/issues/535)) ([f9da854](https://github.com/luizfonseca/proksi/commit/f9da854c75408b66841f829b47e26286f8877870))
+* keep trusted request IDs and use UUID v7 ([#528](https://github.com/luizfonseca/proksi/issues/528)) ([534f9b6](https://github.com/luizfonseca/proksi/commit/534f9b6999e89d518403963e1f2f21e6dcab98cc))
 * keep versions of stored hosts and roll them back ([#534](https://github.com/luizfonseca/proksi/issues/534)) ([c57942e](https://github.com/luizfonseca/proksi/commit/c57942e522bf0275d4adc58f6bca38d46ce5fe47))
-* keep versions of stored hosts, roll back, and refuse stale changes ([c57942e](https://github.com/luizfonseca/proksi/commit/c57942e522bf0275d4adc58f6bca38d46ce5fe47))
+* match lists of values in rules at any size ([#523](https://github.com/luizfonseca/proksi/issues/523)) ([0f7606e](https://github.com/luizfonseca/proksi/commit/0f7606eecc8fc54f027f6c88f363e446a8795603))
 
 
 ### Bug Fixes
 
 * build the dashmap_arc bench ([#531](https://github.com/luizfonseca/proksi/issues/531)) ([38dcd53](https://github.com/luizfonseca/proksi/commit/38dcd53d1a76c5003492eea40acc5e24e1419baa))
+* set config headers without copying their names on each request ([#526](https://github.com/luizfonseca/proksi/issues/526)) ([d1afe3f](https://github.com/luizfonseca/proksi/commit/d1afe3f8bef4381f513f604653ac8aab0efe38f4))
 
 
 ### Dependencies
