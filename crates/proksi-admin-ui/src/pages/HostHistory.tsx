@@ -81,20 +81,28 @@ export function HostHistory({ name }: { name: string }) {
     <>
       <div class="crumbs">
         <a href="/hosts" onClick={onLink}>Hosts</a> /{' '}
-        {active === null ? name : <a href={`/hosts/${encodeURIComponent(name)}`} onClick={onLink}>{name}</a>} / history
+        {current === null ? name : <a href={`/hosts/${encodeURIComponent(name)}`} onClick={onLink}>{name}</a>} / history
       </div>
       <div class="page-head">
         <div>
           <h1>{name}</h1>
           <p>
-            {active === null
-              ? 'Deleted. Restore a version to serve it again.'
-              : `Serving version ${active}. Select versions to compare them.`}
+            {changes.length === 0
+              ? 'In the store, saved before versions were kept.'
+              : active === null
+                ? 'Deleted. Restore a version to serve it again.'
+                : `Serving version ${active}. Select versions to compare them.`}
           </p>
         </div>
       </div>
       {error && <div class="error" role="alert">{error}</div>}
 
+      {changes.length === 0 ? (
+        <div class="panel empty">
+          <strong>No changes recorded yet</strong>
+          The history starts with the next change to this host. Changes made before Proksi kept versions aren't recorded.
+        </div>
+      ) : (
       <div class="panel">
         <table class="history">
           <thead>
@@ -140,6 +148,7 @@ export function HostHistory({ name }: { name: string }) {
           </tbody>
         </table>
       </div>
+      )}
 
       {pair && (
         <section class="panel compare">
