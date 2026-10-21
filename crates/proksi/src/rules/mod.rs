@@ -10,7 +10,7 @@
 //! The proxy calls [`Rules::request`] for the server's, a host's and a location's rules, and
 //! [`Applied`] where the blocks of matched rules take part in later stages of the request.
 
-use std::{borrow::Cow, net::IpAddr, sync::Arc, sync::OnceLock};
+use std::{borrow::Cow, cell::OnceCell, net::IpAddr, sync::Arc, sync::OnceLock};
 
 use bytes::Bytes;
 use http::{HeaderName, Method};
@@ -107,10 +107,12 @@ impl Rules {
         let compiled = &self.compiled;
         let mut state = eval::State::new(compiled);
         let mut normalized = normalized_path(session);
+        let mut client = OnceCell::new();
         let mut candidates = self.candidates(&ProxiedRequest {
             session,
             host: &ctx.host,
             normalized: normalized.as_deref(),
+            client: &client,
         });
         let mut from = 0;
         while let Some(index) = candidates.next(from) {
@@ -123,6 +125,7 @@ impl Rules {
                     session,
                     host: &ctx.host,
                     normalized: normalized.as_deref(),
+                    client: &client,
                 };
                 state.holds(compiled, &rule.condition, &request)
             };
@@ -133,10 +136,12 @@ impl Rules {
                 // The next rules see the changed request
                 state.forget();
                 normalized = normalized_path(session);
+                client = OnceCell::new();
                 candidates = self.candidates(&ProxiedRequest {
                     session,
                     host: &ctx.host,
                     normalized: normalized.as_deref(),
+                    client: &client,
                 });
             }
             if let Some(split) = &rule.then.split {
@@ -277,6 +282,8 @@ struct ProxiedRequest<'a> {
     host: &'a str,
     /// Its path normalized, when that changes it
     normalized: Option<&'a str>,
+    /// Its client, found the first time a rule reads it
+    client: &'a OnceCell<Option<IpAddr>>,
 }
 
 impl Request for ProxiedRequest<'_> {
@@ -312,7 +319,9 @@ impl Request for ProxiedRequest<'_> {
     }
 
     fn client(&self) -> Option<IpAddr> {
-        crate::proxy_server::client::of_session(self.session)
+        *self
+            .client
+            .get_or_init(|| crate::proxy_server::client::of_session(self.session))
     }
 }
 

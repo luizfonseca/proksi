@@ -410,7 +410,7 @@ impl ProxyHttp for Router {
             .and_then(|addr| addr.as_inet())
             .map(std::net::SocketAddr::ip)
         {
-            let header = |name: &str| {
+            let header = |name: &http::HeaderName| {
                 session
                     .req_header()
                     .headers
@@ -424,12 +424,12 @@ impl ProxyHttp for Router {
             let forwarded = crate::proxy_server::client::forwarded(
                 peer,
                 || crate::proxy_server::client::Incoming {
-                    forwarded_for: header("x-forwarded-for"),
-                    proto: header("x-forwarded-proto"),
-                    host: header("x-forwarded-host"),
+                    forwarded_for: header(&crate::proxy_server::client::X_FORWARDED_FOR),
+                    proto: header(&crate::proxy_server::client::X_FORWARDED_PROTO),
+                    host: header(&crate::proxy_server::client::X_FORWARDED_HOST),
                 },
                 proto,
-                header("host").or_else(|| session.req_header().uri.host()),
+                header(&http::header::HOST).or_else(|| session.req_header().uri.host()),
             );
             // `&'static str` names are the cheapest for Pingora: kept as they are for the case of
             // HTTP/1.1 headers (a `HeaderName` is copied first), then parsed once
@@ -598,14 +598,14 @@ impl ProxyHttp for Router {
         let user_agent = session
             .req_header()
             .headers
-            .get("user-agent")
+            .get(http::header::USER_AGENT)
             .unwrap_or(&empty_header);
 
         let peer = session.client_addr();
         let forwarded_for = session
             .req_header()
             .headers
-            .get("x-forwarded-for")
+            .get(&crate::proxy_server::client::X_FORWARDED_FOR)
             .and_then(|value| value.to_str().ok());
         let client_ip = client_ip(session);
 
@@ -855,7 +855,7 @@ fn client_ip(session: &Session) -> String {
     let forwarded_for = session
         .req_header()
         .headers
-        .get("x-forwarded-for")
+        .get(&crate::proxy_server::client::X_FORWARDED_FOR)
         .and_then(|value| value.to_str().ok());
     match peer.and_then(|addr| addr.as_inet()) {
         Some(addr) => {
