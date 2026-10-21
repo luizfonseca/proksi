@@ -245,15 +245,17 @@ impl AdminApi {
             Endpoint::Routes => routes_reply(routes::list(store).await),
             Endpoint::Route(host) => routes_reply(routes::get(store, host).await),
             Endpoint::PutRoute(host) => {
-                routes_reply(routes::put(store, host, request.body, &write).await)
+                change_reply(routes::put(store, host, request.body, &write).await, &write)
             }
-            Endpoint::DeleteRoute(host) => routes_reply(routes::delete(store, host, &write).await),
+            Endpoint::DeleteRoute(host) => {
+                change_reply(routes::delete(store, host, &write).await, &write)
+            }
             Endpoint::RouteHistory(host) => routes_reply(routes::history(store, host).await),
             Endpoint::RouteVersion(host, revision) => {
                 routes_reply(routes::version(store, host, revision).await)
             }
             Endpoint::RollbackRoute(host) => {
-                routes_reply(routes::rollback(store, host, request.body, &write).await)
+                change_reply(routes::rollback(store, host, request.body, &write).await, &write)
             }
             Endpoint::DeletedRoutes => routes_reply(routes::deleted(store).await),
             Endpoint::Session => Reply::ok(&caller),
@@ -302,18 +304,37 @@ fn routes_reply(result: Result<impl Serialize, routes::Refused>) -> Reply {
         Err(routes::Refused::Unusable(reason)) => {
             Reply::error(StatusCode::UNPROCESSABLE_ENTITY, &reason)
         }
-        Err(routes::Refused::Conflict { version }) => {
-            let error = if version == 0 {
-                "the host isn't in the store".to_string()
-            } else {
-                format!("the host was changed by someone else: it's on version {version}, reload it")
-            };
-            Reply::json(
-                StatusCode::PRECONDITION_FAILED,
-                &serde_json::json!({ "error": error, "version": version }),
-            )
-        }
+        Err(routes::Refused::Conflict { version }) => conflict(version, "the host was changed"),
     }
+}
+
+/// A reply to a change: a `412` says why, from what the change expected
+fn change_reply(
+    result: Result<routes::Written, routes::Refused>,
+    write: &proksi_store::Write,
+) -> Reply {
+    let Err(routes::Refused::Conflict { version }) = result else {
+        return routes_reply(result);
+    };
+    let reason = match write.expect {
+        proksi_store::Expect::Absent => "the host already exists",
+        _ if version == 0 => "the host isn't in the store anymore",
+        _ => "the host was changed by someone else",
+    };
+    conflict(version, reason)
+}
+
+/// `412`, with the host's active version (0 if it isn't in the store)
+fn conflict(version: u64, reason: &str) -> Reply {
+    let error = if version == 0 {
+        reason.to_string()
+    } else {
+        format!("{reason}: it's on version {version}")
+    };
+    Reply::json(
+        StatusCode::PRECONDITION_FAILED,
+        &serde_json::json!({ "error": error, "version": version }),
+    )
 }
 
 /// Who makes a change, and the version it was made from (`If-Match`), or that the host
