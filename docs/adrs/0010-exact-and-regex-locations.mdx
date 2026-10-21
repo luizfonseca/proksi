@@ -9,13 +9,13 @@ description: "A location is a path, which can be exact, or a regular expression 
 
 ## Context
 
-A location matches its path and everything below it: `location "/space/:id/entries"` serves `/space/a/entries`, and also `/space/a/entries/1`. Paths are matched with a tree of static segments, parameters (`:id`) and wildcards (`*`), in about 35 nanoseconds per request whatever the number of locations, without allocating.
+A location matches its path and everything below it: `location "/blog/:id/posts"` serves `/blog/a/posts`, and also `/blog/a/posts/1`. Paths are matched with a tree of static segments, parameters (`:id`) and wildcards (`*`), in about 35 nanoseconds per request whatever the number of locations, without allocating.
 
 Some configurations need more than a tree can say:
 
-- **Stopping at a path**: `/space/:id/entries`, and nothing below it.
-- **Alternatives**: `entries` or `assets` under the same path.
-- **What a segment holds**: `/space/` followed by eight lowercase letters.
+- **Stopping at a path**: `/blog/:id/posts`, and nothing below it.
+- **Alternatives**: `posts` or `drafts` under the same path.
+- **What a segment holds**: `/blog/` followed by eight lowercase letters.
 
 Routes converted from `routes = [...]`, and Kubernetes `Exact` paths, already match exactly, but that isn't something a location can say.
 
@@ -30,7 +30,7 @@ Other routers were considered. matchit, path-tree, wayfind and route-recognizer 
 A location's `exact = true` matches its path only, not what's below it:
 
 ```hcl
-location "/space/:id/entries" {
+location "/blog/:id/posts" {
   exact = true
   upstream "app:3000" {}
 }
@@ -43,7 +43,7 @@ It changes the patterns inserted in the tree (the path, without the path and eve
 A location starting with `^` is a regular expression, matched against the request's path. Paths always start with `/`, so the two can't be confused, and a location is always anchored at the start of the path:
 
 ```hcl
-location "^/space/[a-z]{8}/(entries|assets)$" {
+location "^/blog/[a-z]{8}/(posts|drafts)$" {
   upstream "app:3000" {}
 }
 ```
@@ -74,7 +74,7 @@ Both are checked when the configuration loads, with the location's name in the e
 
 ### What isn't changed
 
-- **No syntax on top of paths**: alternatives (`{entries,assets}`, `/a|/b`) and constraints on parameters (`:id([a-z]{8})`) aren't added. A path is what the tree understands; anything else is a regex location.
+- **No syntax on top of paths**: alternatives (`{posts,drafts}`, `/a|/b`) and constraints on parameters (`:id([a-z]{8})`) aren't added. A path is what the tree understands; anything else is a regex location.
 - **`static_files`**: it serves files below its location's path, so it needs a path, not a regex.
 
 ## Consequences

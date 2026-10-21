@@ -150,17 +150,17 @@ mod tests {
     fn test_regex_locations_come_first_in_order() {
         let matcher = LocationMatcher::new([
             patterns(&["/*"]),
-            patterns(&["/space", "/space/*"]),
-            patterns(&["^/space/[a-z]{8}/(entries|assets)$"]),
-            patterns(&["^/space/[a-z]+/entries"]),
+            patterns(&["/blog", "/blog/*"]),
+            patterns(&["^/blog/[a-z]{8}/(posts|drafts)$"]),
+            patterns(&["^/blog/[a-z]+/posts"]),
         ]);
-        assert_eq!(matcher.find("/space/abcdefgh/entries"), Some(2));
-        assert_eq!(matcher.find("/space/abcdefgh/assets"), Some(2));
-        // Not eight letters, or something after `entries`: the next regex
-        assert_eq!(matcher.find("/space/abc/entries"), Some(3));
-        assert_eq!(matcher.find("/space/abcdefgh/entries/1"), Some(3));
+        assert_eq!(matcher.find("/blog/abcdefgh/posts"), Some(2));
+        assert_eq!(matcher.find("/blog/abcdefgh/drafts"), Some(2));
+        // Not eight letters, or something after `posts`: the next regex
+        assert_eq!(matcher.find("/blog/abc/posts"), Some(3));
+        assert_eq!(matcher.find("/blog/abcdefgh/posts/1"), Some(3));
         // No regex: the most specific path
-        assert_eq!(matcher.find("/space/ABCDEFGH/entries"), Some(1));
+        assert_eq!(matcher.find("/blog/ABCDEFGH/posts"), Some(1));
         assert_eq!(matcher.find("/other"), Some(0));
     }
 
@@ -174,12 +174,12 @@ mod tests {
     #[test]
     fn test_regex_locations_allocate_nothing() {
         let matcher = LocationMatcher::new([
-            patterns(&["^/space/[a-z]{8}/(entries|assets)$"]),
+            patterns(&["^/blog/[a-z]{8}/(posts|drafts)$"]),
             patterns(&["/*"]),
         ]);
-        matcher.find("/space/abcdefgh/entries");
+        matcher.find("/blog/abcdefgh/posts");
         crate::allocations::assert_no_allocations("regex location", || {
-            matcher.find("/space/abcdefgh/entries");
+            matcher.find("/blog/abcdefgh/posts");
             matcher.find("/static/site.css");
         });
     }

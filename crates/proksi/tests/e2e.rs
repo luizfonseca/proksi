@@ -890,13 +890,13 @@ host "located.test" {
     }
   }
 
-  location "/space" {
+  location "/blog" {
     respond {
-      body = "space"
+      body = "blog"
     }
   }
 
-  location "^/space/[a-z]{8}/(entries|assets)$" {
+  location "^/blog/[a-z]{8}/(posts|drafts)$" {
     respond {
       body = "regex"
     }
@@ -910,13 +910,13 @@ async fn test_exact_and_regex_locations() {
 
     for (path, expected) in [
         ("/", "home"),
-        ("/space/abcdefgh/entries", "regex"),
-        ("/space/abcdefgh/assets?page=2", "regex"),
-        ("//space/./abcdefgh/entries", "regex"),
+        ("/blog/abcdefgh/posts", "regex"),
+        ("/blog/abcdefgh/drafts?page=2", "regex"),
+        ("//blog/./abcdefgh/posts", "regex"),
         // Below the regex's end, or not eight letters: the path location
-        ("/space/abcdefgh/entries/1", "space"),
-        ("/space/abc/entries", "space"),
-        ("/space", "space"),
+        ("/blog/abcdefgh/posts/1", "blog"),
+        ("/blog/abc/posts", "blog"),
+        ("/blog", "blog"),
     ] {
         let res = proksi.get_http_on(proksi.http_port, "located.test", path).await.unwrap();
         assert!(res.starts_with("HTTP/1.1 200") && res.ends_with(expected), "{path}: {res}");

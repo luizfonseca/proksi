@@ -280,10 +280,10 @@ mod tests {
 
     #[test]
     fn test_regex_locations() {
-        assert!(validate_host(&with_location("^/space/[a-z]{8}/(entries|assets)$")).is_ok());
+        assert!(validate_host(&with_location("^/blog/[a-z]{8}/(posts|drafts)$")).is_ok());
         assert_eq!(
-            validate_host(&with_location("^/space/[a-z")),
-            Err("location \"^/space/[a-z\": invalid regex: regex parse error:\n    ^/space/[a-z\n            ^\nerror: unclosed character class".to_string())
+            validate_host(&with_location("^/blog/[a-z")),
+            Err("location \"^/blog/[a-z\": invalid regex: regex parse error:\n    ^/blog/[a-z\n           ^\nerror: unclosed character class".to_string())
         );
         assert_eq!(
             validate_host(&with_location("^/x{1000}{1000}")),
