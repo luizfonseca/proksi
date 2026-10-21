@@ -192,6 +192,39 @@ host "shop.example.com" {
 }
 ```
 
+## Keep other sites from embedding your images
+
+Images linked from another site's pages are refused, so it doesn't serve them at your cost. Requests without a `Referer` (opened directly, or from browsers and apps that don't send one) still get them.
+
+```hcl
+host "example.com" {
+  location "/images/" {
+    upstream "app:3000" {}
+
+    rule "hotlinks" {
+      and {
+        header "referer" {
+          exists = true
+        }
+        not {
+          header "referer" {
+            prefix = ["https://example.com/", "https://www.example.com/"]
+          }
+        }
+      }
+      then {
+        respond {
+          status = 403
+        }
+      }
+    }
+  }
+}
+```
+
+- The header is spelled `Referer`, as in HTTP.
+- The `/` after each domain keeps `https://example.com.attacker.test/` from passing as `https://example.com`.
+
 ## Beta users see the new frontend
 
 A cookie the app sets sends its users to the beta host.
