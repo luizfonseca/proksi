@@ -12,6 +12,7 @@ pub(crate) trait Request {
     fn method(&self) -> &Method;
     /// Without its port
     fn host(&self) -> &str;
+    /// Normalized, as locations read it: `//a/./b` and `/%61/b` are `/a/b`
     fn path(&self) -> &str;
     fn query(&self) -> Option<&str>;
     /// All the values of a header, joined with `, `
@@ -35,8 +36,7 @@ pub(super) fn evaluate_one(field: &Field, test: &Test, request: &impl Request) -
             text_test(test, Some(&host)) != *negate
         }
         (Field::Path, Test::Text { test, negate }) => {
-            let path = crate::routing::paths::normalize_path(request.path());
-            text_test(test, Some(&path)) != *negate
+            text_test(test, Some(request.path())) != *negate
         }
         _ => false,
     }
@@ -97,8 +97,7 @@ pub(super) fn evaluate(group: &Group, request: &impl Request, mut set: impl FnMu
             text_tests(group, Some(&host), set);
         }
         Field::Path => {
-            let path = crate::routing::paths::normalize_path(request.path());
-            text_tests(group, Some(&path), set);
+            text_tests(group, Some(request.path()), set);
         }
         Field::Query(name) => text_tests(group, query(request.query(), name).as_deref(), set),
         Field::Header(name) => text_tests(group, request.header(name).as_deref(), set),

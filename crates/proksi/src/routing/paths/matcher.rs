@@ -140,6 +140,16 @@ mod tests {
     }
 
     #[test]
+    fn test_encoded_letters_and_dots_are_matched_decoded() {
+        let matcher = matcher();
+        assert_eq!(matcher.find("/v1/%73ession"), Some(1));
+        assert_eq!(matcher.find("/%61uth"), Some(2));
+        assert_eq!(matcher.find("/x/%2E%2e/v1/session"), Some(1));
+        // An encoded slash is a different path
+        assert_eq!(matcher.find("/v1%2Fsession"), Some(0));
+    }
+
+    #[test]
     fn test_exact_location_and_its_trailing_slash() {
         let matcher = LocationMatcher::new([patterns(&["/*"]), patterns(&["/login"])]);
         assert_eq!(matcher.find("/login"), Some(1));
