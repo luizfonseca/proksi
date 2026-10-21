@@ -351,6 +351,60 @@ pub(super) mod tests {
     }
 
     #[test]
+    fn test_content_types() {
+        let writes = json!({ "in": ["POST", "PUT", "PATCH"] });
+        let rules = [
+            rule(
+                "exact",
+                json!({
+                    "method": writes,
+                    "header": { "content-type": {
+                        "not_in": ["application/json", "application/x-www-form-urlencoded"]
+                    } },
+                }),
+            ),
+            rule(
+                "type only",
+                json!({
+                    "method": writes,
+                    "not": { "header": { "content-type": {
+                        "matches": "(?i)^(application/json|multipart/form-data)\\s*(;|$)"
+                    } } },
+                }),
+            ),
+        ];
+        let refused = |method: &str, content_type: Option<&str>| {
+            let mut request = TestRequest::new(method, "api.example.com", "/");
+            if let Some(content_type) = content_type {
+                request = request.header("content-type", content_type);
+            }
+            matching(&rules, &request)
+        };
+
+        assert!(refused("GET", None).is_empty());
+        assert_eq!(refused("POST", None), ["exact", "type only"]);
+        assert!(refused("POST", Some("application/json")).is_empty());
+        assert_eq!(
+            refused("POST", Some("application/json; charset=utf-8")),
+            ["exact"]
+        );
+        assert_eq!(refused("POST", Some("Application/JSON")), ["exact"]);
+        assert_eq!(
+            refused("PUT", Some("multipart/form-data; boundary=x")),
+            ["exact"]
+        );
+        assert_eq!(
+            refused("PATCH", Some("application/x-www-form-urlencoded")),
+            ["type only"]
+        );
+        assert_eq!(
+            refused("POST", Some("application/jsonp")),
+            ["exact", "type only"]
+        );
+        assert_eq!(refused("POST", Some("text/plain")), ["exact", "type only"]);
+    }
+
+    #[test]
     fn test_and_or_not() {
         let rules = [rule(
             "legacy",
