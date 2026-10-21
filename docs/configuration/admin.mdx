@@ -231,10 +231,14 @@ Hosts can be added, changed and removed through the API. They're written to the 
 | Endpoint | |
 | --- | --- |
 | `GET /api/v1/routes` | The hosts in the store, with the store's revision |
-| `GET /api/v1/routes/<host>` | One host, as stored, with the store's revision |
-| `PUT /api/v1/routes/<host>` | Adds or replaces a host. Returns the new revision |
+| `GET /api/v1/routes/<host>` | One host, as stored, with the store's revision and its `version` |
+| `PUT /api/v1/routes/<host>` | Adds or replaces a host, as a new version. Returns the new revision |
 | `POST /api/v1/validate` | Checks a host as `PUT` would, without writing it: `{"valid": true}`, or `400` with the reason |
-| `DELETE /api/v1/routes/<host>` | Removes a host. Returns the revision |
+| `DELETE /api/v1/routes/<host>` | Removes a host, keeping its versions. Returns the revision |
+| `GET /api/v1/routes/<host>/history` | Its changes, newest first: `revision`, `at`, `author`, and `change` (`saved`, `deleted`, or `rolled_back` with `to`) |
+| `GET /api/v1/routes/<host>/history/<revision>` | The version saved at that revision |
+| `POST /api/v1/routes/<host>/rollback` | Makes a version active again, with `{"revision": <version>}`. Also restores a deleted host |
+| `GET /api/v1/deleted-routes` | Deleted hosts that still have versions |
 
 Changing a host needs a token with `access = "write"`. The API takes and returns JSON only: a host in the format hosts are stored in (`GET /api/v1/routes/<host>` returns it), with its `name`:
 
@@ -248,3 +252,20 @@ curl -X PUT -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" -H "Content-Type: app
 - `listen` can't be set: Proksi opens its ports when it starts, so hosts from the store are served on the default addresses.
 - A host in the store takes priority over the same host in the configuration file or docker labels. Removing it from the store brings the other one back.
 - With the memory store (the default), routes written through the API live as long as the Proksi process.
+
+### History and rollbacks
+
+The store keeps the last versions of each host (`store.history_per_host`, 50 by default), and every change with the name of the token that made it. A rollback is a change too: it makes an older version active again, and appears in the history.
+
+Before rolling back, the version is checked by this version of Proksi: if it's no longer valid (an option was removed, for example), the rollback is refused (`422`) with the reason.
+
+### Concurrent changes
+
+To make sure a change applies to the version you read, send its `version` (from `GET /api/v1/routes/<host>`) as `If-Match`. If the host is on another version by then, the change is refused with `412`, and the host's current `version`:
+
+```bash
+curl -X PUT -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" -H 'If-Match: "57"' \
+  -d @api.example.com.json http://127.0.0.1:7555/api/v1/routes/api.example.com
+```
+
+`If-None-Match: *` creates a host only if it doesn't exist. Without either header, a change applies whatever the host is.

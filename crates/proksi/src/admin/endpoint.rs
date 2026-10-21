@@ -10,7 +10,7 @@ use super::Reply;
 const WINDOWS: std::ops::RangeInclusive<u64> = 1..=300;
 
 /// Paths answering other methods (`405` rather than `404`)
-const PATHS: [&str; 13] = [
+const PATHS: [&str; 14] = [
     "/api/v1/schema",
     "/api/v1/validate",
     "/metrics",
@@ -24,6 +24,7 @@ const PATHS: [&str; 13] = [
     "/api/v1/certificates",
     "/api/v1/routes",
     "/api/v1/session",
+    "/api/v1/deleted-routes",
 ];
 
 /// What a request asks for
@@ -59,6 +60,14 @@ pub enum Endpoint<'a> {
     PutRoute(&'a str),
     /// `DELETE /api/v1/routes/<host>`
     DeleteRoute(&'a str),
+    /// `GET /api/v1/routes/<host>/history`: its changes, newest first
+    RouteHistory(&'a str),
+    /// `GET /api/v1/routes/<host>/history/<revision>`: the version saved at that revision
+    RouteVersion(&'a str, u64),
+    /// `POST /api/v1/routes/<host>/rollback`, with `{"revision": <version>}`
+    RollbackRoute(&'a str),
+    /// `GET /api/v1/deleted-routes`: deleted hosts that still have versions
+    DeletedRoutes,
     /// `GET /api/v1/session`: who's signed in
     Session,
     /// `POST /api/v1/session`, with `{"token": "<secret>"}`
@@ -70,20 +79,12 @@ pub enum Endpoint<'a> {
 impl<'a> Endpoint<'a> {
     pub fn parse(method: &Method, path: &'a str, query: Option<&'a str>) -> Result<Self, Reply> {
         use Endpoint::{
-            Certificates, DeleteRoute, Hosts, Metrics, PutRoute, RequestsStream, Route, Routes, Schema, Validate,
-            Server, Session, SignIn, SignOut, Stats, StatsStream, Status, Tcp,
+            Certificates, Hosts, Metrics, RequestsStream, Routes, Schema, Server, Session, SignIn,
+            SignOut, Stats, StatsStream, Status, Tcp, Validate,
         };
 
-        if let Some(host) = path.strip_prefix("/api/v1/routes/") {
-            if host.is_empty() || host.contains('/') {
-                return Err(Reply::error(StatusCode::NOT_FOUND, "not found"));
-            }
-            return match *method {
-                Method::GET => Ok(Route(host)),
-                Method::PUT => Ok(PutRoute(host)),
-                Method::DELETE => Ok(DeleteRoute(host)),
-                _ => Err(method_not_allowed()),
-            };
+        if let Some(rest) = path.strip_prefix("/api/v1/routes/") {
+            return route_endpoint(method, rest);
         }
         let endpoint = match (method.as_str(), path) {
             ("GET", "/metrics") => Metrics,
@@ -98,6 +99,7 @@ impl<'a> Endpoint<'a> {
             ("GET", "/api/v1/tcp") => Tcp,
             ("GET", "/api/v1/certificates") => Certificates,
             ("GET", "/api/v1/routes") => Routes,
+            ("GET", "/api/v1/deleted-routes") => Endpoint::DeletedRoutes,
             ("GET", "/api/v1/session") => Session,
             ("POST", "/api/v1/session") => SignIn,
             ("DELETE", "/api/v1/session") => SignOut,
@@ -109,7 +111,10 @@ impl<'a> Endpoint<'a> {
 
     /// Whether it changes the configuration (a token with `access = "write"`)
     pub fn changes(self) -> bool {
-        matches!(self, Endpoint::PutRoute(_) | Endpoint::DeleteRoute(_))
+        matches!(
+            self,
+            Endpoint::PutRoute(_) | Endpoint::DeleteRoute(_) | Endpoint::RollbackRoute(_)
+        )
     }
 
     /// Whether it's answered without a token: signing in and out
@@ -124,6 +129,37 @@ impl<'a> Endpoint<'a> {
             Endpoint::Metrics | Endpoint::Stats(_) | Endpoint::StatsStream(_)
         )
     }
+}
+
+/// `/api/v1/routes/<rest>`: a host, its history, a version, or its rollback
+fn route_endpoint<'a>(method: &Method, rest: &'a str) -> Result<Endpoint<'a>, Reply> {
+    let not_found = || Reply::error(StatusCode::NOT_FOUND, "not found");
+    let mut parts = rest.split('/');
+    let host = parts.next().filter(|host| !host.is_empty()).ok_or_else(not_found)?;
+    let endpoint = match (parts.next(), parts.next(), parts.next()) {
+        (None, ..) => match *method {
+            Method::GET => Endpoint::Route(host),
+            Method::PUT => Endpoint::PutRoute(host),
+            Method::DELETE => Endpoint::DeleteRoute(host),
+            _ => return Err(method_not_allowed()),
+        },
+        (Some("history"), None, _) => Endpoint::RouteHistory(host),
+        (Some("history"), Some(revision), None) => {
+            let revision = revision.parse().map_err(|_| not_found())?;
+            Endpoint::RouteVersion(host, revision)
+        }
+        (Some("rollback"), None, _) => Endpoint::RollbackRoute(host),
+        _ => return Err(not_found()),
+    };
+    let allowed = match endpoint {
+        Endpoint::RouteHistory(_) | Endpoint::RouteVersion(..) => *method == Method::GET,
+        Endpoint::RollbackRoute(_) => *method == Method::POST,
+        _ => true,
+    };
+    if !allowed {
+        return Err(method_not_allowed());
+    }
+    Ok(endpoint)
 }
 
 fn method_not_allowed() -> Reply {
@@ -168,6 +204,36 @@ mod tests {
         query: Option<&'a str>,
     ) -> Result<Endpoint<'a>, StatusCode> {
         Endpoint::parse(&method, path, query).map_err(|reply| reply.status)
+    }
+
+    #[test]
+    fn test_route_history_endpoints() {
+        assert_eq!(
+            parse(Method::GET, "/api/v1/routes/a.test/history", None),
+            Ok(Endpoint::RouteHistory("a.test"))
+        );
+        assert_eq!(
+            parse(Method::GET, "/api/v1/routes/a.test/history/41", None),
+            Ok(Endpoint::RouteVersion("a.test", 41))
+        );
+        assert_eq!(
+            parse(Method::POST, "/api/v1/routes/a.test/rollback", None),
+            Ok(Endpoint::RollbackRoute("a.test"))
+        );
+        assert_eq!(
+            parse(Method::GET, "/api/v1/deleted-routes", None),
+            Ok(Endpoint::DeletedRoutes)
+        );
+        let refused = [
+            (Method::GET, "/api/v1/routes/a.test/history/x", StatusCode::NOT_FOUND),
+            (Method::GET, "/api/v1/routes/a.test/history/41/x", StatusCode::NOT_FOUND),
+            (Method::GET, "/api/v1/routes/a.test/rollback", StatusCode::METHOD_NOT_ALLOWED),
+            (Method::POST, "/api/v1/routes/a.test/history", StatusCode::METHOD_NOT_ALLOWED),
+            (Method::GET, "/api/v1/routes/a.test/other", StatusCode::NOT_FOUND),
+        ];
+        for (method, path, status) in refused {
+            assert_eq!(parse(method, path, None), Err(status), "{path}");
+        }
     }
 
     #[test]
@@ -229,6 +295,8 @@ mod tests {
     fn test_what_needs_write_access() {
         assert!(Endpoint::PutRoute("a.test").changes());
         assert!(Endpoint::DeleteRoute("a.test").changes());
+        assert!(Endpoint::RollbackRoute("a.test").changes());
+        assert!(!Endpoint::RouteHistory("a.test").changes());
         assert!(!Endpoint::Route("a.test").changes());
         assert!(!Endpoint::SignIn.changes());
     }

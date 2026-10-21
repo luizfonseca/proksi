@@ -87,13 +87,14 @@ pub async fn routes_contract(store: &dyn Store) {
 /// Versions, history and rollbacks of a host, for a store keeping 3 versions per host
 pub async fn history_contract(store: &dyn Store) {
     let anyone = Write::default();
+    let active = |routes: Vec<RouteRecord>| routes.into_iter().find(|r| r.host == "h.test");
     let r1 = store.put_route(route("h.test", "10.0.0.1"), &by("ana", Expect::Absent)).await.unwrap();
-    let r2 = store.put_route(route("h.test", "10.0.0.2"), &by("bo", Expect::Changed(r1))).await.unwrap();
+    let r2 = store.put_route(route("h.test", "10.0.0.2"), &by("bo", Expect::Version(r1))).await.unwrap();
 
-    // The active version, and the host's last change
-    let active = store.routes().await.unwrap().routes.into_iter().find(|r| r.host == "h.test").unwrap();
-    assert_eq!((active.version, active.changed), (r2, r2));
-    assert_eq!(active.data, route("h.test", "10.0.0.2").data);
+    // The active version
+    let current = active(store.routes().await.unwrap().routes).unwrap();
+    assert_eq!(current.version, r2);
+    assert_eq!(current.data, route("h.test", "10.0.0.2").data);
 
     // Every version is kept, with who saved it
     let first = store.route_version("H.test", r1).await.unwrap().unwrap();
@@ -102,12 +103,12 @@ pub async fn history_contract(store: &dyn Store) {
     assert_eq!(store.route_version("h.test", r2 + 100).await.unwrap(), None);
 
     // Rolling back makes an older version active again, as a new change
-    let r3 = store.rollback_route("h.test", r1, &by("cy", Expect::Changed(r2))).await.unwrap();
+    let r3 = store.rollback_route("h.test", r1, &by("cy", Expect::Version(r2))).await.unwrap();
     assert_eq!(r3, r2 + 1);
     assert_eq!(store.revision().await.unwrap(), r3);
-    let active = store.routes().await.unwrap().routes.into_iter().find(|r| r.host == "h.test").unwrap();
-    assert_eq!((active.version, active.changed), (r1, r3));
-    assert_eq!(active.data, route("h.test", "10.0.0.1").data);
+    let current = active(store.routes().await.unwrap().routes).unwrap();
+    assert_eq!(current.version, r1);
+    assert_eq!(current.data, route("h.test", "10.0.0.1").data);
     let history = store.route_history("h.test").await.unwrap();
     let changes = history.iter().map(|e| (e.revision, e.change, e.author.as_deref())).collect::<Vec<_>>();
     assert_eq!(
@@ -119,13 +120,13 @@ pub async fn history_contract(store: &dyn Store) {
         ]
     );
 
-    // Changes made from an older state are refused, and change nothing
-    let stale = store.put_route(route("h.test", "10.0.0.9"), &by("bo", Expect::Changed(r2))).await;
-    assert_eq!(stale, Err(StoreError::Conflict { changed: r3, present: true }));
-    let stale = store.rollback_route("h.test", r2, &by("bo", Expect::Changed(r2))).await;
-    assert_eq!(stale, Err(StoreError::Conflict { changed: r3, present: true }));
+    // Changes made from another version than the active one are refused, and change nothing
+    let stale = store.put_route(route("h.test", "10.0.0.9"), &by("bo", Expect::Version(r2))).await;
+    assert_eq!(stale, Err(StoreError::Conflict { version: r1 }));
+    let stale = store.rollback_route("h.test", r2, &by("bo", Expect::Version(r2))).await;
+    assert_eq!(stale, Err(StoreError::Conflict { version: r1 }));
     let exists = store.put_route(route("h.test", "10.0.0.9"), &by("bo", Expect::Absent)).await;
-    assert_eq!(exists, Err(StoreError::Conflict { changed: r3, present: true }));
+    assert_eq!(exists, Err(StoreError::Conflict { version: r1 }));
     assert_eq!(store.revision().await.unwrap(), r3);
     assert_eq!(store.route_history("h.test").await.unwrap().len(), 3);
 
@@ -134,19 +135,18 @@ pub async fn history_contract(store: &dyn Store) {
     assert_eq!(missing, Err(StoreError::NoVersion(r3 + 100)));
 
     // Deleting keeps the versions: rolling back restores the host
-    let r4 = store.delete_route("h.test", &by("di", Expect::Changed(r3))).await.unwrap();
-    assert!(store.routes().await.unwrap().routes.iter().all(|r| r.host != "h.test"));
+    store.delete_route("h.test", &by("di", Expect::Version(r1))).await.unwrap();
+    assert!(active(store.routes().await.unwrap().routes).is_none());
     assert_eq!(store.deleted_routes().await.unwrap(), vec!["h.test".to_string()]);
     assert_eq!(store.route_history("h.test").await.unwrap()[0].change, Change::Deleted);
-    let gone = store.delete_route("h.test", &by("di", Expect::Changed(r3))).await;
-    assert_eq!(gone, Err(StoreError::Conflict { changed: r4, present: false }));
-    let r5 = store.rollback_route("h.test", r2, &by("di", Expect::Absent)).await.unwrap();
-    let active = store.routes().await.unwrap().routes.into_iter().find(|r| r.host == "h.test").unwrap();
-    assert_eq!((active.version, active.changed), (r2, r5));
+    let gone = store.delete_route("h.test", &by("di", Expect::Version(r1))).await;
+    assert_eq!(gone, Err(StoreError::Conflict { version: 0 }));
+    store.rollback_route("h.test", r2, &by("di", Expect::Absent)).await.unwrap();
+    assert_eq!(active(store.routes().await.unwrap().routes).unwrap().version, r2);
     assert!(store.deleted_routes().await.unwrap().is_empty());
 
     // The last 3 versions and changes are kept
-    let mut last = r5;
+    let mut last = r3;
     for upstream in ["10.0.1.1", "10.0.1.2", "10.0.1.3"] {
         last = store.put_route(route("h.test", upstream), &anyone).await.unwrap();
     }

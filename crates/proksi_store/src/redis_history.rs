@@ -3,8 +3,7 @@
 //! For each host:
 //! - `proksi:route:<host>`: its active definition, read by every replica (and by older Proksi
 //!   versions, which know nothing else)
-//! - `proksi:route:<host>:meta`: `version` (the active version, 0 for none) and `changed` (the
-//!   revision of its last change)
+//! - `proksi:route:<host>:meta`: `version`, the active version (0 for none)
 //! - `proksi:route:<host>:<revision>`: the version saved at that revision (`schema_version`,
 //!   `data`, `at`, `author`)
 //! - `proksi:route:<host>:versions`: the revisions of its versions, sorted
@@ -42,14 +41,15 @@ fn version_key(host: &str, version: u64) -> String {
     format!("proksi:route:{host}:{version}")
 }
 
-/// Checks what a change expects of the host (`ARGV[1]`, `ARGV[2]`): returns `{1, changed,
-/// present}` from the script when it isn't so
+/// Checks what a change expects of the host (`ARGV[1]`, `ARGV[2]`): returns `{1, version}`,
+/// its active version, from the script when it isn't so
 const CHECK: &str = r"
-local changed = tonumber(redis.call('HGET', KEYS[4], 'changed') or '0')
 local present = redis.call('EXISTS', KEYS[1]) == 1
+local active = 0
+if present then active = tonumber(redis.call('HGET', KEYS[4], 'version') or '0') end
 local kind = ARGV[1]
-if (kind == 'absent' and present) or (kind == 'changed' and tonumber(ARGV[2]) ~= changed) then
-  return {1, changed, present and 1 or 0}
+if (kind == 'absent' and present) or (kind == 'version' and tonumber(ARGV[2]) ~= active) then
+  return {1, active}
 end
 ";
 
@@ -61,7 +61,6 @@ local function record(revision, entry)
   redis.call('LPUSH', KEYS[6], cjson.encode(entry))
   local keep = tonumber(ARGV[3])
   redis.call('LTRIM', KEYS[6], 0, keep - 1)
-  redis.call('HSET', KEYS[4], 'changed', revision)
   local active = redis.call('HGET', KEYS[4], 'version')
   local versions = redis.call('ZRANGE', KEYS[5], 0, -1)
   local excess = #versions - keep
@@ -159,7 +158,7 @@ fn change(
     let (kind, value) = match write.expect {
         Expect::Any => ("any", 0),
         Expect::Absent => ("absent", 0),
-        Expect::Changed(changed) => ("changed", changed),
+        Expect::Version(version) => ("version", version),
     };
     invocation
         .arg(kind)
@@ -174,10 +173,7 @@ fn change(
     let result: Vec<u64> = invocation.invoke(conn).map_err(unavailable)?;
     match result.as_slice() {
         [0, revision] => Ok(*revision),
-        [1, changed, present] => Err(StoreError::Conflict {
-            changed: *changed,
-            present: *present == 1,
-        }),
+        [1, version] => Err(StoreError::Conflict { version: *version }),
         _ => Err(StoreError::Invalid(format!("unexpected answer {result:?}"))),
     }
 }
@@ -262,7 +258,6 @@ pub(crate) fn version(
             schema_version: schema_version.parse().map_err(invalid)?,
             data: data.clone(),
             version,
-            changed: 0,
         },
         at: fields
             .get("at")
@@ -280,25 +275,18 @@ pub(crate) fn deleted(conn: &mut redis::Connection) -> Result<Vec<String>, Store
     Ok(hosts)
 }
 
-/// The active version and last change of each host (0 when unknown: saved before versions
-/// were kept)
-pub(crate) fn metas(
+/// The active version of each host (0 when unknown: saved before versions were kept)
+pub(crate) fn versions(
     conn: &mut redis::Connection,
     hosts: &[String],
-) -> Result<Vec<(u64, u64)>, StoreError> {
+) -> Result<Vec<u64>, StoreError> {
     if hosts.is_empty() {
         return Ok(vec![]);
     }
     let mut pipe = redis::pipe();
     for host in hosts {
-        pipe.cmd("HMGET")
-            .arg(format!("proksi:route:{host}:meta"))
-            .arg("version")
-            .arg("changed");
+        pipe.hget(format!("proksi:route:{host}:meta"), "version");
     }
-    let metas: Vec<(Option<u64>, Option<u64>)> = pipe.query(conn).map_err(unavailable)?;
-    Ok(metas
-        .into_iter()
-        .map(|(version, changed)| (version.unwrap_or_default(), changed.unwrap_or_default()))
-        .collect())
+    let versions: Vec<Option<u64>> = pipe.query(conn).map_err(unavailable)?;
+    Ok(versions.into_iter().map(Option::unwrap_or_default).collect())
 }

@@ -210,6 +210,10 @@ impl AdminApi {
             ));
         }
 
+        let write = match write(&caller, request) {
+            Ok(write) => write,
+            Err(reply) => return Answer::Reply(reply),
+        };
         let store = crate::stores::global::get_store();
         let store = store.as_ref();
         let reply = match endpoint {
@@ -240,8 +244,20 @@ impl AdminApi {
             Endpoint::Certificates => Reply::ok(&status::certificates(store).await),
             Endpoint::Routes => routes_reply(routes::list(store).await),
             Endpoint::Route(host) => routes_reply(routes::get(store, host).await),
-            Endpoint::PutRoute(host) => routes_reply(routes::put(store, host, request.body).await),
-            Endpoint::DeleteRoute(host) => routes_reply(routes::delete(store, host).await),
+            Endpoint::PutRoute(host) => {
+                change_reply(routes::put(store, host, request.body, &write).await, &write)
+            }
+            Endpoint::DeleteRoute(host) => {
+                change_reply(routes::delete(store, host, &write).await, &write)
+            }
+            Endpoint::RouteHistory(host) => routes_reply(routes::history(store, host).await),
+            Endpoint::RouteVersion(host, revision) => {
+                routes_reply(routes::version(store, host, revision).await)
+            }
+            Endpoint::RollbackRoute(host) => {
+                change_reply(routes::rollback(store, host, request.body, &write).await, &write)
+            }
+            Endpoint::DeletedRoutes => routes_reply(routes::deleted(store).await),
             Endpoint::Session => Reply::ok(&caller),
             Endpoint::SignIn | Endpoint::SignOut => Reply::not_found(),
         };
@@ -285,7 +301,70 @@ fn routes_reply(result: Result<impl Serialize, routes::Refused>) -> Reply {
         Err(routes::Refused::Unavailable(reason)) => {
             Reply::error(StatusCode::SERVICE_UNAVAILABLE, &reason)
         }
+        Err(routes::Refused::Unusable(reason)) => {
+            Reply::error(StatusCode::UNPROCESSABLE_ENTITY, &reason)
+        }
+        Err(routes::Refused::Conflict { version }) => conflict(version, "the host was changed"),
     }
+}
+
+/// A reply to a change: a `412` says why, from what the change expected
+fn change_reply(
+    result: Result<routes::Written, routes::Refused>,
+    write: &proksi_store::Write,
+) -> Reply {
+    let Err(routes::Refused::Conflict { version }) = result else {
+        return routes_reply(result);
+    };
+    let reason = match write.expect {
+        proksi_store::Expect::Absent => "the host already exists",
+        _ if version == 0 => "the host isn't in the store anymore",
+        _ => "the host was changed by someone else",
+    };
+    conflict(version, reason)
+}
+
+/// `412`, with the host's active version (0 if it isn't in the store)
+fn conflict(version: u64, reason: &str) -> Reply {
+    let error = if version == 0 {
+        reason.to_string()
+    } else {
+        format!("{reason}: it's on version {version}")
+    };
+    Reply::json(
+        StatusCode::PRECONDITION_FAILED,
+        &serde_json::json!({ "error": error, "version": version }),
+    )
+}
+
+/// Who makes a change, and the version it was made from (`If-Match`), or that the host
+/// doesn't exist (`If-None-Match: *`)
+fn write(caller: &access::Caller, request: Request<'_>) -> Result<proksi_store::Write, Reply> {
+    use proksi_store::Expect;
+
+    let expect = match (request.if_match, request.if_none_match) {
+        (Some(_), Some(_)) => {
+            let reason = "If-Match and If-None-Match can't be sent together";
+            return Err(Reply::error(StatusCode::BAD_REQUEST, reason));
+        }
+        (Some(version), None) => {
+            let version = version.trim().trim_matches('"').parse().map_err(|_| {
+                let reason = "If-Match takes the host's `version` (a number)";
+                Reply::error(StatusCode::BAD_REQUEST, reason)
+            })?;
+            Expect::Version(version)
+        }
+        (None, Some(value)) if value.trim() == "*" => Expect::Absent,
+        (None, Some(_)) => {
+            let reason = "If-None-Match only takes `*` (the host must not exist)";
+            return Err(Reply::error(StatusCode::BAD_REQUEST, reason));
+        }
+        (None, None) => Expect::Any,
+    };
+    Ok(proksi_store::Write {
+        author: caller.name.clone(),
+        expect,
+    })
 }
 
 /// The stats over `window` (since the oldest sample if proksi started more recently)
@@ -321,6 +400,8 @@ impl HttpServerApp for AdminApi {
         let cookie = value(header::COOKIE);
         let origin = value(header::ORIGIN);
         let host = value(header::HOST);
+        let if_match = value(header::IF_MATCH);
+        let if_none_match = value(header::IF_NONE_MATCH);
 
         let body = if method == Method::PUT || method == Method::POST {
             match read_body(&mut session).await {
@@ -344,6 +425,8 @@ impl HttpServerApp for AdminApi {
                 cookie: cookie.as_deref(),
                 origin: origin.as_deref(),
                 host: host.as_deref(),
+                if_match: if_match.as_deref(),
+                if_none_match: if_none_match.as_deref(),
                 body: &body,
             })
             .await;
@@ -386,6 +469,10 @@ pub struct Request<'a> {
     pub cookie: Option<&'a str>,
     pub origin: Option<&'a str>,
     pub host: Option<&'a str>,
+    /// The version a change was made from (`version` from `GET`), with or without quotes
+    pub if_match: Option<&'a str>,
+    /// `*`: the change creates the host, and is refused if it exists
+    pub if_none_match: Option<&'a str>,
     pub body: &'a [u8],
 }
 
@@ -541,6 +628,8 @@ mod tests {
             cookie: None,
             origin: None,
             host: None,
+            if_match: None,
+            if_none_match: None,
             body: &[],
         }
     }
@@ -677,6 +766,54 @@ mod tests {
             );
             assert_eq!(refused.status, StatusCode::FORBIDDEN, "{method}");
         }
+    }
+
+    #[tokio::test]
+    async fn test_conditional_changes_and_authors() {
+        let api = AdminApi::new(tokens(), instance());
+        let path = "/api/v1/routes/conditional.test";
+        let body = br#"{"name": "conditional.test", "locations": [{ "path": "/", "upstreams": [{ "ip": "10.0.0.1", "port": 3000 }] }]}"#;
+        let put = |if_match: Option<&'static str>, if_none_match: Option<&'static str>| super::Request {
+            body,
+            if_match,
+            if_none_match,
+            ..request(&Method::PUT, path, None, Some("Bearer secret"))
+        };
+        let json = |reply: Reply| serde_json::from_str::<serde_json::Value>(&reply.body).unwrap();
+
+        // Created only if it doesn't exist
+        let created = reply(api.handle(put(None, Some("*"))).await);
+        assert_eq!(created.status, StatusCode::OK, "{}", created.body);
+        let exists = reply(api.handle(put(None, Some("*"))).await);
+        assert_eq!(exists.status, StatusCode::PRECONDITION_FAILED);
+
+        // Changed only from the active version
+        let one = json(reply(api.handle(request(&Method::GET, path, None, Some("Bearer secret"))).await));
+        let version = one["version"].as_u64().unwrap();
+        let quoted: &'static str = Box::leak(format!("\"{version}\"").into_boxed_str());
+        assert_eq!(reply(api.handle(put(Some(quoted), None)).await).status, StatusCode::OK);
+        let stale = reply(api.handle(put(Some(quoted), None)).await);
+        assert_eq!(stale.status, StatusCode::PRECONDITION_FAILED);
+        assert_eq!(json(stale)["version"].as_u64(), Some(version + 1));
+
+        // Bad headers
+        let bad = reply(api.handle(put(Some("soon"), None)).await);
+        assert_eq!(bad.status, StatusCode::BAD_REQUEST);
+        let both = reply(api.handle(put(Some("1"), Some("*"))).await);
+        assert_eq!(both.status, StatusCode::BAD_REQUEST);
+
+        // Changes are recorded with the token's name
+        let history_path = "/api/v1/routes/conditional.test/history";
+        let history = json(reply(api.handle(request(&Method::GET, history_path, None, Some("Bearer read"))).await));
+        assert_eq!(history["changes"][0]["author"], "ops");
+        assert_eq!(history["changes"][0]["change"], "saved");
+
+        // Rolling back needs write access
+        let rollback = super::Request {
+            body: br#"{"revision": 1}"#,
+            ..request(&Method::POST, "/api/v1/routes/conditional.test/rollback", None, Some("Bearer read"))
+        };
+        assert_eq!(reply(api.handle(rollback).await).status, StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]

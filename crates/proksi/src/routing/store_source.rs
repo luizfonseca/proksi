@@ -71,7 +71,7 @@ impl StoreSource {
                         })
                         .ok()
                 })
-                .map(|stored| stored.host)
+                .map(|stored| stored.route.host)
                 .collect::<Vec<_>>();
 
             let mut snapshot = RouteSnapshot::new(RouteSourceKind::Store, routes);
