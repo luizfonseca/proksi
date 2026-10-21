@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.16.0](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.15.1...proksi-admin-ui-v0.16.0) (2026-10-21)
+
+
+### Features
+
+* host history, compare and rollback in the admin UI ([#536](https://github.com/luizfonseca/proksi/issues/536)) ([8e444a7](https://github.com/luizfonseca/proksi/commit/8e444a72d96222642242d93b6445a0ed9d62cdad))
+
+
+### Bug Fixes
+
+* read settings taking one value or a list as lists in the UI ([#539](https://github.com/luizfonseca/proksi/issues/539)) ([479d4e6](https://github.com/luizfonseca/proksi/commit/479d4e65e371918c1728a6d36092f6dea0072463))
+* show hosts without history yet as such ([#538](https://github.com/luizfonseca/proksi/issues/538)) ([dcb3ec2](https://github.com/luizfonseca/proksi/commit/dcb3ec2a79a3f579c1a85a3ab23ff9d65c11ee64))
+
 ## [0.15.1](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.15.0...proksi-admin-ui-v0.15.1) (2026-10-20)
 
 
