@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'preact/hooks';
-import { get, Unauthorized } from './api';
+import { get, Unauthorized } from '.';
 
 export type Data<T> =
   | { state: 'loading' }

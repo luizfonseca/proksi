@@ -1,10 +1,10 @@
 import { useState } from 'preact/hooks';
 import type { Host, TcpBlock } from '../api';
-import { Lock, Search, Unlock } from '../components/icons';
-import { Loaded, ProtocolBadge, SourceBadge } from '../components/State';
+import { Lock, Search, Unlock } from '../components/ui/icons';
+import { Loaded, ProtocolBadge, SourceBadge } from '../components/ui/State';
 import { navigate, onLink } from '../router';
-import { useCanWrite } from '../session';
-import { useData } from '../useData';
+import { useCanWrite } from '../api/session';
+import { useData } from '../api/useData';
 
 function Health({ host }: { host: Host }) {
   const upstreams = host.locations.flatMap((location) => location.upstreams);

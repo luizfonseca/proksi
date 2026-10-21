@@ -10,7 +10,7 @@ import { Server } from './pages/Server';
 import { Hosts } from './pages/Hosts';
 import { SignIn } from './pages/SignIn';
 import { navigate, usePath } from './router';
-import { SessionContext } from './session';
+import { SessionContext } from './api/session';
 import './styles.css';
 
 function Page({ path }: { path: string }) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { StoredHost } from './api';
+import type { StoredHost } from '../../api';
 import { emptyHost, fromForm, parseAddress, toForm } from './hostForm';
 
 const stored: StoredHost = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actions, condition } from './rules';
+import { actions, condition } from './ruleTree';
 
 describe('rules', () => {
   it('reads conditions as a tree', () => {

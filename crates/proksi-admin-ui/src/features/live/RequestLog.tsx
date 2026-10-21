@@ -1,8 +1,8 @@
 import { useState } from 'preact/hooks';
-import { ms } from '../format';
-import { matches, useRequests } from '../requests';
-import { Search } from './icons';
-import { navigate } from '../router';
+import { ms } from '../../lib/format';
+import { matches, useRequests } from './requests';
+import { Search } from '../../components/ui/icons';
+import { navigate } from '../../router';
 
 /** Rows drawn at once: the newest matching ones (up to `KEPT` are kept to search) */
 const DRAWN = 200;

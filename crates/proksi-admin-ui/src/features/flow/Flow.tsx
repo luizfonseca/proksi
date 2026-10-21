@@ -1,4 +1,4 @@
-import { type Flow as FlowData, type FlowEdge, type FlowNode, NODE_HEIGHT } from '../flow';
+import { type Flow as FlowData, type FlowEdge, type FlowNode, NODE_HEIGHT } from './flowGraph';
 
 /** A title that fits its node (about 6.8px a character) */
 function fit(text: string, width: number): string {

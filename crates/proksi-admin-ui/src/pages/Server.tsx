@@ -1,8 +1,8 @@
 import type { ComponentChildren } from 'preact';
 import { useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { Loaded } from '../components/State';
-import { isSection, label, type Setting, value } from '../settings';
-import { useData } from '../useData';
+import { Loaded } from '../components/ui/State';
+import { isSection, label, type Setting, value } from '../features/server/settings';
+import { useData } from '../api/useData';
 
 type Settings = { [key: string]: Setting };
 

@@ -1,9 +1,9 @@
-import type { TcpBlock } from '../api';
-import { bytes, ms, rate } from '../format';
-import { useLive } from '../live';
-import { onLink } from '../router';
-import { ProtocolBadge } from './State';
-import { Sparkline } from './Chart';
+import type { TcpBlock } from '../../api';
+import { bytes, ms, rate } from '../../lib/format';
+import { useLive } from '../live/live';
+import { onLink } from '../../router';
+import { ProtocolBadge } from '../../components/ui/State';
+import { Sparkline } from '../../components/ui/Chart';
 
 const TLS = { none: 'plain TCP', terminate: 'TLS terminated', passthrough: 'TLS passthrough' };
 

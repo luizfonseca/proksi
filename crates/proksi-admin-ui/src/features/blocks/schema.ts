@@ -1,7 +1,7 @@
 // What rules and blocks accept (`GET /api/v1/schema`), and reading its JSON Schemas
 
 import { useEffect, useState } from 'preact/hooks';
-import { get } from './api';
+import { get } from '../../api';
 
 export type JsonSchema = {
   type?: string | string[];

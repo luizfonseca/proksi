@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import { niceMax } from '../format';
+import { niceMax } from '../../lib/format';
 
 export type Series = { name: string; color: string; values: (number | null)[] };
 
