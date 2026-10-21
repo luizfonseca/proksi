@@ -160,7 +160,7 @@ See [paths](/routing/paths) for the details.
 | `retry { attempts, on }` | Requests sent to another upstream when one can't be reached or answers `502`, `503`, `504`, see [retries](/routing/upstreams#retries). |
 | `traffic_split "<name>" { percent, upstream ... }` | A share of the clients sent to other upstreams (canaries, A/B tests), see [traffic split](/routing/traffic-split). |
 | `mirror { percent, upstream ... }` | Copies of the requests sent to other upstreams, whose answers are dropped, see [mirror](/routing/mirror). |
-| `request_id { }`, `rate_limit { ... }`, `body_limit { ... }`, `basic_auth { ... }`, `oauth2 { ... }`, `jwt { ... }`, `compress { }`, `redirect { ... }`, `respond { ... }`, `ip_filter { ... }`, `cors { ... }`, `forward_auth { ... }`, `static_files { ... }` | Plugins ([request id](/plugins/request-id), [IP filter](/plugins/ip-filter), [CORS](/plugins/cors), [rate limit](/plugins/rate-limit), [body limit](/plugins/body-limit), [basic auth](/plugins/basic-auth), [OAuth2](/plugins/oauth2), [JWT](/plugins/jwt), [forward auth](/plugins/forward-auth), [compress](/plugins/compress), [redirect](/plugins/redirect), [respond](/plugins/respond), [static files](/plugins/static-files)), with the same settings as their `config` in `plugins = [...]`. |
+| `request_id { }`, `rate_limit { ... }`, `bandwidth_limit { ... }`, `body_limit { ... }`, `basic_auth { ... }`, `oauth2 { ... }`, `jwt { ... }`, `compress { }`, `redirect { ... }`, `respond { ... }`, `ip_filter { ... }`, `cors { ... }`, `forward_auth { ... }`, `static_files { ... }` | Plugins ([request id](/plugins/request-id), [IP filter](/plugins/ip-filter), [CORS](/plugins/cors), [rate limit](/plugins/rate-limit), [bandwidth limit](/plugins/bandwidth-limit), [body limit](/plugins/body-limit), [basic auth](/plugins/basic-auth), [OAuth2](/plugins/oauth2), [JWT](/plugins/jwt), [forward auth](/plugins/forward-auth), [compress](/plugins/compress), [redirect](/plugins/redirect), [respond](/plugins/respond), [static files](/plugins/static-files)), with the same settings as their `config` in `plugins = [...]`. |
 
 **Order of blocks**
 
@@ -168,7 +168,7 @@ Everything in a location besides upstreams is a building block: plugins, `header
 
 | Block | Default priority |
 | --- | --- |
-| `request_id`, `ip_filter`, `cors`, `rate_limit` | 0 |
+| `request_id`, `ip_filter`, `cors`, `rate_limit`, `bandwidth_limit` | 0 |
 | `redirect`, `respond` | 5 |
 | `body_limit` | 10 |
 | `basic_auth`, `oauth2`, `jwt`, `forward_auth` | 20 |

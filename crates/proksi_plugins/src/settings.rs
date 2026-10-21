@@ -49,6 +49,23 @@ pub struct RateLimit {
     pub priority: Priority,
 }
 
+/// `bandwidth_limit`: paces the responses sent to each client
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BandwidthLimit {
+    /// Bytes per second for each client, such as "512KiB" or "1MiB"
+    pub rate: String,
+    /// Bytes sent at full speed first, such as "10MiB" (default: one second of `rate`)
+    pub burst: Option<String>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
 /// `body_limit`: answers `413` to requests with a larger body
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -346,6 +363,7 @@ pub fn schemas() -> serde_json::Map<String, serde_json::Value> {
     let schema = |schema: schemars::Schema| schema.to_value();
     [
         ("rate_limit", schema(schemars::schema_for!(RateLimit))),
+        ("bandwidth_limit", schema(schemars::schema_for!(BandwidthLimit))),
         ("body_limit", schema(schemars::schema_for!(BodyLimit))),
         ("redirect", schema(schemars::schema_for!(Redirect))),
         ("respond", schema(schemars::schema_for!(Respond))),
@@ -428,6 +446,6 @@ mod tests {
         );
         assert_eq!(limit["properties"]["priority"]["maximum"], 100);
         assert_eq!(schemas["jwt"]["additionalProperties"], false);
-        assert_eq!(schemas.len(), 13);
+        assert_eq!(schemas.len(), 14);
     }
 }

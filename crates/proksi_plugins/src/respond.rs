@@ -28,8 +28,8 @@ pub async fn respond(
     Ok(())
 }
 
-/// Writes `response`, then `len` bytes of `body` as they're read (64 KiB at a time). `body` is
-/// read on the request's thread: a file, mostly in the page cache.
+/// Writes `response`, then `len` bytes of `body` as they're read (64 KiB at a time), paced as the
+/// location's blocks say. `body` is read on the request's thread: a file, mostly in the page cache.
 ///
 /// # Errors
 ///
@@ -69,9 +69,12 @@ pub async fn respond_streaming(
             ));
         }
         left -= want;
-        session
-            .write_response_body(Some(chunk.into()), left == 0)
-            .await?;
+        let chunk = bytes::Bytes::from(chunk);
+        // Paced as upstreams' responses are (`bandwidth_limit`)
+        if let Some(wait) = ctx.response_body_delay(session, Some(&chunk)) {
+            tokio::time::sleep(wait).await;
+        }
+        session.write_response_body(Some(chunk), left == 0).await?;
     }
     Ok(())
 }

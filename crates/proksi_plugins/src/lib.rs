@@ -6,7 +6,7 @@
 //! a plugin needs from proksi for a request (its host, its client, applying the location's
 //! response blocks to an answer) it asks through [`RequestCtx`].
 
-use std::{borrow::Cow, collections::HashMap, net::IpAddr, sync::Arc};
+use std::{borrow::Cow, collections::HashMap, net::IpAddr, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -17,6 +17,7 @@ use pingora::{
 };
 use serde::{Deserialize, Serialize};
 
+use bandwidth_limit::BandwidthLimit;
 use basic_auth::BasicAuth;
 use body_limit::BodyLimit;
 use compress::Compress;
@@ -32,6 +33,7 @@ use static_files::StaticFiles;
 
 #[cfg(any(test, feature = "test-util"))]
 pub mod allocations;
+mod bandwidth_limit;
 mod basic_auth;
 pub mod body_limit;
 mod compress;
@@ -96,6 +98,10 @@ pub trait RequestCtx: Send {
     /// Changes `response`, an answer of proksi itself, as the location's response blocks and the
     /// rules change upstreams' responses (its `headers`, its CORS headers...)
     async fn response_blocks(&mut self, session: &mut Session, response: &mut ResponseHeader);
+
+    /// How long to wait before sending `body`, part of an answer of proksi itself, as the
+    /// location's blocks and the rules pace upstreams' responses (`bandwidth_limit`)
+    fn response_body_delay(&mut self, session: &Session, body: Option<&Bytes>) -> Option<Duration>;
 }
 
 /// The stages of a request a block can take part in
@@ -145,6 +151,17 @@ pub trait Middleware: Send + Sync {
         Ok(())
     }
 
+    /// Each part of the response body sent to the client (including responses served from the
+    /// cache): how long to wait before sending it
+    fn response_body(
+        &self,
+        _session: &Session,
+        _body: Option<&Bytes>,
+        _ctx: &mut dyn RequestCtx,
+    ) -> Option<Duration> {
+        None
+    }
+
     /// Changes the response sent to the client (including responses served from the cache)
     async fn response(
         &self,
@@ -164,6 +181,7 @@ pub enum Kind {
     IpFilter,
     Cors,
     RateLimit,
+    BandwidthLimit,
     Redirect,
     Respond,
     BodyLimit,
@@ -185,6 +203,7 @@ impl Kind {
             Kind::IpFilter => "ip_filter",
             Kind::Cors => "cors",
             Kind::RateLimit => "rate_limit",
+            Kind::BandwidthLimit => "bandwidth_limit",
             Kind::Redirect => "redirect",
             Kind::Respond => "respond",
             Kind::BodyLimit => "body_limit",
@@ -203,7 +222,11 @@ impl Kind {
     #[must_use]
     pub fn default_priority(self) -> u8 {
         match self {
-            Kind::RequestId | Kind::IpFilter | Kind::Cors | Kind::RateLimit => 0,
+            Kind::RequestId
+            | Kind::IpFilter
+            | Kind::Cors
+            | Kind::RateLimit
+            | Kind::BandwidthLimit => 0,
             Kind::Redirect | Kind::Respond => 5,
             Kind::BodyLimit => 10,
             Kind::BasicAuth | Kind::Jwt | Kind::Oauth2 | Kind::ForwardAuth => 20,
@@ -256,6 +279,7 @@ pub fn build(plugin: &RoutePlugin, location_path: &str) -> Option<Result<Plugin,
         "ip_filter" => built(Kind::IpFilter, arc(IpFilter::new(plugin))),
         "cors" => built(Kind::Cors, arc(Cors::new(plugin))),
         "rate_limit" => built(Kind::RateLimit, arc(RateLimit::new(plugin))),
+        "bandwidth_limit" => built(Kind::BandwidthLimit, arc(BandwidthLimit::new(plugin))),
         "body_limit" => built(Kind::BodyLimit, arc(BodyLimit::new(plugin))),
         "redirect" => built(Kind::Redirect, arc(Redirect::new(plugin))),
         "respond" => built(Kind::Respond, arc(Respond::new(plugin))),

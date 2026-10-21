@@ -200,6 +200,10 @@
           "href": "/plugins/rate-limit"
         },
         {
+          "title": "Bandwidth limit",
+          "href": "/plugins/bandwidth-limit"
+        },
+        {
           "title": "Body limit",
           "href": "/plugins/body-limit"
         },
