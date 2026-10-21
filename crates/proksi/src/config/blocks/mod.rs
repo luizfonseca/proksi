@@ -486,6 +486,21 @@ host "a.test" {{
     }
 
     #[test]
+    fn test_bandwidth_limit_block() {
+        let doc = HclFormat::from_str::<Doc>(
+            "host \"a.test\" {\n  location \"/\" {\n    bandwidth_limit {\n      rate = \"1MiB\"\n      burst = \"10MiB\"\n    }\n  }\n}\n",
+        )
+        .unwrap();
+
+        let host = doc.host.get("a.test").unwrap().to_host("a.test").unwrap();
+        let plugins = host.locations[0].plugins.clone().unwrap();
+
+        assert_eq!(plugins[0].name, "bandwidth_limit");
+        assert_eq!(plugins[0].config.as_ref().unwrap()["rate"], "1MiB");
+        assert_eq!(plugins[0].config.as_ref().unwrap()["burst"], "10MiB");
+    }
+
+    #[test]
     fn test_host_listen_addresses() {
         let doc = HclFormat::from_str::<Doc>(
             "host \"a.test\" {\n  listen = [\"0.0.0.0:8080\", \"[::]:8080\"]\n}\n",

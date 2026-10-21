@@ -1,8 +1,9 @@
 //! What plugins can ask of proksi about a request ([`RequestCtx`]), from its [`RouterContext`]
 
-use std::{borrow::Cow, net::IpAddr};
+use std::{borrow::Cow, net::IpAddr, time::Duration};
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use http::HeaderValue;
 use pingora::{http::ResponseHeader, proxy::Session};
 use proksi_plugins::RequestCtx;
@@ -45,5 +46,15 @@ impl RequestCtx for RouterContext {
             location.blocks.response(session, response, self).await;
         }
         crate::rules::response(session, response, self).await;
+    }
+
+    fn response_body_delay(&mut self, session: &Session, body: Option<&Bytes>) -> Option<Duration> {
+        let location = self
+            .route_container
+            .as_ref()
+            .filter(|location| location.blocks.paces())
+            .cloned();
+        let blocks = location.and_then(|location| location.blocks.response_body(session, body, self));
+        blocks.max(crate::rules::response_body(session, body, self))
     }
 }

@@ -3916,6 +3916,77 @@ async fn test_jwt() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_BANDWIDTH_LIMIT: &str = r#"
+host "paced.test" {
+  tls = false
+
+  location "/api" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    bandwidth_limit {
+      rate  = "4KiB"
+      burst = "1KiB"
+    }
+  }
+
+  location "/files" {
+    static_files {
+      directory = "{files}"
+    }
+
+    bandwidth_limit {
+      rate  = "128KiB"
+      burst = "64KiB"
+    }
+  }
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bandwidth_limit() {
+    let files = tempfile::tempdir().unwrap();
+    std::fs::write(files.path().join("big.bin"), vec![b'x'; 256 * 1024]).unwrap();
+    let config =
+        HOST_WITH_BANDWIDTH_LIMIT.replace("{files}", &files.path().display().to_string());
+    let mut harness = Harness::start_without_https(&config).await;
+    let port = harness.http_port;
+    // The upstream answers with the request's headers: about 8 KiB with this one
+    let padded = |path: &str| {
+        format!(
+            "GET {path} HTTP/1.1\r\nHost: paced.test\r\nX-Pad: {}\r\nConnection: close\r\n\r\n",
+            "p".repeat(8000)
+        )
+    };
+    let proksi = &harness;
+    let timed = |request: String| async move {
+        let start = std::time::Instant::now();
+        let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
+        (res, start.elapsed())
+    };
+
+    // An upstream's answer: 1 KiB at once, the rest at 4 KiB/s
+    let (res, paced) = timed(padded("/api/a")).await;
+    assert!(res.starts_with("HTTP/1.1 200"), "{res}");
+    assert!(res.contains(&"p".repeat(8000)));
+    assert!(paced >= std::time::Duration::from_millis(1200), "{paced:?}");
+    // Other locations aren't paced
+    let (_, unpaced) = timed(padded("/b")).await;
+    assert!(unpaced < std::time::Duration::from_millis(500), "{unpaced:?}");
+
+    // A file: 64 KiB at once, the other 192 KiB at 128 KiB/s
+    let file = "GET /files/big.bin HTTP/1.1\r\nHost: paced.test\r\nConnection: close\r\n\r\n";
+    let (res, paced) = timed(file.to_string()).await;
+    assert!(res.starts_with("HTTP/1.1 200"), "{}", &res[..res.len().min(200)]);
+    assert!(res.ends_with(&"x".repeat(1024)));
+    assert!(paced >= std::time::Duration::from_millis(1000), "{paced:?}");
+
+    harness.assert_healthy();
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_static_files() {
     let site = tempfile::tempdir().unwrap();

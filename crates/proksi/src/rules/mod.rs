@@ -226,6 +226,26 @@ pub fn upstream_response(
     ctx.rules = applied;
 }
 
+/// How long to wait before sending `body`, part of the response: the longest the blocks of the
+/// rules matched ask
+pub fn response_body(
+    session: &Session,
+    body: Option<&Bytes>,
+    ctx: &mut RouterContext,
+) -> Option<std::time::Duration> {
+    if ctx.rules.is_empty() {
+        return None;
+    }
+    let applied = std::mem::take(&mut ctx.rules);
+    let wait = applied
+        .0
+        .iter()
+        .filter_map(|then| then.blocks.response_body(session, body, ctx))
+        .max();
+    ctx.rules = applied;
+    wait
+}
+
 /// Changes the response sent to the client, innermost rule first (as for blocks)
 pub async fn response(
     session: &mut Session,
@@ -398,11 +418,15 @@ mod tests {
     ];
 
     /// Other pages with rules among their examples
-    const OTHER_PAGES: [(&str, &str); 2] = [
+    const OTHER_PAGES: [(&str, &str); 3] = [
         ("README", include_str!("../../../../README.md")),
         (
             "blocking-url-scanners",
             include_str!("../../../../docs/examples/blocking-url-scanners.mdx"),
+        ),
+        (
+            "bandwidth-limit",
+            include_str!("../../../../docs/plugins/bandwidth-limit.mdx"),
         ),
     ];
 

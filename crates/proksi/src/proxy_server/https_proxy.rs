@@ -371,6 +371,22 @@ impl ProxyHttp for Router {
         Ok(())
     }
 
+    /// Each part of the response body, as it's sent to the client (including responses served
+    /// from the cache): how long to wait before sending it, when a block paces them
+    fn response_body_filter(
+        &self,
+        session: &mut Session,
+        body: &mut Option<bytes::Bytes>,
+        _end_of_stream: bool,
+        ctx: &mut Self::CTX,
+    ) -> pingora::Result<Option<std::time::Duration>> {
+        Ok(proksi_plugins::RequestCtx::response_body_delay(
+            ctx,
+            session,
+            body.as_ref(),
+        ))
+    }
+
     /// Modify the request before it is sent to the upstream
     ///
     /// Unlike [`Self::request_filter()`], this filter allows to change the request headers to send

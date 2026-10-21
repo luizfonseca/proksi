@@ -1,0 +1,72 @@
+---
+title: "Bandwidth Limit"
+description: "Paces the responses sent to each client (by IP address) to a number of bytes per second."
+---
+
+Paces the responses of a location to each client (by IP address): the first `burst` bytes go at full speed, then `rate` bytes per second. A client's responses share its limit, so ten downloads at once share `rate` rather than getting ten times it.
+
+Responses aren't refused or cut: they're sent more slowly. It applies to responses from upstreams, from the [cache](/use-cases/cache) and from [`static_files`](/plugins/static-files).
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `rate` | Bytes per second for each client, such as `"512KiB"` or `"1MiB"` (required) |
+| `burst` | Bytes sent at full speed first, such as `"10MiB"` (default: one second of `rate`) |
+| `priority` | When it runs among the blocks of the location (default: `0`) |
+
+Sizes are written as for [`body_limit`](/plugins/body-limit), with a unit: `B`, `KB`, `MB` (1,000 and 1,000,000 bytes), `KiB` or `MiB` (1,024 and 1,048,576 bytes).
+
+### Usage
+
+**proksi.hcl**
+```hcl
+host "downloads.example.com" {
+  location "/files/" {
+    static_files {
+      directory = "/srv/files"
+    }
+
+    bandwidth_limit {
+      rate  = "2MiB"
+      burst = "20MiB"
+    }
+  }
+}
+```
+
+Only some clients, with a [rule](/rules): here everyone but partners.
+
+```hcl
+host "downloads.example.com" {
+  location "/files/" {
+    static_files {
+      directory = "/srv/files"
+    }
+
+    rule "everyone but partners" {
+      and {
+        not {
+          client {
+            in = ["198.51.100.0/24"]
+          }
+        }
+      }
+      then {
+        bandwidth_limit {
+          rate = "2MiB"
+        }
+      }
+    }
+  }
+}
+```
+
+When a location and a rule both limit a response, the slower limit wins.
+
+### Good to know
+
+- Each location (and each rule) has its own limits, kept in memory on each Proksi server. They start over when the configuration changes.
+- A client that stops downloading gets its `burst` back at `rate`, and costs no memory once it has.
+- Clients are identified as for [`rate_limit`](/plugins/rate-limit): behind a proxy or load balancer, list it in `server.trusted_proxies`.
+- Request bodies (uploads) aren't limited.

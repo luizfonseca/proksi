@@ -5,7 +5,7 @@
 //! and takes part in the stages of a request it needs. Blocks run by priority, from 0 (first) to
 //! 100 (last); the response stages run in reverse order.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use pingora::{
@@ -34,7 +34,11 @@ pub struct Block {
 
 /// The blocks of a location, in the order they run
 #[derive(Clone, Default)]
-pub struct Blocks(Vec<Block>);
+pub struct Blocks {
+    blocks: Vec<Block>,
+    /// Whether a block paces response bodies, which every other location skips
+    paces: bool,
+}
 
 impl Blocks {
     /// The blocks of `location`, or why its configuration is invalid
@@ -75,12 +79,13 @@ impl Blocks {
         }
 
         blocks.sort_by_key(|block| (block.priority, block.kind));
-        Ok(Self(blocks))
+        let paces = blocks.iter().any(|block| block.kind == Kind::BandwidthLimit);
+        Ok(Self { blocks, paces })
     }
 
     /// Runs the request stage, until a block answers the request (`true`)
     pub async fn request(&self, session: &mut Session, ctx: &mut RouterContext) -> Option<Kind> {
-        for block in &self.0 {
+        for block in &self.blocks {
             match block.middleware.request(session, ctx).await {
                 Ok(true) => return Some(block.kind),
                 Ok(false) => {}
@@ -96,7 +101,7 @@ impl Blocks {
         body: Option<&Bytes>,
         ctx: &mut RouterContext,
     ) -> Result<(), (Kind, Box<pingora::Error>)> {
-        self.0.iter().try_for_each(|block| {
+        self.blocks.iter().try_for_each(|block| {
             block
                 .middleware
                 .request_body(body, ctx)
@@ -106,7 +111,7 @@ impl Blocks {
 
     /// The kinds of blocks that can answer a request instead of the upstream
     pub fn answering(&self) -> Vec<&'static str> {
-        self.0
+        self.blocks
             .iter()
             .map(|block| block.kind)
             .filter(|kind| kind.answers())
@@ -120,7 +125,7 @@ impl Blocks {
         request: &mut RequestHeader,
         ctx: &mut RouterContext,
     ) {
-        for block in &self.0 {
+        for block in &self.blocks {
             if let Err(err) = block
                 .middleware
                 .upstream_request(session, request, ctx)
@@ -138,7 +143,7 @@ impl Blocks {
         response: &mut ResponseHeader,
         ctx: &mut RouterContext,
     ) {
-        for block in self.0.iter().rev() {
+        for block in self.blocks.iter().rev() {
             if let Err(err) = block.middleware.upstream_response(session, response, ctx) {
                 tracing::debug!(block = block.kind.name(), "upstream response: {err}");
             }
@@ -152,16 +157,37 @@ impl Blocks {
         response: &mut ResponseHeader,
         ctx: &mut RouterContext,
     ) {
-        for block in self.0.iter().rev() {
+        for block in self.blocks.iter().rev() {
             if let Err(err) = block.middleware.response(session, response, ctx).await {
                 tracing::debug!(block = block.kind.name(), "response: {err}");
             }
         }
     }
 
+    /// Whether a block paces response bodies (`bandwidth_limit`)
+    pub fn paces(&self) -> bool {
+        self.paces
+    }
+
+    /// How long to wait before sending `body`, part of the response: the longest any block asks
+    pub fn response_body(
+        &self,
+        session: &Session,
+        body: Option<&Bytes>,
+        ctx: &mut RouterContext,
+    ) -> Option<Duration> {
+        if !self.paces {
+            return None;
+        }
+        self.blocks
+            .iter()
+            .filter_map(|block| block.middleware.response_body(session, body, ctx))
+            .max()
+    }
+
     /// The blocks, in the order they run on requests
     pub fn iter(&self) -> impl Iterator<Item = &Block> {
-        self.0.iter()
+        self.blocks.iter()
     }
 }
 
