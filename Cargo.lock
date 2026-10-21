@@ -3439,13 +3439,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "plugin_request_id"
-version = "0.1.1"
-dependencies = [
- "plugins_api",
-]
-
-[[package]]
 name = "plugins_api"
 version = "0.1.2"
 dependencies = [

@@ -26,7 +26,6 @@ fn test_conditionals_and_loops_are_nested_twice_at_most() {
         "proksi/tests",
         "proksi_store/src",
         "plugins_api/src",
-        "plugin_request_id/src",
     ] {
         rust_files(&root.join(dir), &mut files);
     }
