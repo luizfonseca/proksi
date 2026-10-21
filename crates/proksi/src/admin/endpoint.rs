@@ -2,30 +2,9 @@
 
 use std::time::Duration;
 
-use http::{Method, StatusCode};
+use http::Method;
 
 use super::Reply;
-
-/// Stats windows, in seconds
-const WINDOWS: std::ops::RangeInclusive<u64> = 1..=300;
-
-/// Paths answering other methods (`405` rather than `404`)
-const PATHS: [&str; 14] = [
-    "/api/v1/schema",
-    "/api/v1/validate",
-    "/metrics",
-    "/api/v1/stats",
-    "/api/v1/stats/stream",
-    "/api/v1/requests/stream",
-    "/api/v1/status",
-    "/api/v1/server",
-    "/api/v1/hosts",
-    "/api/v1/tcp",
-    "/api/v1/certificates",
-    "/api/v1/routes",
-    "/api/v1/session",
-    "/api/v1/deleted-routes",
-];
 
 /// What a request asks for
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -77,36 +56,9 @@ pub enum Endpoint<'a> {
 }
 
 impl<'a> Endpoint<'a> {
+    /// The endpoint a request is for (see [`super::router`])
     pub fn parse(method: &Method, path: &'a str, query: Option<&'a str>) -> Result<Self, Reply> {
-        use Endpoint::{
-            Certificates, Hosts, Metrics, RequestsStream, Routes, Schema, Server, Session, SignIn,
-            SignOut, Stats, StatsStream, Status, Tcp, Validate,
-        };
-
-        if let Some(rest) = path.strip_prefix("/api/v1/routes/") {
-            return route_endpoint(method, rest);
-        }
-        let endpoint = match (method.as_str(), path) {
-            ("GET", "/metrics") => Metrics,
-            ("GET", "/api/v1/stats") => Stats(window(query, 60)?),
-            ("GET", "/api/v1/stats/stream") => StatsStream(window(query, 10)?),
-            ("GET", "/api/v1/requests/stream") => RequestsStream(parameter(query, "host")),
-            ("GET", "/api/v1/status") => Status,
-            ("GET", "/api/v1/server") => Server,
-            ("GET", "/api/v1/schema") => Schema,
-            ("POST", "/api/v1/validate") => Validate,
-            ("GET", "/api/v1/hosts") => Hosts,
-            ("GET", "/api/v1/tcp") => Tcp,
-            ("GET", "/api/v1/certificates") => Certificates,
-            ("GET", "/api/v1/routes") => Routes,
-            ("GET", "/api/v1/deleted-routes") => Endpoint::DeletedRoutes,
-            ("GET", "/api/v1/session") => Session,
-            ("POST", "/api/v1/session") => SignIn,
-            ("DELETE", "/api/v1/session") => SignOut,
-            _ if PATHS.contains(&path) => return Err(method_not_allowed()),
-            _ => return Err(Reply::error(StatusCode::NOT_FOUND, "not found")),
-        };
-        Ok(endpoint)
+        super::router::parse(method, path, query)
     }
 
     /// Whether it changes the configuration (a token with `access = "write"`)
@@ -131,165 +83,9 @@ impl<'a> Endpoint<'a> {
     }
 }
 
-/// `/api/v1/routes/<rest>`: a host, its history, a version, or its rollback
-fn route_endpoint<'a>(method: &Method, rest: &'a str) -> Result<Endpoint<'a>, Reply> {
-    let not_found = || Reply::error(StatusCode::NOT_FOUND, "not found");
-    let mut parts = rest.split('/');
-    let host = parts.next().filter(|host| !host.is_empty()).ok_or_else(not_found)?;
-    let endpoint = match (parts.next(), parts.next(), parts.next()) {
-        (None, ..) => match *method {
-            Method::GET => Endpoint::Route(host),
-            Method::PUT => Endpoint::PutRoute(host),
-            Method::DELETE => Endpoint::DeleteRoute(host),
-            _ => return Err(method_not_allowed()),
-        },
-        (Some("history"), None, _) => Endpoint::RouteHistory(host),
-        (Some("history"), Some(revision), None) => {
-            let revision = revision.parse().map_err(|_| not_found())?;
-            Endpoint::RouteVersion(host, revision)
-        }
-        (Some("rollback"), None, _) => Endpoint::RollbackRoute(host),
-        _ => return Err(not_found()),
-    };
-    let allowed = match endpoint {
-        Endpoint::RouteHistory(_) | Endpoint::RouteVersion(..) => *method == Method::GET,
-        Endpoint::RollbackRoute(_) => *method == Method::POST,
-        _ => true,
-    };
-    if !allowed {
-        return Err(method_not_allowed());
-    }
-    Ok(endpoint)
-}
-
-fn method_not_allowed() -> Reply {
-    Reply::error(StatusCode::METHOD_NOT_ALLOWED, "method not allowed")
-}
-
-/// A query parameter's value, if not empty
-fn parameter<'a>(query: Option<&'a str>, name: &str) -> Option<&'a str> {
-    query
-        .unwrap_or_default()
-        .split('&')
-        .find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
-        .filter(|value| !value.is_empty())
-}
-
-/// `?window=<seconds>` (1 to 300), or `default`
-fn window(query: Option<&str>, default: u64) -> Result<Duration, Reply> {
-    let value = parameter(query, "window");
-    let Some(value) = value else {
-        return Ok(Duration::from_secs(default));
-    };
-    match value.parse::<u64>() {
-        Ok(seconds) if WINDOWS.contains(&seconds) => Ok(Duration::from_secs(seconds)),
-        _ => Err(Reply::error(
-            StatusCode::BAD_REQUEST,
-            "window must be a number of seconds, from 1 to 300",
-        )),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
-    use http::{Method, StatusCode};
-
     use super::Endpoint;
-
-    fn parse<'a>(
-        method: Method,
-        path: &'a str,
-        query: Option<&'a str>,
-    ) -> Result<Endpoint<'a>, StatusCode> {
-        Endpoint::parse(&method, path, query).map_err(|reply| reply.status)
-    }
-
-    #[test]
-    fn test_route_history_endpoints() {
-        assert_eq!(
-            parse(Method::GET, "/api/v1/routes/a.test/history", None),
-            Ok(Endpoint::RouteHistory("a.test"))
-        );
-        assert_eq!(
-            parse(Method::GET, "/api/v1/routes/a.test/history/41", None),
-            Ok(Endpoint::RouteVersion("a.test", 41))
-        );
-        assert_eq!(
-            parse(Method::POST, "/api/v1/routes/a.test/rollback", None),
-            Ok(Endpoint::RollbackRoute("a.test"))
-        );
-        assert_eq!(
-            parse(Method::GET, "/api/v1/deleted-routes", None),
-            Ok(Endpoint::DeletedRoutes)
-        );
-        let refused = [
-            (Method::GET, "/api/v1/routes/a.test/history/x", StatusCode::NOT_FOUND),
-            (Method::GET, "/api/v1/routes/a.test/history/41/x", StatusCode::NOT_FOUND),
-            (Method::GET, "/api/v1/routes/a.test/rollback", StatusCode::METHOD_NOT_ALLOWED),
-            (Method::POST, "/api/v1/routes/a.test/history", StatusCode::METHOD_NOT_ALLOWED),
-            (Method::GET, "/api/v1/routes/a.test/other", StatusCode::NOT_FOUND),
-        ];
-        for (method, path, status) in refused {
-            assert_eq!(parse(method, path, None), Err(status), "{path}");
-        }
-    }
-
-    #[test]
-    fn test_endpoints() {
-        assert_eq!(parse(Method::GET, "/metrics", None), Ok(Endpoint::Metrics));
-        assert_eq!(
-            parse(Method::GET, "/api/v1/requests/stream", None),
-            Ok(Endpoint::RequestsStream(None))
-        );
-        assert_eq!(
-            parse(Method::GET, "/api/v1/requests/stream", Some("host=a.test")),
-            Ok(Endpoint::RequestsStream(Some("a.test")))
-        );
-        assert_eq!(
-            parse(Method::GET, "/api/v1/server", None),
-            Ok(Endpoint::Server)
-        );
-        assert_eq!(parse(Method::GET, "/api/v1/tcp", None), Ok(Endpoint::Tcp));
-        assert_eq!(
-            parse(Method::GET, "/api/v1/routes/a.test", None),
-            Ok(Endpoint::Route("a.test"))
-        );
-        assert_eq!(
-            parse(Method::PUT, "/api/v1/routes/a.test", None),
-            Ok(Endpoint::PutRoute("a.test"))
-        );
-        assert_eq!(
-            parse(Method::POST, "/api/v1/session", None),
-            Ok(Endpoint::SignIn)
-        );
-
-        assert_eq!(
-            parse(Method::GET, "/api/v1/nope", None),
-            Err(StatusCode::NOT_FOUND)
-        );
-        assert_eq!(
-            parse(Method::GET, "/api/v1/routes/", None),
-            Err(StatusCode::NOT_FOUND)
-        );
-        assert_eq!(
-            parse(Method::GET, "/api/v1/routes/a/b", None),
-            Err(StatusCode::NOT_FOUND)
-        );
-        for path in [
-            "/metrics",
-            "/api/v1/stats",
-            "/api/v1/routes",
-            "/api/v1/routes/a.test",
-        ] {
-            assert_eq!(
-                parse(Method::POST, path, None),
-                Err(StatusCode::METHOD_NOT_ALLOWED),
-                "{path}"
-            );
-        }
-    }
 
     #[test]
     fn test_what_needs_write_access() {
@@ -299,27 +95,5 @@ mod tests {
         assert!(!Endpoint::RouteHistory("a.test").changes());
         assert!(!Endpoint::Route("a.test").changes());
         assert!(!Endpoint::SignIn.changes());
-    }
-
-    #[test]
-    fn test_stats_windows() {
-        assert_eq!(
-            parse(Method::GET, "/api/v1/stats", Some("window=30")),
-            Ok(Endpoint::Stats(Duration::from_secs(30)))
-        );
-        assert_eq!(
-            parse(Method::GET, "/api/v1/stats", None),
-            Ok(Endpoint::Stats(Duration::from_secs(60)))
-        );
-        assert_eq!(
-            parse(Method::GET, "/api/v1/stats/stream", None),
-            Ok(Endpoint::StatsStream(Duration::from_secs(10)))
-        );
-        for invalid in ["window=0", "window=301", "window=abc"] {
-            assert_eq!(
-                parse(Method::GET, "/api/v1/stats", Some(invalid)),
-                Err(StatusCode::BAD_REQUEST)
-            );
-        }
     }
 }
