@@ -176,6 +176,20 @@ Instances are created from a pool, from the compiled component, and reset after 
 
 A failure is a trap, a limit reached, or an error returned from a stage. Answering the request on purpose (`Flow::Respond`) isn't one.
 
+A limit reached stops the plugin, and its error names the plugin, the stage, what it used and what's allowed:
+
+```
+plugin "fetch_profile" exceeded its CPU budget in request: 51 ms used, 50 ms allowed
+plugin "fetch_profile" exceeded its memory in request: 80 MB requested, 64 MB allowed
+plugin "fetch_profile" exceeded its outbound calls in response: 6 made, 5 allowed
+plugin "fetch_profile" call to profiles.internal.example.com:8080 timed out in request: 5 s allowed
+plugin "fetch_profile" isn't allowed to call api.example.com:443 in request
+```
+
+The plugin is interrupted once it reaches its CPU budget, so the time used is the budget, give or take the interval Wasmtime checks it at (about a millisecond).
+
+These messages are logged with either `on_error`, and counted in the plugin's metrics. A call to a host that isn't allowed, or a call that times out, is first returned to the plugin as an error it can handle; it's only a failure if the plugin returns it.
+
 ### Crates
 
 - `proksi_plugin` (renamed from `plugins_api`): the WIT interface, the `Plugin` trait, `register_plugin!` and `http`. A regular library, published with proksi's versions.
