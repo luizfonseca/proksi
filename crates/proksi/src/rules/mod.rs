@@ -382,7 +382,13 @@ mod tests {
     ];
 
     /// Other pages with rules among their examples
-    const OTHER_PAGES: [(&str, &str); 1] = [("README", include_str!("../../../../README.md"))];
+    const OTHER_PAGES: [(&str, &str); 2] = [
+        ("README", include_str!("../../../../README.md")),
+        (
+            "blocking-url-scanners",
+            include_str!("../../../../docs/examples/blocking-url-scanners.mdx"),
+        ),
+    ];
 
     /// The HCL examples of a page
     fn examples(text: &str) -> impl Iterator<Item = &str> {

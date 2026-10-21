@@ -10,7 +10,13 @@ server {
   rule "scanners" {
     and {
       path {
-        contains = ["/.env", "/.git", "/.aws", "/wp-", "/xmlrpc.php", "/phpmyadmin", "/cgi-bin"]
+        contains = [
+          # Files that leak secrets
+          "/.env", "/.git", "/.aws", "/.ssh", "/.svn", "/.hg", "/.DS_Store", "/docker-compose",
+          # WordPress and PHP pages
+          "/wp-admin", "/wp-login", "/wp-content", "/wp-includes", "/wp-config",
+          "/xmlrpc.php", "/phpmyadmin", "/cgi-bin",
+        ]
       }
     }
     then {
@@ -23,7 +29,10 @@ server {
 ```
 
 - `contains` catches the probes under any path too, like `/app/.env.local` or `/blog/wp-login.php`.
-- Remove the values a site really serves, such as `/wp-` for a WordPress site.
+- Spell out each path: a short value like `/wp-` would also turn away a page such as `/images/wp-site.png`.
+- Escaped characters don't get around it: `/%2Eenv` is checked as `/.env`.
+- Remove the values a site really serves, such as the WordPress paths for a WordPress site.
+- `410` instead of `404` tells clients the path is gone for good. Scanners keep trying either way: what you gain is that your apps never see them.
 - The list can be as long as you need: 100,000 values cost about the same per request as 5, since they're searched all at once.
 
 ## More patterns
@@ -58,7 +67,7 @@ host "api.example.com" {
   rule "scanners" {
     and {
       path {
-        contains = ["/.env", "/.git", "/wp-"]
+        contains = ["/.env", "/.git", "/wp-login"]
       }
     }
     then {
