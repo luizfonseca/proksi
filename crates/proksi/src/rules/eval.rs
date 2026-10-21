@@ -322,6 +322,13 @@ pub(super) mod tests {
         assert_eq!(matching(&rules, &request("/logo.png")), ["images"]);
         assert_eq!(matching(&rules, &request("/blog/post")), ["one"]);
         assert!(matching(&rules, &request("/environment")).is_empty());
+        // Encoded letters and dots are matched decoded
+        for probe in ["/%2Eenv", "/%2egit/config", "/blog/%77p-login.php"] {
+            assert!(
+                matching(&rules, &request(probe)).contains(&"scanners".to_string()),
+                "{probe}"
+            );
+        }
     }
 
     #[test]

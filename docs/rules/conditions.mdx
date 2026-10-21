@@ -55,7 +55,7 @@ host "example.com" {
 | --- | --- |
 | `method` | the method (`GET`, `POST`...), ignoring case |
 | `host` | the host the request is for, without its port, ignoring case |
-| `path` | the path, as used to choose locations: `//a/./b` is `/a/b` |
+| `path` | the path, as used to choose locations: `//a/./b` and `/%61/b` are `/a/b` |
 | `query "<name>"` | the value of a query parameter, decoded (`a+b` and `a%20b` are `a b`) |
 | `header "<name>"` | the value of a request header (several values joined with `, `); names ignore case |
 | `cookie "<name>"` | the value of a cookie |

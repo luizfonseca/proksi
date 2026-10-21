@@ -26,7 +26,7 @@ host "example.com" {
 - A location serves its path **and everything below it**: `/api` serves `/api`, `/api/` and `/api/users`, but not `/apis`. With [`exact = true`](#exact-paths), it serves the path only.
 - `/` serves whatever no other location matches.
 - When several locations match, the **most specific** one wins, whatever their order in the file (see [which location wins](#which-location-wins)).
-- Paths are compared after collapsing repeated slashes and resolving `.` and `..`: `//api` and `/x/../api` are served by `/api`. The request is forwarded unchanged.
+- Paths are compared after decoding escaped letters, digits, `-`, `.`, `_` and `~`, collapsing repeated slashes and resolving `.` and `..`: `/%61pi`, `//api` and `/x/../api` are served by `/api`. Other escapes are kept, so `/a%2Fb` isn't `/a/b`. The request is forwarded unchanged.
 - The query (`?page=2`) isn't part of the path.
 - Matching is case-sensitive: `/API` isn't served by `/api`.
 - A request matching no location gets a `404`.
