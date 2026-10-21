@@ -30,6 +30,7 @@ use rate_limit::RateLimit;
 use redirect::{Redirect, Respond};
 use request_id::RequestId;
 use static_files::StaticFiles;
+use waiting_room::WaitingRoom;
 
 #[cfg(any(test, feature = "test-util"))]
 pub mod allocations;
@@ -51,6 +52,7 @@ mod request_id;
 pub mod respond;
 pub mod settings;
 mod static_files;
+mod waiting_room;
 
 pub use priority::{plugin_priority, priority};
 
@@ -98,6 +100,12 @@ pub trait RequestCtx: Send {
     /// Changes `response`, an answer of proksi itself, as the location's response blocks and the
     /// rules change upstreams' responses (its `headers`, its CORS headers...)
     async fn response_blocks(&mut self, session: &mut Session, response: &mut ResponseHeader);
+
+    /// Adds a header to the response, whoever answers the request
+    fn add_response_header(&mut self, name: http::HeaderName, value: http::HeaderValue);
+
+    /// The store shared by the replicas (memory, Redis or SQL)
+    fn store(&self) -> Arc<dyn proksi_store::Store>;
 
     /// How long to wait before sending `body`, part of an answer of proksi itself, as the
     /// location's blocks and the rules pace upstreams' responses (`bandwidth_limit`)
@@ -182,6 +190,7 @@ pub enum Kind {
     Cors,
     RateLimit,
     BandwidthLimit,
+    WaitingRoom,
     Redirect,
     Respond,
     BodyLimit,
@@ -204,6 +213,7 @@ impl Kind {
             Kind::Cors => "cors",
             Kind::RateLimit => "rate_limit",
             Kind::BandwidthLimit => "bandwidth_limit",
+            Kind::WaitingRoom => "waiting_room",
             Kind::Redirect => "redirect",
             Kind::Respond => "respond",
             Kind::BodyLimit => "body_limit",
@@ -226,7 +236,8 @@ impl Kind {
             | Kind::IpFilter
             | Kind::Cors
             | Kind::RateLimit
-            | Kind::BandwidthLimit => 0,
+            | Kind::BandwidthLimit
+            | Kind::WaitingRoom => 0,
             Kind::Redirect | Kind::Respond => 5,
             Kind::BodyLimit => 10,
             Kind::BasicAuth | Kind::Jwt | Kind::Oauth2 | Kind::ForwardAuth => 20,
@@ -245,6 +256,7 @@ impl Kind {
             self,
             Kind::IpFilter
                 | Kind::RateLimit
+                | Kind::WaitingRoom
                 | Kind::BodyLimit
                 | Kind::BasicAuth
                 | Kind::Jwt
@@ -280,6 +292,10 @@ pub fn build(plugin: &RoutePlugin, location_path: &str) -> Option<Result<Plugin,
         "cors" => built(Kind::Cors, arc(Cors::new(plugin))),
         "rate_limit" => built(Kind::RateLimit, arc(RateLimit::new(plugin))),
         "bandwidth_limit" => built(Kind::BandwidthLimit, arc(BandwidthLimit::new(plugin))),
+        "waiting_room" => built(
+            Kind::WaitingRoom,
+            arc(WaitingRoom::new(plugin, location_path)),
+        ),
         "body_limit" => built(Kind::BodyLimit, arc(BodyLimit::new(plugin))),
         "redirect" => built(Kind::Redirect, arc(Redirect::new(plugin))),
         "respond" => built(Kind::Respond, arc(Respond::new(plugin))),

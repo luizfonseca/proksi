@@ -18,6 +18,7 @@ use crate::{
         StoreError, Write, DEFAULT_HISTORY,
     },
     store_trait::Store,
+    waiting_room::{self, Admission, Room, RoomLimits},
 };
 
 pub struct MemoryStore {
@@ -32,6 +33,10 @@ pub struct MemoryStore {
     certificates_revision: AtomicU64,
     /// Versions kept per host (besides the active one)
     history: usize,
+    /// Waiting rooms, by name
+    rooms: Mutex<HashMap<String, Room>>,
+    /// The key of waiting rooms' cookies, created on first use
+    room_key: Mutex<Option<[u8; 32]>>,
 }
 
 #[derive(Default)]
@@ -114,6 +119,8 @@ impl MemoryStore {
             leases: Mutex::new(HashMap::new()),
             certificates_revision: AtomicU64::new(0),
             history: DEFAULT_HISTORY,
+            rooms: Mutex::new(HashMap::new()),
+            room_key: Mutex::new(None),
         }
     }
 
@@ -284,6 +291,33 @@ impl Store for MemoryStore {
         Ok(self.certificates_revision.load(Ordering::SeqCst))
     }
 
+    async fn wait_in_room(
+        &self,
+        room: &str,
+        visitor: &str,
+        limits: RoomLimits,
+    ) -> Result<Admission, StoreError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, waiting_room::millis);
+        let mut rooms = self.rooms.lock().unwrap_or_else(PoisonError::into_inner);
+        let admission = rooms
+            .entry(room.to_string())
+            .or_default()
+            .wait(visitor, limits, now);
+        // Rooms nobody is in are dropped (a waiting visitor is still in it)
+        rooms.retain(|_, room| !room.is_empty());
+        Ok(admission)
+    }
+
+    async fn waiting_room_key(&self) -> Result<[u8; 32], StoreError> {
+        let mut key = self.room_key.lock().unwrap_or_else(PoisonError::into_inner);
+        match *key {
+            Some(key) => Ok(key),
+            None => Ok(*key.insert(waiting_room::new_key()?)),
+        }
+    }
+
     async fn reload_certificates(&self) -> Result<(), StoreError> {
         // Not shared: the certificates are already the store's
         Ok(())
@@ -382,6 +416,11 @@ mod tests {
     #[tokio::test]
     async fn test_replicas_contract() {
         crate::contract_tests::replicas_contract(&MemoryStore::new()).await;
+    }
+
+    #[tokio::test]
+    async fn test_waiting_rooms_contract() {
+        crate::contract_tests::waiting_rooms_contract(&MemoryStore::new()).await;
     }
 
     #[tokio::test]

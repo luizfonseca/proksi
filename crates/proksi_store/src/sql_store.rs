@@ -12,8 +12,9 @@ use crate::{
         HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write,
         DEFAULT_HISTORY,
     },
-    sql_history,
+    sql_history, sql_waiting_room,
     store_trait::Store,
+    waiting_room::{Admission, RoomLimits},
 };
 
 const CHALLENGE_TTL_SECONDS: i64 = 300;
@@ -292,6 +293,26 @@ impl Store for SqlStore {
 
     async fn deleted_routes(&self) -> Result<Vec<String>, StoreError> {
         self.run(sql_history::deleted(self.pool.clone())).await
+    }
+
+    async fn wait_in_room(
+        &self,
+        room: &str,
+        visitor: &str,
+        limits: RoomLimits,
+    ) -> Result<Admission, StoreError> {
+        let task = sql_waiting_room::wait(
+            self.pool.clone(),
+            self.now_ms,
+            room.to_string(),
+            visitor.to_string(),
+            limits,
+        );
+        self.run(task).await
+    }
+
+    async fn waiting_room_key(&self) -> Result<[u8; 32], StoreError> {
+        self.run(sql_waiting_room::key(self.pool.clone())).await
     }
 
     async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
@@ -730,6 +751,21 @@ mod tests {
     async fn test_postgres_replicas_contract() {
         if let Some(store) = postgres_store("proksi_test_replicas") {
             contract_tests::replicas_contract(&store).await;
+        }
+    }
+
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_sqlite_waiting_rooms_contract() {
+        let (store, _dir) = sqlite_store();
+        contract_tests::waiting_rooms_contract(&store).await;
+    }
+
+    #[cfg(feature = "postgres")]
+    #[tokio::test]
+    async fn test_postgres_waiting_rooms_contract() {
+        if let Some(store) = postgres_store("proksi_test_waiting_rooms") {
+            contract_tests::waiting_rooms_contract(&store).await;
         }
     }
 

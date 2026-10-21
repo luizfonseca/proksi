@@ -3916,6 +3916,84 @@ async fn test_jwt() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_WAITING_ROOM: &str = r#"
+host "line.test" {
+  tls = false
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    waiting_room {
+      active         = 1
+      session        = "3s"
+      refresh        = "1s"
+      on_store_error = "wait"
+    }
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_waiting_room() {
+    let mut harness = Harness::start_without_https(HOST_WITH_WAITING_ROOM).await;
+    let port = harness.http_port;
+    let proksi = &harness;
+    let get = |cookie: Option<String>| async move {
+        let cookie = cookie.map(|cookie| format!("Cookie: {cookie}\r\n")).unwrap_or_default();
+        let request = format!("GET / HTTP/1.1\r\nHost: line.test\r\n{cookie}Connection: close\r\n\r\n");
+        proksi.raw_http_on(port, request.as_bytes()).await.unwrap()
+    };
+    let status = |res: &str| res.split(' ').nth(1).unwrap_or_default().to_string();
+    // The cookie a browser sends back
+    let pass = |res: &str| {
+        header(res, "set-cookie").map(|cookie| cookie.split(';').next().unwrap().to_string())
+    };
+
+    // The first visitor is let in, with a pass
+    let res = get(None).await;
+    assert_eq!(status(&res), "200", "{res}");
+    let first = pass(&res).unwrap();
+    assert!(first.starts_with("proksi_room_"), "{first}");
+
+    // The second waits, first in line, on a page that doesn't get cached
+    let res = get(None).await;
+    assert_eq!(status(&res), "503", "{res}");
+    assert_eq!(header(&res, "retry-after"), Some("1"));
+    assert_eq!(header(&res, "cache-control"), Some("no-store"));
+    assert!(res.contains("<div class=\"place\">1</div>"), "{res}");
+    let second = pass(&res).unwrap();
+
+    // The first goes on with their pass, without a new one
+    let res = get(Some(first.clone())).await;
+    assert_eq!(status(&res), "200", "{res}");
+    assert_eq!(pass(&res), None);
+    // A pass that was changed is no pass: a new visitor, in line
+    let mut changed = first.clone();
+    changed.pop();
+    changed.push(if first.ends_with('A') { 'B' } else { 'A' });
+    assert_eq!(status(&get(Some(changed)).await), "503");
+
+    // The second keeps their place by refreshing, and is let in once the first's slot expires
+    let start = std::time::Instant::now();
+    let mut admitted = None;
+    while start.elapsed() < std::time::Duration::from_secs(8) {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let res = get(Some(second.clone())).await;
+        if status(&res) == "200" {
+            admitted = Some(start.elapsed());
+            assert!(pass(&res).is_some(), "{res}");
+            break;
+        }
+    }
+    let admitted = admitted.expect("the second visitor was never let in");
+    assert!(admitted >= std::time::Duration::from_secs(2), "{admitted:?}");
+
+    // Now the first waits
+    assert_eq!(status(&get(Some(first)).await), "503");
+
+    harness.assert_healthy();
+}
+
 const HOST_WITH_BANDWIDTH_LIMIT: &str = r#"
 host "paced.test" {
   tls = false

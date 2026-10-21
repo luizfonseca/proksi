@@ -5,6 +5,7 @@ use std::{error::Error, hash::RandomState, time::Duration};
 use crate::{
     certificates::Certificate,
     route::{HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write},
+    waiting_room::{Admission, RoomLimits},
 };
 
 // `async_trait` marks the generated methods as `#[must_use]`
@@ -62,6 +63,21 @@ pub trait Store: Send + Sync + 'static {
 
     /// Who holds the lease `name`, if it's held
     async fn lock_holder(&self, name: &str) -> Result<Option<String>, StoreError>;
+
+    /// Lets `visitor` into the waiting room `room` when a slot is free and nobody who came
+    /// before waits for it, keeping the slot `limits.session` after this call; otherwise keeps
+    /// their place in line. Visitors who held a slot keep it, renewed; waiting visitors who
+    /// didn't call for `limits.abandon` lose their place.
+    async fn wait_in_room(
+        &self,
+        room: &str,
+        visitor: &str,
+        limits: RoomLimits,
+    ) -> Result<Admission, StoreError>;
+
+    /// The key of waiting rooms' cookies: random, created on first use, and the same for every
+    /// replica sharing the store
+    async fn waiting_room_key(&self) -> Result<[u8; 32], StoreError>;
 
     /// Revision of the certificates, incremented by every certificate written
     async fn certificates_revision(&self) -> Result<u64, StoreError>;

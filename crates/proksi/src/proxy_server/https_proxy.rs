@@ -64,6 +64,8 @@ pub struct RouterContext {
     pub traffic_split: Option<Arc<str>>,
     /// Traffic split cookies to set on the response: name, and the new client's id
     pub split_cookies: Vec<(String, String)>,
+    /// Headers blocks add to the response (e.g. a waiting room's cookie)
+    pub response_headers: Vec<(http::HeaderName, http::HeaderValue)>,
     /// Whether a rule chose to copy the request to the location's mirror, or not to
     pub mirror_rule: Option<bool>,
     /// The copy of the request for the location's mirror
@@ -104,6 +106,7 @@ impl ProxyHttp for Router {
             health_check: false,
             traffic_split: None,
             split_cookies: vec![],
+            response_headers: vec![],
             mirror_rule: None,
             mirror: crate::routing::mirror::State::default(),
             tries: 0,
@@ -347,6 +350,10 @@ impl ProxyHttp for Router {
                 .await;
         }
         crate::rules::response(session, upstream_response, ctx).await;
+
+        for (name, value) in std::mem::take(&mut ctx.response_headers) {
+            upstream_response.append_header(name, value)?;
+        }
 
         // A new client of a traffic split keeps its side
         for (name, id) in std::mem::take(&mut ctx.split_cookies) {

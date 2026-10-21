@@ -39,5 +39,10 @@ The following keys are used by the Redis store (see [ADR 0001](/adrs/0001-route-
 | `proksi:replica:<id>` | Revision applied by each proksi instance (TTL: 3 sync intervals) | `{ "id": "...", "revision": 1, "applied_at": 1700000000, "version": "...", "hostname": "..." }` |
 | `proksi:certificates:revision` | Revision of the certificates, incremented on every certificate written | integer |
 | `proksi:lock:<name>` | Lease held by an instance (`acme:<domain>`, `acme:account`), see [ADR 0002](/adrs/0002-certificate-issuance) | `<id>` of the instance (expires) |
+| `proksi:room:{<room>}:active` | Visitors of a [waiting room](/plugins/waiting-room) holding a slot (expires with the room) | sorted set of `<visitor>`, by when the slot expires (milliseconds) |
+| `proksi:room:{<room>}:queue` | Visitors waiting in line | sorted set of `<visitor>`, by ticket |
+| `proksi:room:{<room>}:seen` | When waiting visitors last checked | sorted set of `<visitor>`, by time (milliseconds) |
+| `proksi:room:{<room>}:next` | The last ticket given | integer |
+| `proksi:waiting-room:key` | The key waiting rooms' cookies are encrypted with, set once | 64 hex characters |
 
 When changing routes directly in Redis, change `proksi:route:<host>`, `proksi:routes` and `proksi:revision` in a single transaction (`MULTI`/`EXEC`), otherwise replicas won't see the change. The same goes for certificates: change `proksi:cert:<domain>` with `INCR proksi:certificates:revision`.

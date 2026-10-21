@@ -5,12 +5,13 @@ use std::{error::Error, hash::RandomState, time::Duration};
 
 use crate::{
     certificates::{Certificate, SerializableCertificate},
-    redis_history,
+    redis_history, redis_waiting_room,
     route::{
         HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write,
         DEFAULT_HISTORY,
     },
     store_trait::Store,
+    waiting_room::{Admission, RoomLimits},
 };
 
 const CHALLENGE_TTL_SECONDS: u64 = 300;
@@ -287,6 +288,19 @@ impl Store for RedisStore {
             .map_err(unavailable)
     }
 
+    async fn wait_in_room(
+        &self,
+        room: &str,
+        visitor: &str,
+        limits: RoomLimits,
+    ) -> Result<Admission, StoreError> {
+        redis_waiting_room::wait(&mut *self.connection()?, room, visitor, limits)
+    }
+
+    async fn waiting_room_key(&self) -> Result<[u8; 32], StoreError> {
+        redis_waiting_room::key(&mut *self.connection()?)
+    }
+
     async fn certificates_revision(&self) -> Result<u64, StoreError> {
         let revision: Option<u64> = self
             .connection()?
@@ -497,6 +511,13 @@ mod tests {
     async fn test_replicas_contract() {
         if let Some(store) = test_store(15) {
             crate::contract_tests::replicas_contract(&store).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_waiting_rooms_contract() {
+        if let Some(store) = test_store(7) {
+            crate::contract_tests::waiting_rooms_contract(&store).await;
         }
     }
 

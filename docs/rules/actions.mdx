@@ -42,6 +42,7 @@ host "example.com" {
 | [`redirect`](/plugins/redirect), [`respond`](/plugins/respond) | answer the request |
 | [`ip_filter`](/plugins/ip-filter), [`rate_limit`](/plugins/rate-limit), [`body_limit`](/plugins/body-limit) | refuse some requests |
 | [`bandwidth_limit`](/plugins/bandwidth-limit) | pace responses |
+| [`waiting_room`](/plugins/waiting-room) | let visitors in a few at a time |
 | [`basic_auth`](/plugins/basic-auth), [`jwt`](/plugins/jwt), [`oauth2`](/plugins/oauth2), [`forward_auth`](/plugins/forward-auth) | ask for authentication |
 | [`cors`](/plugins/cors), [`compress`](/plugins/compress), [`request_id`](/plugins/request-id) | as in a location |
 | `headers { response { ... } }` | change the response's headers |
