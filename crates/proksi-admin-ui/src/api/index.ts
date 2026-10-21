@@ -5,6 +5,16 @@ import type { Rule } from '../features/rules/ruleTree';
 
 export class Unauthorized extends Error {}
 
+/** An answer other than a success, with its status */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 /** The host is on another version than the change was made from (`412`): reload it */
 export class Conflict extends Error {
   constructor(
@@ -37,7 +47,7 @@ async function request<T>(method: string, path: string, body?: unknown, extra: R
   if (response.status === 401) throw new Unauthorized();
   const json = await response.json().catch(() => ({}));
   if (response.status === 412) throw new Conflict(json.error ?? 'changed by someone else', json.version ?? 0);
-  if (!response.ok) throw new Error(json.error ?? `${response.status} ${response.statusText}`);
+  if (!response.ok) throw new ApiError(json.error ?? `${response.status} ${response.statusText}`, response.status);
   return json as T;
 }
 
@@ -87,7 +97,12 @@ export const routes = {
   delete: (name: string, expect?: Expect) => request<Written>('DELETE', hostPath(name), undefined, conditions(expect)),
   /** Checks a host as saving would, without saving it */
   validate: (host: StoredHost) => request<{ valid: boolean }>('POST', '/validate', host),
-  history: (name: string) => get<{ host: string; changes: HistoryEntry[] }>(`${hostPath(name)}/history`),
+  /** Its changes, newest first: none for a host saved before versions were kept */
+  history: (name: string) =>
+    get<{ host: string; changes: HistoryEntry[] }>(`${hostPath(name)}/history`).catch((err) => {
+      if (err instanceof ApiError && err.status === 404) return { host: name, changes: [] };
+      throw err;
+    }),
   version: (name: string, revision: number) => get<SavedVersion>(`${hostPath(name)}/history/${revision}`),
   /** Makes a version active again (also restores a deleted host) */
   rollback: (name: string, revision: number, expect?: Expect) =>
