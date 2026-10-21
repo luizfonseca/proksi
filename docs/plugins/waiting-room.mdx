@@ -43,6 +43,29 @@ host "shop.example.com" {
 
 `page` replaces the built-in page with your own HTML file, read when the configuration loads. `{position}` is the visitor's place in line (1 is next), `{waiting}` how many are waiting, and `{refresh}` the seconds between checks, for its own `<meta http-equiv="refresh" content="{refresh}">`. When the store can't be reached and `on_store_error = "wait"`, `{position}` and `{waiting}` are `…`.
 
+Requests for the page's images, styles and fonts go through the waiting room too, so a waiting visitor would get a `503` for them. Inline them (`<style>`, `data:` images), load them from another domain, or serve them from a location without a waiting room:
+
+```hcl
+host "shop.example.com" {
+  location "/" {
+    upstream "shop:3000" {}
+
+    waiting_room {
+      active         = 500
+      on_store_error = "admit"
+      page           = "/etc/proksi/waiting.html"
+    }
+  }
+
+  # The waiting page's files, outside the room
+  location "/waiting/" {
+    static_files {
+      directory = "/srv/waiting"
+    }
+  }
+}
+```
+
 ## Only some requests
 
 A [rule](/rules) can put a room in front of part of a site, or only during a launch. In a rule, set `name`, since a rule has no path of its own:
