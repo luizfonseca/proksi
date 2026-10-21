@@ -158,9 +158,13 @@ Plugins have no sockets, so they can't reach databases or other services except 
 
 A plugin is code the operator chose to run. The limits keep a faulty plugin from affecting the rest of proksi:
 
-- **Time**: each stage has 50 ms of CPU time, enforced by Wasmtime interrupting the plugin. Waiting for an outbound call doesn't count toward it.
-- **Memory**: 64 MB per instance.
-- **Outbound calls**: 5 per request, for all of a plugin's stages, each with a 5 second timeout (as `forward_auth`'s).
+| Limit | Value |
+| --- | --- |
+| CPU time per stage | 50 ms, enforced by Wasmtime interrupting the plugin. Waiting for an outbound call doesn't count. |
+| Memory per instance | 64 MB, enough for a JavaScript component |
+| Outbound calls | 5 per request, across all of a plugin's stages |
+| Timeout per call | 5 seconds, as `forward_auth`'s |
+
 - **No other access**: no files, sockets or environment variables, and no state shared with other plugins. A component importing anything else proksi doesn't provide is refused when it loads, with the import's name.
 
 These are fixed for now. Settings to change them can be added once plugins show which ones need to.
