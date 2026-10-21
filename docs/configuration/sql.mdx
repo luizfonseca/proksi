@@ -22,6 +22,9 @@ store {
 
   # How often (in seconds) routes are synced from the store (default: 10)
   sync_interval_secs = 10
+
+  # Versions kept for each host, to roll back to (default: 50)
+  history_per_host = 50
 }
 ```
 
@@ -45,6 +48,8 @@ ON CONFLICT (host) DO UPDATE SET data = excluded.data, updated_at = excluded.upd
 UPDATE proksi_meta SET value = value + 1 WHERE key = 'revision';
 COMMIT;
 ```
+
+Hosts saved through the [admin API](/configuration/admin) also keep their last versions (`history_per_host`) and changes, in `proksi_route_versions` and `proksi_route_changes`, so a host can be rolled back. Changes written directly to `proksi_routes`, as above, aren't recorded there.
 
 Each instance reports the revision it applied in `proksi_replicas`. As with Redis, routes from the store win over docker labels and the configuration file, and the routes from the last sync are kept if the database can't be reached.
 

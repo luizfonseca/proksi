@@ -43,6 +43,9 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
     if config.store.sync_interval_secs == 0 {
         return Err(anyhow!("store.sync_interval_secs must be greater than 0"));
     }
+    if config.store.history_per_host == 0 {
+        return Err(anyhow!("store.history_per_host must be greater than 0"));
+    }
 
     // Validate that the docker interval secs is greater than 0
     if config.docker.interval_secs.is_some_and(|v| v == 0) {
@@ -380,6 +383,16 @@ mod tests {
             err.to_string(),
             "store.sync_interval_secs must be greater than 0"
         );
+    }
+
+    #[test]
+    fn test_check_config_store_history_per_host() {
+        let mut config = Config::default();
+        config.store.history_per_host = 0;
+
+        let err = check_config(&config).unwrap_err();
+
+        assert_eq!(err.to_string(), "store.history_per_host must be greater than 0");
     }
 
     #[test]

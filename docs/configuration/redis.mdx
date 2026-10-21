@@ -31,12 +31,16 @@ store {
 
   # How often routes are synced from the store (default: 10)
   sync_interval_secs = 10
+
+  # Versions kept for each host, to roll back to (default: 50)
+  history_per_host = 50
 }
 ```
 
 - When a host is defined in several places, routes from the store win over docker labels, which win over the configuration file.
 - Every change increments a revision. Each instance reports the revision it applied, so you can check that a change reached every instance.
 - If Redis can't be reached, the routes from the last sync are kept.
+- Hosts saved through the [admin API](/configuration/admin) keep their last versions (`history_per_host`) and changes, so a host can be rolled back, or restored after it was deleted.
 
 See [the specification](/general/specifications#store-keys) for the keys and format.
 

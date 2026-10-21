@@ -1,7 +1,7 @@
 //! Routes kept in a store, shared by every replica
 
 use async_trait::async_trait;
-use proksi_store::{RouteRecord, Store, StoreError};
+use proksi_store::{RouteRecord, Store, StoreError, Write};
 use serde::{Deserialize, Serialize};
 
 use crate::config::host::Host;
@@ -62,8 +62,8 @@ pub trait HostStore {
     /// The routes of the store, each read or reported as unreadable
     async fn stored_routes(&self) -> Result<StoredRoutes, StoreError>;
 
-    /// Adds or replaces the route of a host, returning the new revision
-    async fn put_stored(&self, route: &StoredRoute) -> Result<u64, StoreError>;
+    /// Saves a new version of a host, returning the new revision
+    async fn put_stored(&self, route: &StoredRoute, write: &Write) -> Result<u64, StoreError>;
 }
 
 #[async_trait]
@@ -80,8 +80,8 @@ impl<S: Store + ?Sized> HostStore for S {
         })
     }
 
-    async fn put_stored(&self, route: &StoredRoute) -> Result<u64, StoreError> {
-        self.put_route(route.to_record()?).await
+    async fn put_stored(&self, route: &StoredRoute, write: &Write) -> Result<u64, StoreError> {
+        self.put_route(route.to_record()?, write).await
     }
 }
 

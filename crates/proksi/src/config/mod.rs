@@ -46,6 +46,10 @@ pub struct StoreConfig {
     /// How often (in seconds) routes are synced from the store
     #[serde(default = "default_sync_interval_secs")]
     pub sync_interval_secs: u64,
+
+    /// Versions kept for each host, to roll back to (besides the active one)
+    #[serde(default = "default_history_per_host")]
+    pub history_per_host: usize,
 }
 
 impl Default for StoreConfig {
@@ -55,12 +59,17 @@ impl Default for StoreConfig {
             redis_url: None,
             database_url: None,
             sync_interval_secs: default_sync_interval_secs(),
+            history_per_host: default_history_per_host(),
         }
     }
 }
 
 fn default_sync_interval_secs() -> u64 {
     10
+}
+
+fn default_history_per_host() -> usize {
+    proksi_store::DEFAULT_HISTORY
 }
 
 /// Cache settings shared by all routes
