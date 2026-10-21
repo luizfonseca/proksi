@@ -29,13 +29,13 @@ proksi's plugins don't need to run plugins written for other proxies: converting
 
 ### Components, built with the Rust toolchain
 
-A plugin is a WebAssembly component implementing proksi's interface, written in WIT and published with an SDK crate, `proksi_plugin`. proksi runs it with Wasmtime and doesn't know or care which language built it.
+A plugin is a WebAssembly component implementing proksi's interface, written in WIT and published with an SDK crate, `proksi_plugin_sdk`. proksi runs it with Wasmtime and doesn't know or care which language built it.
 
 Rust is the supported language. Since Rust 1.82, `wasm32-wasip2` builds components directly, so a plugin is an ordinary crate in its author's repository:
 
 ```sh
 cargo new --lib fetch_profile
-cargo add proksi_plugin
+cargo add proksi_plugin_sdk
 cargo build --release --target wasm32-wasip2
 # target/wasm32-wasip2/release/fetch_profile.wasm
 ```
@@ -43,7 +43,7 @@ cargo build --release --target wasm32-wasip2
 Its `Cargo.toml` sets `crate-type = ["cdylib"]`, and the crate implements one trait:
 
 ```rust
-use proksi_plugin::{http, register_plugin, Error, Flow, Plugin, Request, Response};
+use proksi_plugin_sdk::{http, register_plugin, Error, Flow, Plugin, Request, Response};
 
 #[derive(serde::Deserialize, schemars::JsonSchema)]
 struct Options {
@@ -160,7 +160,7 @@ Before it's built, the memory of an instance and the support for WASI 0.3 in Rus
 
 ### Outbound HTTP
 
-Plugins call out with `wasi:http`, the standard WASI interface for HTTP, implemented by proksi with `wasmtime-wasi-http`. `proksi_plugin::http` is a small client on top of it, and other crates built for `wasi:http` work too.
+Plugins call out with `wasi:http`, the standard WASI interface for HTTP, implemented by proksi with `wasmtime-wasi-http`. `proksi_plugin_sdk::http` is a small client on top of it, and other crates built for `wasi:http` work too.
 
 - proksi makes the request: it reuses connections, does TLS, and applies a timeout (below).
 - Only hosts in `allowed_hosts` can be called; any other is refused, as an error the plugin can handle.
@@ -213,7 +213,7 @@ Each part has one job and can be built and tested without the others. Only the l
 
 | Part | Its job | Knows nothing of |
 | --- | --- | --- |
-| `proksi_plugin` (crate, renamed from `plugins_api`) | The WIT interface, the `Plugin` trait, `register_plugin!` and `http`, for plugin authors. A regular library, published with proksi's versions. | proksi, Wasmtime |
+| `proksi_plugin_sdk` (crate, renamed from `plugins_api`) | The WIT interface, the `Plugin` trait, `register_plugin!` and `http`, for plugin authors. A regular library, published with proksi's versions. | proksi, Wasmtime |
 | `proksi_wasm` (crate) | Running components: the Wasmtime engine and instance pool, reading the declaration, the limits, `wasi:http` with its allowed hosts. It takes a request's parts and returns what the plugin changed or answered. | Pingora, the configuration format |
 | A `plugin` block in proksi (module) | Reading `plugin "<name>" { }`, checking `options` against the declaration, and calling `proksi_wasm` at each stage from the block's hooks, with `on_error`. | Wasmtime |
 
