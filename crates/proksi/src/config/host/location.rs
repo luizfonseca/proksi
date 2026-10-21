@@ -5,10 +5,10 @@ use crate::config::{RouteCache, RouteHeader, RoutePlugin, RouteUpstream};
 /// Requests of a host matching a path, and how they are handled
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Location {
-    /// Path pattern (`/api`, `/users/:id`, `/*`)
+    /// Path pattern (`/api`, `/users/:id`, `/*`), or a regex starting with `^/` (ADR 0010)
     pub path: String,
-    /// Match only the path itself instead of the path and everything below it.
-    /// Set for routes converted from `routes = [...]`, which matched exactly.
+    /// Match only the path itself instead of the path and everything below it (`exact = true`,
+    /// routes converted from `routes = [...]`, Kubernetes `Exact` paths)
     #[serde(default)]
     pub exact: bool,
     #[serde(default)]
@@ -382,10 +382,15 @@ impl UpstreamTimeouts {
 }
 
 impl Location {
+    /// Whether the location is a regex (`^/...`) rather than a path
+    pub fn is_regex(&self) -> bool {
+        self.path.starts_with('^')
+    }
+
     /// Path patterns matched by this location: the path and everything below it
-    /// (`/api` matches `/api`, `/api/` and `/api/users`, not `/apis`)
+    /// (`/api` matches `/api`, `/api/` and `/api/users`, not `/apis`), or its regex
     pub fn patterns(&self) -> Vec<String> {
-        if self.exact || self.path.ends_with(['*', '+']) {
+        if self.exact || self.is_regex() || self.path.ends_with(['*', '+']) {
             return vec![self.path.clone()];
         }
         let base = self.path.trim_end_matches('/');

@@ -147,6 +147,14 @@
       "group": "Routing",
       "pages": [
         {
+          "title": "Paths",
+          "href": "/routing/paths"
+        },
+        {
+          "title": "Regex locations",
+          "href": "/routing/regex-locations"
+        },
+        {
           "title": "Upstreams",
           "href": "/routing/upstreams"
         },

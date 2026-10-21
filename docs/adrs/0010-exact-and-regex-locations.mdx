@@ -1,0 +1,84 @@
+---
+title: "ADR 0010: Exact and regex locations"
+description: "A location is a path, which can be exact, or a regular expression starting with `^`."
+---
+
+- Status: accepted
+- Date: 2026-10-21
+- Related: [ADR 0003](/adrs/0003-configuration-model) (hosts and locations), [ADR 0007](/adrs/0007-rules) (rules)
+
+## Context
+
+A location matches its path and everything below it: `location "/blog/:id/posts"` serves `/blog/a/posts`, and also `/blog/a/posts/1`. Paths are matched with a tree of static segments, parameters (`:id`) and wildcards (`*`), in about 35 nanoseconds per request whatever the number of locations, without allocating.
+
+Some configurations need more than a tree can say:
+
+- **Stopping at a path**: `/blog/:id/posts`, and nothing below it.
+- **Alternatives**: `posts` or `drafts` under the same path.
+- **What a segment holds**: `/blog/` followed by eight lowercase letters.
+
+Routes converted from `routes = [...]`, and Kubernetes `Exact` paths, already match exactly, but that isn't something a location can say.
+
+Rules (ADR 0007) can test a path with a regular expression, but they can't route: the upstream belongs to the location.
+
+Other routers were considered. matchit, path-tree, wayfind and route-recognizer have no regular expressions or alternatives. actix-router has both, but checks each route in turn, about 45 times slower than a tree. Reverse proxies split the two the same way: nginx and Envoy match paths with prefixes and try regular expressions in order.
+
+## Decision
+
+### Exact paths
+
+A location's `exact = true` matches its path only, not what's below it:
+
+```hcl
+location "/blog/:id/posts" {
+  exact = true
+  upstream "app:3000" {}
+}
+```
+
+It changes the patterns inserted in the tree (the path, without the path and everything below it), so it costs nothing more per request.
+
+### Regex locations
+
+A location starting with `^` is a regular expression, matched against the request's path. Paths always start with `/`, so the two can't be confused, and a location is always anchored at the start of the path:
+
+```hcl
+location "^/blog/[a-z]{8}/(posts|drafts)$" {
+  upstream "app:3000" {}
+}
+```
+
+- **Case**: matched as written. `[A-Za-z]` or `(?i)` accept both cases.
+- **Its end**: up to the pattern. With `$`, nothing below the path; without it, anything that follows.
+- **The path matched**: the same as for paths, its repeated slashes collapsed and `.` and `..` resolved, without the query.
+- **Order**: regex locations are tried first, in the order they're written, and the first that matches serves the request. When none does, the most specific path does, as before. A host without regex locations is matched as before.
+- **Syntax**: Rust's `regex`. It never backtracks, so its time grows with the length of the path only, whatever the pattern.
+
+They must start with `^/`: `^~ /x` (an nginx modifier) is refused, as are `~` and `=`.
+
+### Cost
+
+A host's regex locations are compiled into one automaton that finds the first matching one in a single pass over the path, with no allocations. Measured on 2026-10-21, on paths of about 25 bytes:
+
+| Regex locations in a host | Path matching one | Path matching none | Memory |
+| --- | --- | --- | --- |
+| 100 | 38 ns | 9 ns | 0.7 MB |
+| 1,000 | 38 ns | 8 ns | 3.5 MB |
+
+Every request to the host pays for it, before the tree, including requests to path locations. A regular expression per location, tried in turn, grows with their number (60 ns for 10, 830 ns for 100); a `RegexSet` allocates on each request, and grows to microseconds at 10,000. Past a few thousand patterns, the single automaton's memory grows without bounds (2.7 GB at 10,000 in the same test), so:
+
+- A host has at most 1,000 regex locations.
+- Each pattern's compiled size is limited to 1 MiB, so patterns such as `^/x{1000}{1000}` are refused. Its time stays linear whatever the pattern, and the automaton is built lazily, in a cache of fixed size.
+
+Both are checked when the configuration loads, with the location's name in the error, so a host from the store or the admin API is refused before it's served.
+
+### What isn't changed
+
+- **No syntax on top of paths**: alternatives (`{posts,drafts}`, `/a|/b`) and constraints on parameters (`:id([a-z]{8})`) aren't added. A path is what the tree understands; anything else is a regex location.
+- **`static_files`**: it serves files below its location's path, so it needs a path, not a regex.
+
+## Consequences
+
+- Paths stay the recommended way: they cost nothing more, whatever their number. Regex locations are for what paths can't say, and the documentation shows their cost.
+- `exact = true` replaces most regular expressions that only end with `$`.
+- Locations pointing to the same upstreams each have their own load balancer and health checks; sharing them is a separate change.

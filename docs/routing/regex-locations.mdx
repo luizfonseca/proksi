@@ -1,0 +1,82 @@
+---
+title: "Regex locations"
+description: "Locations matching a regular expression, for what paths can't say."
+---
+
+A location starting with `^` is a regular expression, matched against the request's path. Use it for what a [path](/routing/paths) can't say: alternatives, what a segment holds, or a path ending in a given way.
+
+```hcl
+host "example.com" {
+  # /blog/ and eight lowercase letters, then posts or drafts, and nothing after
+  location "^/blog/[a-z]{8}/(posts|drafts)$" {
+    upstream "app:3000" {}
+  }
+
+  location "/" {
+    upstream "web:3000" {}
+  }
+}
+```
+
+Paths are the better choice whenever they can say it: they cost nothing more, whatever their number, while regex locations add to every request of their host. See [performance](#performance).
+
+## Matching
+
+- **From the start of the path**: a regex location starts with `^/`. It's anchored at the start, so `^/api` never matches `/v1/api`.
+- **Its end**: with `$`, the path must end there. Without it, anything can follow: `^/blog/[a-z]{8}/posts` also serves `/blog/abcdefgh/posts/1`.
+- **Case**: matched as written. `[A-Za-z]` accepts both cases, and `(?i)` ignores case for what follows it: `^/(?i:blogs)/`.
+- **The path**: as for paths, with repeated slashes collapsed and `.` and `..` resolved, and without the query.
+- **Order**: regex locations are tried first, in the order they're written, and the first that matches serves the request. When none does, the most specific path does.
+- **Syntax**: Rust's [`regex`](https://docs.rs/regex/latest/regex/#syntax). There are no look-arounds or back-references: in return, matching never backtracks, and takes a time proportional to the length of the path, whatever the pattern.
+
+| Location | Serves | Doesn't serve |
+| --- | --- | --- |
+| `^/blog/[a-z]{8}/(posts\|drafts)$` | `/blog/abcdefgh/posts`, `/blog/abcdefgh/drafts` | `/blog/abc/posts`, `/blog/abcdefgh/posts/1` |
+| `^/(posts\|drafts)(/.*)?$` | `/posts`, `/drafts/logo.png` | `/postsx` |
+| `^/v[0-9]+/users` | `/v1/users`, `/v12/users/42` | `/v/users`, `/V1/users` |
+| `^/(?i:blogs)/` | `/blogs/a`, `/BLOGS/a` | `/blog/a` |
+
+## Performance
+
+A host's regex locations are compiled into one automaton, which finds the first matching location in a single pass over the path, without allocating. Every request to the host goes through it before paths are matched, including requests served by a path location.
+
+Time to choose a location in a host with 20 path locations, on paths of about 25 characters:
+
+| Regex locations in the host | Path served by a regex location | Path served by a path location | Memory |
+| --- | --- | --- | --- |
+| none | | 35 ns | |
+| 10 | 37 ns | 35 ns | |
+| 100 | 43 ns | 36 ns | 0.7 MB |
+| 1,000 | 42 ns | 35 ns | 3.5 MB |
+| 1,000, starting with a class (`^/[a-z]+/...`) | 29 ns | 39 ns | |
+
+A regex starting with fixed text (`^/blog/`) is ruled out by a quick check when the path starts differently, which is why 1,000 of them cost almost nothing to paths served elsewhere. Regexes starting with a class or a wildcard are run over the path. Longer paths and larger patterns take longer.
+
+## Limits
+
+Checked when the configuration loads, so a host from the store or the admin API is refused before it's served:
+
+- A host has 1,000 regex locations at most.
+- Each pattern's compiled size is limited to 1 MiB: patterns such as `^/x{1000}{1000}` are refused.
+- An invalid pattern names its location and the problem:
+
+  ```text
+  location "^/blog/[a-z": invalid regex: regex parse error:
+      ^/blog/[a-z
+             ^
+  error: unclosed character class
+  ```
+
+- `exact` doesn't apply: a regex ends where it says, with `$`.
+- [`static_files`](/plugins/static-files) needs a path, as its files are found below it.
+
+## Paths, regex locations or rules
+
+| To... | Use |
+| --- | --- |
+| Send a path and what's below it to an upstream | a path: `location "/api"` |
+| Stop at a path | a path with `exact = true` |
+| Accept only some segments, or alternatives | a regex location |
+| Refuse, redirect or limit requests by path, header, method... | a [rule](/rules), in the host or the location |
+
+Rules can test the path with the same regular expressions (`path { matches = "..." }`), but they don't choose the upstream: they act on the requests of their location.

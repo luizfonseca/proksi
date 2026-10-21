@@ -1,0 +1,181 @@
+---
+title: "Paths"
+description: "Every way a location's path can choose its requests: static paths, parameters, wildcards and exact paths."
+---
+
+A location's path chooses the requests it serves. Paths are the default way to route: they're matched with a tree, in about the same time with 20 locations or 10,000, without allocating. Use them whenever they can say what you need, and [regex locations](/routing/regex-locations) only for the rest.
+
+```hcl
+host "example.com" {
+  location "/" {
+    upstream "web:3000" {}
+  }
+
+  location "/api" {
+    upstream "api:4000" {}
+  }
+
+  location "/users/:id/avatar" {
+    upstream "images:5000" {}
+  }
+}
+```
+
+## How a path matches
+
+- A location serves its path **and everything below it**: `/api` serves `/api`, `/api/` and `/api/users`, but not `/apis`. With [`exact = true`](#exact-paths), it serves the path only.
+- `/` serves whatever no other location matches.
+- When several locations match, the **most specific** one wins, whatever their order in the file (see [which location wins](#which-location-wins)).
+- Paths are compared after collapsing repeated slashes and resolving `.` and `..`: `//api` and `/x/../api` are served by `/api`. The request is forwarded unchanged.
+- The query (`?page=2`) isn't part of the path.
+- Matching is case-sensitive: `/API` isn't served by `/api`.
+- A request matching no location gets a `404`.
+
+## Static paths
+
+Text without `:`, `*` or `+` matches itself.
+
+| Location | Serves | Doesn't serve |
+| --- | --- | --- |
+| `/api` | `/api`, `/api/`, `/api/v1/users` | `/apis`, `/API` |
+| `/api/v1` | `/api/v1`, `/api/v1/users` | `/api`, `/api/v2` |
+| `/docs/` | `/docs/`, `/docs/intro` | `/docs` |
+
+A trailing slash is part of the path: `/docs/` doesn't serve `/docs`. Leave it out to serve both.
+
+## Parameters
+
+`:name` matches one segment, or part of one: anything up to the next `/`, or the next character written after it. The name is only there to read the path: proksi doesn't use it.
+
+| Location | Serves | Doesn't serve |
+| --- | --- | --- |
+| `/users/:id` | `/users/42`, `/users/me/posts` | `/users`, `/users/` |
+| `/users/:id/posts` | `/users/42/posts`, `/users/42/posts/1` | `/users/42`, `/users/posts` |
+| `/img-:id` | `/img-42`, `/img-42/large` | `/img-`, `/img` |
+| `/files/:name.:ext` | `/files/a.png`, `/files/a.b.png` | `/files/a` |
+| `/tags/:day-:month-:year` | `/tags/2026-10-21` | `/tags/2026-10` |
+| `/v:version/api` | `/v1/api`, `/v12/api/users`, and `/v/api` | `/version` |
+
+- A parameter alone in its segment needs at least one character (`/users/` isn't served by `/users/:id`). A parameter after text in the same segment can be empty (`/v/api` is served by `/v:version/api`).
+- A parameter accepts any text: `/users/:id` serves `/users/42` and `/users/me` alike. To accept only some (digits, eight letters), use a [regex location](/routing/regex-locations).
+- `\:` is a `:` written as text, not a parameter: `location "/actions/:name\\::verb"` serves `/actions/ci:bench` (in HCL, `\\` writes one `\`).
+
+### Optional parameters
+
+`:name?` matches a segment that may be empty.
+
+| Location | Serves | Doesn't serve |
+| --- | --- | --- |
+| `/users/:id?` | `/users/`, `/users/42`, `/users/42/posts` | `/users` |
+
+## Wildcards
+
+Wildcards match any number of segments, `/` included.
+
+| Location | Matches | Serves | Doesn't serve |
+| --- | --- | --- | --- |
+| `/files/*` | anything after `/files/`, even nothing | `/files/`, `/files/a`, `/files/a/b` | `/files` |
+| `/files/+` | at least one character after `/files/` | `/files/a`, `/files/a/b` | `/files`, `/files/` |
+| `/files/:path*` | the same as `*`, named | `/files/`, `/files/a/b` | `/files` |
+| `/files/:path+` | the same as `+`, named | `/files/a/b` | `/files/` |
+| `/*/settings` | one segment or more, then `settings` | `/a/settings`, `/a/b/settings/x` | `/settings`, `/a/settingsx` |
+| `/repos/:org/*/issues` | a segment, any segments, then `issues` | `/repos/o/a/issues`, `/repos/o/a/b/issues/1` | `/repos/o/issues` |
+
+A location ending with `*` or `+` already serves everything below it. Others serve what's below them too, unless they're [exact](#exact-paths).
+
+## Which location wins
+
+Locations are compared from the left of the path, one part at a time. At each part, text beats a parameter, which beats a wildcard, and the location that wins the first difference serves the request. Their order in the file doesn't matter.
+
+With these locations:
+
+```hcl
+host "example.com" {
+  location "/" {
+    upstream "web:3000" {}
+  }
+  location "/:page" {
+    upstream "pages:3000" {}
+  }
+  location "/users/me" {
+    upstream "account:3000" {}
+  }
+  location "/users/:id" {
+    upstream "users:3000" {}
+  }
+  location "/users/:id/posts" {
+    upstream "posts:3000" {}
+  }
+}
+```
+
+| Request | Served by | Why |
+| --- | --- | --- |
+| `/users/me` | `/users/me` | text beats `:id` |
+| `/users/me/settings` | `/users/me` | and what's below it |
+| `/users/42` | `/users/:id` | |
+| `/users/42/posts` | `/users/:id/posts` | longer text after the parameter |
+| `/users` | `/:page` | no location has `/users` alone |
+| `/about` | `/:page` | a parameter beats `/`'s wildcard |
+| `/` | `/` | |
+
+Two locations matching exactly the same paths (`/api` and `/api/*`) stop the configuration from loading.
+
+## Exact paths
+
+`exact = true` serves the path itself, and nothing below it:
+
+```hcl
+host "example.com" {
+  # Only the home page
+  location "/" {
+    exact = true
+    upstream "home:3000" {}
+  }
+
+  # /blog/a/posts, not /blog/a/posts/1
+  location "/blog/:id/posts" {
+    exact = true
+    upstream "blog:3000" {}
+  }
+
+  location "/blog" {
+    upstream "blog:3000" {}
+  }
+}
+```
+
+| Location, with `exact = true` | Serves | Doesn't serve |
+| --- | --- | --- |
+| `/api` | `/api` | `/api/`, `/api/users` |
+| `/users/:id` | `/users/42` | `/users/42/`, `/users/42/posts` |
+| `/files/:name.:ext` | `/files/a.png` | `/files/a.png/x` |
+| `/*/settings` | `/a/settings`, `/a/b/settings` | `/a/settings/x` |
+| `/files/*` | `/files/a/b` (a wildcard at the end still matches what follows) | `/files` |
+
+- A trailing slash is a different path: an exact `/login` doesn't serve `/login/`.
+- An exact location and one serving the same path and below (`/api` and `/api`) can't both be written: there's one location per path.
+
+## Performance
+
+The tree is searched one part of the path at a time, so the number of locations barely changes the time. Measured on 2026-10-21, with paths of about 25 characters:
+
+| Locations | Choosing one |
+| --- | --- |
+| 20 | 35 ns |
+| 1,000 | 38 ns |
+| 10,000 | 37 ns |
+| 20, all exact | 22 ns |
+
+No allocations in any case. Long paths with many segments take longer, as each segment is compared.
+
+## What paths can't say
+
+| To... | Use |
+| --- | --- |
+| Accept only some segments (digits, eight letters) | a [regex location](/routing/regex-locations): `^/users/[0-9]+$` |
+| Alternatives (`posts` or `drafts`) | a location for each, or a regex location: `^/blog/[a-z]+/(posts\|drafts)$` |
+| Ignore case | a regex location with `(?i)` |
+| Refuse, redirect or limit requests by path | a [rule](/rules) with `path { prefix, suffix, contains, wildcard, matches }` |
+
+There's no syntax for several paths in one location: write a location for each. A regex location covers them at once, at a cost on every request of the host.

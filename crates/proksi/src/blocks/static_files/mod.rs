@@ -49,6 +49,12 @@ impl StaticFiles {
             ));
         }
 
+        if location.starts_with('^') {
+            return Err(
+                "static_files: the location must be a path, its files are found below it"
+                    .to_string(),
+            );
+        }
         let prefix = location.trim_end_matches('*').trim_end_matches('/');
         if prefix.contains([':', '*', '+']) {
             return Err(
