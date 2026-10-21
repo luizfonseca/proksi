@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.16.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.16.0...proksi-v0.16.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* decode escaped letters and dots before matching paths ([#541](https://github.com/luizfonseca/proksi/issues/541)) ([262e50e](https://github.com/luizfonseca/proksi/commit/262e50e96ae58f1bee766d65aa79654af3a20795))
+* spell out the paths blocked in the URL scanners recipe ([#542](https://github.com/luizfonseca/proksi/issues/542)) ([52aab11](https://github.com/luizfonseca/proksi/commit/52aab11ef32ccf94d9ea907158833bf73224e717))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.16.0 to 0.16.1
+    * proksi_store bumped from 0.16.0 to 0.16.1
+  * dev-dependencies
+    * proksi_store bumped from 0.16.0 to 0.16.1
+
 ## [0.16.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.15.1...proksi-v0.16.0) (2026-10-21)
 
 
