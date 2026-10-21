@@ -53,6 +53,63 @@ host "api.example.com" {
 }
 ```
 
+## Accept only some content types
+
+Writes to an API must send JSON or a form; anything else, or no `Content-Type` at all, is refused with `415 Unsupported Media Type`. Reads have no body, so only writes are checked.
+
+```hcl
+host "api.example.com" {
+  location "/" {
+    upstream "api:4000" {}
+
+    rule "content types" {
+      and {
+        method {
+          in = ["POST", "PUT", "PATCH"]
+        }
+        header "content-type" {
+          not_in = ["application/json", "application/x-www-form-urlencoded"]
+        }
+      }
+      then {
+        respond {
+          status = 415
+        }
+      }
+    }
+  }
+}
+```
+
+- `not_in` holds when the header is missing, so a write without a `Content-Type` is refused too.
+- Values are compared exactly, parameters included: `application/json; charset=utf-8` isn't `application/json`, and file uploads (`multipart/form-data`) always have a `boundary`. To accept any parameters, and any case, compare the type only with `matches`:
+
+```hcl
+host "api.example.com" {
+  location "/" {
+    upstream "api:4000" {}
+
+    rule "content types" {
+      and {
+        method {
+          in = ["POST", "PUT", "PATCH"]
+        }
+        not {
+          header "content-type" {
+            matches = "(?i)^(application/json|multipart/form-data)\\s*(;|$)"
+          }
+        }
+      }
+      then {
+        respond {
+          status = 415
+        }
+      }
+    }
+  }
+}
+```
+
 ## Protect everything but the health check
 
 A load balancer's probe reaches the app without signing in; every other request needs it.
