@@ -169,6 +169,11 @@ pub fn of_session(session: &pingora::proxy::Session) -> Option<IpAddr> {
     Some(client_ip(peer, forwarded_for))
 }
 
+/// Whether `peer` is a trusted proxy (`server.trusted_proxies`)
+pub fn is_trusted(peer: IpAddr) -> bool {
+    TRUSTED.get().is_some_and(|trusted| trusted.trusts(&peer))
+}
+
 /// The client of a request, see [`TrustedProxies::client`]
 pub fn client_ip(peer: IpAddr, forwarded_for: Option<&str>) -> IpAddr {
     match TRUSTED.get() {

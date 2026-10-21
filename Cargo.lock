@@ -3595,6 +3595,7 @@ dependencies = [
  "proksi-admin-ui",
  "prometheus",
  "r2d2",
+ "rand 0.8.8",
  "redis",
  "regex",
  "reqwest",

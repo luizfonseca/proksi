@@ -1,21 +1,38 @@
 ---
 title: "Request ID"
-description: "In order to enable a particular route to include x-request-id, you can do the following"
+description: "Gives each request an ID, sent to the upstream and back to the client, and logged."
 ---
 
-In order to enable a particular route to include `x-request-id`, you can do the following:
+Gives each request of a location an ID, to follow it through the logs of proksi and of the apps behind it. The upstream gets it as `X-Request-Id` (or `header_name`), the client gets it back in the response, and access logs have it as `request_id`.
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `header_name` | The header it's sent and kept in, such as `"X-Correlation-Id"` (default: `X-Request-Id`) |
+| `suffix` | Added to the IDs after a `-`, such as the server's name or region: 1 to 32 letters, digits, `-`, `_` or `.` (default: none) |
+| `priority` | When it runs among the blocks of the location (default: `0`, first) |
+
+### Usage
 
 **proksi.hcl**
 ```hcl
-lets_encrypt {
-  enabled = true
-  email = "test@email.com"
-}
-
-host "mywebsite.com" {
+host "example.com" {
   location "/" {
-    request_id {}
     upstream "localhost:3000" {}
+
+    # 0192f3a4-5b6c-7d8e-9f01-23456789abcd-ams1
+    request_id {
+      suffix = "ams1"
+    }
   }
 }
 ```
+
+### Good to know
+
+- IDs are [UUID v7](https://www.rfc-editor.org/rfc/rfc9562#name-uuid-version-7): they start with the time, so they sort in the order requests came, and are unique without proksi servers talking to each other.
+- With several proksi servers, a `suffix` per server tells which one handled a request. Set it from the environment, such as `suffix = env("REGION")`.
+- Behind proxies listed in `server.trusted_proxies`, their ID (in the same header) is kept, so a request has one ID across every hop. IDs of up to 200 visible characters are kept, and other ones are replaced.
+- A client's own ID is always replaced, so it can't choose an ID that's already in your logs.
+- Responses served from the [cache](/use-cases/cache) get the ID of the request they answer, not the one that filled the cache.

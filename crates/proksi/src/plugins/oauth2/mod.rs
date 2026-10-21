@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use cookie::Cookie;
 use http::StatusCode;
 use once_cell::sync::Lazy;
-use pingora::http::{RequestHeader, ResponseHeader};
+use pingora::http::ResponseHeader;
 use pingora::proxy::Session;
 
 use provider::{OauthType, OauthUser, Provider};
@@ -181,24 +181,6 @@ impl Oauth2 {
 
 #[async_trait]
 impl MiddlewarePlugin for Oauth2 {
-    async fn upstream_request_filter(
-        &self,
-        _: &mut Session,
-        _: &mut RequestHeader,
-        _: &mut RouterContext,
-    ) -> Result<()> {
-        Ok(())
-    }
-
-    fn upstream_response_filter(
-        &self,
-        _: &mut Session,
-        _: &mut ResponseHeader,
-        _: &mut RouterContext,
-    ) -> Result<()> {
-        Ok(())
-    }
-
     /// Oauth2 filters requests with/without the required Secure Cookie
     /// If the request has the required cookie, the request is allowed to pass through
     /// and we perform a JWT validation

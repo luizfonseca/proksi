@@ -44,7 +44,7 @@ pub struct RouterContext {
     /// The location serving the request, once found
     pub route_container: Option<Arc<RouteStoreContainer>>,
     /// The request's id (`request_id` block)
-    pub request_id: Option<String>,
+    pub request_id: Option<http::HeaderValue>,
     /// Whether the response came from the cache (`cache-status`)
     pub cache_state: Option<&'static str>,
     /// The connection to the upstream: whether it was reused, and its address
@@ -607,7 +607,7 @@ impl ProxyHttp for Router {
             http_version,
             reused_connection = reused,
             upstream_addr = %OrEmpty(upstream_addr),
-            request_id = ctx.request_id.as_deref(),
+            request_id = ctx.request_id.as_ref().and_then(|id| id.to_str().ok()),
             access_log = true
         );
     }
