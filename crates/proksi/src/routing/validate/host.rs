@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn test_regex_locations_per_host_are_limited() {
         let mut host = with_location("^/0$");
-        for index in 1..=crate::routing::paths::MAX_REGEXES {
+        for index in 1..=1000 {
             let mut other = host.locations[0].clone();
             other.path = format!("^/{index}$");
             host.locations.push(other);

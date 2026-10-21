@@ -3,5 +3,5 @@
 mod matcher;
 mod normalize;
 
-pub use matcher::{compile_regex, compile_regexes, LocationMatcher, MAX_REGEXES};
+pub use matcher::{compile_regex, compile_regexes, LocationMatcher};
 pub(crate) use normalize::normalize_path;
