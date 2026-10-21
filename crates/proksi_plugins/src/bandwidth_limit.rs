@@ -235,6 +235,15 @@ mod tests {
     }
 
     #[test]
+    fn test_counting_a_known_client_allocates_nothing() {
+        let block = limit(serde_json::json!({ "rate": "100KiB" })).unwrap();
+        let now = Instant::now();
+        crate::allocations::assert_no_allocations("counting a part of a body", || {
+            block.take(client(1), KIB, now)
+        });
+    }
+
+    #[test]
     fn test_refilled_buckets_are_dropped() {
         let block = limit(serde_json::json!({ "rate": "100KiB" })).unwrap();
         let start = Instant::now();
