@@ -1,0 +1,197 @@
+---
+title: "ADR 0011: Wasm plugins"
+description: "Plugins built outside proksi as WebAssembly components, configured like the built-in ones."
+---
+
+- Status: proposed
+- Date: 2026-10-21
+- Related: [ADR 0003](/adrs/0003-configuration-model) (building blocks), [ADR 0007](/adrs/0007-rules) (rules)
+
+## Context
+
+proksi's plugins (`request_id`, `rate_limit`, `forward_auth`...) are built into the binary. Anything they don't do needs a change to proksi, or another service in front of the upstream.
+
+A common case is a step that depends on another service: ask an internal API about the request, then add headers from its answer, rewrite the request, or refuse it. `forward_auth` covers one shape of this (a `2xx` lets the request through); anything else, such as reading a JSON answer, isn't possible.
+
+Plugins should be written and built outside proksi's repository, by whoever runs it, and later shared. Code from someone else must not be able to read files, open connections or bring proksi down.
+
+An earlier prototype (`plugins_api`, `plugin_request_id`, and a Wasmtime experiment on the `wip/wasm-plugin-support` branch) defined a small WebAssembly interface but was never wired to requests or to the configuration.
+
+Other proxies were considered:
+
+- **Envoy, Istio and nginx** share proxy-wasm. Its SDKs are for Rust, Go and C++, with no JavaScript.
+- **Traefik** runs plugins through http-wasm, a small interface for HTTP middleware, or interprets Go.
+- **Zed's extensions and Fastly Compute** use the WebAssembly component model: an interface written in WIT, implemented in any language that builds components. Fastly runs JavaScript by compiling a JS engine (SpiderMonkey) to WebAssembly with the script inside.
+
+proksi's plugins don't need to run plugins written for other proxies: converting one is a small job.
+
+## Decision
+
+### Components, built with the Rust toolchain
+
+A plugin is a WebAssembly component implementing proksi's interface, written in WIT and published with an SDK crate, `proksi_plugin`. proksi runs it with Wasmtime and doesn't know or care which language built it.
+
+Rust is the supported language. Since Rust 1.82, `wasm32-wasip2` builds components directly, so a plugin is an ordinary crate in its author's repository:
+
+```sh
+cargo new --lib fetch_profile
+cargo add proksi_plugin
+cargo build --release --target wasm32-wasip2
+# target/wasm32-wasip2/release/fetch_profile.wasm
+```
+
+Its `Cargo.toml` sets `crate-type = ["cdylib"]`, and the crate implements one trait:
+
+```rust
+use proksi_plugin::{http, register_plugin, Error, Flow, Plugin, Request, Response};
+
+#[derive(serde::Deserialize, schemars::JsonSchema)]
+struct Options {
+    /// The profiles API
+    api: String,
+}
+
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+struct Profile {
+    plan: String,
+}
+
+struct FetchProfile {
+    api: String,
+}
+
+impl Plugin for FetchProfile {
+    type Options = Options;
+    type Ctx = Profile;
+
+    fn new(options: Options) -> Result<Self, String> {
+        Ok(Self { api: options.api })
+    }
+
+    async fn request(&self, request: &mut Request, ctx: &mut Profile) -> Result<Flow, Error> {
+        let user = request.header("x-user").unwrap_or_default();
+        *ctx = http::get(format!("{}/profiles/{user}", self.api)).await?.json()?;
+        request.set_header("x-plan", &ctx.plan);
+        Ok(Flow::Continue)
+    }
+
+    async fn response(&self, response: &mut Response, ctx: &mut Profile) -> Result<(), Error> {
+        response.set_header("x-plan", &ctx.plan);
+        Ok(())
+    }
+}
+
+register_plugin!(FetchProfile);
+```
+
+The interface stays language-neutral, and proksi provides the standard WASI imports a language runtime expects (clocks, random numbers, output for logs), so a component built from JavaScript with `componentize-js` can load too. Only Rust has an SDK, documentation and examples.
+
+### Configuration
+
+A plugin is a block like the built-in ones, with a name, its file, and its options:
+
+```hcl
+location "/" {
+  upstream "app:3000" {}
+
+  plugin "fetch_profile" {
+    file     = "plugins/fetch_profile.wasm"
+    on_error = "fail"
+    allow    = ["profiles.internal.example.com:8080"]
+    options  = {
+      api   = "http://profiles.internal.example.com:8080"
+      token = env("PROFILES_TOKEN")
+    }
+  }
+}
+```
+
+- **Name**: the instance, in logs, metrics and errors. Two blocks can use one file with different options.
+- **`file`**: the component. Each file is compiled once, whatever the number of blocks using it, and compiled again when the configuration reloads and the file has changed.
+- **`options`**: any value, passed to the plugin as JSON. Secrets come from `env()`, as for the built-in plugins.
+- **`on_error`**: required, `"fail"` or `"continue"` (below).
+- **`allow`**: the hosts the plugin may call (below).
+- **`priority`**: when it runs among the location's blocks, as for any block. The default is `30`, after authentication and before `compress`.
+
+It goes where the built-in plugins go: in a location, and in a rule's `then`.
+
+### What a plugin declares
+
+`register_plugin!` embeds a declaration in the component, as a custom section that proksi reads without running the plugin:
+
+- **Its options**, as a JSON Schema derived from the `Options` type. proksi checks `options` against it when the configuration loads, with the block's name in the error, and the admin UI builds the block's form from it, as for the built-in plugins.
+- **The stages it implements.** proksi doesn't call the others, so they cost nothing.
+- **The hosts it expects to call**, shown next to `allow` to help write it. Only `allow` grants them.
+- **The interface version it was built for.** A component built for an interface proksi doesn't know is refused.
+
+`new` then receives the options already parsed, and can still refuse them (`"timeout must be above 0"`). Either way, the configuration doesn't load.
+
+### Stages
+
+A plugin attaches to the stages of a request that proksi's own blocks use:
+
+| Stage | Pingora | A plugin can |
+| --- | --- | --- |
+| `request` | `request_filter` | read the request, call out, change its headers, path or method, or answer it (`Flow::Respond`): a `401`, a redirect |
+| `upstream_request` | `upstream_request_filter` | change the request sent to the upstream |
+| `response` | `upstream_response_filter`, `response_filter` | read the status and headers, change the headers |
+| `logging` | `logging` | read the request and its response, after it's sent; call out |
+
+Bodies aren't readable or changeable.
+
+### State within a request
+
+`Ctx` is the plugin's state for one request: `Default` when it starts, and the same value in each of its stages. The SDK serializes it between stages, and proksi keeps the bytes with the request, so an instance isn't held while the upstream answers. Nothing is kept between requests.
+
+### Outbound HTTP
+
+Plugins call out with `wasi:http`, the standard WASI interface for HTTP, implemented by proksi with `wasmtime-wasi-http`. `proksi_plugin::http` is a small client on top of it, and other crates built for `wasi:http` work too.
+
+- proksi makes the request: it reuses connections, does TLS, and applies a timeout.
+- Only hosts in `allow` can be called; any other is refused, as an error the plugin can handle.
+- Each request has a limit on the number of calls a plugin makes.
+
+Plugins have no sockets, so they can't reach databases or other services except over HTTP.
+
+### Limits
+
+A plugin is code the operator chose to run. The limits keep a faulty plugin from affecting the rest of proksi:
+
+- **Time**: each stage has a budget of CPU time, enforced by Wasmtime interrupting the plugin. Waiting for an outbound call doesn't count toward it; the call has its own timeout.
+- **Memory**: each instance has a maximum.
+- **No other access**: no files, sockets or environment variables, and no state shared with other plugins. A component importing anything else proksi doesn't provide is refused when it loads, with the import's name.
+
+Each limit has a default, and a block can change it: `limits { cpu_ms, memory_mb, calls, call_timeout_secs }`.
+
+Instances are created from a pool, from the compiled component, and reset after each stage.
+
+### Errors
+
+`on_error` is required, so whoever adds a plugin decides what its failures mean:
+
+- `"fail"`: the request is answered with `502`, and the plugin's name and error are logged.
+- `"continue"`: the request goes on as if the plugin weren't there, with a warning in the logs.
+
+A failure is a trap, a limit reached, or an error returned from a stage. Answering the request on purpose (`Flow::Respond`) isn't one.
+
+### Crates
+
+- `proksi_plugin` (renamed from `plugins_api`): the WIT interface, the `Plugin` trait, `register_plugin!` and `http`. A regular library, published with proksi's versions.
+- `plugin_request_id` is removed: request IDs are built in. An example plugin replaces it, built in CI to check that the SDK and proksi agree.
+- In proksi, plugins are a building block like the others, in their own module.
+
+## Consequences
+
+- Plugins are written and built outside proksi, with the standard Rust toolchain, and added with a path in the configuration.
+- A plugin can't read files, open sockets, or call hosts the configuration doesn't allow, and a faulty one fails its requests, as configured, without stopping others.
+- A request through a plugin crosses into WebAssembly once per stage it implements, expected to take a few microseconds for a Rust plugin (to be measured), plus whatever it calls out to. Locations without plugins pay nothing.
+- The interface is proksi's own: plugins for Envoy or Traefik have to be converted.
+- JavaScript components can load, but aren't documented or tested; they need more memory per instance, and their code runs slower.
+
+## Not included
+
+- **Bodies**, of requests or responses.
+- **State between requests**, and caching of outbound calls.
+- **Databases and other protocols** than HTTP.
+- **A registry** of plugins. Plugins are files; a registry can later fetch and verify them.
+- **SDKs for other languages.**
