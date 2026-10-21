@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks';
+import { asList } from '../../lib/lists';
 import { input, type JsonSchema, resolve } from './schema';
 
 type Value = Record<string, unknown>;
@@ -107,10 +108,10 @@ function Setting({ name, schema, root, value, onChange }: { name: string; schema
         </select>
       );
     case 'list':
-      return <ListInput value={(value as string[]) ?? []} onChange={(next) => onChange(next.length ? next : undefined)} />;
+      return <ListInput value={asList(value)} onChange={(next) => onChange(next.length ? next : undefined)} />;
     case 'choices': {
       const options = resolve(resolved.items ?? {}, root).enum ?? [];
-      const chosen = (value as string[]) ?? [];
+      const chosen = asList(value);
       return (
         <div class="choices">
           {options.map((option) => (

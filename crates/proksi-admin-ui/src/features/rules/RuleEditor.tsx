@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { emptyRule, emptyTest, fromRule, type Group, type GroupName, type Node, type RuleModel, type Test, type TestValue, toRule } from './ruleModel';
 import { type Schema, useSchema } from '../blocks/schema';
 import { ListInput, SchemaForm } from '../blocks/SchemaForm';
+import { asList } from '../../lib/lists';
 
 type Rules = Schema['rules'];
 
@@ -56,7 +57,7 @@ function TestRow({ test, rules, onChange, onRemove }: { test: Test; rules: Rules
       </select>
       <div class="test-value">
         {kind === 'list' ? (
-          <ListInput value={test.value as string[]} onChange={(value) => onChange({ ...test, value })} />
+          <ListInput value={asList(test.value)} onChange={(value) => onChange({ ...test, value })} />
         ) : kind === 'bool' ? (
           // Nothing more to say: "is there", or "is missing"
           <span />
