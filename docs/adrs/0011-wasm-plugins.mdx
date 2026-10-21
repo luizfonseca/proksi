@@ -140,9 +140,23 @@ A plugin attaches to the stages of a request that proksi's own blocks use:
 
 Bodies aren't readable or changeable.
 
-### State within a request
+### Stages are functions
 
-`Ctx` is the plugin's state for one request: `Default` when it starts, and the same value in each of its stages. The SDK serializes it between stages, and proksi keeps the bytes with the request, so an instance isn't held while the upstream answers. Nothing is kept between requests.
+A stage is a function of the plugin's options, the current request and its `Ctx`, returning what it changed and the new `Ctx`. Nothing else carries state:
+
+- `&self` holds the options parsed by `new`, and can't be changed by a stage.
+- `Ctx` is the state of one request: `Default` when it starts, and the same value in each of its stages. The SDK serializes it between stages, and proksi keeps the bytes with the request.
+- A plugin only ever receives the current request.
+- Nothing is kept between requests. A `static` that changes (behind a `Mutex` or atomics) would be, so the SDK's documentation rules it out.
+
+### Instances
+
+Because stages keep no state in the instance, instances are shared: each plugin has one instance per worker thread, and it runs the stages of many requests. With WASI 0.3's asynchronous calls, a stage waiting on an outbound call lets the instance run other requests' stages meanwhile, so memory doesn't grow with the number of requests waiting.
+
+- Stages on one instance take turns on its thread between waits, which the CPU budget keeps short.
+- A trap ends the instance: the requests with a stage in progress on it follow their `on_error`, and the next stage gets a new instance.
+
+Before it's built, the memory of an instance and the support for WASI 0.3 in Rust's tooling are measured. If a Rust plugin can't use WASI 0.3 yet, stages start with one instance each, from a pool, and a limit on the instances of a plugin keeps the memory bounded.
 
 ### Outbound HTTP
 
@@ -169,7 +183,6 @@ A plugin is code the operator chose to run. The limits keep a faulty plugin from
 
 These are fixed for now. Settings to change them can be added once plugins show which ones need to.
 
-Instances are created from a pool, from the compiled component, and reset after each stage.
 
 ### Errors
 
@@ -213,7 +226,7 @@ Wasmtime is a large dependency: with the WASI and `wasi:http` hosts, it adds abo
 ## Consequences
 
 - Plugins are written and built outside proksi, with the standard Rust toolchain, and added with a path in the configuration.
-- A plugin can't read files, open sockets, or call hosts the configuration doesn't allow, and a faulty one fails its requests, as configured, without stopping others.
+- A plugin can't read files, open sockets, or call hosts the configuration doesn't allow, and a faulty one fails the requests it's running, as configured, without stopping others.
 - A request through a plugin crosses into WebAssembly once per stage it implements, expected to take a few microseconds for a Rust plugin (to be measured), plus whatever it calls out to.
 - A configuration without plugins pays nothing at runtime: the Wasmtime engine and its instance pool are only created when a `plugin` block is loaded, and locations without one run exactly as before, with no check per request. Only the binary is larger; its unused code isn't loaded into memory.
 - The interface is proksi's own: plugins for Envoy or Traefik have to be converted.
