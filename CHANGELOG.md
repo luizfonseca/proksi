@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.16.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.15.1...proksi-v0.16.0) (2026-10-21)
+
+
+### Features
+
+* add exact paths and regex locations ([#529](https://github.com/luizfonseca/proksi/issues/529)) ([a660954](https://github.com/luizfonseca/proksi/commit/a660954603daca477413f319da227f23d099c926))
+* history and rollback in the admin API ([#535](https://github.com/luizfonseca/proksi/issues/535)) ([f9da854](https://github.com/luizfonseca/proksi/commit/f9da854c75408b66841f829b47e26286f8877870))
+* keep versions of stored hosts and roll them back ([#534](https://github.com/luizfonseca/proksi/issues/534)) ([c57942e](https://github.com/luizfonseca/proksi/commit/c57942e522bf0275d4adc58f6bca38d46ce5fe47))
+* keep versions of stored hosts, roll back, and refuse stale changes ([c57942e](https://github.com/luizfonseca/proksi/commit/c57942e522bf0275d4adc58f6bca38d46ce5fe47))
+
+
+### Bug Fixes
+
+* build the dashmap_arc bench ([#531](https://github.com/luizfonseca/proksi/issues/531)) ([38dcd53](https://github.com/luizfonseca/proksi/commit/38dcd53d1a76c5003492eea40acc5e24e1419baa))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.15.1 to 0.16.0
+    * proksi_store bumped from 0.15.1 to 0.16.0
+  * dev-dependencies
+    * proksi_store bumped from 0.15.1 to 0.16.0
+
 ## [0.15.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.15.0...proksi-v0.15.1) (2026-10-20)
 
 
