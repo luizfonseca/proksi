@@ -107,10 +107,15 @@ aho-corasick = "1"
 [[bench]]
 name = "dashmap_arc"
 harness = false
-path = "../benches"
+path = "../../benches/dashmap_arc.rs"
+
+[[bench]]
+name = "hot_paths"
+harness = false
+path = "../../benches/hot_paths.rs"
 
 [dev-dependencies]
-criterion = { version = "0.8.2", features = ["html_reports"] }
+criterion = { version = "5.0.3", package = "codspeed-criterion-compat" }
 figment = { version = "0.10.19", features = ["toml", "yaml", "env", "test"] }
 futures-util = "0.3.34"
 native-tls = { version = "0.2.14", features = ["alpn"] }

@@ -9,6 +9,7 @@
 ![Crates.io MSRV](https://img.shields.io/crates/msrv/proksi?style=for-the-badge)
 ![Crates.io License](https://img.shields.io/crates/l/proksi?style=for-the-badge)
 [![Crates.io Total Downloads](https://img.shields.io/crates/d/proksi?style=for-the-badge)](https://crates.io/crates/proksi)
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/luizfonseca/proksi?utm_source=badge)
 
 # Proksi: Automatic SSL, HTTP, and DNS Proxy
 
