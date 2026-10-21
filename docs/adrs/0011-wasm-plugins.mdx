@@ -148,9 +148,9 @@ Bodies aren't readable or changeable.
 
 Plugins call out with `wasi:http`, the standard WASI interface for HTTP, implemented by proksi with `wasmtime-wasi-http`. `proksi_plugin::http` is a small client on top of it, and other crates built for `wasi:http` work too.
 
-- proksi makes the request: it reuses connections, does TLS, and applies a timeout.
+- proksi makes the request: it reuses connections, does TLS, and applies a timeout (below).
 - Only hosts in `allowed_hosts` can be called; any other is refused, as an error the plugin can handle.
-- Each request has a limit on the number of calls a plugin makes.
+- A plugin can make a limited number of calls per request (below).
 
 Plugins have no sockets, so they can't reach databases or other services except over HTTP.
 
@@ -158,11 +158,12 @@ Plugins have no sockets, so they can't reach databases or other services except 
 
 A plugin is code the operator chose to run. The limits keep a faulty plugin from affecting the rest of proksi:
 
-- **Time**: each stage has a budget of CPU time, enforced by Wasmtime interrupting the plugin. Waiting for an outbound call doesn't count toward it; the call has its own timeout.
-- **Memory**: each instance has a maximum.
+- **Time**: each stage has 50 ms of CPU time, enforced by Wasmtime interrupting the plugin. Waiting for an outbound call doesn't count toward it.
+- **Memory**: 64 MB per instance.
+- **Outbound calls**: 5 per request, for all of a plugin's stages, each with a 5 second timeout (as `forward_auth`'s).
 - **No other access**: no files, sockets or environment variables, and no state shared with other plugins. A component importing anything else proksi doesn't provide is refused when it loads, with the import's name.
 
-Each limit has a default, and a block can change it: `limits { cpu_ms, memory_mb, calls, call_timeout_secs }`.
+These are fixed for now. Settings to change them can be added once plugins show which ones need to.
 
 Instances are created from a pool, from the compiled component, and reset after each stage.
 
