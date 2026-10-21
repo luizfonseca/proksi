@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { Certificates } from './pages/Certificates';
 import { EditHost } from './pages/EditHost';
 import { Host } from './pages/Host';
+import { HostHistory } from './pages/HostHistory';
 import { Overview } from './pages/Overview';
 import { Server } from './pages/Server';
 import { Hosts } from './pages/Hosts';
@@ -15,6 +16,9 @@ import './styles.css';
 
 function Page({ path }: { path: string }) {
   if (path === '/hosts/new') return <EditHost name={null} />;
+  if (path.startsWith('/hosts/') && path.endsWith('/history')) {
+    return <HostHistory name={decodeURIComponent(path.slice('/hosts/'.length, -'/history'.length))} />;
+  }
   if (path.startsWith('/hosts/') && path.endsWith('/edit')) {
     return <EditHost name={decodeURIComponent(path.slice('/hosts/'.length, -'/edit'.length))} />;
   }

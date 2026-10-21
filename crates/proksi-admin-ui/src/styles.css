@@ -475,3 +475,18 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-s
 .requests .legend .search { flex: 0 1 240px; }
 .requests .legend .search input { padding-top: 5px; padding-bottom: 5px; }
 .requests .chart-head .legend { flex: 1; justify-content: flex-end; }
+
+/* History of a host: changes, and two versions compared */
+.history td { vertical-align: middle; }
+.compare { margin-top: 16px; padding: 14px 16px; }
+.compare h3 { margin: 0 0 10px; }
+.diff { margin: 0; padding: 10px 0; overflow-x: auto; font: 12.5px/1.55 var(--mono); background: var(--sunken); border: 1px solid var(--line); border-radius: var(--radius); }
+.diff > div { padding: 0 12px; white-space: pre; }
+.diff .sign { display: inline-block; width: 1.5ch; color: var(--faint); user-select: none; }
+.diff .added { background: var(--ok-soft); }
+.diff .added .sign { color: var(--ok); }
+.diff .removed { background: var(--bad-soft); }
+.diff .removed .sign { color: var(--bad); }
+.deleted-hosts { margin-top: 16px; padding: 14px 16px; }
+.deleted-hosts h3 { margin: 0 0 10px; }
+.deleted-hosts a.chip { text-decoration: none; }

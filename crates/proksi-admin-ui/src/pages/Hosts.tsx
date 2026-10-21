@@ -39,6 +39,24 @@ function Summary({ hosts }: { hosts: Host[] }) {
   );
 }
 
+/** Hosts removed from the store, which their history restores */
+function DeletedHosts() {
+  const [data] = useData<{ hosts: string[] }>('/deleted-routes', 30000);
+  if (data.state !== 'ready' || data.value.hosts.length === 0) return null;
+  return (
+    <section class="panel deleted-hosts">
+      <h3>Deleted hosts <small>their versions are kept: open one to restore it</small></h3>
+      <div class="chips">
+        {data.value.hosts.map((host) => (
+          <a class="chip" href={`/hosts/${encodeURIComponent(host)}/history`} onClick={onLink}>
+            {host}
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function Hosts() {
   const [data] = useData<Host[]>('/hosts');
   const [tcp] = useData<TcpBlock[]>('/tcp', 10000);
@@ -133,6 +151,7 @@ export function Hosts() {
                   </table>
                 )}
               </div>
+              <DeletedHosts />
             </>
           );
         }}

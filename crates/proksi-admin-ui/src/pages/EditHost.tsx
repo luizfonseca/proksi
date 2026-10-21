@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { routes } from '../api';
+import { Conflict, routes } from '../api';
 import {
   emptyHost,
   emptyLocation,
@@ -39,6 +39,8 @@ function RulesSection({ title, hint, rules, onChange }: { title: string; hint: s
 /** Creates a host in the store (`name` null), or changes one */
 export function EditHost({ name }: { name: string | null }) {
   const [form, setForm] = useState<HostForm | null>(name ? null : emptyHost());
+  // The version opened: saving is refused if the host is on another one by then
+  const [version, setVersion] = useState<number | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   // What Proksi says of the form as it is, checked shortly after each change
@@ -60,7 +62,10 @@ export function EditHost({ name }: { name: string | null }) {
     if (!name) return;
     routes
       .get(name)
-      .then(({ host }) => setForm(toForm(host)))
+      .then(({ host, version }) => {
+        setForm(toForm(host));
+        setVersion(version);
+      })
       .catch((err) => setErrors([String(err.message ?? err)]));
   }, [name]);
 
@@ -80,9 +85,15 @@ export function EditHost({ name }: { name: string | null }) {
     if ('errors' in result) return setErrors(result.errors);
     setBusy(true);
     try {
-      await routes.put(result.host);
+      await routes.put(result.host, version === null ? 'absent' : { version });
       navigate(`/hosts/${encodeURIComponent(result.host.name)}`);
     } catch (err) {
+      if (err instanceof Conflict) {
+        const reason = name
+          ? 'Someone else changed this host since you opened it. Reload to see their change (yours would replace it).'
+          : `A host named ${result.host.name} already exists.`;
+        return setErrors([reason]);
+      }
       setErrors([String((err as Error).message ?? err)]);
     } finally {
       setBusy(false);
