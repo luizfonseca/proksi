@@ -1,6 +1,6 @@
 //! `request_id { suffix = "ams1" }`: gives each request an ID, sent to the upstream and back to
-//! the client as `X-Request-Id` (or `header_name`), and logged. An ID sent by a trusted proxy is kept, so a request
-//! has one ID across the proxies it goes through.
+//! the client as `X-Request-Id` (or `header_name`), and logged. An ID sent by a trusted proxy is
+//! kept, so a request has one ID across the proxies it goes through.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -55,9 +55,8 @@ impl RequestId {
         };
         let valid = |byte: &u8| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.');
         if suffix.is_empty() || suffix.len() > MAX_SUFFIX || !suffix.bytes().all(|b| valid(&b)) {
-            return Err(format!(
-                "request_id: suffix {suffix:?} must be 1 to {MAX_SUFFIX} letters, digits, `-`, `_` or `.`"
-            ));
+            let allowed = "letters, digits, `-`, `_` or `.`";
+            return Err(format!("request_id: suffix {suffix:?} must be 1 to {MAX_SUFFIX} {allowed}"));
         }
         Ok(Self {
             header,
