@@ -194,11 +194,21 @@ The plugin is interrupted once it reaches its CPU budget, so the time used is th
 
 These messages are logged with either `on_error`, and counted in the plugin's metrics. A call to a host that isn't allowed, or a call that times out, is first returned to the plugin as an error it can handle; it's only a failure if the plugin returns it.
 
-### Crates
+### Modules and crates
 
-- `proksi_plugin` (renamed from `plugins_api`): the WIT interface, the `Plugin` trait, `register_plugin!` and `http`. A regular library, published with proksi's versions.
-- `plugin_request_id` is removed: request IDs are built in. An example plugin replaces it, built in CI to check that the SDK and proksi agree.
-- In proksi, plugins are a building block like the others, in their own module.
+Each part has one job and can be built and tested without the others. Only the last one knows about Pingora or proksi's configuration.
+
+| Part | Its job | Knows nothing of |
+| --- | --- | --- |
+| `proksi_plugin` (crate, renamed from `plugins_api`) | The WIT interface, the `Plugin` trait, `register_plugin!` and `http`, for plugin authors. A regular library, published with proksi's versions. | proksi, Wasmtime |
+| `proksi_wasm` (crate) | Running components: the Wasmtime engine and instance pool, reading the declaration, the limits, `wasi:http` with its allowed hosts. It takes a request's parts and returns what the plugin changed or answered. | Pingora, the configuration format |
+| A `plugin` block in proksi (module) | Reading `plugin "<name>" { }`, checking `options` against the declaration, and calling `proksi_wasm` at each stage from the block's hooks, with `on_error`. | Wasmtime |
+
+Inside `proksi_wasm`, each concern is its own module (the engine and pool, the declaration, the limits, outbound HTTP, the stages), so a new stage or a new `allowed_*` grant changes one module.
+
+Wasmtime is a large dependency, so plugins are a Cargo feature of proksi, `wasm-plugins`, on by default. Built without it, proksi refuses a `plugin` block with a message saying so, and the rest is unchanged.
+
+`plugin_request_id` is removed: request IDs are built in. An example plugin replaces it, built in CI to check that the SDK and `proksi_wasm` agree.
 
 ## Consequences
 
