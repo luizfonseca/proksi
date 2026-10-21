@@ -77,8 +77,7 @@ impl Rules {
         match &self.index {
             Some(index) => {
                 let host = fields::lowercase(request.host());
-                let path = crate::routing::paths::normalize_path(request.path());
-                index.candidates(request.method(), &host, &path)
+                index.candidates(request.method(), &host, request.path())
             }
             None => index::all(self.compiled.rules.len()),
         }
@@ -107,9 +106,11 @@ impl Rules {
     pub async fn request(&self, session: &mut Session, ctx: &mut RouterContext) -> bool {
         let compiled = &self.compiled;
         let mut state = eval::State::new(compiled);
+        let mut normalized = normalized_path(session);
         let mut candidates = self.candidates(&ProxiedRequest {
             session,
             host: &ctx.host,
+            normalized: normalized.as_deref(),
         });
         let mut from = 0;
         while let Some(index) = candidates.next(from) {
@@ -121,6 +122,7 @@ impl Rules {
                 let request = ProxiedRequest {
                     session,
                     host: &ctx.host,
+                    normalized: normalized.as_deref(),
                 };
                 state.holds(compiled, &rule.condition, &request)
             };
@@ -130,9 +132,11 @@ impl Rules {
             if rule.then.change_request(session.req_header_mut()) {
                 // The next rules see the changed request
                 state.forget();
+                normalized = normalized_path(session);
                 candidates = self.candidates(&ProxiedRequest {
                     session,
                     host: &ctx.host,
+                    normalized: normalized.as_deref(),
                 });
             }
             if let Some(split) = &rule.then.split {
@@ -238,10 +242,21 @@ pub async fn response(
     ctx.rules = applied;
 }
 
+/// The path of `session` normalized, when that changes it: worked out once per request, not
+/// for each test on the path
+fn normalized_path(session: &Session) -> Option<String> {
+    match crate::routing::paths::normalize_path(session.req_header().uri.path()) {
+        Cow::Owned(path) => Some(path),
+        Cow::Borrowed(_) => None,
+    }
+}
+
 /// A request being proxied, as rules read it
 struct ProxiedRequest<'a> {
     session: &'a Session,
     host: &'a str,
+    /// Its path normalized, when that changes it
+    normalized: Option<&'a str>,
 }
 
 impl Request for ProxiedRequest<'_> {
@@ -254,7 +269,8 @@ impl Request for ProxiedRequest<'_> {
     }
 
     fn path(&self) -> &str {
-        self.session.req_header().uri.path()
+        self.normalized
+            .unwrap_or_else(|| self.session.req_header().uri.path())
     }
 
     fn query(&self) -> Option<&str> {
