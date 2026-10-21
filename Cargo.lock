@@ -3626,7 +3626,6 @@ dependencies = [
  "jsonwebtoken",
  "mimalloc",
  "openssl",
- "papaya",
  "pingora",
  "pingora-limits",
  "rand 0.8.8",

@@ -27,7 +27,6 @@ itertools = "0.15.0"
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto", "use_pem"] }
 mimalloc = { version = "0.1.52", default-features = false, optional = true }
 openssl = { version = "0.10", features = ["vendored"] }
-papaya = "0.2.3"
 pingora = { version = "0.9.0", features = ["lb", "openssl", "proxy", "cache"] }
 pingora-limits = "0.9.0"
 rand = "0.8"

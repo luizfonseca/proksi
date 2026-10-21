@@ -1,10 +1,12 @@
 //! `bandwidth_limit { rate = "1MiB", burst = "10MiB" }`: paces the responses sent to each client
 
 use std::{
+    collections::HashMap,
+    hash::{BuildHasher, RandomState},
     net::IpAddr,
     sync::{
-        atomic::{AtomicUsize, Ordering},
-        Mutex, PoisonError,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc, Mutex, MutexGuard, PoisonError,
     },
     time::{Duration, Instant},
 };
@@ -19,20 +21,39 @@ use super::Middleware;
 /// Shorter waits are carried over to the next part of the body, rather than slept
 const SHORTEST_WAIT: Duration = Duration::from_millis(1);
 
-/// Buckets of clients that stopped downloading are dropped once this many new ones were added
+/// Buckets of clients that stopped downloading are dropped once this many new clients came, or
+/// as many as there are buckets: going through them all costs the same for each new client
 const SWEEP_EVERY: usize = 1024;
 
 const NANOS_PER_SEC: u128 = 1_000_000_000;
 
+/// Clients are spread over this many maps, each with its own lock: growing a map, or sweeping
+/// it, holds up the clients of that map only
+const SHARDS: usize = 64;
+
 /// A token bucket for each client (by IP address), shared by all its responses: `burst` bytes
 /// can be sent at once, then `rate` bytes per second
 pub(super) struct BandwidthLimit {
+    pace: Pace,
+    buckets: Arc<Buckets>,
+}
+
+#[derive(Clone, Copy)]
+struct Pace {
     /// Bytes per second
     rate: u64,
     /// Bytes
     burst: i64,
-    buckets: papaya::HashMap<IpAddr, Mutex<Bucket>>,
+}
+
+struct Buckets {
+    shards: Vec<Mutex<HashMap<IpAddr, Bucket>>>,
+    hasher: RandomState,
+    /// Clients with a bucket
+    clients: AtomicUsize,
+    /// New clients since the last sweep
     added: AtomicUsize,
+    sweeping: AtomicBool,
 }
 
 struct Bucket {
@@ -56,67 +77,114 @@ impl BandwidthLimit {
             })?;
         let burst = match &settings.burst {
             None => rate,
-            Some(burst) => parse_size(burst).filter(|burst| *burst > 0).ok_or_else(|| {
-                format!(
+            Some(burst) => parse_size(burst)
+                .filter(|burst| *burst > 0)
+                .ok_or_else(|| {
+                    format!(
                     "bandwidth_limit: burst \"{burst}\" is not a size such as \"1MiB\" or \"10MiB\""
                 )
-            })?,
+                })?,
         };
         Ok(Self {
-            rate,
-            burst: i64::try_from(burst).unwrap_or(i64::MAX),
-            buckets: papaya::HashMap::new(),
-            added: AtomicUsize::new(0),
+            pace: Pace {
+                rate,
+                burst: i64::try_from(burst).unwrap_or(i64::MAX),
+            },
+            buckets: Arc::new(Buckets {
+                shards: (0..SHARDS).map(|_| Mutex::default()).collect(),
+                hasher: RandomState::new(),
+                clients: AtomicUsize::new(0),
+                added: AtomicUsize::new(0),
+                sweeping: AtomicBool::new(false),
+            }),
         })
     }
 
     /// Counts `bytes` more sent to `client`, returning how long to wait before sending them
     fn take(&self, client: IpAddr, bytes: u64, now: Instant) -> Option<Duration> {
-        let buckets = self.buckets.pin();
-        if buckets.get(&client).is_none() {
-            self.sweep(&buckets, now);
-        }
-        let bucket = buckets.get_or_insert_with(client, || {
-            Mutex::new(Bucket {
-                tokens: self.burst,
+        let Pace { rate, burst } = self.pace;
+        let (tokens, new) = {
+            let mut shard = self.buckets.shard(client)?;
+            let clients = shard.len();
+            let bucket = shard.entry(client).or_insert(Bucket {
+                tokens: burst,
                 at: now,
-            })
-        });
-        let mut bucket = bucket.lock().unwrap_or_else(PoisonError::into_inner);
-        let refilled = bucket
-            .tokens
-            .saturating_add(self.refill(now.saturating_duration_since(bucket.at)))
-            .min(self.burst);
-        bucket.tokens = refilled.saturating_sub(i64::try_from(bytes).unwrap_or(i64::MAX));
-        bucket.at = now;
+            });
+            let refilled = bucket
+                .tokens
+                .saturating_add(self.pace.refill(now.saturating_duration_since(bucket.at)))
+                .min(burst);
+            bucket.tokens = refilled.saturating_sub(i64::try_from(bytes).unwrap_or(i64::MAX));
+            bucket.at = now;
+            (bucket.tokens, shard.len() > clients)
+        };
+        if new {
+            self.added(now);
+        }
 
-        let owed = bucket.tokens.checked_neg().and_then(|owed| u64::try_from(owed).ok())?;
-        let wait = u128::from(owed) * NANOS_PER_SEC / u128::from(self.rate);
+        let owed = tokens
+            .checked_neg()
+            .and_then(|owed| u64::try_from(owed).ok())?;
+        let wait = u128::from(owed) * NANOS_PER_SEC / u128::from(rate);
         let wait = Duration::from_nanos(u64::try_from(wait).unwrap_or(u64::MAX));
         (wait >= SHORTEST_WAIT).then_some(wait)
     }
 
+    /// Counts a new client. Once enough came, drops the buckets that refilled, on Tokio's
+    /// blocking threads: no request waits for it.
+    fn added(&self, now: Instant) {
+        let clients = self.buckets.clients.fetch_add(1, Ordering::Relaxed) + 1;
+        let added = self.buckets.added.fetch_add(1, Ordering::Relaxed) + 1;
+        if added < SWEEP_EVERY.max(clients) || self.buckets.sweeping.swap(true, Ordering::Acquire) {
+            return;
+        }
+        self.buckets.added.store(0, Ordering::Relaxed);
+        let (buckets, pace) = (Arc::clone(&self.buckets), self.pace);
+        let sweep = move || {
+            buckets.sweep(pace, now);
+            buckets.sweeping.store(false, Ordering::Release);
+        };
+        match tokio::runtime::Handle::try_current() {
+            Ok(runtime) => drop(runtime.spawn_blocking(sweep)),
+            Err(_) => sweep(),
+        }
+    }
+}
+
+impl Pace {
     /// The bytes `rate` allows in `elapsed`
-    fn refill(&self, elapsed: Duration) -> i64 {
+    fn refill(self, elapsed: Duration) -> i64 {
         let bytes = elapsed.as_nanos() * u128::from(self.rate) / NANOS_PER_SEC;
         i64::try_from(bytes).unwrap_or(i64::MAX)
     }
+}
 
-    /// Every [`SWEEP_EVERY`] new clients, drops the buckets that refilled: their clients
-    /// would start with a full bucket anyway
-    fn sweep<S: std::hash::BuildHasher, G: papaya::Guard>(
-        &self,
-        buckets: &papaya::HashMapRef<'_, IpAddr, Mutex<Bucket>, S, G>,
-        now: Instant,
-    ) {
-        if self.added.fetch_add(1, Ordering::Relaxed) % SWEEP_EVERY != SWEEP_EVERY - 1 {
-            return;
+impl Buckets {
+    /// The (locked) map of `client`
+    fn shard(&self, client: IpAddr) -> Option<MutexGuard<'_, HashMap<IpAddr, Bucket>>> {
+        let index = usize::try_from(self.hasher.hash_one(client) % SHARDS as u64).ok()?;
+        let shard = self.shards.get(index)?;
+        Some(shard.lock().unwrap_or_else(PoisonError::into_inner))
+    }
+
+    /// Drops the buckets that refilled, a map at a time: their clients would start with a full
+    /// bucket anyway
+    fn sweep(&self, pace: Pace, now: Instant) {
+        for shard in &self.shards {
+            let mut shard = shard.lock().unwrap_or_else(PoisonError::into_inner);
+            let before = shard.len();
+            shard.retain(|_, bucket| {
+                let refill = pace.refill(now.saturating_duration_since(bucket.at));
+                bucket.tokens.saturating_add(refill) < pace.burst
+            });
+            self.clients
+                .fetch_sub(before - shard.len(), Ordering::Relaxed);
         }
-        buckets.retain(|_, bucket| {
-            let bucket = bucket.lock().unwrap_or_else(PoisonError::into_inner);
-            let refill = self.refill(now.saturating_duration_since(bucket.at));
-            bucket.tokens.saturating_add(refill) < self.burst
-        });
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.clients.load(Ordering::Relaxed)
     }
 }
 
@@ -132,7 +200,11 @@ impl Middleware for BandwidthLimit {
             return None;
         }
         let client = ctx.client(session)?;
-        self.take(client, u64::try_from(bytes).unwrap_or(u64::MAX), Instant::now())
+        self.take(
+            client,
+            u64::try_from(bytes).unwrap_or(u64::MAX),
+            Instant::now(),
+        )
     }
 }
 
@@ -163,10 +235,13 @@ mod tests {
     #[test]
     fn test_settings() {
         let block = limit(serde_json::json!({ "rate": "1MiB", "burst": "10MiB" })).unwrap();
-        assert_eq!((block.rate, block.burst), (1024 * KIB, 10 * 1024 * 1024));
+        assert_eq!(
+            (block.pace.rate, block.pace.burst),
+            (1024 * KIB, 10 * 1024 * 1024)
+        );
         // One second of `rate` unless set
         let block = limit(serde_json::json!({ "rate": "512KiB" })).unwrap();
-        assert_eq!(block.burst, 512 * 1024);
+        assert_eq!(block.pace.burst, 512 * 1024);
 
         for (config, err) in [
             (
@@ -200,7 +275,10 @@ mod tests {
         );
         // Half a second later, it's paid
         let later = start + Duration::from_millis(500);
-        assert_eq!(block.take(client(1), 100 * KIB, later), Some(Duration::from_secs(1)));
+        assert_eq!(
+            block.take(client(1), 100 * KIB, later),
+            Some(Duration::from_secs(1))
+        );
     }
 
     #[test]
@@ -256,7 +334,12 @@ mod tests {
             block.take(IpAddr::from((0xc612_0000 + other).to_be_bytes()), 1, later);
         }
         // Client 0 refilled long ago; the others aren't full yet
-        assert!(block.buckets.pin().get(&client(0)).is_none());
+        assert!(block
+            .buckets
+            .shard(client(0))
+            .unwrap()
+            .get(&client(0))
+            .is_none());
         assert_eq!(block.buckets.len(), SWEEP_EVERY - 1);
     }
 }
