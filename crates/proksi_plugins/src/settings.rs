@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use schemars::JsonSchema;
 use serde::{de::DeserializeOwned, Deserialize};
 
-use crate::RoutePlugin;
+use crate::{Kind, RoutePlugin};
 
 /// When a block runs among the blocks of its location, from 0 (first) to 100
 type Priority = Option<u8>;
@@ -402,24 +402,36 @@ pub struct RequestId {
 pub fn schemas() -> serde_json::Map<String, serde_json::Value> {
     let schema = |schema: schemars::Schema| schema.to_value();
     [
-        ("rate_limit", schema(schemars::schema_for!(RateLimit))),
-        ("bandwidth_limit", schema(schemars::schema_for!(BandwidthLimit))),
-        ("waiting_room", schema(schemars::schema_for!(WaitingRoom))),
-        ("body_limit", schema(schemars::schema_for!(BodyLimit))),
-        ("redirect", schema(schemars::schema_for!(Redirect))),
-        ("respond", schema(schemars::schema_for!(Respond))),
-        ("ip_filter", schema(schemars::schema_for!(IpFilter))),
-        ("cors", schema(schemars::schema_for!(Cors))),
-        ("compress", schema(schemars::schema_for!(Compress))),
-        ("forward_auth", schema(schemars::schema_for!(ForwardAuth))),
-        ("jwt", schema(schemars::schema_for!(Jwt))),
-        ("static_files", schema(schemars::schema_for!(StaticFiles))),
-        ("basic_auth", schema(schemars::schema_for!(BasicAuth))),
-        ("oauth2", schema(schemars::schema_for!(Oauth2))),
-        ("request_id", schema(schemars::schema_for!(RequestId))),
+        (Kind::RateLimit, schema(schemars::schema_for!(RateLimit))),
+        (
+            Kind::BandwidthLimit,
+            schema(schemars::schema_for!(BandwidthLimit)),
+        ),
+        (
+            Kind::WaitingRoom,
+            schema(schemars::schema_for!(WaitingRoom)),
+        ),
+        (Kind::BodyLimit, schema(schemars::schema_for!(BodyLimit))),
+        (Kind::Redirect, schema(schemars::schema_for!(Redirect))),
+        (Kind::Respond, schema(schemars::schema_for!(Respond))),
+        (Kind::IpFilter, schema(schemars::schema_for!(IpFilter))),
+        (Kind::Cors, schema(schemars::schema_for!(Cors))),
+        (Kind::Compress, schema(schemars::schema_for!(Compress))),
+        (
+            Kind::ForwardAuth,
+            schema(schemars::schema_for!(ForwardAuth)),
+        ),
+        (Kind::Jwt, schema(schemars::schema_for!(Jwt))),
+        (
+            Kind::StaticFiles,
+            schema(schemars::schema_for!(StaticFiles)),
+        ),
+        (Kind::BasicAuth, schema(schemars::schema_for!(BasicAuth))),
+        (Kind::Oauth2, schema(schemars::schema_for!(Oauth2))),
+        (Kind::RequestId, schema(schemars::schema_for!(RequestId))),
     ]
     .into_iter()
-    .map(|(name, schema)| (name.to_string(), schema))
+    .map(|(kind, schema)| (kind.name().to_string(), schema))
     .collect()
 }
 

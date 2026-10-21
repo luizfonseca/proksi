@@ -205,6 +205,33 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// Every kind, in the order blocks with the same priority run
+    pub const ALL: [Kind; 17] = [
+        Kind::RequestId,
+        Kind::IpFilter,
+        Kind::Cors,
+        Kind::RateLimit,
+        Kind::BandwidthLimit,
+        Kind::WaitingRoom,
+        Kind::Redirect,
+        Kind::Respond,
+        Kind::BodyLimit,
+        Kind::BasicAuth,
+        Kind::Jwt,
+        Kind::Oauth2,
+        Kind::ForwardAuth,
+        Kind::Compress,
+        Kind::Headers,
+        Kind::Cache,
+        Kind::StaticFiles,
+    ];
+
+    /// The kind named `name`, as written in the configuration
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Kind> {
+        Kind::ALL.into_iter().find(|kind| kind.name() == name)
+    }
+
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
@@ -286,35 +313,58 @@ pub fn build(plugin: &RoutePlugin, location_path: &str) -> Option<Result<Plugin,
             })
         }))
     };
-    match plugin.name.as_ref() {
-        "request_id" => built(Kind::RequestId, arc(RequestId::new(plugin))),
-        "ip_filter" => built(Kind::IpFilter, arc(IpFilter::new(plugin))),
-        "cors" => built(Kind::Cors, arc(Cors::new(plugin))),
-        "rate_limit" => built(Kind::RateLimit, arc(RateLimit::new(plugin))),
-        "bandwidth_limit" => built(Kind::BandwidthLimit, arc(BandwidthLimit::new(plugin))),
-        "waiting_room" => built(
-            Kind::WaitingRoom,
-            arc(WaitingRoom::new(plugin, location_path)),
-        ),
-        "body_limit" => built(Kind::BodyLimit, arc(BodyLimit::new(plugin))),
-        "redirect" => built(Kind::Redirect, arc(Redirect::new(plugin))),
-        "respond" => built(Kind::Respond, arc(Respond::new(plugin))),
-        "basic_auth" => built(Kind::BasicAuth, arc(BasicAuth::new(plugin))),
-        "jwt" => built(Kind::Jwt, arc(Jwt::new(plugin))),
-        "oauth2" => built(Kind::Oauth2, arc(Oauth2::new(plugin))),
-        "forward_auth" => built(Kind::ForwardAuth, arc(ForwardAuth::new(plugin))),
-        "compress" => built(Kind::Compress, arc(Compress::new(plugin))),
-        "static_files" => built(
-            Kind::StaticFiles,
-            arc(StaticFiles::new(plugin, location_path)),
-        ),
-        // Other plugins of `routes = [...]` and docker labels are ignored, as before
-        _ => None,
-    }
+    // Other plugins of `routes = [...]` and docker labels are ignored, as before
+    let kind = Kind::from_name(&plugin.name)?;
+    let middleware = match kind {
+        Kind::RequestId => arc(RequestId::new(plugin)),
+        Kind::IpFilter => arc(IpFilter::new(plugin)),
+        Kind::Cors => arc(Cors::new(plugin)),
+        Kind::RateLimit => arc(RateLimit::new(plugin)),
+        Kind::BandwidthLimit => arc(BandwidthLimit::new(plugin)),
+        Kind::WaitingRoom => arc(WaitingRoom::new(plugin, location_path)),
+        Kind::BodyLimit => arc(BodyLimit::new(plugin)),
+        Kind::Redirect => arc(Redirect::new(plugin)),
+        Kind::Respond => arc(Respond::new(plugin)),
+        Kind::BasicAuth => arc(BasicAuth::new(plugin)),
+        Kind::Jwt => arc(Jwt::new(plugin)),
+        Kind::Oauth2 => arc(Oauth2::new(plugin)),
+        Kind::ForwardAuth => arc(ForwardAuth::new(plugin)),
+        Kind::Compress => arc(Compress::new(plugin)),
+        Kind::StaticFiles => arc(StaticFiles::new(plugin, location_path)),
+        // proksi's own blocks, built by proksi
+        Kind::Headers | Kind::Cache => return None,
+    };
+    built(kind, middleware)
 }
 
 fn arc<M: Middleware + 'static>(
     middleware: Result<M, String>,
 ) -> Result<Arc<dyn Middleware>, String> {
     middleware.map(|middleware| Arc::new(middleware) as Arc<dyn Middleware>)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Kind;
+
+    #[test]
+    fn test_kinds_are_listed_once_in_order() {
+        // In the order blocks with the same priority run: the order of the enum
+        assert!(Kind::ALL.windows(2).all(|pair| pair[0] < pair[1]));
+        for kind in Kind::ALL {
+            assert_eq!(Kind::from_name(kind.name()), Some(kind));
+        }
+        assert_eq!(Kind::from_name("unknown"), None);
+    }
+
+    #[test]
+    fn test_every_plugin_has_settings() {
+        let schemas = crate::settings::schemas();
+        for kind in Kind::ALL {
+            let plugin = !matches!(kind, Kind::Headers | Kind::Cache);
+            assert_eq!(schemas.contains_key(kind.name()), plugin, "{}", kind.name());
+        }
+        // And every set of settings is a plugin's (none missing from `Kind::ALL`)
+        assert!(schemas.keys().all(|name| Kind::from_name(name).is_some()));
+    }
 }
