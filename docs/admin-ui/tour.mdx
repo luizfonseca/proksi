@@ -12,12 +12,12 @@ The first page: how Proksi is doing right now.
 - **Requests, errors, latency, CPU and memory**, each with the last two minutes, and charts over 1, 5 or 15 minutes. The page keeps them in memory from the moment it's opened: Proksi doesn't store more than it already does. CPU is a share of one core; in a container, memory and CPU limits are shown too.
 - **Hosts right now**: the hosts with requests in the last 5 seconds, busiest first, with their error rate and latency. Hosts accessed earlier since the page opened stay below, with when their last request came. Click one to open it.
 - **TCP**: each `tcp` block, with its upstreams' health and, over the last 5 seconds, its new and open connections, bytes each way, connections that couldn't reach an upstream, and how long the connections that closed stayed open (p50, p90, p99). Shown when Proksi has `tcp` blocks.
-- **Latest requests**: each request as it's served, once you click **Watch requests**. Up to 100 a second come in, and the latest 1,000 are kept while the page is open, also when you leave it and come back. The filter finds requests by host, path, method, status (`503` or `5xx`), client or upstream; hovering the list holds it still so you can read it.
+- **Latest requests**: each request as it's served, once you click **Watch requests**. Up to 100 a second come in, and the latest 1,000 are kept while the page is open, also when you leave it and come back. The filter finds requests by host, path, method, status (`503` or `5xx`), client or upstream; hovering the list holds it still so you can read it. Click a request for everything known of it: its time, status, duration, client, location and upstream.
 - **Instances sharing the store**: every Proksi using the same store, and the routes revision each one serves, so you can tell when a change reached all of them.
 
 ## Hosts
 
-Every host Proksi serves, from every source (`file`, `docker`, `kubernetes`, `store`), with its locations, upstream health and plugins. **HTTP** marks hosts with locations, **TCP** hosts with `tcp` blocks.
+Every host Proksi serves, from every source (`file`, `docker`, `kubernetes`, `store`), with its locations, upstream health and plugins. **HTTPS**, in green with a lock, marks hosts served with TLS, **HTTP** in blue those served in plain text, and **TCP** hosts with `tcp` blocks.
 
 <Image src="/assets/admin/hosts.png" alt="The list of hosts, with their source, locations, upstream health and plugins" />
 
@@ -29,7 +29,10 @@ A host's page starts with its traffic, as a graph from clients to its locations 
 
 - Lines move while requests flow, faster and thicker the busier they are.
 - **Green**: requests succeed. **Amber**: some fail (5xx, or connections to the upstream that fail). **Red**: a quarter or more fail, or the upstream is unhealthy. **Grey**: nothing flows.
-- Each box shows requests per second, the 99th percentile latency and the share of 5xx over the last 5 seconds. Click a location to jump to its details.
+- Each box shows requests per second, the 99th percentile latency and the share of 5xx over the last 5 seconds. An upstream sharing its location with others shows its part of the traffic.
+- Hover a box for its responses by status, and its p50, p90 and p99 latency.
+- Click a location or an upstream to see only its requests in the latest requests below; click it again, or the ✕ by its name there, to see them all.
+- With no requests over the last seconds, the graph is dimmed.
 
 Below are the host's requests and latency, its latest requests, and each location: its upstreams (as written, and the addresses they resolved to), plugins and rules. Its `tcp` blocks come last, with their connections. Their connections aren't requests: they're not in the graph, the charts or the latest requests.
 
@@ -47,6 +50,7 @@ With a token that can write, hosts in the store have **Edit** and **Remove**, an
 - Locations: their path, upstreams (`host:port`, weight, SNI) and rules.
 - Settings the form doesn't edit yet are kept as they are.
 - Proksi checks the host as you type, as it would when saving: its error shows above the form.
+- Saving, removing and rolling back are confirmed at the bottom right, with a link to the host's history: a removed host can be restored from there.
 
 ## Rules
 
@@ -66,6 +70,12 @@ See [Request/Response rules](/rules) for what rules can do.
 The settings Proksi started with, defaults included: addresses, timeouts, TLS, the store, cache, Let's Encrypt, logging, docker, Kubernetes and the admin tokens' names. Secrets and credentials are never shown.
 
 <Image src="/assets/admin/server.png" alt="The server page: settings grouped in cards" />
+
+Sections that are off (`enabled = false`), such as Docker when it isn't used, are dimmed.
+
+## Search
+
+Press <kbd>⌘K</kbd> (<kbd>Ctrl</kbd> + <kbd>K</kbd> on Linux and Windows), or click **Search**, to find a host, a page or an action by typing a few letters: each host with its health, its editor and history (with a token that can write), the documentation, and signing out.
 
 ## Certificates
 
