@@ -56,6 +56,7 @@ The admin listener also serves a UI, at its address (`http://127.0.0.1:7555`):
 
 - **Overview**: requests by status, errors, latency (p50, p90, p99), CPU and memory, charted from the moment the page is opened (up to 15 minutes, kept by the page); the latest requests; and the instances sharing the store.
 - **Hosts**: every host served, from every source. A host's page shows its traffic as a graph, from clients to its locations and upstreams (each line green while traffic flows, amber or red with errors or an unhealthy upstream), its requests and latency, and its latest requests; then its locations, upstreams (with what they resolved to) and their health, plugins and rules. With a token that can write, hosts in the store can be created, changed and removed, and their rules built with a form (conditions as a tree of all of, any of and none of; actions with their settings), checked by Proksi as they're edited.
+- **Notifications**: each `notify` block, the hosts it's told about (each opening its page), how its last send went, and a button to send it a test.
 - **Certificates** and **Server** (the settings Proksi started with).
 
 Rules are shown without what can be a secret: the values headers, cookies and query parameters are compared with, the settings of `basic_auth`, `oauth2` and `forward_auth`, and the values of headers a rule adds.

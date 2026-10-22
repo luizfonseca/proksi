@@ -3,7 +3,7 @@ import { get, type Host } from '../../api';
 import { useCanWrite } from '../../api/session';
 import type { ComponentType } from 'preact';
 import { Status } from '../../components/ui/Badge';
-import { Book, Clock, External, Globe, Pencil, Plus, Pulse, Search, Server, Shield, SignOut } from '../../components/ui/icons';
+import { Bell, Book, Clock, External, Globe, Pencil, Plus, Pulse, Search, Server, Shield, SignOut } from '../../components/ui/icons';
 import { navigate } from '../../router';
 import { ACTIONS, type Command, GROUPS, hostCommands, type IconName, PAGES, search } from './commands';
 
@@ -16,6 +16,7 @@ const ICONS: Record<IconName, ComponentType<{ class?: string }>> = {
   overview: Pulse,
   hosts: Globe,
   certificates: Shield,
+  notifications: Bell,
   server: Server,
   new: Plus,
   edit: Pencil,

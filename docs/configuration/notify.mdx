@@ -85,6 +85,8 @@ With several instances sharing a [store](/configuration/redis), each sees the sa
 
 ## Admin API and UI
 
+The admin UI's **Notifications** page lists each block with the hosts it's told about, how its last send went, and a button to send it a test. A host's page shows the blocks told about it.
+
 A webhook's URL is often its secret: the admin API and UI show it masked (`https://hook…bf3a`), and headers by name only. Errors never include it.
 
 | Endpoint | |

@@ -1,10 +1,12 @@
 import { useRef, useState } from 'preact/hooks';
-import { type Host as HostData, routes, type TcpBlock, type Upstream } from '../api';
+import { type Host as HostData, type Notifications, routes, type TcpBlock, type Upstream } from '../api';
 import { Legend, LineChart, Swatch } from '../components/ui/Chart';
 import { Flow } from '../features/flow/Flow';
 import { RequestLog, type RequestFocus } from '../features/live/RequestLog';
 import { Rules } from '../features/rules/Rules';
 import { TcpBlocks } from '../features/tcp/Tcp';
+import { notifying } from '../features/notify/notify';
+import { Bell } from '../components/ui/icons';
 import { type FlowNode, layout } from '../features/flow/flowGraph';
 import { ms, rate } from '../lib/format';
 import { useLive } from '../features/live/live';
@@ -146,12 +148,14 @@ function Traffic({ host }: { host: HostData }) {
 export function Host({ name }: { name: string }) {
   const [data] = useData<HostData[]>('/hosts');
   const [tcp] = useData<TcpBlock[]>('/tcp', 10000);
+  const [notify] = useData<Notifications>('/notifications', 60000);
   const canWrite = useCanWrite();
   return (
     <Loaded data={data}>
       {(hosts) => {
         const host = hosts.find((candidate) => candidate.host === name);
         const blocks = tcp.state === 'ready' ? tcp.value.filter((block) => block.host === host?.host) : [];
+        const notified = notify.state === 'ready' && host ? notifying(notify.value.notifications, host.host) : [];
         if (!host) {
           return (
             <Panel>
@@ -177,6 +181,11 @@ export function Host({ name }: { name: string }) {
                   {host.locations.length > 0 && <ProtocolBadge protocol="http" tls={host.tls} />}
                   {blocks.length > 0 && <ProtocolBadge protocol="tcp" />}
                   {host.listen.map((address) => <Chip>{address}</Chip>)}
+                  {notified.map((block) => (
+                    <Chip href="/notifications">
+                      <Bell class="size-3" /> {block.name}
+                    </Chip>
+                  ))}
                 </>
               }
               actions={canWrite && host.source === 'store' && <Actions name={host.host} />}

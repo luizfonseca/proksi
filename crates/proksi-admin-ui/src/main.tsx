@@ -6,6 +6,7 @@ import { Layout } from './components/Layout';
 import { Certificates } from './pages/Certificates';
 import { EditHost } from './pages/EditHost';
 import { Host } from './pages/Host';
+import { Notifications } from './pages/Notifications';
 import { HostHistory } from './pages/HostHistory';
 import { Overview } from './pages/Overview';
 import { Server } from './pages/Server';
@@ -25,6 +26,7 @@ function Page({ path }: { path: string }) {
   }
   if (path.startsWith('/hosts/')) return <Host name={decodeURIComponent(path.slice('/hosts/'.length))} />;
   if (path === '/certificates') return <Certificates />;
+  if (path === '/notifications') return <Notifications />;
   if (path === '/server') return <Server />;
   if (path === '/overview') return <Overview />;
   return <Hosts />;
