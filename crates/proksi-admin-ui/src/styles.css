@@ -3,90 +3,46 @@
 @source './';
 
 /*
- * Only Proksi's own themes, light and dark (the default themes aren't built), and only the parts
- * of daisyUI the UI uses: a class name that appears anywhere in the sources (a variable named
- * `steps`, `list`, `filter`) would otherwise bring its part in. Add a part here when a component
- * starts using it.
+ * daisyUI's own themes, light and (when the system prefers it) black, with Proksi's color as their
+ * primary, and rounder corners. Only the parts of daisyUI the UI uses are built: a class name that
+ * appears anywhere in the sources (a variable named `steps`, `list`, `filter`) would otherwise bring
+ * its part in. Add a part here when a component starts using it.
  */
 @plugin 'daisyui' {
-  themes: false;
+  themes: light --default, black --prefersdark;
   logs: false;
   include: rootcolor, scrollbar, radius, alert, badge, breadcrumbs, button, checkbox, input, link, menu, progress, select, skeleton, stat, status, tab, table, textarea;
 }
 
 @plugin 'daisyui/theme' {
-  name: 'proksi';
+  name: 'light';
   default: true;
-  color-scheme: light;
-  --color-base-100: #ffffff;
-  --color-base-200: #f7f7f8;
-  --color-base-300: #e4e4e8;
-  --color-base-content: #18181b;
   --color-primary: #e11d48;
   --color-primary-content: #ffffff;
-  --color-secondary: #7c3aed;
-  --color-secondary-content: #ffffff;
-  --color-accent: #0891b2;
-  --color-accent-content: #ffffff;
-  --color-neutral: #18181b;
-  --color-neutral-content: #f7f7f8;
-  --color-info: #4338ca;
-  --color-info-content: #ffffff;
-  --color-success: #16a34a;
-  --color-success-content: #ffffff;
-  --color-warning: #d97706;
-  --color-warning-content: #ffffff;
-  --color-error: #dc2626;
-  --color-error-content: #ffffff;
-  /* daisyUI's own sizes and corners (a theme has none without them) */
+  /* Rounder than daisyUI's own */
   --radius-selector: 0.5rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
-  --size-selector: 0.25rem;
-  --size-field: 0.25rem;
-  --border: 1px;
-  --depth: 1;
-  --noise: 0;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
 }
 
 @plugin 'daisyui/theme' {
-  name: 'proksi-dark';
+  name: 'black';
   prefersdark: true;
-  color-scheme: dark;
-  --color-base-100: #141417;
-  --color-base-200: #0c0c0e;
-  --color-base-300: #26262c;
-  --color-base-content: #ececf0;
   --color-primary: #fb7185;
   --color-primary-content: #18181b;
+  /* Black's own are grey: badges and chart lines need a color */
   --color-secondary: #a78bfa;
   --color-secondary-content: #18181b;
   --color-accent: #22d3ee;
   --color-accent-content: #18181b;
-  --color-neutral: #ececf0;
-  --color-neutral-content: #141417;
-  --color-info: #a5b4fc;
-  --color-info-content: #18181b;
-  --color-success: #4ade80;
-  --color-success-content: #18181b;
-  --color-warning: #fbbf24;
-  --color-warning-content: #18181b;
-  --color-error: #f87171;
-  --color-error-content: #18181b;
-  /* daisyUI's own sizes and corners (a theme has none without them) */
+  /* Rounder than daisyUI's own */
   --radius-selector: 0.5rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
-  --size-selector: 0.25rem;
-  --size-field: 0.25rem;
-  --border: 1px;
-  --depth: 1;
-  --noise: 0;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
 }
 
 /* Series colors of charts, and the lines between things */
 :root {
-  --root-bg: var(--color-base-200);
   --chart-1: var(--color-primary);
   --chart-2: var(--color-secondary);
   --chart-3: var(--color-accent);
