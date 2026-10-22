@@ -99,7 +99,9 @@ impl Reply {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SignIn {
-    /// A token's secret
+    /// The token's name (without it, the secret of any token signs in)
+    name: Option<String>,
+    /// Its secret
     token: String,
 }
 
@@ -281,10 +283,13 @@ impl AdminApi {
         {
             return Reply::ok(&caller);
         }
-        let Ok(SignIn { token }) = serde_json::from_slice::<SignIn>(request.body) else {
-            return Reply::error(StatusCode::BAD_REQUEST, r#"expected {"token": "<secret>"}"#);
+        let Ok(SignIn { name, token }) = serde_json::from_slice::<SignIn>(request.body) else {
+            return Reply::error(
+                StatusCode::BAD_REQUEST,
+                r#"expected {"name": "<token>", "token": "<secret>"}"#,
+            );
         };
-        let Some((id, caller)) = self.tokens.sign_in(&token) else {
+        let Some((id, caller)) = self.tokens.sign_in(name.as_deref(), &token) else {
             return Reply::unauthorized();
         };
         let mut reply = Reply::ok(&caller);
@@ -829,6 +834,18 @@ mod tests {
         let refused = reply(api.handle(sign_in(br#"{"token":"wrong"}"#)).await);
         assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
         assert_eq!(refused.set_cookie, None);
+
+        // By name: only that token's secret
+        let named = reply(
+            api.handle(sign_in(br#"{"name":"ops","token":"read"}"#))
+                .await,
+        );
+        assert_eq!(named.status, StatusCode::UNAUTHORIZED);
+        let named = reply(
+            api.handle(sign_in(br#"{"name":"ops","token":"secret"}"#))
+                .await,
+        );
+        assert_eq!(named.body, r#"{"name":"ops","access":"write"}"#);
 
         let signed_in = reply(api.handle(sign_in(br#"{"token":"secret"}"#)).await);
         assert_eq!(signed_in.status, StatusCode::OK);

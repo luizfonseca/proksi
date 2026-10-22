@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { session, type Session, Unauthorized } from '../api';
 
 export function SignIn({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
+  const [name, setName] = useState('');
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -10,9 +11,9 @@ export function SignIn({ onSignedIn }: { onSignedIn: (session: Session) => void 
     event.preventDefault();
     setBusy(true);
     try {
-      onSignedIn(await session.signIn(value.trim()));
+      onSignedIn(await session.signIn(name.trim(), value.trim()));
     } catch (err) {
-      setError(err instanceof Unauthorized ? 'That token is not valid.' : String(err));
+      setError(err instanceof Unauthorized ? 'That name and secret do not match a token.' : String(err));
     } finally {
       setBusy(false);
     }
@@ -24,12 +25,13 @@ export function SignIn({ onSignedIn }: { onSignedIn: (session: Session) => void 
         <img src="/logo.svg" alt="" />
         <h1>Sign in to Proksi</h1>
         <p>
-          Use the <code>secret</code> of a <code>token</code> block in your <code>admin</code> configuration.
+          Use the name and <code>secret</code> of a <code>token</code> block in your <code>admin</code> configuration.
         </p>
         <form onSubmit={submit}>
-          <input type="password" autoFocus placeholder="Token" value={value} onInput={(e) => setValue(e.currentTarget.value)} />
+          <input autoFocus autoComplete="username" placeholder="Name" value={name} onInput={(e) => setName(e.currentTarget.value)} />
+          <input type="password" autoComplete="current-password" placeholder="Secret" value={value} onInput={(e) => setValue(e.currentTarget.value)} />
           {error && <div class="error">{error}</div>}
-          <button class="primary" disabled={busy || !value.trim()}>Sign in</button>
+          <button class="primary" disabled={busy || !name.trim() || !value.trim()}>Sign in</button>
         </form>
       </div>
     </div>

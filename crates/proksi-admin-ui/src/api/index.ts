@@ -113,7 +113,7 @@ export const routes = {
 
 export const session = {
   get: () => get<Session>('/session'),
-  signIn: (token: string) => request<Session>('POST', '/session', { token }),
+  signIn: (name: string, token: string) => request<Session>('POST', '/session', { name, token }),
   signOut: () => request<unknown>('DELETE', '/session'),
 };
 
