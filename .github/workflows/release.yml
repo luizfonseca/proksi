@@ -252,14 +252,22 @@ jobs:
         working-directory: crates/proksi-admin-ui
         run: npm ci && npm run build
 
-      # The admin UI, the plugins and the store first, with Proksi's version: Proksi depends on them
+      # Each crate after those it depends on: the store before the plugins, all of them before Proksi
       - name: Publish to crates.io
         run: |
+          # A crate already published (a rerun after a failure) is skipped
+          publish() {
+            if ! out=$(cargo publish "$@" --token ${{ secrets.CRATES_IO_TOKEN }} 2>&1); then
+              echo "$out"
+              echo "$out" | grep -q 'already exists' || return 1
+            fi
+            echo "$out"
+          }
           # The UI's built files are ignored by git, and published with the crate
-          cargo publish -p proksi-admin-ui --allow-dirty --token ${{ secrets.CRATES_IO_TOKEN }}
-          cargo publish -p proksi_plugins --token ${{ secrets.CRATES_IO_TOKEN }}
-          cargo publish -p proksi_store --token ${{ secrets.CRATES_IO_TOKEN }}
-          cargo publish -p proksi --token ${{ secrets.CRATES_IO_TOKEN }}
+          publish -p proksi-admin-ui --allow-dirty
+          publish -p proksi_store
+          publish -p proksi_plugins
+          publish -p proksi
 
   upload-artifacts:
     continue-on-error: true
