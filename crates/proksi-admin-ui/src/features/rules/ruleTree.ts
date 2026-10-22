@@ -2,8 +2,17 @@
 
 export type Rule = { name?: string; then?: Record<string, unknown>; [key: string]: unknown };
 
-/** A test (`method is one of GET, HEAD`), or `all`, `any` or `none` of the tests below it */
-export type Condition = { test: string } | { group: 'all' | 'any' | 'none'; children: Condition[] };
+/**
+ * What a test checks: its field (`header`), the name of what's checked in it (`x-api-key`), how
+ * (`is one of`), and the value it's checked against: missing for `is there`, or `hidden` (a secret)
+ */
+export type Test = { field: string; name?: string; operator: string; value?: string; hidden?: boolean };
+
+/** A test, or `all`, `any` or `none` of the tests below it */
+export type Condition = { test: Test } | { group: 'all' | 'any' | 'none'; children: Condition[] };
+
+/** How the API writes a value it doesn't show */
+const HIDDEN = '(hidden)';
 
 const GROUPS = { and: 'all', or: 'any', not: 'none' } as const;
 const LABELLED = ['header', 'cookie', 'query'];
@@ -29,13 +38,18 @@ function text(value: unknown): string {
   return String(value);
 }
 
-function tests(field: string, operators: unknown): Condition[] {
-  if (Array.isArray(operators)) return operators.flatMap((each) => tests(field, each));
-  if (!operators || typeof operators !== 'object') return [{ test: `${field} ${text(operators)}` }];
-  return Object.entries(operators).map(([operator, value]) => {
-    if (operator === 'exists') return { test: `${field} ${value ? 'is there' : 'is missing'}` };
-    return { test: `${field} ${OPERATORS[operator] ?? operator} ${text(value)}` };
+function tests(field: string, name: string | undefined, operators: unknown): Condition[] {
+  if (Array.isArray(operators)) return operators.flatMap((each) => tests(field, name, each));
+  const named = name === undefined ? { field } : { field, name };
+  if (!operators || typeof operators !== 'object') return [{ test: { ...named, operator: 'is', ...value(operators) } }];
+  return Object.entries(operators).map(([operator, checked]) => {
+    if (operator === 'exists') return { test: { ...named, operator: checked ? 'is there' : 'is missing' } };
+    return { test: { ...named, operator: OPERATORS[operator] ?? operator, ...value(checked) } };
   });
+}
+
+function value(checked: unknown): Pick<Test, 'value' | 'hidden'> {
+  return checked === HIDDEN ? { hidden: true } : { value: text(checked) };
 }
 
 /** The tests of a block's body: each key is a field or a nested `and`, `or`, `not` */
@@ -49,9 +63,9 @@ function body(node: unknown): Condition[] {
       return blocks.map((block) => ({ group: GROUPS[key as keyof typeof GROUPS], children: body(block) }));
     }
     if (LABELLED.includes(key) && value && typeof value === 'object') {
-      return Object.entries(value).flatMap(([label, operators]) => tests(`${key} "${label}"`, operators));
+      return Object.entries(value).flatMap(([label, operators]) => tests(key, label, operators));
     }
-    return tests(key, value);
+    return tests(key, undefined, value);
   });
 }
 
@@ -61,10 +75,15 @@ export function condition(rule: Rule): Condition[] {
   return body(when);
 }
 
-/** What the rule does: each block, with its settings */
-export function actions(rule: Rule): { block: string; settings: string }[] {
+/** What the rule does: each block, with its settings by name (or `hidden`, when they're secret) */
+export function actions(rule: Rule): { block: string; settings: [string, string][] | 'hidden' }[] {
   return Object.entries(rule.then ?? {}).map(([block, settings]) => ({
     block,
-    settings: settings === '(hidden)' ? 'settings hidden' : text(settings),
+    settings:
+      settings === HIDDEN
+        ? 'hidden'
+        : settings && typeof settings === 'object' && !Array.isArray(settings)
+          ? Object.entries(settings).map(([name, inner]): [string, string] => [name, text(inner)])
+          : [['', text(settings)]],
   }));
 }

@@ -59,6 +59,19 @@ export function Panel({
   );
 }
 
+/** A part of a panel: its name in a column on the left (above, on phones), and what it holds */
+export function Section({ label, hint, children }: { label: ComponentChildren; hint?: ComponentChildren; children: ComponentChildren }) {
+  return (
+    <div class="grid gap-2 border-t border-base-300 px-4 py-3.5 first:border-t-0 md:grid-cols-[8rem_minmax(0,1fr)] md:gap-4">
+      <div class="text-xs font-medium text-base-content/60 md:pt-0.5">
+        {label}
+        {hint && <div class="mt-0.5 font-normal text-base-content/45">{hint}</div>}
+      </div>
+      <div class="min-w-0">{children}</div>
+    </div>
+  );
+}
+
 /** A small heading in capitals, above a part of a panel */
 export function Label({ children }: { children: ComponentChildren }) {
   return <h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/45">{children}</h4>;

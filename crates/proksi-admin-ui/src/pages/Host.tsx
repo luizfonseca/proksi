@@ -8,9 +8,9 @@ import { TcpBlocks } from '../features/tcp/Tcp';
 import { layout } from '../features/flow/flowGraph';
 import { ms, rate } from '../lib/format';
 import { useLive } from '../features/live/live';
-import { Badge, Chip, ProtocolBadge, SourceBadge, Status } from '../components/ui/Badge';
+import { Badge, Chip, ProtocolBadge, SourceBadge, Status, UpstreamHealth } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { Empty, Hint, Label, Mono, None, PageHead, Panel } from '../components/ui/Page';
+import { Empty, Hint, Mono, None, PageHead, Panel, Section } from '../components/ui/Page';
 import { Grid, Stack } from '../components/ui/Stack';
 import { Loaded } from '../components/ui/State';
 import { navigate, onLink } from '../router';
@@ -164,11 +164,10 @@ export function Host({ name }: { name: string }) {
             />
             <Traffic host={host} />
             {host.rules.length > 0 && (
-              <Panel class="mb-3 px-4 py-3.5">
-                <Label>
-                  Host rules <Hint class="ml-1.5 tracking-normal normal-case">every request, before its location is chosen</Hint>
-                </Label>
-                <Rules rules={host.rules} />
+              <Panel class="mb-3">
+                <Section label="Host rules" hint="every request, before its location is chosen">
+                  <Rules rules={host.rules} />
+                </Section>
               </Panel>
             )}
             <h2 class="mt-5 mb-2.5 flex items-center gap-2 text-sm font-semibold">
@@ -178,41 +177,37 @@ export function Host({ name }: { name: string }) {
             <Grid>
               {host.locations.map((location) => (
                 <Panel class="location" id={encodeURIComponent(`location ${location.location}`)}>
-                  <Stack gap={2.5} class="border-b border-base-300 px-4 py-3">
-                    <span class="font-mono text-sm font-semibold">{location.location}</span>
-                    <Badge class="ml-auto">
-                      {location.upstreams.length} upstream{location.upstreams.length === 1 ? '' : 's'}
-                    </Badge>
+                  <Stack gap={3} class="border-b border-base-300 px-4 py-3">
+                    <Mono size="md" class="font-semibold">{location.location}</Mono>
+                    {location.mirror && <Badge tone="accent">mirrors {location.mirror.percent}%</Badge>}
+                    <span class="ml-auto"><UpstreamHealth upstreams={location.upstreams} /></span>
                   </Stack>
-                  <div class="grid md:grid-cols-2">
-                    <section class="px-4 py-3">
-                      <Label>Upstreams</Label>
-                      {location.upstreams.length === 0 ? (
-                        <None>Answered by Proksi (no upstream)</None>
-                      ) : (
-                        location.upstreams.map((upstream) => <UpstreamRow upstream={upstream} />)
-                      )}
-                      {location.mirror && (
-                        <div class="mt-1.5 text-xs text-base-content/45" title="Copies of the requests sent to the mirror since Proksi started">
-                          Mirroring {location.mirror.percent}% · {location.mirror.sent} sent · {location.mirror.failed} failed
-                          {location.mirror.dropped > 0 && ` · ${location.mirror.dropped} dropped (too many at once)`}
-                          {location.mirror.too_large > 0 && ` · ${location.mirror.too_large} not copied (body too large)`}
-                        </div>
-                      )}
-                    </section>
-                    <section class="border-t border-base-300 px-4 py-3 md:border-t-0 md:border-l">
-                      <Label>Plugins</Label>
-                      <Stack gap={1} wrap>
-                        {location.blocks.length === 0 ? <None>None</None> : location.blocks.map((block) => <Chip>{block}</Chip>)}
-                      </Stack>
-                    </section>
-                    {location.rules.length > 0 && (
-                      <section class="col-span-full border-t border-base-300 px-4 py-3">
-                        <Label>Rules</Label>
-                        <Rules rules={location.rules} />
-                      </section>
+                  <Section label="Upstreams">
+                    {location.upstreams.length === 0 ? (
+                      <None>Answered by Proksi (no upstream)</None>
+                    ) : (
+                      location.upstreams.map((upstream) => <UpstreamRow upstream={upstream} />)
                     )}
-                  </div>
+                    {location.mirror && (
+                      <Hint block class="mt-1.5" title="Copies of the requests sent to the mirror since Proksi started">
+                        Mirror: {location.mirror.sent} sent · {location.mirror.failed} failed
+                        {location.mirror.dropped > 0 && ` · ${location.mirror.dropped} dropped (too many at once)`}
+                        {location.mirror.too_large > 0 && ` · ${location.mirror.too_large} not copied (body too large)`}
+                      </Hint>
+                    )}
+                  </Section>
+                  {location.blocks.length > 0 && (
+                    <Section label="Plugins" hint="in the order they run">
+                      <Stack gap={1} wrap>
+                        {location.blocks.map((block) => <Chip>{block}</Chip>)}
+                      </Stack>
+                    </Section>
+                  )}
+                  {location.rules.length > 0 && (
+                    <Section label="Rules" hint="each that matches, in order: one that answers ends the request">
+                      <Rules rules={location.rules} />
+                    </Section>
+                  )}
                 </Panel>
               ))}
             </Grid>

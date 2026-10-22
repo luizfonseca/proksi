@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import type { Host, TcpBlock } from '../api';
-import { Chip, ProtocolBadge, SourceBadge, Status } from '../components/ui/Badge';
+import { Chip, ProtocolBadge, SourceBadge, UpstreamHealth } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { SearchInput, Segmented } from '../components/ui/Form';
 import { Empty, Hint, None, PageHead, Panel } from '../components/ui/Page';
@@ -11,22 +11,6 @@ import { Cell, Row, Table } from '../components/ui/Table';
 import { navigate } from '../router';
 import { useCanWrite } from '../api/session';
 import { useData } from '../api/useData';
-
-function Health({ host }: { host: Host }) {
-  const upstreams = host.locations.flatMap((location) => location.upstreams);
-  if (upstreams.length === 0) return <None>no upstreams</None>;
-  const healthy = upstreams.filter((upstream) => upstream.healthy).length;
-  return (
-    <Stack class="text-sm text-base-content/60">
-      <Stack gap={1}>
-        {upstreams.slice(0, 8).map((upstream) => (
-          <Status tone={upstream.healthy ? 'success' : 'error'} title={upstream.upstream} />
-        ))}
-      </Stack>
-      {healthy}/{upstreams.length}
-    </Stack>
-  );
-}
 
 function Summary({ hosts }: { hosts: Host[] }) {
   const upstreams = hosts.flatMap((host) => host.locations.flatMap((location) => location.upstreams));
@@ -112,7 +96,7 @@ export function Hosts() {
                           <Cell><Serves host={host} tcp={tcpHosts.has(host.host)} /></Cell>
                           <Cell><SourceBadge source={host.source} /></Cell>
                           <Cell phone={false} numeric>{host.locations.length}</Cell>
-                          <Cell><Health host={host} /></Cell>
+                          <Cell><UpstreamHealth upstreams={host.locations.flatMap((location) => location.upstreams)} /></Cell>
                           <Cell phone={false}>
                             <Stack gap={1} wrap>
                               {blocks.length === 0 ? <None>none</None> : blocks.map((block) => <Chip>{block}</Chip>)}

@@ -94,3 +94,19 @@ export function SourceBadge({ source }: { source: string | null }) {
   const name = source ?? 'unknown';
   return <Badge tone={SOURCES[name] ?? 'neutral'}>{name}</Badge>;
 }
+
+/** Upstreams' health: a dot each (up to 8), and how many are healthy */
+export function UpstreamHealth({ upstreams }: { upstreams: { upstream: string; healthy: boolean }[] }) {
+  if (upstreams.length === 0) return <span class="text-sm text-base-content/45">no upstreams</span>;
+  const healthy = upstreams.filter((upstream) => upstream.healthy).length;
+  return (
+    <span class="inline-flex items-center gap-2 text-sm text-base-content/60">
+      <span class="inline-flex gap-1">
+        {upstreams.slice(0, 8).map((upstream) => (
+          <Status tone={upstream.healthy ? 'success' : 'error'} title={upstream.upstream} />
+        ))}
+      </span>
+      {healthy}/{upstreams.length} healthy
+    </span>
+  );
+}
