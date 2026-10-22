@@ -5,6 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use crate::config::notify::Kind;
 use clap::Parser;
 use notify::{EventHandler, Watcher};
 use pingora::{
@@ -81,15 +82,27 @@ impl EventHandler for FileWatcherServiceHandler {
                 tracing::error!(
                     "the configuration file changed but is invalid, keeping the current configuration: {err}"
                 );
+                crate::notify::emit(|| crate::notify::Event {
+                    detail: Some(err),
+                    ..crate::notify::Event::new(Kind::ConfigReloadFailed)
+                });
             }
-            ReloadAction::ApplyRoutes(snapshot) => {
+            ReloadAction::ApplyRoutes(snapshot, notify) => {
+                crate::notify::configure(notify);
                 if self.sender.try_send(snapshot).is_err() {
                     tracing::error!("failed to apply the routes from the configuration file");
                 } else {
                     tracing::info!("applying route changes from the configuration file");
+                    crate::notify::emit(|| crate::notify::Event::new(Kind::ConfigReloaded));
                 }
             }
-            ReloadAction::Restart => restart(),
+            ReloadAction::Restart => {
+                crate::notify::emit(|| crate::notify::Event {
+                    detail: Some("restarting with the new settings".to_string()),
+                    ..crate::notify::Event::new(Kind::ConfigReloaded)
+                });
+                restart();
+            }
         }
     }
 }

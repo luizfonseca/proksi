@@ -1,4 +1,5 @@
 use std::{sync::Arc, time::Duration};
+use crate::config::notify::Kind;
 
 use acme_v2::{order::NewOrder, Account, DirectoryUrl};
 use anyhow::anyhow;
@@ -344,6 +345,14 @@ impl LetsencryptService {
 
         let valid_days_left = cert.valid_days_left();
         tracing::info!("certificate for domain {domain} expires in {valid_days_left} days",);
+        // Each `notify` block says from how many days left it's told (`expiring_days`)
+        if valid_days_left <= crate::notify::EXPIRING_DAYS_MAX {
+            crate::notify::emit(|| crate::notify::Event {
+                host: Some(domain.to_string()),
+                days_left: Some(valid_days_left),
+                ..crate::notify::Event::new(Kind::CertificateExpiring)
+            });
+        }
 
         // Nothing to do before the renewal interval
         if valid_days_left > DEFAULT_RENEW_INTERVAL_DAYS {
@@ -385,13 +394,31 @@ impl LetsencryptService {
         let ordered = Self::create_order_for_domain(domain, account, host.challenge, dns).await;
         if ordered.is_err() {
             Self::create_self_signed_certificate(domain, host.self_signed_on_failure).await?;
+        } else {
+            crate::notify::emit(|| crate::notify::Event {
+                host: Some(domain.to_string()),
+                ..crate::notify::Event::new(Kind::CertificateIssued)
+            });
         }
         ordered
     }
 }
 
-/// Logs what happened to a domain's certificate
+/// Logs what happened to a domain's certificate, and tells `notify` blocks about renewals and
+/// failures (once: the replica holding the domain's lease)
 fn log_outcome(domain: &str, action: &str, outcome: &Outcome) {
+    let event = |kind: Kind, detail: Option<String>| {
+        crate::notify::emit(|| crate::notify::Event {
+            host: Some(domain.to_string()),
+            detail,
+            ..crate::notify::Event::new(kind)
+        });
+    };
+    match outcome {
+        Outcome::Done if action == "renewing" => event(Kind::CertificateRenewed, None),
+        Outcome::Failed(err) => event(Kind::CertificateFailed, Some(err.clone())),
+        _ => {}
+    }
     match outcome {
         Outcome::Done => info!("{action} certificate for {domain}: done"),
         Outcome::Held => tracing::debug!(

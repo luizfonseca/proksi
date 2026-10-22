@@ -21,6 +21,7 @@ pub(crate) mod hcl;
 pub mod host;
 pub mod kubernetes;
 pub mod listeners;
+pub mod notify;
 pub mod server_tls;
 pub mod tcp;
 pub mod validate;
@@ -836,6 +837,11 @@ pub(crate) struct Config {
     #[clap(skip)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin: Option<admin::AdminConfig>,
+
+    /// Webhooks told about what happens to Proksi (`notify "<name>" { ... }`)
+    #[clap(skip)]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub notify: BTreeMap<String, notify::NotifyBlock>,
     // Listeners -- a list of specific listeners and upstrems
     // that don't necessarily need to be HTTP/HTTPS related
     // pub listeners: Vec<ConfigListener>,
@@ -865,6 +871,7 @@ impl Default for Config {
             host: BTreeMap::new(),
             tcp: BTreeMap::new(),
             admin: None,
+            notify: BTreeMap::new(),
             kubernetes: kubernetes::KubernetesConfig::default(),
             auto_reload: AutoReload::default(),
             store: StoreConfig::default(),

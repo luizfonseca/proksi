@@ -35,7 +35,15 @@ pub fn tcp_targets(routes: &[TcpRoute]) -> Result<Arc<Vec<TcpTarget>>, anyhow::E
     let mut targets = vec![];
     for route in routes {
         let mut load_balancer = load_balancer(&route.upstreams);
-        set_health_check(&mut load_balancer, route.health_check);
+        set_health_check(
+            &mut load_balancer,
+            route.health_check,
+            crate::routing::build::Watched {
+                host: route.host.clone(),
+                location: None,
+                tcp: Some(route.label()),
+            },
+        );
         targets.push(TcpTarget {
             label: route.label(),
             host: route.host.clone(),

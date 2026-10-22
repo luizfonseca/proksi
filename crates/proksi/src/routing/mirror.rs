@@ -56,9 +56,10 @@ impl Mirror {
         mirror: &crate::config::host::Mirror,
         first: usize,
         health_check: Option<HealthCheck>,
+        watched: crate::routing::build::Watched,
     ) -> Self {
         let mut load_balancer = crate::routing::build::load_balancer_at(&mirror.upstreams, first);
-        crate::routing::build::set_health_check(&mut load_balancer, health_check);
+        crate::routing::build::set_health_check(&mut load_balancer, health_check, watched);
         Self {
             percent: mirror.percent,
             max_body_size: mirror.max_body_size,
@@ -275,6 +276,7 @@ mod tests {
             },
             2,
             None,
+            crate::routing::build::Watched::default(),
         ))
     }
 

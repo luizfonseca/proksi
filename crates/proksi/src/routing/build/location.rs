@@ -7,7 +7,7 @@ use crate::{
     stores::routes::RouteStoreContainer,
 };
 
-use super::load_balancer::{load_balancer, set_health_check};
+use super::load_balancer::{load_balancer, set_health_check, Watched};
 
 /// Builds a location's container: load balancer (with health checks) and building blocks
 pub(super) fn build_location_container(
@@ -15,7 +15,11 @@ pub(super) fn build_location_container(
     location: &Location,
 ) -> Option<RouteStoreContainer> {
     let mut load_balancer = load_balancer(&location.upstreams);
-    set_health_check(&mut load_balancer, location.health_check);
+    set_health_check(
+        &mut load_balancer,
+        location.health_check,
+        Watched::location(host, &location.path),
+    );
 
     let mut container = RouteStoreContainer::new(load_balancer);
     container.path.clone_from(&location.path);
@@ -37,6 +41,7 @@ pub(super) fn build_location_container(
             mirror,
             mirror_first,
             location.health_check,
+            Watched::location(host, &location.path),
         ))
     });
     container.splits = Arc::new(crate::routing::split::Split::build(

@@ -42,7 +42,11 @@ impl Split {
             .map(|split| {
                 let mut load_balancer =
                     crate::routing::build::load_balancer_at(&split.upstreams, first);
-                crate::routing::build::set_health_check(&mut load_balancer, health_check);
+                crate::routing::build::set_health_check(
+                    &mut load_balancer,
+                    health_check,
+                    crate::routing::build::Watched::location(host, path),
+                );
                 let end = start.saturating_add(split.percent).min(100);
                 let built = Split {
                     name: split.name.clone(),

@@ -17,13 +17,16 @@ use async_trait::async_trait;
 use http::Extensions;
 use pingora::{
     lb::{
-        discovery::ServiceDiscovery, health_check::TcpHealthCheck, selection::RoundRobin, Backend,
+        discovery::ServiceDiscovery,
+        health_check::{HealthObserve, TcpHealthCheck},
+        selection::RoundRobin,
+        Backend,
         Backends, LoadBalancer,
     },
     protocols::l4::socket::SocketAddr as BackendAddr,
 };
 
-use crate::config::{host::HealthCheck, RouteUpstream};
+use crate::config::{host::HealthCheck, notify::Kind, RouteUpstream};
 
 /// Names are never resolved more often than this, however many connections fail
 pub const MIN_RESOLVE_INTERVAL: Duration = Duration::from_secs(1);
@@ -111,16 +114,55 @@ fn load_balancer_from(
     load_balancer
 }
 
+/// What a load balancer's upstreams serve, to tell which upstream went down: a location of a
+/// host, or a `tcp` block
+#[derive(Debug, Clone, Default)]
+pub struct Watched {
+    pub host: Option<String>,
+    pub location: Option<String>,
+    pub tcp: Option<String>,
+}
+
+impl Watched {
+    pub fn location(host: &str, path: &str) -> Self {
+        Self {
+            host: Some(host.to_string()),
+            location: Some(path.to_string()),
+            tcp: None,
+        }
+    }
+}
+
+/// Raises `upstream_down` and `upstream_up` (`notify` blocks) when an upstream's health changes
+struct HealthChanges(Watched);
+
+#[async_trait]
+impl HealthObserve for HealthChanges {
+    async fn observe(&self, target: &Backend, healthy: bool) {
+        let watched = &self.0;
+        crate::notify::emit(|| crate::notify::Event {
+            host: watched.host.clone(),
+            location: watched.location.clone(),
+            tcp: watched.tcp.clone(),
+            upstream: Some(target.addr.to_string()),
+            ..crate::notify::Event::new(if healthy { Kind::UpstreamUp } else { Kind::UpstreamDown })
+        });
+    }
+}
+
 /// Checks the upstreams of `load_balancer` as `health_check` says, if it's enabled: unhealthy
-/// after two failed checks in a row (the health check service runs them)
+/// after two failed checks in a row (the health check service runs them). Changes of their
+/// health are told to `notify` blocks, as upstreams of `watched`.
 pub fn set_health_check(
     load_balancer: &mut LoadBalancer<RoundRobin>,
     health_check: Option<HealthCheck>,
+    watched: Watched,
 ) {
     load_balancer.health_check_frequency = HealthCheck::interval(health_check);
     if load_balancer.health_check_frequency.is_some() {
         let mut check = TcpHealthCheck::new();
         check.consecutive_failure = 2;
+        check.health_changed_callback = Some(Box::new(HealthChanges(watched)));
         load_balancer.set_health_check(check);
     }
 }
@@ -530,7 +572,7 @@ mod tests {
         let frequency = |health_check: Option<HealthCheck>| {
             let mut load_balancer =
                 load_balancer_with(&[upstream("10.0.0.1", 80)], Dns::default().lookup());
-            super::set_health_check(&mut load_balancer, health_check);
+            super::set_health_check(&mut load_balancer, health_check, super::Watched::default());
             load_balancer.health_check_frequency.map(|frequency| frequency.as_secs())
         };
         let check = |enabled, interval_secs| Some(HealthCheck { enabled, interval_secs });

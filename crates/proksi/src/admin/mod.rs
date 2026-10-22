@@ -184,33 +184,8 @@ impl AdminApi {
             Ok(_) => return Answer::Reply(Reply::not_found()),
             Err(reply) => return Answer::Reply(reply),
         };
-        if endpoint.changes() {
-            // Other sites can't send the cookie (`SameSite=Strict`), nor make changes with it
-            let trusted = &self.trusted_origins;
-            if caller.session && !access::allowed_origin(request.origin, request.host, trusted) {
-                let origin = request.origin.unwrap_or("none");
-                let host = request.host.unwrap_or("none");
-                return Answer::Reply(Reply::error(
-                    StatusCode::FORBIDDEN,
-                    &format!(
-                        "changes must come from the admin's own pages: their Origin ({origin}) \
-                         isn't this address ({host}). Behind a proxy that changes Host, add the \
-                         origin to admin.trusted_origins"
-                    ),
-                ));
-            }
-            if caller.access == Access::Read {
-                return Answer::Reply(Reply::error(
-                    StatusCode::FORBIDDEN,
-                    "this token can only read (access = \"write\" to change hosts)",
-                ));
-            }
-        }
-        if endpoint.metrics() && !crate::metrics::enabled() {
-            return Answer::Reply(Reply::error(
-                StatusCode::NOT_FOUND,
-                "metrics are disabled (admin.metrics = false)",
-            ));
+        if let Some(refused) = self.reject_access(endpoint, &caller, request) {
+            return Answer::Reply(refused);
         }
 
         let write = match write(&caller, request) {
@@ -248,23 +223,68 @@ impl AdminApi {
             Endpoint::Routes => routes_reply(routes::list(store).await),
             Endpoint::Route(host) => routes_reply(routes::get(store, host).await),
             Endpoint::PutRoute(host) => {
-                change_reply(routes::put(store, host, request.body, &write).await, &write)
+                change_reply(routes::put(store, host, request.body, &write).await, &write, "saved")
             }
             Endpoint::DeleteRoute(host) => {
-                change_reply(routes::delete(store, host, &write).await, &write)
+                change_reply(routes::delete(store, host, &write).await, &write, "removed")
             }
             Endpoint::RouteHistory(host) => routes_reply(routes::history(store, host).await),
             Endpoint::RouteVersion(host, revision) => {
                 routes_reply(routes::version(store, host, revision).await)
             }
             Endpoint::RollbackRoute(host) => {
-                change_reply(routes::rollback(store, host, request.body, &write).await, &write)
+                change_reply(
+                    routes::rollback(store, host, request.body, &write).await,
+                    &write,
+                    "rolled back",
+                )
             }
             Endpoint::DeletedRoutes => routes_reply(routes::deleted(store).await),
+            Endpoint::Notifications => Reply::ok(&notifications()),
+            Endpoint::TestNotification(name) => match crate::notify::test(name).await {
+                None => Reply::not_found(),
+                Some(Ok(())) => Reply::ok(&serde_json::json!({ "ok": true })),
+                Some(Err(err)) => Reply::error(StatusCode::BAD_GATEWAY, &err),
+            },
             Endpoint::Session => Reply::ok(&caller),
             Endpoint::SignIn | Endpoint::SignOut => Reply::not_found(),
         };
         Answer::Reply(reply)
+    }
+
+    /// Why `caller` can't reach `endpoint`, if they can't: a change from another site or with a
+    /// read-only token, or metrics that are turned off
+    fn reject_access(&self, endpoint: Endpoint<'_>, caller: &access::Caller, request: Request<'_>) -> Option<Reply> {
+        if endpoint.metrics() && !crate::metrics::enabled() {
+            return Some(Reply::error(
+                StatusCode::NOT_FOUND,
+                "metrics are disabled (admin.metrics = false)",
+            ));
+        }
+        if !endpoint.changes() {
+            return None;
+        }
+        // Other sites can't send the cookie (`SameSite=Strict`), nor make changes with it
+        let trusted = &self.trusted_origins;
+        if caller.session && !access::allowed_origin(request.origin, request.host, trusted) {
+            let origin = request.origin.unwrap_or("none");
+            let host = request.host.unwrap_or("none");
+            return Some(Reply::error(
+                StatusCode::FORBIDDEN,
+                &format!(
+                    "changes must come from the admin's own pages: their Origin ({origin}) \
+                     isn't this address ({host}). Behind a proxy that changes Host, add the \
+                     origin to admin.trusted_origins"
+                ),
+            ));
+        }
+        if caller.access == Access::Read {
+            return Some(Reply::error(
+                StatusCode::FORBIDDEN,
+                "this token can only read (access = \"write\" to change hosts)",
+            ));
+        }
+        None
     }
 
     /// `POST /api/v1/session` exchanges a token for a session cookie; `DELETE` ends it
@@ -315,10 +335,27 @@ fn routes_reply(result: Result<impl Serialize, routes::Refused>) -> Reply {
 }
 
 /// A reply to a change: a `412` says why, from what the change expected
+/// The answer to a change of a host (`change`: saved, removed or rolled back), told to `notify`
+/// blocks when it's made
 fn change_reply(
     result: Result<routes::Written, routes::Refused>,
     write: &proksi_store::Write,
+    change: &str,
 ) -> Reply {
+    if let Ok(written) = &result {
+        let change = if change == "saved" && write.expect == proksi_store::Expect::Absent {
+            "created"
+        } else {
+            change
+        };
+        crate::notify::emit(|| crate::notify::Event {
+            host: Some(written.host.clone()),
+            detail: Some(change.to_string()),
+            author: write.author.clone(),
+            version: (change != "removed").then_some(written.revision),
+            ..crate::notify::Event::new(crate::config::notify::Kind::HostChanged)
+        });
+    }
     let Err(routes::Refused::Conflict { version }) = result else {
         return routes_reply(result);
     };
@@ -370,6 +407,32 @@ fn write(caller: &access::Caller, request: Request<'_>) -> Result<proksi_store::
     Ok(proksi_store::Write {
         author: caller.name.clone(),
         expect,
+    })
+}
+
+/// The `notify` blocks, without their secrets (URLs masked, header names only), each with its
+/// last delivery, and every event they can ask for
+fn notifications() -> serde_json::Value {
+    let deliveries = crate::notify::deliveries();
+    let blocks: Vec<serde_json::Value> = crate::notify::blocks()
+        .iter()
+        .map(|(name, block)| {
+            serde_json::json!({
+                "name": name,
+                "source": "file",
+                "url": crate::notify::masked(&block.url),
+                "format": block.format,
+                "on": block.on.iter().map(|kind| kind.name()).collect::<Vec<_>>(),
+                "hosts": block.hosts,
+                "headers": block.headers.keys().collect::<Vec<_>>(),
+                "expiring_days": block.expiring_days,
+                "last": deliveries.get(name),
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "notifications": blocks,
+        "events": crate::config::notify::Kind::ALL.iter().map(|kind| kind.name()).collect::<Vec<_>>(),
     })
 }
 

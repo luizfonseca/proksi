@@ -1,9 +1,12 @@
 //! Decides what to do when the configuration file changes
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use crate::{
-    config::{listeners::listeners, validate::check_config, Config},
+    config::{listeners::listeners, notify::NotifyBlock, validate::check_config, Config},
     routing::{file_source::file_snapshot, RouteSnapshot},
 };
 
@@ -12,8 +15,8 @@ use crate::{
 pub enum ReloadAction {
     /// The new configuration is invalid: keep the current one
     Reject(String),
-    /// Only routes changed: apply them without restarting
-    ApplyRoutes(RouteSnapshot),
+    /// Only routes (or `notify` blocks) changed: apply them without restarting
+    ApplyRoutes(RouteSnapshot, BTreeMap<String, NotifyBlock>),
     /// Other settings changed: restart with the new configuration
     Restart,
 }
@@ -29,18 +32,20 @@ pub fn reload_action(current: &Config, new: Result<Config, String>) -> ReloadAct
 
     // Ports are opened at startup: hosts needing other ports restart proksi
     if settings(current) == settings(&new) && listeners(current) == listeners(&new) {
-        ReloadAction::ApplyRoutes(file_snapshot(&new))
+        ReloadAction::ApplyRoutes(file_snapshot(&new), new.notify)
     } else {
         ReloadAction::Restart
     }
 }
 
-/// Everything in the configuration except the routes and hosts
+/// Everything in the configuration except the routes and hosts, and `notify` blocks (they
+/// apply without restarting)
 fn settings(config: &Config) -> Option<serde_json::Value> {
     let mut value = serde_json::to_value(config).ok()?;
     if let Some(settings) = value.as_object_mut() {
         settings.remove("routes");
         settings.remove("host");
+        settings.remove("notify");
     }
     Some(value)
 }
@@ -89,7 +94,7 @@ mod tests {
         let current = config_with_routes(&["a.test"]);
         let new = config_with_routes(&["a.test", "b.test"]);
 
-        let ReloadAction::ApplyRoutes(snapshot) = reload_action(&current, Ok(new)) else {
+        let ReloadAction::ApplyRoutes(snapshot, _) = reload_action(&current, Ok(new)) else {
             panic!("expected routes to be applied");
         };
 
@@ -175,8 +180,30 @@ mod tests {
 
         assert!(matches!(
             reload_action(&current, Ok(new)),
-            ReloadAction::ApplyRoutes(_)
+            ReloadAction::ApplyRoutes(..)
         ));
+    }
+
+    #[test]
+    fn test_notify_block_change_applies_without_restarting() {
+        let current = Config::default();
+        let mut new = Config::default();
+        new.notify.insert(
+            "ops".to_string(),
+            crate::config::notify::NotifyBlock {
+                url: "https://hooks.example.com/a".to_string(),
+                format: crate::config::notify::Format::Slack,
+                on: vec![],
+                hosts: vec![],
+                headers: std::collections::BTreeMap::new(),
+                expiring_days: 14,
+            },
+        );
+
+        let ReloadAction::ApplyRoutes(_, notify) = reload_action(&current, Ok(new)) else {
+            panic!("expected notify blocks to apply without restarting");
+        };
+        assert_eq!(notify.len(), 1);
     }
 
     #[test]
