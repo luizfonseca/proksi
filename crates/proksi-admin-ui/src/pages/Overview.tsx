@@ -167,7 +167,7 @@ export function Overview() {
       />
 
       <Cards columns={5}>
-        <Card label="Requests" value={last ? rate(last.requests) : '—'} values={take(history, (point) => point.requests)} color="var(--chart-1)" />
+        <Card label="Requests" value={last ? rate(last.requests) : '—'} values={take(history, (point) => point.requests)} color="var(--color-info)" />
         <Card
           label="Errors (5xx)"
           value={last ? percent(last.errors * 100) : '—'}
