@@ -33,6 +33,32 @@ export function PageHead({
   );
 }
 
+/** A group of panels under a heading, with what it is and what can be done beside it */
+export function PageSection({
+  title,
+  description,
+  aside,
+  children,
+}: {
+  title: ComponentChildren;
+  description?: ComponentChildren;
+  aside?: ComponentChildren;
+  children: ComponentChildren;
+}) {
+  return (
+    <section class="mt-8 first:mt-0">
+      <div class="mb-3 flex flex-wrap items-end gap-x-4 gap-y-1">
+        <div class="min-w-0">
+          <h2 class="text-base font-semibold">{title}</h2>
+          {description && <p class="text-sm text-base-content/60">{description}</p>}
+        </div>
+        {aside && <div class="ml-auto">{aside}</div>}
+      </div>
+      <div class="grid gap-3">{children}</div>
+    </section>
+  );
+}
+
 /** A box with an optional heading row */
 export function Panel({
   title,

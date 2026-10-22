@@ -25,7 +25,6 @@ export function TcpBlocks({ blocks, withHost }: { blocks: TcpBlock[]; withHost?:
   if (blocks.length === 0) return null;
   return (
     <Panel
-      class="mb-3"
       title={
         <Stack>
           Blocks

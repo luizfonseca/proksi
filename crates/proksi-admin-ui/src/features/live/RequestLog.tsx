@@ -59,8 +59,8 @@ function Request({ served, host, onClose }: { served: Served | null; host?: stri
   );
 }
 
-/** The latest requests, of every host or of `host` */
-export function RequestLog({ host }: { host?: string }) {
+/** The latest requests, of every host or of `host` (`title`: none when a section already says it) */
+export function RequestLog({ host, title = 'Latest requests' }: { host?: string; title?: string | null }) {
   // Off until asked for: Proksi builds nothing for it until then
   const [paused, setPaused] = useState(true);
   const [held, setHeld] = useState(false);
@@ -70,8 +70,7 @@ export function RequestLog({ host }: { host?: string }) {
   const shown = filter.trim() ? requests.filter((served) => matches(served, filter.trim())) : requests;
   return (
     <Panel
-      class="mb-3"
-      title="Latest requests"
+      title={title}
       aside={
         <Stack gap={3} wrap justify="end" class="flex-1 text-xs text-base-content/60">
           {requests.length > 0 && <SearchInput class="w-full max-w-60" placeholder="Filter: path, 5xx, client…" value={filter} onInput={setFilter} />}

@@ -1,7 +1,4 @@
-import type { ComponentChildren } from 'preact';
-import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { Badge, Chip } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
 import { Mono, None, PageHead, Panel } from '../components/ui/Page';
 import { Stack } from '../components/ui/Stack';
 import { Loaded } from '../components/ui/State';
@@ -41,7 +38,7 @@ function Value({ name, setting }: { name: string; setting: Setting }) {
 
 function Rows({ settings }: { settings: Settings }) {
   return (
-    <dl class="grid text-xs">
+    <dl class="grid text-sm">
       {Object.entries(settings).map(([name, setting]) =>
         isSection(setting) ? (
           <div class="border-t border-base-300 py-1.5 first:border-t-0">
@@ -63,36 +60,16 @@ function Rows({ settings }: { settings: Settings }) {
   );
 }
 
-/** A card of settings, all of the same height: taller ones can be expanded */
-function Section({ title, children }: { title: string; children: ComponentChildren }) {
-  const body = useRef<HTMLDivElement>(null);
-  const [overflows, setOverflows] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  useLayoutEffect(() => {
-    const element = body.current;
-    if (element) setOverflows(element.scrollHeight > element.clientHeight + 1);
-  }, [children]);
+/** A card of settings, as tall as they are: dimmed, and marked off, when its `enabled` is false */
+function Card({ title, settings }: { title: string; settings: Settings }) {
+  const off = settings.enabled === false;
   return (
-    <Panel class="flex flex-col px-4 py-3.5">
-      <h2 class="mb-2 text-sm font-semibold">{title}</h2>
-      <div
-        class={`relative overflow-hidden ${expanded ? 'h-auto' : 'h-[196px]'} ${
-          overflows && !expanded
-            ? "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-10 after:bg-linear-to-b after:from-transparent after:to-base-100 after:content-['']"
-            : ''
-        }`}
-        ref={body}
-      >
-        {children}
-      </div>
-      {/* Kept when there's nothing more, so every card has the same height */}
-      <div class="mt-2 h-5">
-        {(overflows || expanded) && (
-          <Button variant="link" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-            {expanded ? 'Show less' : 'Show all'}
-          </Button>
-        )}
-      </div>
+    <Panel class={`mb-3 break-inside-avoid px-4 py-3.5 ${off ? 'opacity-60' : ''}`}>
+      <Stack class="mb-2">
+        <h2 class="text-sm font-semibold">{title}</h2>
+        {off && <Badge>off</Badge>}
+      </Stack>
+      <Rows settings={settings} />
     </Panel>
   );
 }
@@ -107,20 +84,13 @@ export function Server() {
           const general = Object.fromEntries(Object.entries(settings).filter(([, setting]) => !isSection(setting)));
           const sections = Object.entries(settings).filter(([, setting]) => isSection(setting)) as [string, Settings][];
           return (
-            <div class="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] items-start gap-3 max-sm:grid-cols-1">
-              <Section title="General">
-                <Rows settings={general} />
-              </Section>
+            // Columns that cards fill top to bottom: no gaps under short ones
+            <div class="gap-3 md:columns-2 xl:columns-3">
+              <Card title="General" settings={general} />
               {sections.map(([name, section]) => (
-                <Section title={label(name)}>
-                  <Rows settings={section} />
-                </Section>
+                <Card title={label(name)} settings={section} />
               ))}
-              {settings.admin === null && (
-                <Section title="Admin">
-                  <None>off</None>
-                </Section>
-              )}
+              {settings.admin === null && <Card title="Admin" settings={{ enabled: false }} />}
             </div>
           );
         }}

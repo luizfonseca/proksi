@@ -10,7 +10,7 @@ import { ms, rate } from '../lib/format';
 import { useLive } from '../features/live/live';
 import { Badge, Chip, ProtocolBadge, SourceBadge, Status, UpstreamHealth } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { Empty, Hint, Mono, None, PageHead, Panel, Section } from '../components/ui/Page';
+import { Empty, Hint, Mono, None, PageHead, PageSection, Panel, Section } from '../components/ui/Page';
 import { Grid, Stack } from '../components/ui/Stack';
 import { Loaded } from '../components/ui/State';
 import { navigate, onLink } from '../router';
@@ -82,10 +82,9 @@ function Traffic({ host }: { host: HostData }) {
   const read = (value: (point: NonNullable<(typeof points)[number]>) => number | null) =>
     points.map((point) => (point ? value(point) : null));
   return (
-    <>
+    <PageSection title="Traffic" description="Requests to this host, from clients to upstreams">
       <Panel
-        class="mb-3"
-        title="Traffic"
+        title="Now"
         aside={
           <Legend>
             <Swatch color="var(--color-success)">flowing</Swatch>
@@ -99,7 +98,7 @@ function Traffic({ host }: { host: HostData }) {
           <Flow flow={layout(host, stats, latest?.window_seconds)} />
         </div>
       </Panel>
-      <Grid columns={2} class="mb-3">
+      <Grid columns={2}>
         <LineChart
           title="Requests"
           span={300}
@@ -120,7 +119,7 @@ function Traffic({ host }: { host: HostData }) {
         />
       </Grid>
       <RequestLog host={host.host} />
-    </>
+    </PageSection>
   );
 }
 
@@ -163,18 +162,14 @@ export function Host({ name }: { name: string }) {
               actions={canWrite && host.source === 'store' && <Actions name={host.host} />}
             />
             <Traffic host={host} />
-            {host.rules.length > 0 && (
-              <Panel class="mb-3">
-                <Section label="Host rules" hint="every request, before its location is chosen">
-                  <Rules rules={host.rules} />
-                </Section>
-              </Panel>
-            )}
-            <h2 class="mt-5 mb-2.5 flex items-center gap-2 text-sm font-semibold">
-              Locations
-              <ProtocolBadge protocol="http" />
-            </h2>
-            <Grid>
+            <PageSection title="Configuration" description="How requests to this host are served: by path, then each location's upstreams, plugins and rules">
+              {host.rules.length > 0 && (
+                <Panel>
+                  <Section label="Host rules" hint="every request, before its location is chosen">
+                    <Rules rules={host.rules} />
+                  </Section>
+                </Panel>
+              )}
               {host.locations.map((location) => (
                 <Panel class="location" id={encodeURIComponent(`location ${location.location}`)}>
                   <Stack gap={3} class="border-b border-base-300 px-4 py-3">
@@ -204,14 +199,14 @@ export function Host({ name }: { name: string }) {
                     </Section>
                   )}
                   {location.rules.length > 0 && (
-                    <Section label="Rules" hint="each that matches, in order: one that answers ends the request">
+                    <Section label="Rules" hint="each that matches, in order; one that answers ends the request">
                       <Rules rules={location.rules} />
                     </Section>
                   )}
                 </Panel>
               ))}
-            </Grid>
-            <TcpBlocks blocks={blocks} />
+              <TcpBlocks blocks={blocks} />
+            </PageSection>
           </>
         );
       }}

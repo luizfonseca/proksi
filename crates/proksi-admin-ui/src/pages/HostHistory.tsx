@@ -112,7 +112,7 @@ export function HostHistory({ name }: { name: string }) {
         </Panel>
       ) : (
         <Panel class="overflow-hidden">
-          <Table columns={['Compare', 'Change', 'By', 'When', '']}>
+          <Table columns={[{ label: 'Compare', class: 'w-20' }, 'Change', 'By', 'When', '']}>
             {changes.map((entry) => {
               const version = versionOf(entry);
               const at = new Date(entry.at * 1000);
@@ -128,15 +128,19 @@ export function HostHistory({ name }: { name: string }) {
                       />
                     )}
                   </Cell>
-                  <Cell>
+                  <Cell class="font-medium">
                     {describe(entry)}
-                    {version !== null && version === active && <Badge class="ml-2">active</Badge>}
+                    {version !== null && version === active && (
+                      <Badge tone="success" class="ml-2">
+                        serving
+                      </Badge>
+                    )}
                   </Cell>
                   <Cell>{entry.author ?? <None>unknown</None>}</Cell>
-                  <Cell>
+                  <Cell class="text-base-content/60">
                     <span title={at.toISOString()}>{at.toLocaleString()}</span>
                   </Cell>
-                  <Cell>
+                  <Cell class="text-right">
                     {canWrite && version !== null && version !== active && (
                       <Button disabled={busy} onClick={() => rollback(version)}>
                         {active === null ? 'Restore' : 'Roll back to this'}
