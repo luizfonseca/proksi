@@ -89,10 +89,10 @@ function Account({ session, onSignOut }: { session: Session; onSignOut: () => vo
   );
 }
 
-/** The UI's pages, the current one underlined */
+/** The UI's pages, the current one underlined: stays at the top as the page scrolls */
 function Nav({ path }: { path: string }) {
   return (
-    <nav class="border-t border-base-300">
+    <nav class="sticky top-0 z-10 border-b border-base-300 bg-base-100">
       {/* Sideways on phones, without a scrollbar */}
       <ul class={`${WIDTH} flex gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none]`}>
         {NAV.map(({ href, label, icon: Icon }) => {
@@ -138,8 +138,8 @@ export function Layout({ path, session, onSignOut, children }: Props) {
             <Account session={session} onSignOut={signOut} />
           </div>
         </div>
-        <Nav path={path} />
       </header>
+      <Nav path={path} />
       <main class={`${WIDTH} pt-6 pb-16`}>{children}</main>
     </div>
   );
