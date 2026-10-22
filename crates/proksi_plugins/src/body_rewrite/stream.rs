@@ -8,13 +8,17 @@
 //! - `remove` removes a member, or an element of an array, with its comma.
 //!
 //! In the objects and arrays it follows, a comma and the key after it are held back until the
-//! member is kept or removed, so the result stays valid JSON. A body that isn't JSON is passed
+//! member is kept or removed, so the result stays valid JSON: at most `MAX_HELD` bytes, past which
+//! the body is refused (a longer key, or more spaces before it). A body that isn't JSON is passed
 //! on as it comes from where it stops being JSON (what was changed before it, already sent,
 //! stays changed).
 
 use bytes::{Bytes, BytesMut};
 
 use super::path::Step;
+
+/// The most held back at once: a comma, the key after it, and the spaces between them
+pub(super) const MAX_HELD: usize = 64 * 1024;
 
 /// What's done at a path
 #[derive(Debug, Clone)]
@@ -47,8 +51,17 @@ pub(super) struct Editor {
     dropping: bool,
     /// The key being read, as written
     key: Vec<u8>,
+    flow: Flow,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum Flow {
+    #[default]
+    Editing,
     /// Not JSON: the rest passes as it comes
-    passing: bool,
+    Passing,
+    /// More than `MAX_HELD` to hold back: refused
+    Overflow,
 }
 
 #[derive(Debug)]
@@ -149,14 +162,19 @@ impl<'a> Output<'a> {
 }
 
 impl Editor {
-    /// The part of the body to send for `part`, `last` when it's the body's end
-    pub(super) fn edit(&mut self, targets: &[Target], part: &Bytes, last: bool) -> Bytes {
+    /// The part of the body to send for `part`, `last` when it's the body's end. `None` when
+    /// more than `MAX_HELD` would be held back
+    pub(super) fn edit(&mut self, targets: &[Target], part: &Bytes, last: bool) -> Option<Bytes> {
         let mut out = Output::new(part);
         let mut at = 0;
         while let Some(byte) = part.get(at).copied() {
-            if self.passing {
-                out.pass(at);
-                break;
+            match self.flow {
+                Flow::Editing => {}
+                Flow::Passing => {
+                    out.pass(at);
+                    break;
+                }
+                Flow::Overflow => return None,
             }
             at = match self.read {
                 // Runs of bytes, read without stopping at each
@@ -172,7 +190,7 @@ impl Editor {
             let held = std::mem::take(&mut self.held);
             out.write(part.len(), &held);
         }
-        out.done()
+        (self.flow != Flow::Overflow).then(|| out.done())
     }
 
     fn step(&mut self, targets: &[Target], byte: u8, at: usize, out: &mut Output) {
@@ -193,6 +211,9 @@ impl Editor {
         if self.holding {
             out.end_run(at);
             self.held.push(byte);
+            if self.held.len() > MAX_HELD {
+                self.flow = Flow::Overflow;
+            }
         } else if self.dropping {
             out.end_run(at);
         } else {
@@ -364,6 +385,9 @@ impl Editor {
         self.emit(byte, at, out);
         if escaped || byte != b'"' {
             self.key.push(byte);
+            if self.key.len() > MAX_HELD {
+                self.flow = Flow::Overflow;
+            }
             self.read = Read::Key {
                 escaped: !escaped && byte == b'\\',
             };
@@ -437,7 +461,7 @@ impl Editor {
         let held = std::mem::take(&mut self.held);
         out.write(at, &held);
         out.pass(at);
-        self.passing = true;
+        self.flow = Flow::Passing;
     }
 
     fn leads_into(&self, targets: &[Target]) -> bool {
@@ -595,7 +619,7 @@ fn is_literal(byte: u8) -> bool {
 mod tests {
     use bytes::Bytes;
 
-    use super::{Action, Editor, Target};
+    use super::{Action, Editor, Target, MAX_HELD};
     use crate::body_rewrite::path;
 
     fn set(path: &str, value: serde_json::Value) -> Target {
@@ -646,7 +670,8 @@ mod tests {
         let mut out = vec![];
         for (index, part) in parts.iter().enumerate() {
             let part = Bytes::copy_from_slice(part);
-            out.extend_from_slice(&editor.edit(targets, &part, index + 1 == parts.len()));
+            let edited = editor.edit(targets, &part, index + 1 == parts.len());
+            out.extend_from_slice(&edited.unwrap());
         }
         String::from_utf8(out).unwrap()
     }
@@ -769,5 +794,29 @@ mod tests {
         }
         // What was changed before a body stops being JSON stays changed: it was sent
         assert_eq!(edit(&[remove("$.a")], r#"{"a": 1,}"#), "{,}");
+    }
+
+    #[test]
+    fn test_what_is_held_back_is_limited() {
+        let targets = [remove("$.a")];
+        let long = "k".repeat(MAX_HELD);
+        let spaces = " ".repeat(MAX_HELD);
+        for body in [
+            format!(r#"{{"a": 1, "{long}": 2}}"#),
+            format!(r#"{{"a": 1,{spaces}"b": 2}}"#),
+        ] {
+            let mut editor = Editor::default();
+            let parts = body.as_bytes().chunks(4096);
+            let refused = parts
+                .map(|part| editor.edit(&targets, &Bytes::copy_from_slice(part), false))
+                .any(|part| part.is_none());
+            assert!(refused, "{}", &body[..20]);
+        }
+        // Up to the limit, edited
+        let key = "k".repeat(MAX_HELD - 16);
+        assert_eq!(
+            edit_parts(&targets, &[format!(r#"{{"a": 1, "{key}": 2}}"#).as_bytes()]),
+            format!(r#"{{ "{key}": 2}}"#)
+        );
     }
 }

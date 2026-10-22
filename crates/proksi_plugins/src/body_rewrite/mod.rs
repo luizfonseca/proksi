@@ -204,7 +204,13 @@ impl Middleware for BodyRewrite {
         };
         let mut part = body.take().unwrap_or_default();
         if let Some(editor) = &mut rewriting.json {
-            part = editor.edit(&self.targets, &part, end_of_stream);
+            let edited = editor.edit(&self.targets, &part, end_of_stream);
+            part = edited.ok_or_else(|| {
+                pingora::Error::explain(
+                    pingora::ErrorType::HTTPStatus(413),
+                    "body_rewrite: a key of the body is too long to change it",
+                )
+            })?;
         }
         // Empty when the body isn't text
         for (replace, replacing) in self.replaces.iter().zip(&mut rewriting.replacing) {

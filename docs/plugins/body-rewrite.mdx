@@ -48,7 +48,8 @@ Paths are written as in JSONPath ([RFC 9535](https://www.rfc-editor.org/rfc/rfc9
 Wildcards (`[*]`), recursive descent (`..`), slices, negative indexes and filters are refused when the configuration loads, for now.
 
 - A value that isn't in the body is left alone, except for `set` on a member of an object that's there, which adds it at the end of the object.
-- A body that stops being JSON is sent on as it comes from there (what was changed before, already sent, stays changed): a change never fails a request.
+- A body that stops being JSON is sent on as it comes from there (what was changed before, already sent, stays changed).
+- In the objects on the way to a path, each key is held back until it's known whether its member is kept, with the comma and spaces before it: at most 64KiB. A request with a longer key there is refused with `413`, as it can't be changed without holding more of it.
 
 ## Sending the body
 
