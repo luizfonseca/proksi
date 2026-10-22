@@ -16,7 +16,7 @@ export function Table({ columns, height = 'none', children }: { columns: Column[
     <div class={`overflow-x-auto first:rounded-t-[inherit] last:rounded-b-[inherit] ${HEIGHTS[height]}`}>
       <table class={`table ${pinned ? 'table-pin-rows' : ''}`}>
         <thead>
-          <tr class="bg-base-200 text-xs text-base-content/60 [&>th]:font-medium">
+          <tr class="text-xs text-base-content/60 [&>th]:font-medium">
             {columns.map((column) =>
               typeof column === 'string' ? (
                 <th>{column}</th>

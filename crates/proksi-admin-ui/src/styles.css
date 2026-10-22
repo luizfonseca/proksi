@@ -30,6 +30,19 @@
   prefersdark: true;
   --color-primary: #fb7185;
   --color-primary-content: #18181b;
+  /* A near-black page, cards a step lighter with a faint border, softer status colors */
+  --color-base-100: #141416;
+  --color-base-200: #0a0a0b;
+  --color-base-300: #26262b;
+  --color-base-content: #ececef;
+  --color-success: #4ade80;
+  --color-success-content: #0a0a0b;
+  --color-warning: #fbbf24;
+  --color-warning-content: #0a0a0b;
+  --color-error: #f87171;
+  --color-error-content: #0a0a0b;
+  --color-info: #60a5fa;
+  --color-info-content: #0a0a0b;
   /* Black's own are grey: badges and chart lines need a color */
   --color-secondary: #a78bfa;
   --color-secondary-content: #18181b;
