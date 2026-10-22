@@ -1,0 +1,90 @@
+---
+title: "Body Rewrite"
+description: "Changes bodies as they stream through: JSON values by path, and regular expressions."
+---
+
+Changes the body of a location's requests as they're sent upstream (`request`): values of a JSON body, by path, and any text, with regular expressions. The body is changed as it streams through, a part at a time: it's never held whole, whatever its size.
+
+```hcl
+host "api.example.com" {
+  location "/" {
+    upstream "api:8080" {}
+
+    body_rewrite {
+      request {
+        json {
+          set    = { "$.user.role" = "guest", "$.source" = "edge" }
+          remove = ["$.debug"]
+        }
+        replace {
+          pattern = "card=[0-9]{12}([0-9]{4})"
+          with    = "card=************$1"
+        }
+      }
+    }
+  }
+}
+```
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `request` | Changes to the request's body, before it's sent upstream: `json` and `replace` |
+| `json.set` | Values set, by path: the value is replaced, or added to an object that's there |
+| `json.remove` | Members or array elements removed, by path |
+| `replace { pattern, with, max_match }` | A regular expression, and what replaces each match (`$1`, `$name` are its groups, `$$` a `$`). Repeat the block for several, applied in order. `max_match` is the longest match, such as `"4KiB"` (default: `"1KiB"`): a longer one may be missed where two parts of the body meet. |
+| `priority` | When it runs among the blocks of the location (default: `25`, after authentication) |
+
+`json` only applies to JSON bodies (`Content-Type: application/json`, or a type ending in `+json`), and `replace`, after `json`, to text: `text/*`, JSON, XML, `application/x-www-form-urlencoded`, `application/javascript`, `application/graphql` and `application/x-ndjson`. Files and images, bodies without a type, and compressed bodies (`Content-Encoding` other than `identity`) are sent as they came.
+
+## Paths
+
+Paths are written as in JSONPath ([RFC 9535](https://www.rfc-editor.org/rfc/rfc9535)), naming one value:
+
+| Path | Names |
+| --- | --- |
+| `$.user.role` | the member `role` of the member `user` |
+| `$.items[0].id` | `id` of the first element of `items` |
+| `$['a key']`, `$["b.c"]` | members whose names aren't letters, digits and `_` |
+
+Wildcards (`[*]`), recursive descent (`..`), slices, negative indexes and filters are refused when the configuration loads, for now.
+
+- A value that isn't in the body is left alone, except for `set` on a member of an object that's there, which adds it at the end of the object.
+- A body that stops being JSON is sent on as it comes from there (what was changed before, already sent, stays changed).
+- In the objects on the way to a path, each key is held back until it's known whether its member is kept, with the comma and spaces before it: at most 64KiB. A request with a longer key there is refused with `413`, as it can't be changed without holding more of it.
+
+## Sending the body
+
+The changed body's length isn't known when the request is sent upstream, so it's sent without `Content-Length`: chunked (`Transfer-Encoding: chunked`) to HTTP/1.1 upstreams, as HTTP/2 does on its own. A request whose body nothing applies to (a `json` change on a body that isn't JSON, without `replace`) is sent as it came, with its length.
+
+## Cost
+
+Each byte is read once, as it passes: the objects and arrays on the way to a path are followed, and the rest is only scanned for its quotes and brackets, at about 2 GB/s. Parts of the body that nothing changes are passed on without being copied. A change costs the same wherever it is in the body: about 150 µs for a 330 KB body, measured on one core. Locations without `body_rewrite` don't look at bodies at all.
+
+With a [rule](/rules), a body can be changed for some requests only:
+
+```hcl
+host "api.example.com" {
+  location "/" {
+    upstream "api:8080" {}
+
+    rule "partners send no debug flags" {
+      and {
+        header "x-partner" {
+          exists = true
+        }
+      }
+      then {
+        body_rewrite {
+          request {
+            json {
+              remove = ["$.debug"]
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```

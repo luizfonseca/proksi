@@ -6,7 +6,7 @@
 //! a plugin needs from proksi for a request (its host, its client, applying the location's
 //! response blocks to an answer) it asks through [`RequestCtx`].
 
-use std::{borrow::Cow, collections::HashMap, net::IpAddr, sync::Arc, time::Duration};
+use std::{any::Any, borrow::Cow, collections::HashMap, net::IpAddr, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -18,6 +18,7 @@ use pingora::{
 use serde::{Deserialize, Serialize};
 
 use bandwidth_limit::BandwidthLimit;
+use body_rewrite::BodyRewrite;
 use basic_auth::BasicAuth;
 use body_limit::BodyLimit;
 use compress::Compress;
@@ -37,6 +38,7 @@ pub mod allocations;
 mod bandwidth_limit;
 mod basic_auth;
 pub mod body_limit;
+mod body_rewrite;
 mod compress;
 mod cors;
 mod filter;
@@ -104,6 +106,9 @@ pub trait RequestCtx: Send {
     /// Adds a header to the response, whoever answers the request
     fn add_response_header(&mut self, name: http::HeaderName, value: http::HeaderValue);
 
+    /// What blocks keep for this request, by block: see [`block_state`]
+    fn block_states(&mut self) -> &mut Vec<(usize, Box<dyn Any + Send + Sync>)>;
+
     /// The store shared by the replicas (memory, Redis or SQL)
     fn store(&self) -> Arc<dyn proksi_store::Store>;
 
@@ -122,14 +127,16 @@ pub trait Middleware: Send + Sync {
         Ok(false)
     }
 
-    /// Each part of the request body, as it's proxied. An error ends the request.
+    /// Each part of the request body, as it's proxied, which a block can change (the last one
+    /// with `end_of_stream`).
     ///
     /// # Errors
     ///
     /// An error ends the request.
     fn request_body(
         &self,
-        _body: Option<&Bytes>,
+        _body: &mut Option<Bytes>,
+        _end_of_stream: bool,
         _ctx: &mut dyn RequestCtx,
     ) -> pingora::Result<()> {
         Ok(())
@@ -198,6 +205,7 @@ pub enum Kind {
     Jwt,
     Oauth2,
     ForwardAuth,
+    BodyRewrite,
     Compress,
     Headers,
     Cache,
@@ -206,7 +214,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, in the order blocks with the same priority run
-    pub const ALL: [Kind; 17] = [
+    pub const ALL: [Kind; 18] = [
         Kind::RequestId,
         Kind::IpFilter,
         Kind::Cors,
@@ -220,6 +228,7 @@ impl Kind {
         Kind::Jwt,
         Kind::Oauth2,
         Kind::ForwardAuth,
+        Kind::BodyRewrite,
         Kind::Compress,
         Kind::Headers,
         Kind::Cache,
@@ -248,6 +257,7 @@ impl Kind {
             Kind::Jwt => "jwt",
             Kind::Oauth2 => "oauth2",
             Kind::ForwardAuth => "forward_auth",
+            Kind::BodyRewrite => "body_rewrite",
             Kind::Compress => "compress",
             Kind::Headers => "headers",
             Kind::Cache => "cache",
@@ -268,6 +278,8 @@ impl Kind {
             Kind::Redirect | Kind::Respond => 5,
             Kind::BodyLimit => 10,
             Kind::BasicAuth | Kind::Jwt | Kind::Oauth2 | Kind::ForwardAuth => 20,
+            // After authentication: bodies of requests that are refused aren't read
+            Kind::BodyRewrite => 25,
             Kind::Compress => 40,
             Kind::Headers => 50,
             Kind::Cache => 60,
@@ -289,6 +301,7 @@ impl Kind {
                 | Kind::Jwt
                 | Kind::Oauth2
                 | Kind::ForwardAuth
+                | Kind::BodyRewrite
         )
     }
 }
@@ -329,6 +342,7 @@ pub fn build(plugin: &RoutePlugin, location_path: &str) -> Option<Result<Plugin,
         Kind::Jwt => arc(Jwt::new(plugin)),
         Kind::Oauth2 => arc(Oauth2::new(plugin)),
         Kind::ForwardAuth => arc(ForwardAuth::new(plugin)),
+        Kind::BodyRewrite => arc(BodyRewrite::new(plugin)),
         Kind::Compress => arc(Compress::new(plugin)),
         Kind::StaticFiles => arc(StaticFiles::new(plugin, location_path)),
         // proksi's own blocks, built by proksi
@@ -367,4 +381,19 @@ mod tests {
         // And every set of settings is a plugin's (none missing from `Kind::ALL`)
         assert!(schemas.keys().all(|name| Kind::from_name(name).is_some()));
     }
+}
+
+/// What the block `owner` keeps for the current request, if it set something
+pub fn block_state<T: Any>(ctx: &mut dyn RequestCtx, owner: usize) -> Option<&mut T> {
+    ctx.block_states()
+        .iter_mut()
+        .find(|(id, state)| *id == owner && state.is::<T>())
+        .and_then(|(_, state)| state.downcast_mut())
+}
+
+/// Keeps `state` for the block `owner` for the current request, replacing what it kept
+pub fn set_block_state<T: Any + Send + Sync>(ctx: &mut dyn RequestCtx, owner: usize, state: T) {
+    let states = ctx.block_states();
+    states.retain(|(id, kept)| !(*id == owner && kept.is::<T>()));
+    states.push((owner, Box::new(state)));
 }

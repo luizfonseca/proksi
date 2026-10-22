@@ -98,13 +98,14 @@ impl Blocks {
     /// Runs the request body stage, until a block ends the request
     pub fn request_body(
         &self,
-        body: Option<&Bytes>,
+        body: &mut Option<Bytes>,
+        end_of_stream: bool,
         ctx: &mut RouterContext,
     ) -> Result<(), (Kind, Box<pingora::Error>)> {
         self.blocks.iter().try_for_each(|block| {
             block
                 .middleware
-                .request_body(body, ctx)
+                .request_body(body, end_of_stream, ctx)
                 .map_err(|err| (block.kind, err))
         })
     }

@@ -48,8 +48,13 @@ impl Middleware for BodyLimit {
         Ok(true)
     }
 
-    fn request_body(&self, body: Option<&Bytes>, ctx: &mut dyn RequestCtx) -> pingora::Result<()> {
-        let read = ctx.count_request_body(body.map_or(0, |body| body.len() as u64));
+    fn request_body(
+        &self,
+        body: &mut Option<Bytes>,
+        _end_of_stream: bool,
+        ctx: &mut dyn RequestCtx,
+    ) -> pingora::Result<()> {
+        let read = ctx.count_request_body(body.as_ref().map_or(0, |body| body.len() as u64));
         if read > self.max {
             return Err(pingora::Error::explain(
                 HTTPStatus(413),

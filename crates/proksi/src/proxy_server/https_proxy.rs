@@ -66,6 +66,8 @@ pub struct RouterContext {
     pub traffic_split: Option<Arc<str>>,
     /// Traffic split cookies to set on the response: name, and the new client's id
     pub split_cookies: Vec<(String, String)>,
+    /// What blocks keep for this request, by block (e.g. where a body's change is at)
+    pub block_states: Vec<(usize, Box<dyn std::any::Any + Send + Sync>)>,
     /// Headers blocks add to the response (e.g. a waiting room's cookie)
     pub response_headers: Vec<(http::HeaderName, http::HeaderValue)>,
     /// Whether a rule chose to copy the request to the location's mirror, or not to
@@ -110,6 +112,7 @@ impl ProxyHttp for Router {
             traffic_split: None,
             split_cookies: vec![],
             response_headers: vec![],
+            block_states: vec![],
             mirror_rule: None,
             mirror: crate::routing::mirror::State::default(),
             tries: 0,
@@ -262,13 +265,13 @@ impl ProxyHttp for Router {
             session.set_read_timeout(Some(read.min(remaining)));
         }
 
-        crate::rules::request_body(body.as_ref(), ctx)?;
+        crate::rules::request_body(body, end_of_stream, ctx)?;
         let Some(location) = ctx.route_container.clone() else {
             return Ok(());
         };
         location
             .blocks
-            .request_body(body.as_ref(), ctx)
+            .request_body(body, end_of_stream, ctx)
             .map_err(|(block, err)| {
                 if let Some(metrics) = &location.metrics {
                     metrics.blocked(block.name());
@@ -410,6 +413,7 @@ impl ProxyHttp for Router {
         upstream_request: &mut RequestHeader,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
+
         // Who the client is, set first so the location's headers can still change them
         if let Some(peer) = session
             .client_addr()

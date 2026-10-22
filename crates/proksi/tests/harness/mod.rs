@@ -795,8 +795,8 @@ impl HttpUpstream {
 }
 
 /// Reads a chunked request body, returning its length (`None` if the connection closed)
-async fn read_chunked_body(reader: &mut BufReader<TcpStream>) -> Option<usize> {
-    let mut length = 0;
+async fn read_chunked_body(reader: &mut BufReader<TcpStream>) -> Option<Vec<u8>> {
+    let mut body = vec![];
     loop {
         let mut size = String::new();
         if reader.read_line(&mut size).await.ok()? == 0 {
@@ -807,9 +807,9 @@ async fn read_chunked_body(reader: &mut BufReader<TcpStream>) -> Option<usize> {
         let mut chunk = vec![0; size + 2];
         reader.read_exact(&mut chunk).await.ok()?;
         if size == 0 {
-            return Some(length);
+            return Some(body);
         }
-        length += size;
+        body.extend_from_slice(chunk.get(..size)?);
     }
 }
 
@@ -833,19 +833,19 @@ async fn read_headers(
     }
 }
 
-/// Reads a request body, chunked or of `content_length` bytes, returning its length (`None`
+/// Reads a request body, chunked or of `content_length` bytes (`None`
 /// if the connection closed)
 async fn read_body(
     reader: &mut BufReader<TcpStream>,
     chunked: bool,
     content_length: usize,
-) -> Option<usize> {
+) -> Option<Vec<u8>> {
     if chunked {
         return read_chunked_body(reader).await;
     }
     let mut body = vec![0; content_length];
     reader.read_exact(&mut body).await.ok()?;
-    Some(content_length)
+    Some(body)
 }
 
 async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<String, u32>>>) {
@@ -877,9 +877,14 @@ async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<Strin
             *count
         };
 
-        let Some(body_length) = read_body(&mut reader, chunked, content_length).await else {
+        let Some(received) = read_body(&mut reader, chunked, content_length).await else {
             return;
         };
+        let body_length = received.len();
+        // The body itself, for paths asking for it
+        let echoed = path
+            .contains("echo-body")
+            .then(|| String::from_utf8_lossy(&received).into_owned());
 
         let body = serde_json::json!({
             "method": method,
@@ -887,6 +892,7 @@ async fn handle_http_connection(stream: TcpStream, hits: Arc<Mutex<HashMap<Strin
             "hits": hit_count,
             "headers": headers,
             "body_length": body_length,
+            "body": echoed,
         })
         .to_string();
 

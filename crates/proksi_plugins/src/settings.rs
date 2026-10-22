@@ -66,6 +66,75 @@ pub struct BandwidthLimit {
     pub priority: Priority,
 }
 
+/// `body_rewrite`: changes bodies as they stream through (the request's)
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BodyRewrite {
+    /// Changes to the request's body, before it's sent upstream
+    pub request: Option<BodyChanges>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// `request { json { ... } replace { ... } }` of `body_rewrite`
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BodyChanges {
+    /// Changes to JSON bodies (`Content-Type: application/json`, or `+json`), by path
+    pub json: Option<BodyRewriteJson>,
+    /// Regular expressions replaced in the body, in order
+    #[serde(default, deserialize_with = "one_or_many")]
+    pub replace: Vec<BodyReplace>,
+}
+
+/// `json { set = { ... }, remove = [...] }` of `body_rewrite`
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BodyRewriteJson {
+    /// Values set, by path, such as `{ "$.user.role" = "guest" }`
+    pub set: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+    /// Members or elements removed, by path, such as `["$.debug"]`
+    pub remove: Option<Vec<String>>,
+}
+
+/// `replace { pattern = "...", with = "..." }` of `body_rewrite`
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BodyReplace {
+    /// A regular expression
+    pub pattern: String,
+    /// What replaces each match: `$1`, `$name` are its groups (`$$` for a `$`)
+    pub with: String,
+    /// The longest match, such as "1KiB" (default): longer ones may be missed where parts of
+    /// the body meet
+    pub max_match: Option<String>,
+}
+
+/// A block written once (an object) or repeated (a list)
+fn one_or_many<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: DeserializeOwned,
+{
+    use serde::de::Error;
+    match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::Null => Ok(vec![]),
+        serde_json::Value::Array(items) => items
+            .into_iter()
+            .map(serde_json::from_value)
+            .collect::<Result<_, _>>()
+            .map_err(D::Error::custom),
+        one => serde_json::from_value(one)
+            .map(|one| vec![one])
+            .map_err(D::Error::custom),
+    }
+}
+
 /// `waiting_room`: lets a number of visitors in at once, the others wait in line
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -407,6 +476,7 @@ pub fn schemas() -> serde_json::Map<String, serde_json::Value> {
             Kind::BandwidthLimit,
             schema(schemars::schema_for!(BandwidthLimit)),
         ),
+        (Kind::BodyRewrite, schema(schemars::schema_for!(BodyRewrite))),
         (
             Kind::WaitingRoom,
             schema(schemars::schema_for!(WaitingRoom)),
@@ -499,6 +569,6 @@ mod tests {
         );
         assert_eq!(limit["properties"]["priority"]["maximum"], 100);
         assert_eq!(schemas["jwt"]["additionalProperties"], false);
-        assert_eq!(schemas.len(), 15);
+        assert_eq!(schemas.len(), 16);
     }
 }

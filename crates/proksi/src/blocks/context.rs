@@ -56,6 +56,10 @@ impl RequestCtx for RouterContext {
         self.response_headers.push((name, value));
     }
 
+    fn block_states(&mut self) -> &mut Vec<(usize, Box<dyn std::any::Any + Send + Sync>)> {
+        &mut self.block_states
+    }
+
     fn store(&self) -> Arc<dyn Store> {
         Arc::clone(crate::stores::global::get_store())
     }
