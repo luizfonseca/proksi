@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use bandwidth_limit::BandwidthLimit;
 use body_rewrite::BodyRewrite;
+use openapi::OpenApi;
 use basic_auth::BasicAuth;
 use body_limit::BodyLimit;
 use compress::Compress;
@@ -39,6 +40,7 @@ mod bandwidth_limit;
 mod basic_auth;
 pub mod body_limit;
 mod body_rewrite;
+pub mod openapi;
 mod compress;
 mod cors;
 mod filter;
@@ -206,6 +208,7 @@ pub enum Kind {
     Oauth2,
     ForwardAuth,
     BodyRewrite,
+    OpenApi,
     Compress,
     Headers,
     Cache,
@@ -214,7 +217,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, in the order blocks with the same priority run
-    pub const ALL: [Kind; 18] = [
+    pub const ALL: [Kind; 19] = [
         Kind::RequestId,
         Kind::IpFilter,
         Kind::Cors,
@@ -229,6 +232,7 @@ impl Kind {
         Kind::Oauth2,
         Kind::ForwardAuth,
         Kind::BodyRewrite,
+        Kind::OpenApi,
         Kind::Compress,
         Kind::Headers,
         Kind::Cache,
@@ -258,6 +262,7 @@ impl Kind {
             Kind::Oauth2 => "oauth2",
             Kind::ForwardAuth => "forward_auth",
             Kind::BodyRewrite => "body_rewrite",
+            Kind::OpenApi => "openapi",
             Kind::Compress => "compress",
             Kind::Headers => "headers",
             Kind::Cache => "cache",
@@ -280,6 +285,8 @@ impl Kind {
             Kind::BasicAuth | Kind::Jwt | Kind::Oauth2 | Kind::ForwardAuth => 20,
             // After authentication: bodies of requests that are refused aren't read
             Kind::BodyRewrite => 25,
+            // After authentication: who isn't let in learns nothing of the API
+            Kind::OpenApi => 22,
             Kind::Compress => 40,
             Kind::Headers => 50,
             Kind::Cache => 60,
@@ -302,6 +309,7 @@ impl Kind {
                 | Kind::Oauth2
                 | Kind::ForwardAuth
                 | Kind::BodyRewrite
+                | Kind::OpenApi
         )
     }
 }
@@ -343,6 +351,7 @@ pub fn build(plugin: &RoutePlugin, location_path: &str) -> Option<Result<Plugin,
         Kind::Oauth2 => arc(Oauth2::new(plugin)),
         Kind::ForwardAuth => arc(ForwardAuth::new(plugin)),
         Kind::BodyRewrite => arc(BodyRewrite::new(plugin)),
+        Kind::OpenApi => arc(OpenApi::new(plugin)),
         Kind::Compress => arc(Compress::new(plugin)),
         Kind::StaticFiles => arc(StaticFiles::new(plugin, location_path)),
         // proksi's own blocks, built by proksi

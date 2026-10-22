@@ -237,13 +237,28 @@ pub struct Path {
     // TLS
     /// Path to the certificates directory (where the certificates are stored)
     pub lets_encrypt: PathBuf,
+    /// Where `openapi` keeps compiled contracts (default: `openapi` next to `lets_encrypt`)
+    #[serde(default)]
+    pub openapi: Option<PathBuf>,
 }
 
 impl Default for Path {
     fn default() -> Self {
         Self {
             lets_encrypt: PathBuf::from("/etc/proksi/letsencrypt"),
+            openapi: None,
         }
+    }
+}
+
+impl Path {
+    /// Where `openapi` keeps compiled contracts
+    pub fn openapi(&self) -> PathBuf {
+        self.openapi.clone().unwrap_or_else(|| {
+            self.lets_encrypt
+                .parent()
+                .map_or_else(|| PathBuf::from("openapi"), |parent| parent.join("openapi"))
+        })
     }
 }
 
@@ -931,7 +946,10 @@ pub fn load(fallback: &str) -> Result<Config, figment::Error> {
     // Check if no explicit config path was provided by the user
     let use_minimal_default = parsed_commands.config_path.is_none();
 
-    load_from_path(path_with_fallback, &parsed_commands, use_minimal_default)
+    let config = load_from_path(path_with_fallback, &parsed_commands, use_minimal_default)?;
+    // The specs of `openapi` blocks are loaded once their cache is known
+    proksi_plugins::openapi::set_cache_dir(config.paths.openapi());
+    Ok(config)
 }
 
 /// Default number of worker threads: 80% of the available CPUs (respecting container

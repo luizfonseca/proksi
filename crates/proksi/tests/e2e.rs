@@ -4022,6 +4022,87 @@ async fn test_body_rewrite() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_OPENAPI: &str = r#"
+host "contract.test" {
+  tls = false
+
+  location "/api/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    openapi {
+      file            = "{spec}"
+      base_path       = "/api"
+      on_missing_spec = "deny"
+    }
+  }
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+  }
+}
+"#;
+
+const OPENAPI_SPEC: &str = r##"
+openapi: 3.0.3
+info: { title: Shop, version: "1" }
+paths:
+  /orders:
+    get:
+      parameters:
+        - { name: limit, in: query, required: true }
+      responses: { "200": { description: a list } }
+    post:
+      parameters:
+        - { $ref: "#/components/parameters/Tenant" }
+      responses: { "201": { description: created } }
+  /orders/{id}:
+    get:
+      responses: { "200": { description: an order } }
+components:
+  parameters:
+    Tenant: { name: X-Tenant, in: header, required: true }
+"##;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_openapi() {
+    let specs = tempfile::tempdir().unwrap();
+    let spec = specs.path().join("shop.yaml");
+    std::fs::write(&spec, OPENAPI_SPEC).unwrap();
+    let config = HOST_WITH_OPENAPI.replace("{spec}", &spec.display().to_string());
+    let mut harness = Harness::start_without_https(&config).await;
+    let port = harness.http_port;
+    let proksi = &harness;
+    let send = |method: &'static str, path: &'static str, headers: &'static str| async move {
+        let request = format!("{method} {path} HTTP/1.1\r\nHost: contract.test\r\n{headers}Content-Length: 0\r\nConnection: close\r\n\r\n");
+        proksi.raw_http_on(port, request.as_bytes()).await.unwrap()
+    };
+    let status = |res: &str| res.split(' ').nth(1).unwrap_or_default().to_string();
+
+    // Loaded in the background; `deny` answers 503 until then
+    let started = std::time::Instant::now();
+    while status(&send("GET", "/api/orders/1", "").await) == "503" {
+        assert!(started.elapsed() < std::time::Duration::from_secs(10), "the spec never loaded");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    assert_eq!(status(&send("GET", "/api/orders/1", "").await), "200");
+    assert_eq!(status(&send("GET", "/api/orders?limit=5", "").await), "200");
+    assert_eq!(status(&send("POST", "/api/orders", "X-Tenant: a\r\n").await), "200");
+
+    let res = send("GET", "/api/orders", "").await;
+    assert_eq!(status(&res), "400", "{res}");
+    assert!(res.contains("the required query parameter `limit` is missing"), "{res}");
+    assert_eq!(status(&send("POST", "/api/orders", "").await), "400");
+    let res = send("DELETE", "/api/orders/1", "").await;
+    assert_eq!(status(&res), "405", "{res}");
+    assert_eq!(header(&res, "allow"), Some("GET"));
+    assert_eq!(status(&send("GET", "/api/accounts", "").await), "404");
+    // Outside its location, no contract
+    assert_eq!(status(&send("GET", "/accounts", "").await), "200");
+
+    harness.assert_healthy();
+}
+
 const HOST_WITH_WAITING_ROOM: &str = r#"
 host "line.test" {
   tls = false
