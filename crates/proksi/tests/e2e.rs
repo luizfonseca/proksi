@@ -3916,6 +3916,87 @@ async fn test_jwt() {
     proksi.assert_healthy();
 }
 
+const HOST_WITH_BODY_REWRITE: &str = r#"
+host "body.test" {
+  tls {
+    certificate {
+      pem = "{cert_pem}"
+      key = "{cert_key}"
+    }
+  }
+
+  location "/" {
+    upstream "127.0.0.1:{http_upstream_port}" {}
+
+    body_rewrite {
+      max_size = "512KiB"
+      json {
+        set    = { "$.user.role" = "guest", "$.source" = "proksi" }
+        remove = ["$.debug"]
+      }
+      replace {
+        pattern = "secret-[0-9]+"
+        with    = "[redacted]"
+      }
+    }
+  }
+}
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_body_rewrite() {
+    let mut proksi = Harness::start_with(vec![], HOST_WITH_BODY_REWRITE).await;
+    proksi.resolve("body.test");
+    let url = format!("https://body.test:{}/echo-body", proksi.https_port);
+
+    for client in [proksi.client(), proksi.client_h2()] {
+        let send = |content_type: &'static str, body: String| {
+            client
+                .post(&url)
+                .header("content-type", content_type)
+                .body(body)
+                .send()
+        };
+        let upstream = |res: reqwest::Response| async move {
+            assert_eq!(res.status(), 200);
+            let echoed: serde_json::Value = res.json().await.unwrap();
+            let body = echoed["body"].as_str().unwrap().to_string();
+            // Sent whole, with its own length
+            assert_eq!(echoed["headers"]["content-length"].as_str(), Some(body.len().to_string().as_str()));
+            body
+        };
+
+        // JSON: set, added, removed, then replaced
+        let body = r#"{"user": {"id": 1, "role": "admin"}, "debug": true, "note": "secret-42"}"#;
+        let sent = upstream(send("application/json", body.to_string()).await.unwrap()).await;
+        let sent: serde_json::Value = serde_json::from_str(&sent).unwrap();
+        assert_eq!(
+            sent,
+            serde_json::json!({ "source": "proksi", "user": { "id": 1, "role": "guest" }, "note": "[redacted]" })
+        );
+
+        // Another content type: only the replacements
+        let sent = upstream(send("text/plain", "token secret-7, debug".to_string()).await.unwrap()).await;
+        assert_eq!(sent, "token [redacted], debug");
+
+        // Larger than a read buffer, still whole
+        let items = (0..20_000).map(|i| format!("{{\"id\":{i}}}")).collect::<Vec<_>>().join(",");
+        let body = format!(r#"{{"debug": 1, "items": [{items}]}}"#);
+        assert!(body.len() > 200_000);
+        let sent = upstream(send("application/json", body).await.unwrap()).await;
+        let sent: serde_json::Value = serde_json::from_str(&sent).unwrap();
+        assert_eq!(sent["items"].as_array().map(Vec::len), Some(20_000));
+        assert_eq!(sent.get("debug"), None);
+        assert_eq!(sent["source"], "proksi");
+
+        // Over `max_size`: refused, the upstream never sees it
+        let res = send("application/json", "x".repeat(600_000)).await.unwrap();
+        assert_eq!(res.status(), 413);
+    }
+
+    proksi.assert_healthy();
+}
+
 const HOST_WITH_WAITING_ROOM: &str = r#"
 host "line.test" {
   tls = false

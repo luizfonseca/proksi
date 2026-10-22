@@ -18,6 +18,7 @@ use pingora::{
 use serde::{Deserialize, Serialize};
 
 use bandwidth_limit::BandwidthLimit;
+use body_rewrite::BodyRewrite;
 use basic_auth::BasicAuth;
 use body_limit::BodyLimit;
 use compress::Compress;
@@ -36,7 +37,9 @@ use waiting_room::WaitingRoom;
 pub mod allocations;
 mod bandwidth_limit;
 mod basic_auth;
+pub mod body;
 pub mod body_limit;
+mod body_rewrite;
 mod compress;
 mod cors;
 mod filter;
@@ -103,6 +106,12 @@ pub trait RequestCtx: Send {
 
     /// Adds a header to the response, whoever answers the request
     fn add_response_header(&mut self, name: http::HeaderName, value: http::HeaderValue);
+
+    /// The request body, if a block already read it all
+    fn request_body(&self) -> Option<&Bytes>;
+
+    /// Sends `body` upstream instead of the client's, which a block read all
+    fn set_request_body(&mut self, body: Bytes);
 
     /// The store shared by the replicas (memory, Redis or SQL)
     fn store(&self) -> Arc<dyn proksi_store::Store>;
@@ -198,6 +207,7 @@ pub enum Kind {
     Jwt,
     Oauth2,
     ForwardAuth,
+    BodyRewrite,
     Compress,
     Headers,
     Cache,
@@ -206,7 +216,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, in the order blocks with the same priority run
-    pub const ALL: [Kind; 17] = [
+    pub const ALL: [Kind; 18] = [
         Kind::RequestId,
         Kind::IpFilter,
         Kind::Cors,
@@ -220,6 +230,7 @@ impl Kind {
         Kind::Jwt,
         Kind::Oauth2,
         Kind::ForwardAuth,
+        Kind::BodyRewrite,
         Kind::Compress,
         Kind::Headers,
         Kind::Cache,
@@ -248,6 +259,7 @@ impl Kind {
             Kind::Jwt => "jwt",
             Kind::Oauth2 => "oauth2",
             Kind::ForwardAuth => "forward_auth",
+            Kind::BodyRewrite => "body_rewrite",
             Kind::Compress => "compress",
             Kind::Headers => "headers",
             Kind::Cache => "cache",
@@ -268,6 +280,8 @@ impl Kind {
             Kind::Redirect | Kind::Respond => 5,
             Kind::BodyLimit => 10,
             Kind::BasicAuth | Kind::Jwt | Kind::Oauth2 | Kind::ForwardAuth => 20,
+            // After authentication: bodies of requests that are refused aren't read
+            Kind::BodyRewrite => 25,
             Kind::Compress => 40,
             Kind::Headers => 50,
             Kind::Cache => 60,
@@ -289,6 +303,7 @@ impl Kind {
                 | Kind::Jwt
                 | Kind::Oauth2
                 | Kind::ForwardAuth
+                | Kind::BodyRewrite
         )
     }
 }
@@ -329,6 +344,7 @@ pub fn build(plugin: &RoutePlugin, location_path: &str) -> Option<Result<Plugin,
         Kind::Jwt => arc(Jwt::new(plugin)),
         Kind::Oauth2 => arc(Oauth2::new(plugin)),
         Kind::ForwardAuth => arc(ForwardAuth::new(plugin)),
+        Kind::BodyRewrite => arc(BodyRewrite::new(plugin)),
         Kind::Compress => arc(Compress::new(plugin)),
         Kind::StaticFiles => arc(StaticFiles::new(plugin, location_path)),
         // proksi's own blocks, built by proksi

@@ -526,8 +526,12 @@ where
 
         let mut downstream_state = DownstreamStateMachine::new(session.as_mut().is_body_done());
 
-        // retry, send buffer if it exists
-        if let Some(buffer) = session.as_mut().get_retry_buffer() {
+        // retry, send buffer if it exists (proksi: or a body read by a filter)
+        let buffer = self
+            .inner
+            .buffered_request_body(ctx)
+            .or_else(|| session.as_mut().get_retry_buffer());
+        if let Some(buffer) = buffer {
             self.send_body_to2(
                 session,
                 Some(buffer),

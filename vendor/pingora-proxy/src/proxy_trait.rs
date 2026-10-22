@@ -137,6 +137,12 @@ pub trait ProxyHttp {
         false
     }
 
+    /// proksi: the request body to send upstream, when a filter already read the whole body
+    /// (to check or change it), instead of the client's body. It's sent again on a retry.
+    fn buffered_request_body(&self, _ctx: &Self::CTX) -> Option<Bytes> {
+        None
+    }
+
     /// Handle the incoming request body.
     ///
     /// This function will be called every time a piece of request body is received. The `body` is

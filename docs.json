@@ -208,6 +208,10 @@
           "href": "/plugins/waiting-room"
         },
         {
+          "title": "Body rewrite",
+          "href": "/plugins/body-rewrite"
+        },
+        {
           "title": "Body limit",
           "href": "/plugins/body-limit"
         },

@@ -427,7 +427,7 @@ mod tests {
     ];
 
     /// Other pages with rules among their examples
-    const OTHER_PAGES: [(&str, &str); 4] = [
+    const OTHER_PAGES: [(&str, &str); 5] = [
         ("README", include_str!("../../../../README.md")),
         (
             "blocking-url-scanners",
@@ -440,6 +440,10 @@ mod tests {
         (
             "waiting-room",
             include_str!("../../../../docs/plugins/waiting-room.mdx"),
+        ),
+        (
+            "body-rewrite",
+            include_str!("../../../../docs/plugins/body-rewrite.mdx"),
         ),
     ];
 

@@ -1,0 +1,81 @@
+---
+title: "Body Rewrite"
+description: "Changes the request body before it's sent upstream: JSON values by path, and regular expressions."
+---
+
+Changes the body of a location's requests before they're sent upstream: values of a JSON body, by path, and any text, with regular expressions. The body is read whole first, then sent with its new `Content-Length`.
+
+```hcl
+host "api.example.com" {
+  location "/" {
+    upstream "api:8080" {}
+
+    body_rewrite {
+      json {
+        set    = { "$.user.role" = "guest", "$.source" = "edge" }
+        remove = ["$.debug"]
+      }
+      replace {
+        pattern = "card=[0-9]{12}([0-9]{4})"
+        with    = "card=************$1"
+      }
+    }
+  }
+}
+```
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `json.set` | Values set, by path: the value is replaced, or added to an object that's there |
+| `json.remove` | Members or array elements removed, by path |
+| `replace { pattern, with }` | A regular expression, and what replaces each match (`$1`, `$name` are its groups, `$$` a `$`). Repeat the block for several, applied in order. |
+| `max_size` | The largest body read, such as `"512KiB"` (default: `"1MiB"`). Larger ones are refused with `413 Payload Too Large`, before they're read when the client sends `Content-Length`. |
+| `priority` | When it runs among the blocks of the location (default: `25`, after authentication) |
+
+`json` only applies to JSON bodies (`Content-Type: application/json`, or a type ending in `+json`); `replace` to any body, after `json`.
+
+## Paths
+
+Paths are written as in JSONPath ([RFC 9535](https://www.rfc-editor.org/rfc/rfc9535)), naming one value:
+
+| Path | Names |
+| --- | --- |
+| `$.user.role` | the member `role` of the member `user` |
+| `$.items[0].id` | `id` of the first element of `items` |
+| `$['a key']`, `$["b.c"]` | members whose names aren't letters, digits and `_` |
+
+Wildcards (`[*]`), recursive descent (`..`), slices, negative indexes and filters are refused when the configuration loads, for now.
+
+- A value that isn't in the body is left alone, except for `set` on a member of an object that's there, which adds it.
+- A body that isn't JSON where a path leads is left alone too: a change never fails a request (only a body over `max_size` is refused).
+
+## Cost
+
+The body is read into one buffer (sized from `Content-Length`), and changes are made on its bytes: a path is followed by reading the body up to its value, without parsing the rest, and the change is a copy of the body with the new value in it. A value near the start of a 300 KB body is changed in a few microseconds; one behind most of the body (or a member that isn't there, which is looked for to the end of its object) in about half a millisecond. Locations without `body_rewrite` read nothing: their bodies are proxied as they arrive.
+
+With a [rule](/rules), a body can be changed for some requests only:
+
+```hcl
+host "api.example.com" {
+  location "/" {
+    upstream "api:8080" {}
+
+    rule "partners send no debug flags" {
+      and {
+        header "x-partner" {
+          exists = true
+        }
+      }
+      then {
+        body_rewrite {
+          json {
+            remove = ["$.debug"]
+          }
+        }
+      }
+    }
+  }
+}
+```
