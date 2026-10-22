@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.17.0](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.16.1...proksi-admin-ui-v0.17.0) (2026-10-22)
+
+
+### Features
+
+* add `notify` block support for webhook sending based on upstream information ([#562](https://github.com/luizfonseca/proksi/issues/562)) ([98d15a7](https://github.com/luizfonseca/proksi/commit/98d15a76492399b858bf081725dbc08e2b916ba1))
+* build the admin UI with daisyUI, from shared components ([#561](https://github.com/luizfonseca/proksi/issues/561)) ([be5946e](https://github.com/luizfonseca/proksi/commit/be5946e48c5c46ea55cc5d27631bb209f6d0f6e3))
+* sign in to the admin UI with a token's name and secret ([#560](https://github.com/luizfonseca/proksi/issues/560)) ([a8c6027](https://github.com/luizfonseca/proksi/commit/a8c602795b6270c8695e3ab45eda01800424ad93))
+
 ## [0.16.1](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.16.0...proksi-admin-ui-v0.16.1) (2026-10-21)
 
 

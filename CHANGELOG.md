@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.17.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.16.1...proksi-v0.17.0) (2026-10-22)
+
+
+### Features
+
+* add `notify` block support for webhook sending based on upstream information ([#562](https://github.com/luizfonseca/proksi/issues/562)) ([98d15a7](https://github.com/luizfonseca/proksi/commit/98d15a76492399b858bf081725dbc08e2b916ba1))
+* add body_rewrite to change request bodies as they stream ([#556](https://github.com/luizfonseca/proksi/issues/556)) ([a87001a](https://github.com/luizfonseca/proksi/commit/a87001a03408bc3663b77788e7cfaa08cdd418a9))
+* add more information about requests that could not be served by a location ([#558](https://github.com/luizfonseca/proksi/issues/558)) ([8d964d3](https://github.com/luizfonseca/proksi/commit/8d964d35b9530821bd2e932748aa634e0f2f355d))
+* count requests no location served by why, instead of all as _unknown ([8d964d3](https://github.com/luizfonseca/proksi/commit/8d964d35b9530821bd2e932748aa634e0f2f355d))
+* create bandwidth_limit plugin to help pace responses per client ([#550](https://github.com/luizfonseca/proksi/issues/550)) ([13c63f4](https://github.com/luizfonseca/proksi/commit/13c63f4d924679509a06bfd7abea03c804a272e4))
+* create openapi plugin for api validation via specs  ([#557](https://github.com/luizfonseca/proksi/issues/557)) ([1cb1a0f](https://github.com/luizfonseca/proksi/commit/1cb1a0f947392074e2b40f17a73fb2720e6f2463))
+* create waiting_room plugin for visitor-type-based locations ([#552](https://github.com/luizfonseca/proksi/issues/552)) ([7691625](https://github.com/luizfonseca/proksi/commit/76916251d9afd4b80cc13efacb261eade67e4812))
+* sign in to the admin UI with a token's name and secret ([#560](https://github.com/luizfonseca/proksi/issues/560)) ([a8c6027](https://github.com/luizfonseca/proksi/commit/a8c602795b6270c8695e3ab45eda01800424ad93))
+
+
+### Performance Improvements
+
+* find the client once per request for rules, and read headers by prebuilt names ([#555](https://github.com/luizfonseca/proksi/issues/555)) ([650bf0c](https://github.com/luizfonseca/proksi/commit/650bf0cfece90ab348236a375f14888ff2487667))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.16.1 to 0.17.0
+    * proksi_plugins bumped from 0.16.1 to 0.17.0
+    * proksi_store bumped from 0.16.1 to 0.17.0
+  * dev-dependencies
+    * proksi_plugins bumped from 0.16.1 to 0.17.0
+    * proksi_store bumped from 0.16.1 to 0.17.0
+
 ## [0.16.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.16.0...proksi-v0.16.1) (2026-10-21)
 
 
