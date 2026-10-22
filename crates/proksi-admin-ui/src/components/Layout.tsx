@@ -5,6 +5,7 @@ import { useData } from '../api/useData';
 import { Badge, Status } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Globe, Pulse, Server, Shield } from './ui/icons';
+import { ThemeToggle } from './ui/Theme';
 
 const NAV = [
   { href: '/overview', label: 'Overview', icon: Pulse },
@@ -12,6 +13,9 @@ const NAV = [
   { href: '/certificates', label: 'Certificates', icon: Shield },
   { href: '/server', label: 'Server', icon: Server },
 ];
+
+/** The width of the bars and the page, centered */
+const WIDTH = 'mx-auto w-full max-w-7xl px-4 md:px-6';
 
 function uptime(seconds: number) {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
@@ -22,72 +26,87 @@ function uptime(seconds: number) {
 /** The logo, and the version once known */
 function Brand({ version }: { version?: string }) {
   return (
-    <div class="flex shrink-0 items-center gap-2.5 px-2.5 text-base font-semibold md:pt-1 md:pb-4">
+    <a class="flex shrink-0 items-center gap-2.5 text-lg font-semibold" href="/overview" onClick={onLink}>
       <img class="w-7" src="/logo.svg" alt="" />
       Proksi
-      {version && <small class="ml-auto hidden font-mono text-xs font-medium text-base-content/45 md:inline">v{version}</small>}
-    </div>
+      {version && <small class="font-mono text-xs font-medium text-base-content/45">v{version}</small>}
+    </a>
   );
 }
 
-/** The UI's pages: a column on the side, a row on phones */
+/** Which instance this is */
+function Instance({ status }: { status: ServerStatus }) {
+  return (
+    <span class="hidden items-center gap-1.5 text-xs text-base-content/60 lg:flex" title={`${status.store.type} store`}>
+      <Status tone="success" /> {status.hostname} · up {uptime(status.uptime_seconds)}
+    </span>
+  );
+}
+
+/** Who's signed in */
+function Account({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
+  if (!session.name) return null;
+  return (
+    <span class="flex items-center gap-3 border-l border-base-300 pl-3 text-sm">
+      <span class="whitespace-nowrap">
+        {session.name}
+        {session.access === 'read' && <Badge size="xs" class="ml-1.5">read-only</Badge>}
+      </span>
+      <Button variant="link" onClick={() => api.signOut().finally(onSignOut)}>
+        Sign out
+      </Button>
+    </span>
+  );
+}
+
+/** The UI's pages, the current one underlined */
 function Nav({ path }: { path: string }) {
   return (
-    <ul class="menu menu-horizontal flex-nowrap p-0 [--menu-active-bg:var(--color-base-200)] [--menu-active-fg:var(--color-base-content)] md:menu-vertical md:w-full">
-      {NAV.map(({ href, label, icon: Icon }) => {
-        const current = path.startsWith(href);
-        return (
-          <li key={href}>
-            <a class={`font-medium ${current ? 'menu-active' : 'text-base-content/60'}`} href={href} onClick={onLink} aria-current={current ? 'page' : undefined}>
-              <Icon />
-              {label}
-            </a>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-/** Which instance this is, and who's signed in */
-function Footer({ status, session, onSignOut }: { status: ServerStatus; session: Session; onSignOut: () => void }) {
-  return (
-    <footer class="ml-auto p-2.5 text-xs text-base-content/45 md:mt-auto md:ml-0">
-      <div class="hidden items-center gap-1.5 md:flex">
-        <Status tone="success" /> {status.hostname}
-      </div>
-      <div class="hidden md:block">
-        up {uptime(status.uptime_seconds)} · {status.store.type} store
-      </div>
-      {session.name && (
-        <div class="flex items-center justify-between gap-3 text-base-content/60 md:mt-2 md:border-t md:border-base-300 md:pt-2">
-          <span class="whitespace-nowrap">
-            {session.name}
-            {session.access === 'read' && <Badge size="xs" class="ml-1.5">read-only</Badge>}
-          </span>
-          <Button variant="link" onClick={() => api.signOut().finally(onSignOut)}>
-            Sign out
-          </Button>
-        </div>
-      )}
-    </footer>
+    <nav class="border-t border-base-300">
+      <ul class={`${WIDTH} flex gap-1 overflow-x-auto`}>
+        {NAV.map(({ href, label, icon: Icon }) => {
+          const current = path.startsWith(href);
+          return (
+            <li key={href}>
+              <a
+                class={`-mb-px flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium whitespace-nowrap ${
+                  current ? 'border-primary text-base-content' : 'border-transparent text-base-content/60 hover:text-base-content'
+                }`}
+                href={href}
+                onClick={onLink}
+                aria-current={current ? 'page' : undefined}
+              >
+                <Icon />
+                {label}
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
 
 type Props = { path: string; session: Session; onSignOut: () => void; children: ComponentChildren };
 
-/** The sidebar and the page */
+/** The bars at the top, and the page */
 export function Layout({ path, session, onSignOut, children }: Props) {
   const [status] = useData<ServerStatus>('/status', 15000);
   const ready = status.state === 'ready' ? status.value : null;
   return (
-    <div class="min-h-screen md:grid md:grid-cols-[232px_minmax(0,1fr)]">
-      <aside class="flex items-center gap-1 overflow-x-auto border-b border-base-300 bg-base-100 px-3 py-2.5 md:sticky md:top-0 md:h-screen md:flex-col md:items-stretch md:border-r md:border-b-0 md:px-3 md:py-4">
-        <Brand version={ready?.version} />
+    <div class="min-h-screen">
+      <header class="border-b border-base-300 bg-base-100">
+        <div class={`${WIDTH} flex h-14 items-center gap-3`}>
+          <Brand version={ready?.version} />
+          <div class="ml-auto flex items-center gap-3">
+            {ready && <Instance status={ready} />}
+            <ThemeToggle />
+            <Account session={session} onSignOut={onSignOut} />
+          </div>
+        </div>
         <Nav path={path} />
-        {ready && <Footer status={ready} session={session} onSignOut={onSignOut} />}
-      </aside>
-      <main class="max-w-[1180px] min-w-0 px-4 pt-5 pb-12 md:px-9 md:pt-7 md:pb-16">{children}</main>
+      </header>
+      <main class={`${WIDTH} pt-6 pb-16`}>{children}</main>
     </div>
   );
 }
