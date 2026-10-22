@@ -86,8 +86,13 @@ export function TcpBlocks({ blocks, withHost }: { blocks: TcpBlock[]; withHost?:
               <Figure phone={false}>
                 {stats ? (
                   <>
-                    ↑ {bytes(stats.bytes_in_per_second)}/s
-                    <br />↓ {bytes(stats.bytes_out_per_second)}/s
+                    <span class="text-accent/75" title="From clients to the upstream">
+                      ↑ {bytes(stats.bytes_in_per_second)}/s
+                    </span>
+                    <br />
+                    <span class="text-secondary/75" title="From the upstream back to clients">
+                      ↓ {bytes(stats.bytes_out_per_second)}/s
+                    </span>
                   </>
                 ) : (
                   '—'
