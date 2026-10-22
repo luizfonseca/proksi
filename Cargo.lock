@@ -2608,6 +2608,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "memmap2"
+version = "0.9.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b0ca1155a9ecc25aa12e8313a119f32edf0255fea2f44839c4ac0a12b2ac157"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "memoffset"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3626,8 +3635,10 @@ dependencies = [
  "itertools 0.15.0",
  "jsonwebtoken",
  "memchr",
+ "memmap2",
  "mimalloc",
  "openssl",
+ "path-tree",
  "pingora",
  "pingora-limits",
  "proksi_store",
@@ -3637,6 +3648,7 @@ dependencies = [
  "ring",
  "schemars",
  "serde",
+ "serde-saphyr",
  "serde_json",
  "short-crypt",
  "tempfile",

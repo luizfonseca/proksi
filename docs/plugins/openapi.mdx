@@ -1,0 +1,63 @@
+---
+title: "OpenAPI"
+description: "Only lets through requests in an API's contract, as its OpenAPI spec says: its paths, methods and required parameters."
+---
+
+Only lets through the requests an [OpenAPI](https://spec.openapis.org/oas/latest.html) 3 spec describes, before they reach the upstream:
+
+| The request | Answer |
+| --- | --- |
+| A path that isn't in the spec | `404 Not Found` |
+| A method its path doesn't have | `405 Method Not Allowed`, with `Allow` |
+| A required query parameter or header missing | `400 Bad Request`, naming it |
+
+Answers have a short message saying why. Bodies aren't checked.
+
+```hcl
+host "api.example.com" {
+  location "/v1/" {
+    upstream "api:8080" {}
+
+    openapi {
+      spec      = "/etc/proksi/specs/api.yaml"
+      base_path = "/v1"
+    }
+  }
+}
+```
+
+## Options
+
+| Name | Description |
+| --- | --- |
+| `spec` | The spec's file, JSON or YAML |
+| `url` | The spec's URL, instead of a file |
+| `refresh` | How often the spec is looked at for a change, such as `"30s"` (default: `"1m"`) |
+| `base_path` | Removed from a request's path before it's matched: `"/v1"` for a spec whose paths start at `/users`, served at `/v1/users` |
+| `on_missing_spec` | Requests before the spec was ever loaded: `"allow"` lets them through unchecked (default), `"deny"` answers `503` |
+| `priority` | When it runs among the blocks of the location (default: `22`, after authentication, so who isn't let in learns nothing of the API) |
+
+## What's checked
+
+- **Paths**: as written in the spec, with `{parameters}` matching one segment, or part of one (`/files/{name}.json`). Paths without parameters win over those with (`/users/me` over `/users/{id}`). They're matched after the path is [normalized](/routing/paths), as locations are.
+- **Methods**: those of the path. `HEAD` is let through where `GET` is.
+- **Parameters**: the required ones `in: query` and `in: header`, of the path and of the operation (whose own replaces the path's), including those referred to in `components/parameters`. Path parameters are in the path already; cookies aren't checked.
+
+OpenAPI 3.0 and 3.1 specs are read; Swagger 2.0 isn't (convert it first).
+
+## Loading specs
+
+Specs are loaded in the background: requests never wait for one, and while a spec loads (or if it can't be read), its location uses the contract it had, or `on_missing_spec` before it ever had one. A spec that fails to load is reported in the logs, and never stops proksi or other locations.
+
+- **Only the contract is kept**: paths, methods and required parameters. The rest of a spec (responses, schemas, examples, descriptions) is passed over as it's read, without being kept: a spec of 80 MB takes 0.5 MB once loaded, 50,000 paths about 6 to 18 MB. A request is checked in a few tens of nanoseconds, without allocating, whatever the number of paths.
+- **Large specs**: a JSON spec is read at about 2 GB/s (a 50 MB one in a few tens of milliseconds), a YAML one at about 65 MB/s. A few are read at once, on threads of their own.
+- **Locations naming the same spec** share it: it's loaded once.
+- **A cache** keeps compiled contracts, in `paths.openapi` (default: `openapi`, next to `paths.lets_encrypt`). After a restart, unchanged specs aren't read again: a file is known by its size, modification time and inode (then its content, if they changed), a URL by `ETag` and `Last-Modified` (`304 Not Modified`). Only specs that changed are compiled again.
+- **URLs** are downloaded to a file as they arrive (never held whole), up to 1 GB.
+
+```hcl
+paths {
+  lets_encrypt = "/var/lib/proksi/letsencrypt"
+  openapi      = "/var/lib/proksi/openapi"
+}
+```

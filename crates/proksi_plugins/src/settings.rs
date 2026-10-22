@@ -135,6 +135,40 @@ where
     }
 }
 
+/// `openapi`: only lets through requests in an API's contract (`OpenAPI` 3, JSON or YAML)
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OpenApi {
+    /// The spec's file
+    pub spec: Option<String>,
+    /// The spec's URL, instead of a file
+    pub url: Option<String>,
+    /// How often the spec is looked at for a change, such as "1m" (default)
+    pub refresh: Option<String>,
+    /// Removed from a request's path before it's matched, such as "/api" for a spec whose paths
+    /// start at "/users"
+    pub base_path: Option<String>,
+    /// Requests before the spec was ever loaded: "allow" (default) or "deny" (`503`)
+    pub on_missing_spec: Option<OnMissingSpec>,
+    // Read by `plugin_priority`
+    #[allow(dead_code)]
+    #[schemars(
+        description = "When it runs among the blocks of its location, from 0 (first) to 100",
+        range(max = 100)
+    )]
+    pub priority: Priority,
+}
+
+/// What `openapi` does with requests before its spec was ever loaded
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum OnMissingSpec {
+    /// Lets them through, unchecked
+    Allow,
+    /// Answers `503`
+    Deny,
+}
+
 /// `waiting_room`: lets a number of visitors in at once, the others wait in line
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -477,6 +511,7 @@ pub fn schemas() -> serde_json::Map<String, serde_json::Value> {
             schema(schemars::schema_for!(BandwidthLimit)),
         ),
         (Kind::BodyRewrite, schema(schemars::schema_for!(BodyRewrite))),
+        (Kind::OpenApi, schema(schemars::schema_for!(OpenApi))),
         (
             Kind::WaitingRoom,
             schema(schemars::schema_for!(WaitingRoom)),
@@ -569,6 +604,6 @@ mod tests {
         );
         assert_eq!(limit["properties"]["priority"]["maximum"], 100);
         assert_eq!(schemas["jwt"]["additionalProperties"], false);
-        assert_eq!(schemas.len(), 16);
+        assert_eq!(schemas.len(), 17);
     }
 }

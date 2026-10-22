@@ -208,6 +208,10 @@
           "href": "/plugins/waiting-room"
         },
         {
+          "title": "OpenAPI",
+          "href": "/plugins/openapi"
+        },
+        {
           "title": "Body rewrite",
           "href": "/plugins/body-rewrite"
         },
