@@ -106,6 +106,10 @@
         {
           "title": "Admin API and metrics",
           "href": "/configuration/admin"
+        },
+        {
+          "title": "Notifications",
+          "href": "/configuration/notify"
         }
       ]
     },

@@ -41,6 +41,7 @@ Proksi is evolving day by day, and new features are being added all the time. Be
 - [x] **Kubernetes** ingress controller: `Ingress` resources served with their ready pods as upstreams, TLS secrets, plugins through annotations, status and events, with a Helm chart
 - [x] **Metrics** in the Prometheus format, per host, location and upstream, on an admin listener with a token
 - [x] **Admin API**: live stats (requests per second, latency percentiles), hosts, certificates, and routes written to the store
+- [x] **Notifications** to webhooks (JSON, Slack, Discord) when upstreams go down, certificates fail or expire, the configuration or the store changes (see [notifications](/configuration/notify))
 - [x] **Certificate files** reloaded when they change, served with their whole chain
 - [x] **Forwarded headers** (`X-Forwarded-For`, `-Proto`, `-Host`, `X-Real-IP`), and clients found behind trusted proxies
 - [x] **Rules**: conditions on the method, host, path, query, headers, cookies or client (`and`, `or`, `not`), and what to do when they hold, in the server, a host or a location (see [rules](/rules))

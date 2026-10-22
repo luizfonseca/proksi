@@ -85,6 +85,7 @@ To reach it on a server, use a tunnel: `ssh -L 7555:127.0.0.1:7555 your-server`,
 | `proksi_tcp_connection_duration_seconds` | `block` | How long connections stay open (histogram) |
 | `proksi_certificate_expiry_timestamp_seconds` | `domain` | When each certificate expires (refreshed every minute) |
 | `proksi_routes` | `source` | Hosts applied from each source (`file`, `docker`, `kubernetes`, `store`) |
+| `proksi_notifications_total` | `notify`, `event`, `result` | Events sent to [webhooks](/configuration/notify) (`sent`), that failed after every try (`failed`), or dropped while too many were waiting (`dropped`) |
 
 Labels come from the configuration: `host` is the name of the host that served the request (`*` for the catch-all), `location` its path, and `upstream` its address as configured. Requests no location served are counted under a `host` that says why: `_unknown_host` (no host has the name), `_no_location` (a host does, but no location has the path), `_https_redirect`, `_acme` (Let's Encrypt challenges), or `_rules` (answered by the server's or a host's rules). Clients can't create new series by sending new names or paths.
 
