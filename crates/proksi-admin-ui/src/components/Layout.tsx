@@ -5,7 +5,7 @@ import { onLink } from '../router';
 import { useData } from '../api/useData';
 import { Badge, Status } from './ui/Badge';
 import { Button } from './ui/Button';
-import { Book, External, Globe, Pulse, Server, Shield } from './ui/icons';
+import { Bell, Book, External, Globe, Pulse, Server, Shield } from './ui/icons';
 import { Palette, PaletteButton, SHORTCUT } from '../features/palette/Palette';
 import { Toaster } from './ui/Toast';
 import { DOCS, GITHUB, ISSUES } from '../lib/links';
@@ -14,6 +14,7 @@ const NAV = [
   { href: '/overview', label: 'Overview', icon: Pulse },
   { href: '/hosts', label: 'Hosts', icon: Globe },
   { href: '/certificates', label: 'Certificates', icon: Shield },
+  { href: '/notifications', label: 'Notifications', icon: Bell },
   { href: '/server', label: 'Server', icon: Server },
 ];
 

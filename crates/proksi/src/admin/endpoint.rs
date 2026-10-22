@@ -47,6 +47,10 @@ pub enum Endpoint<'a> {
     RollbackRoute(&'a str),
     /// `GET /api/v1/deleted-routes`: deleted hosts that still have versions
     DeletedRoutes,
+    /// `GET /api/v1/notifications`: the `notify` blocks (URLs masked), and their last delivery
+    Notifications,
+    /// `POST /api/v1/notifications/<name>/test`: sends a test event to a block's webhook
+    TestNotification(&'a str),
     /// `GET /api/v1/session`: who's signed in
     Session,
     /// `POST /api/v1/session`, with `{"token": "<secret>"}`
@@ -65,7 +69,11 @@ impl<'a> Endpoint<'a> {
     pub fn changes(self) -> bool {
         matches!(
             self,
-            Endpoint::PutRoute(_) | Endpoint::DeleteRoute(_) | Endpoint::RollbackRoute(_)
+            Endpoint::PutRoute(_)
+                | Endpoint::DeleteRoute(_)
+                | Endpoint::RollbackRoute(_)
+                // Sends a request out, from Proksi
+                | Endpoint::TestNotification(_)
         )
     }
 
@@ -95,5 +103,7 @@ mod tests {
         assert!(!Endpoint::RouteHistory("a.test").changes());
         assert!(!Endpoint::Route("a.test").changes());
         assert!(!Endpoint::SignIn.changes());
+        assert!(Endpoint::TestNotification("ops").changes());
+        assert!(!Endpoint::Notifications.changes());
     }
 }

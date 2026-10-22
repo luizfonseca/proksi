@@ -86,6 +86,7 @@ struct Metrics {
     tcp_bytes: IntCounterVec,
     tcp_upstream_errors: IntCounterVec,
     tls_handshake_failures: IntCounterVec,
+    notifications: IntCounterVec,
     tcp_duration: HistogramVec,
     certificate_expiry: IntGaugeVec,
     routes: IntGaugeVec,
@@ -169,6 +170,11 @@ static METRICS: Lazy<Metrics> = Lazy::new(|| {
             "Connections of a tcp block that couldn't reach an upstream (refused, timed out, or \
              none available)",
             &["block"],
+        ),
+        notifications: counter(
+            "proksi_notifications_total",
+            "Events for notify webhooks: sent, failed (after retries), or dropped (too many at once)",
+            &["notify", "event", "result"],
         ),
         tls_handshake_failures: {
             let failures = counter(
@@ -428,6 +434,16 @@ pub fn set_certificates(expiry: &[(String, i64)]) {
 }
 
 /// A TLS handshake with a client that didn't complete
+/// An event for the `notify` block `notify`: `sent`, `failed` or `dropped`
+pub fn notification(notify: &str, event: &str, result: &str) {
+    if enabled() {
+        METRICS
+            .notifications
+            .with_label_values(&[notify, event, result])
+            .inc();
+    }
+}
+
 pub fn tls_handshake_failed() {
     if enabled() {
         METRICS

@@ -42,6 +42,7 @@ describe('the palette', () => {
       'Overview',
       'Hosts',
       'Certificates',
+      'Notifications',
       'Server',
       'New host',
       'Documentation',

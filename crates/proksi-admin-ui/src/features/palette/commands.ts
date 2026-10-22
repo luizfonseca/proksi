@@ -5,7 +5,7 @@ import { DOCS, GITHUB } from '../../lib/links';
 export const GROUPS = ['Hosts', 'Pages', 'Actions'] as const;
 
 /** Icons of pages and actions (hosts show their health) */
-export type IconName = 'overview' | 'hosts' | 'certificates' | 'server' | 'new' | 'edit' | 'history' | 'docs' | 'github' | 'sign-out';
+export type IconName = 'overview' | 'hosts' | 'certificates' | 'notifications' | 'server' | 'new' | 'edit' | 'history' | 'docs' | 'github' | 'sign-out';
 
 /** Something the palette opens or does */
 export type Command = {
@@ -29,6 +29,7 @@ export const PAGES: Command[] = [
   { title: 'Overview', group: 'Pages', icon: 'overview', keywords: 'dashboard metrics live', run: { href: '/overview' } },
   { title: 'Hosts', group: 'Pages', icon: 'hosts', keywords: 'routes sites', run: { href: '/hosts' } },
   { title: 'Certificates', group: 'Pages', icon: 'certificates', keywords: 'tls https letsencrypt', run: { href: '/certificates' } },
+  { title: 'Notifications', group: 'Pages', icon: 'notifications', keywords: 'notify alerts slack discord', run: { href: '/notifications' } },
   { title: 'Server', group: 'Pages', icon: 'server', keywords: 'settings configuration', run: { href: '/server' } },
 ];
 

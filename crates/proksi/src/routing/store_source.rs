@@ -1,6 +1,7 @@
 //! Routes kept in the store (shared by every replica)
 
 use std::{sync::Arc, time::Duration};
+use crate::config::notify::Kind;
 
 use proksi_store::{ReplicaStatus, Store, StoreError};
 
@@ -129,12 +130,15 @@ impl StoreSource {
     pub async fn run(mut self) {
         tracing::info!("syncing routes from the store every {:?}", self.interval);
         let mut interval = tokio::time::interval(self.interval);
+        // Whether the store answered last time: `notify` blocks are told when that changes
+        let mut answering = true;
         loop {
             tokio::select! {
                 _ = interval.tick() => {}
                 () = SYNC_NOW.notified() => {}
             }
-            match self.sync_once().await {
+            let synced = self.sync_once().await;
+            match &synced {
                 Ok(Some(revision)) => {
                     tracing::info!("applied routes from the store (revision {revision})");
                 }
@@ -143,8 +147,25 @@ impl StoreSource {
                     "failed to sync routes from the store, keeping the current routes: {err}"
                 ),
             }
+            if synced.is_ok() != answering {
+                answering = synced.is_ok();
+                notify_store_changed(synced.err().map(|err| err.to_string()));
+            }
         }
     }
+}
+
+/// Tells `notify` blocks the store stopped answering (with why), or answers again (`None`)
+fn notify_store_changed(error: Option<String>) {
+    let kind = if error.is_some() {
+        Kind::StoreDown
+    } else {
+        Kind::StoreUp
+    };
+    crate::notify::emit(|| crate::notify::Event {
+        detail: error,
+        ..crate::notify::Event::new(kind)
+    });
 }
 
 /// Runs a future on its own (blocking) thread. Store backends may block (e.g. waiting for

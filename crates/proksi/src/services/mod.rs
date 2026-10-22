@@ -64,6 +64,7 @@ impl pingora::services::ServiceWithDependents for BackgroundFunctionService {
             return;
         };
         let mut routing_service = RoutingService::new(route_receiver);
+        let mut notify_service = crate::notify::NotifyService::new(self.config.notify.clone());
 
         // Routes from the configuration file
         if self
@@ -155,7 +156,8 @@ impl pingora::services::ServiceWithDependents for BackgroundFunctionService {
             Service::start_service(&mut health_service, None, shutdown.clone(), _listeners_per_fd),
             Service::start_service(&mut config_server, None, shutdown.clone(), _listeners_per_fd),
             Service::start_service(&mut docker_service, None, shutdown.clone(), _listeners_per_fd),
-            Service::start_service(&mut letsencrypt_service, None, shutdown, _listeners_per_fd),
+            Service::start_service(&mut letsencrypt_service, None, shutdown.clone(), _listeners_per_fd),
+            Service::start_service(&mut notify_service, None, shutdown, _listeners_per_fd),
         );
     }
 
@@ -197,6 +199,7 @@ async fn ready(config: &Config, store_routes: bool, ready_notifier: ServiceReady
     ready_notifier.notify_ready();
     #[cfg(target_os = "linux")]
     crate::supervisor::notify_ready();
+    crate::notify::emit(|| crate::notify::Event::new(crate::config::notify::Kind::InstanceStarted));
 }
 
 /// Keeps `proksi_certificate_expiry_timestamp_seconds` up to date

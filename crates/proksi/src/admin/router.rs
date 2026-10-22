@@ -32,11 +32,13 @@ enum Path {
     RouteVersion,
     RouteRollback,
     DeletedRoutes,
+    Notifications,
+    NotificationTest,
     Session,
 }
 
 /// Every path of the API
-const PATHS: [(&str, Path); 18] = [
+const PATHS: [(&str, Path); 20] = [
     ("/metrics", Path::Metrics),
     ("/api/v1/stats", Path::Stats),
     ("/api/v1/stats/stream", Path::StatsStream),
@@ -54,6 +56,8 @@ const PATHS: [(&str, Path); 18] = [
     ("/api/v1/routes/:host/history/:revision", Path::RouteVersion),
     ("/api/v1/routes/:host/rollback", Path::RouteRollback),
     ("/api/v1/deleted-routes", Path::DeletedRoutes),
+    ("/api/v1/notifications", Path::Notifications),
+    ("/api/v1/notifications/:name/test", Path::NotificationTest),
     ("/api/v1/session", Path::Session),
 ];
 
@@ -73,7 +77,7 @@ pub fn parse<'a>(
     query: Option<&'a str>,
 ) -> Result<Endpoint<'a>, Reply> {
     let (kind, found) = ROUTER.find(path).ok_or_else(not_found)?;
-    // The parameters, in the order of the pattern: `:host`, then `:revision`
+    // The parameters, in the order of the pattern: `:host` (or `:name`), then `:revision`
     let param = |index: usize| found.raws.get(index).copied().unwrap_or_default();
     let (host, revision) = (param(0), param(1));
     let endpoint = match (*kind, method.as_str()) {
@@ -98,6 +102,8 @@ pub fn parse<'a>(
         }
         (Path::RouteRollback, "POST") => Endpoint::RollbackRoute(host),
         (Path::DeletedRoutes, "GET") => Endpoint::DeletedRoutes,
+        (Path::Notifications, "GET") => Endpoint::Notifications,
+        (Path::NotificationTest, "POST") => Endpoint::TestNotification(host),
         (Path::Session, "GET") => Endpoint::Session,
         (Path::Session, "POST") => Endpoint::SignIn,
         (Path::Session, "DELETE") => Endpoint::SignOut,

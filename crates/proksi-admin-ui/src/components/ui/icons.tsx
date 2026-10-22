@@ -43,6 +43,9 @@ export const Clock = ({ class: size = 'size-4' }: Icon) => (
 export const SignOut = ({ class: size = 'size-4' }: Icon) => (
   <svg {...props} class={`shrink-0 ${size}`}><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /><path d="M10 16l-4-4 4-4M6 12h10" /></svg>
 );
+export const Bell = ({ class: size = 'size-4' }: Icon) => (
+  <svg {...props} class={`shrink-0 ${size}`}><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z" /><path d="M10 21h4" /></svg>
+);
 export const Book = ({ class: size = 'size-4' }: Icon) => (
   <svg {...props} class={`shrink-0 ${size}`}><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 19V5M8 7h7" /></svg>
 );

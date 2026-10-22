@@ -68,6 +68,10 @@ pub async fn exit_when_drained(mut shutdown: ShutdownWatch, timeout: Duration) {
         timeout.as_secs(),
         CONNECTIONS.count()
     );
+    crate::notify::emit(|| crate::notify::Event {
+        detail: Some(format!("{} open connections", CONNECTIONS.count())),
+        ..crate::notify::Event::new(crate::config::notify::Kind::InstanceStopping)
+    });
     let open = CONNECTIONS.drain(timeout).await;
     if open > 0 {
         tracing::warn!("stopping: closing {open} connections still open");

@@ -27,6 +27,7 @@ mod config;
 #[cfg(feature = "kubernetes")]
 mod kubernetes;
 mod metrics;
+mod notify;
 mod proxy_server;
 mod routing;
 mod rules;

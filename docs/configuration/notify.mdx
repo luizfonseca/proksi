@@ -1,0 +1,97 @@
+---
+title: "Notifications"
+description: "Proksi can tell a webhook when an upstream goes down, a certificate fails, the configuration changes, and more."
+---
+
+Proksi can send what happens to it to a webhook: an upstream going down, a certificate that couldn't be renewed, a configuration change it refused. Each `notify` block names a webhook, at the root of the configuration, and there can be as many as needed:
+
+```hcl
+notify "ops" {
+  url    = env("SLACK_WEBHOOK_URL")
+  format = "slack"
+}
+
+notify "payments" {
+  url   = "https://alerts.example.com/proksi"
+  on    = ["upstream_down", "upstream_up", "certificate_failed"]
+  hosts = ["pay.example.com", "*.payments.internal"]
+
+  headers = {
+    authorization = env("ALERTS_TOKEN")
+  }
+}
+```
+
+| Setting | | Default |
+| --- | --- | --- |
+| `url` | Where events are sent, with a `POST`. Must start with `https://` or `http://` | |
+| `format` | `json`, `slack` (an incoming webhook) or `discord` | `json` |
+| `on` | The events sent | Every event |
+| `hosts` | Only the events of these hosts: a name, `*.example.com` (one more label, as wildcard hosts) or `*`. Events that aren't about a host (the store, an instance, the configuration) are always sent | Every host |
+| `headers` | Headers added to each request, such as a token | |
+| `expiring_days` | `certificate_expiring` is sent once a certificate has this many days left or fewer (up to 60) | `14` |
+
+Changing `notify` blocks in the configuration file applies them without a restart.
+
+## Events
+
+| Event | Sent when |
+| --- | --- |
+| `upstream_down` | A health check finds an upstream failing (a location's, or a `tcp` block's) |
+| `upstream_up` | A failing upstream passes its health checks again |
+| `certificate_issued` | Let's Encrypt gives a certificate for a new domain |
+| `certificate_renewed` | A certificate is renewed |
+| `certificate_failed` | Ordering or renewing a certificate fails |
+| `certificate_expiring` | A certificate has `expiring_days` left or fewer, once a day |
+| `config_reloaded` | The configuration file changed and was applied |
+| `config_reload_failed` | The configuration file changed but is invalid: the previous one is kept |
+| `host_changed` | A host in the store is created, changed, removed or rolled back, through the admin API or UI |
+| `store_down` | The shared store stops answering |
+| `store_up` | The store answers again |
+| `instance_started` | An instance starts serving |
+| `instance_stopping` | An instance starts shutting down |
+
+`upstream_down` and `upstream_up` need [health checks](/routing/upstreams#health-checks) on the upstream. `certificate_*` events are about certificates from Let's Encrypt.
+
+## What a webhook receives
+
+With `format = "json"`, the event, a sentence saying what happened, the instance that saw it, when, and what's known about it (`host`, `location`, `upstream`, `tcp`, `detail`, `author`, `version`, `days_left`):
+
+```json
+{
+  "event": "upstream_down",
+  "summary": "Upstream 10.0.0.1:80 of api.example.com /v1 is down",
+  "instance": "proksi-1",
+  "at": "2026-10-22T09:41:07Z",
+  "host": "api.example.com",
+  "location": "/v1",
+  "upstream": "10.0.0.1:80"
+}
+```
+
+With `slack` or `discord`, the same sentence as a message, after a sign of how it went:
+
+```
+🔴 Upstream 10.0.0.1:80 of api.example.com /v1 is down · proksi-1
+```
+
+## Delivery
+
+Events never hold anything up: raising one only queues it, and requests, health checks and reloads go on right away. They're sent in the background, with up to 5 seconds for the webhook to answer (a `2xx`) and 3 more tries over about 40 seconds. Redirects aren't followed. Past 256 events waiting, or 16 sends at once, new events are dropped and counted.
+
+An upstream that flaps isn't sent each time it changes: after an event, the same upstream (or the store) is held for a minute, and what it is at the end of that minute is sent if it changed. An upstream that's up and was never said to be down isn't sent either.
+
+With several instances sharing a [store](/configuration/redis), each sees the same upstreams and certificates: one of them sends `upstream_down`, `upstream_up`, `store_down`, `store_up` and `certificate_expiring`, the others don't. Each instance sends its own `instance_started` and `instance_stopping`.
+
+## Admin API and UI
+
+The admin UI's **Notifications** page lists each block with the hosts it's told about, how its last send went, and a button to send it a test. A host's page shows the blocks told about it.
+
+A webhook's URL is often its secret: the admin API and UI show it masked (`https://hook…bf3a`), and headers by name only. Errors never include it.
+
+| Endpoint | |
+| --- | --- |
+| `GET /api/v1/notifications` | Every `notify` block, with its masked URL, format, events, hosts, header names, and how its last send went |
+| `POST /api/v1/notifications/<name>/test` | Sends a `test` event to the block's webhook, once, and answers how it went: `{"ok": true}`, or `502` with the error. Needs a token that can write |
+
+Sends are counted in `proksi_notifications_total`, by `notify` (the block's name), `event` and `result` (`sent`, `failed` or `dropped`). Events dropped before reaching a block are counted with an empty `notify`.

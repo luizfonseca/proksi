@@ -162,6 +162,29 @@ export type Certificate = {
   days_left: number | null;
   lease_holder: string | null;
 };
+/** How the latest send to a webhook went */
+export type Delivery = { event: string; /** Unix timestamp (seconds) */ at: number; ok: boolean; error?: string };
+/** A `notify` block, without its secrets: the URL masked, headers by name */
+export type Notification = {
+  name: string;
+  source: 'file' | 'store';
+  url: string;
+  format: 'json' | 'slack' | 'discord';
+  /** The events it's sent (none: all of them) */
+  on: string[];
+  /** The hosts whose events it's sent (none: every host) */
+  hosts: string[];
+  headers: string[];
+  expiring_days: number;
+  last: Delivery | null;
+};
+export type Notifications = { notifications: Notification[]; events: string[] };
+
+export const notifications = {
+  /** Sends a `test` event to the block's webhook: rejected with the error when it fails */
+  test: (name: string) => request<{ ok: true }>('POST', `/notifications/${encodeURIComponent(name)}/test`),
+};
+
 export type Replica = { id: string; revision: number; applied_at: number; version: string; hostname: string };
 export type Status = {
   version: string;

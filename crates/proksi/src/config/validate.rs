@@ -27,6 +27,9 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
         .validate()
         .map_err(|err| anyhow!("server.tls.{err}"))?;
     crate::rules::Rules::compile(&config.server.rule).map_err(|err| anyhow!("server: {err}"))?;
+    for (name, block) in &config.notify {
+        block.check(name).map_err(|err| anyhow!(err))?;
+    }
 
     let publish = config.kubernetes.publish_service.as_deref();
     if publish.is_some_and(|service| {
