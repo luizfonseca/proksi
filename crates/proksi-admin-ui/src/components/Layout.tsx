@@ -6,6 +6,7 @@ import { Badge, Status } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Globe, Pulse, Server, Shield } from './ui/icons';
 import { ThemeToggle } from './ui/Theme';
+import { Palette, PaletteButton } from '../features/palette/Palette';
 
 const NAV = [
   { href: '/overview', label: 'Overview', icon: Pulse },
@@ -52,7 +53,7 @@ function Account({ session, onSignOut }: { session: Session; onSignOut: () => vo
         {session.name}
         {session.access === 'read' && <Badge size="xs" class="ml-1.5">read-only</Badge>}
       </span>
-      <Button variant="link" onClick={() => api.signOut().finally(onSignOut)}>
+      <Button variant="link" onClick={onSignOut}>
         Sign out
       </Button>
     </span>
@@ -93,15 +94,18 @@ type Props = { path: string; session: Session; onSignOut: () => void; children: 
 export function Layout({ path, session, onSignOut, children }: Props) {
   const [status] = useData<ServerStatus>('/status', 15000);
   const ready = status.state === 'ready' ? status.value : null;
+  const signOut = () => api.signOut().finally(onSignOut);
   return (
     <div class="min-h-screen">
+      <Palette onSignOut={signOut} />
       <header class="border-b border-base-300 bg-base-100">
         <div class={`${WIDTH} flex h-14 items-center gap-3`}>
           <Brand version={ready?.version} />
+          <PaletteButton />
           <div class="ml-auto flex items-center gap-3">
             {ready && <Instance status={ready} />}
             <ThemeToggle />
-            <Account session={session} onSignOut={onSignOut} />
+            <Account session={session} onSignOut={signOut} />
           </div>
         </div>
         <Nav path={path} />

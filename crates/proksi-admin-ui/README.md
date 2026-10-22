@@ -19,7 +19,7 @@ src/
   components/           the app's frame (Layout)
     ui/                 generic pieces with no Proksi concepts (Button, Badge, Table, Field,
                         Panel, Stack, charts, icons...): the only place daisyUI's classes are used
-  features/             one folder per concept (rules, flow, live, hosts, tcp...): its logic
+  features/             one folder per concept (rules, flow, live, hosts, tcp, palette...): its logic
                         and the components showing it, with their tests
   pages/                one per route, composed of features and ui components
   lib/                  helpers shared by everything (formatting)

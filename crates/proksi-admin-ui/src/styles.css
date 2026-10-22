@@ -11,7 +11,7 @@
 @plugin 'daisyui' {
   themes: light --default, black --prefersdark;
   logs: false;
-  include: rootcolor, scrollbar, radius, alert, badge, breadcrumbs, button, checkbox, input, link, menu, progress, select, skeleton, stat, status, tab, table, textarea;
+  include: rootcolor, scrollbar, radius, alert, badge, breadcrumbs, button, checkbox, input, kbd, link, menu, modal, progress, select, skeleton, stat, status, tab, table, textarea;
 }
 
 @plugin 'daisyui/theme' {
