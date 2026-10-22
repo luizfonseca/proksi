@@ -191,7 +191,7 @@ export function Overview() {
         />
       </Cards>
 
-      <PageSection title="Traffic" description="Requests to every host, by status, and how long they take">
+      <PageSection title="Traffic">
         <Grid columns={2}>
   <LineChart
             title="Requests by status"
@@ -216,16 +216,16 @@ export function Overview() {
         </Grid>
       </PageSection>
 
-      <PageSection title="Right now" description="Hosts and TCP blocks with traffic over the last seconds">
+      <PageSection title="Right now">
         <ActiveHosts latest={latest} history={history} />
         {tcp.state === 'ready' && <TcpBlocks blocks={tcp.value} withHost />}
       </PageSection>
 
-      <PageSection title="Latest requests" description="Each request as it's served, while you watch: click one for its details">
+      <PageSection title="Latest requests">
         <RequestLog title={null} />
       </PageSection>
 
-      <PageSection title="This instance" description="What Proksi itself uses, and the instances sharing its store">
+      <PageSection title="This instance">
         <Grid columns={2}>
           <LineChart
             title="CPU"

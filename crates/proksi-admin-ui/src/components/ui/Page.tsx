@@ -46,8 +46,8 @@ export function PageSection({
   children: ComponentChildren;
 }) {
   return (
-    <section class="mt-8 first:mt-0">
-      <div class="mb-3 flex flex-wrap items-end gap-x-4 gap-y-1">
+    <section class="mt-6 first:mt-0">
+      <div class="mb-2.5 flex flex-wrap items-end gap-x-4 gap-y-1">
         <div class="min-w-0">
           <h2 class="text-base font-semibold">{title}</h2>
           {description && <p class="text-sm text-base-content/60">{description}</p>}
