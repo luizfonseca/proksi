@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/luizfonseca/proksi/compare/proksi_store-v0.16.1...proksi_store-v0.17.0) (2026-10-22)
+
+
+### Features
+
+* create waiting_room plugin for visitor-type-based locations ([#552](https://github.com/luizfonseca/proksi/issues/552)) ([7691625](https://github.com/luizfonseca/proksi/commit/76916251d9afd4b80cc13efacb261eade67e4812))
+
 ## [0.16.1](https://github.com/luizfonseca/proksi/compare/proksi_store-v0.16.0...proksi_store-v0.16.1) (2026-10-21)
 
 
