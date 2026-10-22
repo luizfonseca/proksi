@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { onLink } from '../../router';
+import { Lock } from './icons';
 
 const TONES = {
   neutral: 'border-base-300 bg-base-200 text-base-content/70',
@@ -54,11 +55,34 @@ export function Chip({ href, children }: { href?: string; children: ComponentChi
   );
 }
 
-/** What a host or block serves: HTTP requests, or TCP connections */
-export function ProtocolBadge({ protocol }: { protocol: 'http' | 'tcp' }) {
+/**
+ * What a host or block serves: HTTP requests, or TCP connections. For a host's HTTP, `tls` says
+ * whether it's HTTPS, or plain HTTP (marked as a warning: nothing is encrypted).
+ */
+export function ProtocolBadge({ protocol, tls }: { protocol: 'http' | 'tcp'; tls?: boolean }) {
+  if (protocol === 'tcp') {
+    return (
+      <Badge size="xs" tone="secondary" class="font-mono font-semibold">
+        TCP
+      </Badge>
+    );
+  }
+  if (tls === undefined) {
+    return (
+      <Badge size="xs" tone="info" class="font-mono font-semibold">
+        HTTP
+      </Badge>
+    );
+  }
   return (
-    <Badge size="xs" tone={protocol === 'http' ? 'info' : 'secondary'} class="font-mono font-semibold">
-      {protocol.toUpperCase()}
+    <Badge
+      size="xs"
+      tone={tls ? 'info' : 'warning'}
+      class="gap-1 font-mono font-semibold"
+      title={tls ? 'HTTPS: served with TLS' : 'Plain HTTP: no TLS, nothing is encrypted'}
+    >
+      {tls && <Lock class="size-2.5" />}
+      {tls ? 'HTTPS' : 'HTTP'}
     </Badge>
   );
 }

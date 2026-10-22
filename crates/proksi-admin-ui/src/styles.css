@@ -19,11 +19,13 @@
   default: true;
   --color-primary: #e11d48;
   --color-primary-content: #ffffff;
-  /* Light's own are pink (too close to the primary) and cyan */
+  /* Light's own are pink (too close to the primary), cyan, and a yellow too pale for text */
   --color-secondary: #7c3aed;
   --color-secondary-content: #ffffff;
   --color-info: #2563eb;
   --color-info-content: #ffffff;
+  --color-warning: #d97706;
+  --color-warning-content: #ffffff;
   /* Rounder than daisyUI's own */
   --radius-selector: 0.5rem;
   --radius-field: 0.5rem;

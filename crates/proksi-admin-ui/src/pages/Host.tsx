@@ -1,6 +1,5 @@
 import { useState } from 'preact/hooks';
 import { type Host as HostData, routes, type TcpBlock, type Upstream } from '../api';
-import { Lock, Unlock } from '../components/ui/icons';
 import { Legend, LineChart, Swatch } from '../components/ui/Chart';
 import { Flow } from '../features/flow/Flow';
 import { RequestLog } from '../features/live/RequestLog';
@@ -156,11 +155,8 @@ export function Host({ name }: { name: string }) {
               badges={
                 <>
                   <SourceBadge source={host.source} />
-                  {host.locations.length > 0 && <ProtocolBadge protocol="http" />}
+                  {host.locations.length > 0 && <ProtocolBadge protocol="http" tls={host.tls} />}
                   {blocks.length > 0 && <ProtocolBadge protocol="tcp" />}
-                  <Badge class="gap-1">
-                    {host.tls ? <Lock class="size-3" /> : <Unlock class="size-3" />} {host.tls ? 'HTTPS' : 'Plain HTTP'}
-                  </Badge>
                   {host.listen.map((address) => <Chip>{address}</Chip>)}
                 </>
               }

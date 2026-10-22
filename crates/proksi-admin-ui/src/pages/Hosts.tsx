@@ -2,7 +2,6 @@ import { useState } from 'preact/hooks';
 import type { Host, TcpBlock } from '../api';
 import { Chip, ProtocolBadge, SourceBadge, Status } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { Lock, Unlock } from '../components/ui/icons';
 import { SearchInput, Segmented } from '../components/ui/Form';
 import { Empty, Hint, None, PageHead, Panel } from '../components/ui/Page';
 import { Stack } from '../components/ui/Stack';
@@ -58,24 +57,11 @@ function DeletedHosts() {
   );
 }
 
-function HostName({ host }: { host: Host }) {
-  return (
-    <Stack class="font-semibold">
-      {host.host}
-      {host.tls ? (
-        <span class="text-success" title="HTTPS"><Lock class="size-3.5" /></span>
-      ) : (
-        <span class="text-warning" title="Plain HTTP: no TLS"><Unlock class="size-3.5" /></span>
-      )}
-    </Stack>
-  );
-}
-
 /** What a host serves: HTTP requests, TCP connections, or both */
 function Serves({ host, tcp }: { host: Host; tcp: boolean }) {
   return (
     <Stack gap={1}>
-      {host.locations.length > 0 && <ProtocolBadge protocol="http" />}
+      {host.locations.length > 0 && <ProtocolBadge protocol="http" tls={host.tls} />}
       {tcp && <ProtocolBadge protocol="tcp" />}
     </Stack>
   );
@@ -122,7 +108,7 @@ export function Hosts() {
                       const blocks = [...new Set(host.locations.flatMap((location) => location.blocks))];
                       return (
                         <Row onClick={() => navigate(`/hosts/${encodeURIComponent(host.host)}`)}>
-                          <Cell><HostName host={host} /></Cell>
+                          <Cell class="font-semibold">{host.host}</Cell>
                           <Cell><Serves host={host} tcp={tcpHosts.has(host.host)} /></Cell>
                           <Cell><SourceBadge source={host.source} /></Cell>
                           <Cell phone={false} numeric>{host.locations.length}</Cell>
