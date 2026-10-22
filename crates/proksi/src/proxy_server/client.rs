@@ -3,7 +3,7 @@
 
 use std::{net::IpAddr, sync::OnceLock};
 
-use http::HeaderValue;
+use http::{HeaderName, HeaderValue};
 
 use crate::ip_set::{network, IpSet};
 
@@ -12,6 +12,13 @@ use crate::ip_set::{network, IpSet};
 pub struct TrustedProxies(IpSet);
 
 static TRUSTED: OnceLock<TrustedProxies> = OnceLock::new();
+
+/// Headers are read by these, so their names aren't parsed on each request (built at compile
+/// time, they don't allocate). Headers are inserted by `&'static str` instead, as Pingora keeps
+/// those as they are.
+pub const X_FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
+pub const X_FORWARDED_PROTO: HeaderName = HeaderName::from_static("x-forwarded-proto");
+pub const X_FORWARDED_HOST: HeaderName = HeaderName::from_static("x-forwarded-host");
 
 impl TrustedProxies {
     /// From addresses (`10.0.0.1`) and networks (`10.0.0.0/8`)
@@ -164,7 +171,7 @@ pub fn of_session(session: &pingora::proxy::Session) -> Option<IpAddr> {
     let forwarded_for = session
         .req_header()
         .headers
-        .get("x-forwarded-for")
+        .get(&X_FORWARDED_FOR)
         .and_then(|value| value.to_str().ok());
     Some(client_ip(peer, forwarded_for))
 }
