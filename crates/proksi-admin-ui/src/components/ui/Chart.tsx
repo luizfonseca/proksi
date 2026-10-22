@@ -10,6 +10,9 @@ const WIDTH = 1000;
 /** A value on the chart's left, over its grid line */
 const TICK = 'pointer-events-none absolute left-0 bg-base-100 pr-1 text-xs leading-none text-base-content/45';
 
+/** An axis label: round numbers, without a trailing `.0` ("20/s", not "20.0/s") */
+const tick = (text: string) => text.replace(/\.0(?=\D|$)/, '');
+
 /** The last `span` values, newest at the right, as an SVG path (gaps where there's no value) */
 function path(values: (number | null)[], span: number, max: number, height: number): string {
   const start = span - values.length;
@@ -78,8 +81,8 @@ export function LineChart({ title, series, span, format, height = 80, max }: Pro
         }}
         onMouseLeave={() => setHover(null)}
       >
-        <span class={`${TICK} top-0.5`}>{format(top)}</span>
-        <span class={`${TICK} top-[calc(50%+2px)]`}>{format(top / 2)}</span>
+        <span class={`${TICK} top-0.5`}>{tick(format(top))}</span>
+        <span class={`${TICK} top-[calc(50%+2px)]`}>{tick(format(top / 2))}</span>
         <svg viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" role="img" aria-label={title}>
           {/* The middle and the bottom: a line at the top would read as the header's border */}
           {[0.5, 1].map((share) => (

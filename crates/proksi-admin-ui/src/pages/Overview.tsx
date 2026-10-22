@@ -172,7 +172,7 @@ export function Overview() {
     <>
       <PageHead
         title="Overview"
-        description="Live, from the moment this page was opened. Nothing more is kept by Proksi."
+        description="Live, from the moment this page was opened."
         actions={
           <Segmented
             label="Time span"
