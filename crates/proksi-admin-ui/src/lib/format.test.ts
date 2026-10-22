@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { availability, bytes, ms, niceMax, percent, rate } from './format';
+import { bytes, ms, niceMax, percent, rate } from './format';
 
 describe('format', () => {
   it('reads sizes, durations, rates and shares', () => {
@@ -19,15 +19,5 @@ describe('format', () => {
     expect(niceMax(7)).toBe(10);
     expect(niceMax(130)).toBe(200);
     expect(niceMax(2.1)).toBe(2.5);
-  });
-
-  it('shows availability: what was not a 5xx, never 100% while there are errors', () => {
-    expect(availability(0)).toBe('100%');
-    expect(availability(0.00001)).toBe('99.99%');
-    expect(availability(0.0005)).toBe('99.95%');
-    expect(availability(0.004)).toBe('99.6%');
-    expect(availability(0.025)).toBe('97.5%');
-    expect(availability(0.29)).toBe('71%');
-    expect(availability(1)).toBe('0%');
   });
 });

@@ -10,7 +10,7 @@ import { Cell, Row, Table } from '../components/ui/Table';
 import { RequestLog } from '../features/live/RequestLog';
 import { Loaded } from '../components/ui/State';
 import { TcpBlocks } from '../features/tcp/Tcp';
-import { availability, bytes, ms, percent, rate } from '../lib/format';
+import { bytes, ms, percent, rate } from '../lib/format';
 import { activeHosts, type Point, type Stats, useLive } from '../features/live/live';
 import { useData } from '../api/useData';
 
@@ -73,7 +73,7 @@ function ActiveHosts({ latest, history }: { latest: Stats | null; history: Point
       {hosts.length === 0 ? (
         <Empty title={latest ? 'No requests' : 'Waiting for data…'}>Hosts appear here once they're accessed, and stay while this page is open.</Empty>
       ) : (
-        <Table columns={['Host', 'Requests', 'Availability', 'p99', { label: 'Last 2 minutes', phone: false, class: 'w-[220px]' }]}>
+        <Table columns={['Host', 'Requests', '5xx', 'p99', { label: 'Last 2 minutes', phone: false, class: 'w-[220px]' }]}>
           {hosts.map(({ host, point, lastSeen }) => {
             const errors = point.requests ? point.errors / point.requests : 0;
             return (
@@ -84,11 +84,7 @@ function ActiveHosts({ latest, history }: { latest: Stats | null; history: Point
                 {point.requests > 0 ? (
                   <>
                     <Cell><Mono>{rate(point.requests)}</Mono></Cell>
-                    <Cell>
-                      <Badge tone={tone(errors)} title={`${percent(errors * 100)} of responses were 5xx`}>
-                        {availability(errors)}
-                      </Badge>
-                    </Cell>
+                    <Cell><Badge tone={tone(errors)}>{percent(errors * 100)}</Badge></Cell>
                   </>
                 ) : (
                   // Across the requests and their errors
@@ -173,11 +169,10 @@ export function Overview() {
       <Cards columns={5}>
         <Card label="Requests" value={last ? rate(last.requests) : '—'} values={take(history, (point) => point.requests)} color="var(--chart-1)" />
         <Card
-          label="Availability"
-          value={last && last.requests > 0 ? availability(last.errors) : '—'}
-          detail={last && last.errors > 0 ? `${percent(last.errors * 100)} 5xx` : 'responses not 5xx'}
-          values={take(history, (point) => (point.requests > 0 ? 100 - point.errors * 100 : null))}
-          color={last && last.errors > 0 ? 'var(--color-error)' : 'var(--color-success)'}
+          label="Errors (5xx)"
+          value={last ? percent(last.errors * 100) : '—'}
+          values={take(history, (point) => point.errors * 100)}
+          color="var(--color-error)"
         />
         <Card label="Latency p99" value={last ? ms(last.p99) : '—'} detail={last ? `p50 ${ms(last.p50)}` : undefined} values={take(history, (point) => point.p99)} color="var(--chart-3)" />
         <Card

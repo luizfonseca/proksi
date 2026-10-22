@@ -2,7 +2,7 @@
 // each line toned by what flows through it over the last seconds
 
 import type { Host } from '../../api';
-import { availability, ms, percent, rate } from '../../lib/format';
+import { ms, percent, rate } from '../../lib/format';
 import type { HostStats, LocationStats, Percentiles } from '../live/live';
 
 export type Tone = 'idle' | 'ok' | 'warn' | 'bad';
@@ -90,8 +90,7 @@ function summary(requests: number, p99: number | null, responses?: Record<string
   const parts = [rate(requests)];
   if (p99 !== null) parts.push(`p99 ${ms(p99)}`);
   const errors = responses ? errorShare(responses) : 0;
-  // Availability: the responses that weren't 5xx, shown once some were
-  if (errors > 0) parts.push(`${availability(errors)} avail`);
+  if (errors > 0) parts.push(`${percent(errors * 100)} 5xx`);
   return parts.join(' · ');
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { availability, ms, percent, rate } from '../../lib/format';
+import { ms, percent, rate } from '../../lib/format';
 import { type Card, type Flow as FlowData, type FlowEdge, type FlowNode, type Focus, NODE_HEIGHT } from './flowGraph';
 
 /** A title that fits its node (about 6.8px a character) */
@@ -122,11 +122,6 @@ function HoverCard({ node, card, flow, pad }: { node: FlowNode; card: Card; flow
             <b class="text-error">{rate(card.failed)}</b> failed
           </span>
         ) : null}
-        {card.responses && Object.keys(card.responses).length > 0 && (
-          <span>
-            <b class="text-base-content">{availability((card.responses['5xx'] ?? 0) / Object.values(card.responses).reduce((sum, count) => sum + count, 0))}</b> available
-          </span>
-        )}
         {node.share !== undefined && node.share > 0 && <span>{percent(node.share * 100)} of its location</span>}
         {card.health && <span class={card.health === 'healthy' ? 'text-success' : 'text-error'}>{card.health}</span>}
       </div>

@@ -84,7 +84,7 @@ describe('the traffic graph', () => {
     // Refused connections aren't answered, but they're traffic, and failing
     expect(edge('upstream / 10.0.0.3:80')).toMatchObject({ rate: 2, tone: 'bad' });
     expect(flow.nodes.find((node) => node.id === 'upstream / 10.0.0.3:80')!.detail).toBe('2/s failed · 17%');
-    expect(flow.nodes.find((node) => node.id === 'location /')!.detail).toBe('10/s · p99 30 ms · 90% avail');
+    expect(flow.nodes.find((node) => node.id === 'location /')!.detail).toBe('10/s · p99 30 ms · 10% 5xx');
   });
 
   it('is idle without stats', () => {
