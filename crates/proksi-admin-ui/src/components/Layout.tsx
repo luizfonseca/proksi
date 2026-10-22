@@ -64,7 +64,7 @@ function Account({ session, onSignOut }: { session: Session; onSignOut: () => vo
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <div class="w-8 rounded-full bg-primary text-sm font-semibold text-primary-content">
+        <div class="w-8 rounded-full border border-base-300 bg-base-200 text-sm font-semibold text-base-content/80 hover:bg-base-300">
           <span>{session.name.slice(0, 1).toUpperCase()}</span>
         </div>
       </button>

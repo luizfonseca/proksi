@@ -49,6 +49,15 @@ export function matches(served: Served, filter: string): boolean {
     .every((word) => text.includes(word));
 }
 
+/**
+ * Whether `served` went through what was clicked in a host's traffic: a location, or an upstream
+ * at any of its addresses (as written, and as resolved)
+ */
+export function focused(served: Served, focus: { location: string; upstreams?: string[] }): boolean {
+  if (served.location !== focus.location) return false;
+  return !focus.upstreams || (served.upstream !== null && focus.upstreams.includes(served.upstream));
+}
+
 /** What each list saw (of every host, or of one), while the page is open */
 const seen = new Map<string, Served[]>();
 

@@ -40,7 +40,7 @@ type Props = {
 };
 
 /** Lines over time, with a legend of the latest values and the values under the pointer */
-export function LineChart({ title, series, span, format, height = 140, max }: Props) {
+export function LineChart({ title, series, span, format, height = 80, max }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const shown = series.map((one) => ({ ...one, values: one.values.slice(-span) }));
   const largest = Math.max(0, ...shown.flatMap((one) => one.values.filter((value): value is number => value !== null)));
@@ -71,7 +71,7 @@ export function LineChart({ title, series, span, format, height = 140, max }: Pr
     >
       <div
         class="plot relative mx-4 mb-3"
-        style={{ height }}
+        style={{ height: `${height}px` }}
         onMouseMove={(event) => {
           const box = event.currentTarget.getBoundingClientRect();
           setHover(Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)));
@@ -81,7 +81,8 @@ export function LineChart({ title, series, span, format, height = 140, max }: Pr
         <span class={`${TICK} top-0.5`}>{format(top)}</span>
         <span class={`${TICK} top-[calc(50%+2px)]`}>{format(top / 2)}</span>
         <svg viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" role="img" aria-label={title}>
-          {[0, 0.5, 1].map((share) => (
+          {/* The middle and the bottom: a line at the top would read as the header's border */}
+          {[0.5, 1].map((share) => (
             <line class="grid" x1="0" x2={WIDTH} y1={height * share} y2={height * share} />
           ))}
           {shown.map((one) => (

@@ -1,6 +1,6 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { ms } from '../../lib/format';
-import { matches, type Served, useRequests } from './requests';
+import { focused, matches, type Served, useRequests } from './requests';
 import { Details, Drawer } from '../../components/ui/Drawer';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -59,20 +59,48 @@ function Request({ served, host, onClose }: { served: Served | null; host?: stri
   );
 }
 
-/** The latest requests, of every host or of `host` (`title`: none when a section already says it) */
-export function RequestLog({ host, title = 'Latest requests' }: { host?: string; title?: string | null }) {
+/** Requests of one location or upstream only, picked in the host's traffic: `label` names it */
+export type RequestFocus = { label: string; location: string; upstreams?: string[] };
+
+/**
+ * The latest requests, of every host or of `host` (`title`: none when a section already says it).
+ * With a `focus`, only those of a location or upstream, watched as soon as it's picked.
+ */
+export function RequestLog({
+  host,
+  title = 'Latest requests',
+  focus = null,
+  onClearFocus,
+}: {
+  host?: string;
+  title?: string | null;
+  focus?: RequestFocus | null;
+  onClearFocus?: () => void;
+}) {
   // Off until asked for: Proksi builds nothing for it until then
   const [paused, setPaused] = useState(true);
   const [held, setHeld] = useState(false);
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState<Served | null>(null);
   const { requests, skipped } = useRequests(paused, held, host);
-  const shown = filter.trim() ? requests.filter((served) => matches(served, filter.trim())) : requests;
+  useEffect(() => {
+    if (focus) setPaused(false);
+  }, [focus]);
+  const kept = focus ? requests.filter((served) => focused(served, focus)) : requests;
+  const shown = filter.trim() ? kept.filter((served) => matches(served, filter.trim())) : kept;
   return (
     <Panel
       title={title}
       aside={
         <Stack gap={3} wrap justify="end" class="flex-1 text-xs text-base-content/60">
+          {focus && (
+            <Badge tone="primary" class="gap-1.5">
+              only {focus.label}
+              <button type="button" class="cursor-pointer" aria-label="Show every request" onClick={onClearFocus}>
+                ✕
+              </button>
+            </Badge>
+          )}
           {requests.length > 0 && <SearchInput class="w-full max-w-60" placeholder="Filter: path, 5xx, client…" value={filter} onInput={setFilter} />}
           {held && !paused && <span>Held while the pointer is on the list</span>}
           {!paused && <span>up to 100 a second</span>}
@@ -84,8 +112,8 @@ export function RequestLog({ host, title = 'Latest requests' }: { host?: string;
       }
     >
       {requests.length > 0 && shown.length === 0 ? (
-        <Empty compact title="No requests match">
-          {requests.length} kept: try another filter.
+        <Empty compact title={focus && kept.length === 0 ? `No requests to ${focus.label} yet` : 'No requests match'}>
+          {focus && kept.length === 0 ? 'They appear here as they’re served.' : `${requests.length} kept: try another filter.`}
         </Empty>
       ) : requests.length === 0 ? (
         <Empty compact title={paused ? 'Not watching' : 'Waiting for requests…'}>

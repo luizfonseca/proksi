@@ -124,12 +124,20 @@
     stroke: var(--color-error);
     stroke-opacity: 1;
   }
-  svg.flow a .node rect {
+  /* Locations and upstreams can be clicked: their requests show in the request log */
+  svg.flow .node.selectable {
     cursor: pointer;
+    outline: none;
   }
-  svg.flow a:hover .node rect {
+  svg.flow .node.selectable:hover rect,
+  svg.flow .node.selectable:focus-visible rect {
+    stroke: var(--color-base-content);
+    stroke-opacity: 0.5;
+  }
+  svg.flow .node.selected rect {
     stroke: var(--color-primary);
     stroke-opacity: 1;
+    stroke-width: 1.5;
   }
   svg.flow .edge path {
     fill: none;

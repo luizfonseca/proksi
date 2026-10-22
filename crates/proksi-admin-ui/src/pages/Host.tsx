@@ -1,11 +1,11 @@
-import { useState } from 'preact/hooks';
+import { useRef, useState } from 'preact/hooks';
 import { type Host as HostData, routes, type TcpBlock, type Upstream } from '../api';
 import { Legend, LineChart, Swatch } from '../components/ui/Chart';
 import { Flow } from '../features/flow/Flow';
-import { RequestLog } from '../features/live/RequestLog';
+import { RequestLog, type RequestFocus } from '../features/live/RequestLog';
 import { Rules } from '../features/rules/Rules';
 import { TcpBlocks } from '../features/tcp/Tcp';
-import { layout } from '../features/flow/flowGraph';
+import { type FlowNode, layout } from '../features/flow/flowGraph';
 import { ms, rate } from '../lib/format';
 import { useLive } from '../features/live/live';
 import { Badge, Chip, ProtocolBadge, SourceBadge, Status, UpstreamHealth } from '../components/ui/Badge';
@@ -74,9 +74,20 @@ function Actions({ name }: { name: string }) {
   );
 }
 
-/** The host's traffic now (a graph), and since the page was opened (charts) */
+/**
+ * The host's traffic now (a graph), and since the page was opened (charts). Clicking a location or
+ * upstream shows its requests in the log below.
+ */
 function Traffic({ host }: { host: HostData }) {
   const { history, latest } = useLive();
+  const [focus, setFocus] = useState<RequestFocus | null>(null);
+  const log = useRef<HTMLDivElement>(null);
+  const pick = (node: FlowNode) => {
+    if (!node.filter) return;
+    const picked = focus?.location === node.filter.location && focus.upstreams?.[0] === node.filter.upstreams?.[0];
+    setFocus(picked ? null : { label: node.title, ...node.filter });
+    if (!picked) log.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const stats = latest?.hosts.find((candidate) => candidate.host === host.host);
   const points = history.map((point) => point.hosts[host.host]);
   const read = (value: (point: NonNullable<(typeof points)[number]>) => number | null) =>
@@ -84,7 +95,12 @@ function Traffic({ host }: { host: HostData }) {
   return (
     <PageSection title="Traffic" description="Requests to this host, from clients to upstreams">
       <Panel
-        title="Now"
+        title={
+          <Stack gap={2}>
+            <span class="status status-success animate-pulse" aria-hidden="true" />
+            Now
+          </Stack>
+        }
         aside={
           <Legend>
             <Swatch color="var(--color-success)">flowing</Swatch>
@@ -95,7 +111,7 @@ function Traffic({ host }: { host: HostData }) {
         }
       >
         <div class="px-4 pb-2.5">
-          <Flow draw={(width) => layout(host, stats, latest?.window_seconds, width)} />
+          <Flow draw={(width) => layout(host, stats, latest?.window_seconds, width)} selected={focus} onSelect={pick} />
         </div>
       </Panel>
       <Grid columns={2}>
@@ -118,7 +134,9 @@ function Traffic({ host }: { host: HostData }) {
           ]}
         />
       </Grid>
-      <RequestLog host={host.host} />
+      <div ref={log} class="scroll-mt-16">
+        <RequestLog host={host.host} focus={focus} onClearFocus={() => setFocus(null)} />
+      </div>
     </PageSection>
   );
 }

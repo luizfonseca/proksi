@@ -83,13 +83,39 @@ describe('the traffic graph', () => {
     expect(edge('location /status')).toMatchObject({ rate: 0, tone: 'idle' });
     // Refused connections aren't answered, but they're traffic, and failing
     expect(edge('upstream / 10.0.0.3:80')).toMatchObject({ rate: 2, tone: 'bad' });
-    expect(flow.nodes.find((node) => node.id === 'upstream / 10.0.0.3:80')!.detail).toBe('2/s failed');
+    expect(flow.nodes.find((node) => node.id === 'upstream / 10.0.0.3:80')!.detail).toBe('2/s failed · 17%');
     expect(flow.nodes.find((node) => node.id === 'location /')!.detail).toBe('10/s · p99 30 ms · 10% 5xx');
   });
 
   it('is idle without stats', () => {
     const flow = layout(host, undefined);
+    expect(flow.idle).toBe(true);
     expect(flow.edges.every((edge) => edge.rate === 0)).toBe(true);
     expect(flow.nodes[0].detail).toBe('idle');
+  });
+
+  it("gives each upstream its share of its location's traffic", () => {
+    const flow = layout(host, stats);
+    const node = (id: string) => flow.nodes.find((candidate) => candidate.id === id)!;
+    expect(flow.idle).toBe(false);
+    // 10/s answered by the first, 2/s refused by the third
+    expect(node('upstream / 10.0.0.1:80').share).toBeCloseTo(10 / 12);
+    expect(node('upstream / 10.0.0.1:80').detail).toBe('10/s · p99 28 ms · 83%');
+    expect(node('upstream / 10.0.0.2:80').share).toBe(0);
+  });
+
+  it('says what to filter requests by, and what to show when hovered', () => {
+    const flow = layout(host, stats);
+    const node = (id: string) => flow.nodes.find((candidate) => candidate.id === id)!;
+    expect(node('host').filter).toBeUndefined();
+    expect(node('location /').filter).toEqual({ location: '/' });
+    expect(node('upstream / 10.0.0.1:80').filter).toEqual({ location: '/', upstreams: ['10.0.0.1:80'] });
+    expect(node('location /').card).toEqual({
+      requests: 10,
+      responses: { '2xx': 45, '5xx': 5 },
+      duration: { p50: 1, p90: 2, p99: 30 },
+    });
+    expect(node('upstream / 10.0.0.2:80').card).toMatchObject({ health: 'unhealthy' });
+    expect(node('upstream / 10.0.0.3:80').card).toMatchObject({ failed: 2, health: 'healthy' });
   });
 });

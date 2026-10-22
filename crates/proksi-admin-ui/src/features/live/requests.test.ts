@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { add, addAll, KEPT, matches, type Served } from './requests';
+import { add, addAll, focused, KEPT, matches, type Served } from './requests';
 
 const served = (path: string): Served => ({
   time: 0,
@@ -37,5 +37,16 @@ describe('the latest requests', () => {
     for (const filter of ['b.test', '/web', 'post', '404', '4xx', 'a.test 2xx']) {
       expect(matches(one, filter), filter).toBe(false);
     }
+  });
+
+  it("keeps a location's requests, or an upstream's at any of its addresses", () => {
+    const at = (location: string | null, upstream: string | null): Served => ({ ...served('/'), location, upstream });
+    expect(focused(at('/api', '127.0.0.1:9001'), { location: '/api' })).toBe(true);
+    expect(focused(at('/', '127.0.0.1:9001'), { location: '/api' })).toBe(false);
+    const upstream = { location: '/api', upstreams: ['localhost:9001', '127.0.0.1:9001', '[::1]:9001'] };
+    expect(focused(at('/api', '127.0.0.1:9001'), upstream)).toBe(true);
+    expect(focused(at('/api', '[::1]:9001'), upstream)).toBe(true);
+    expect(focused(at('/api', '127.0.0.1:9002'), upstream)).toBe(false);
+    expect(focused(at('/api', null), upstream)).toBe(false);
   });
 });
