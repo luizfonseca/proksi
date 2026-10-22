@@ -1,4 +1,5 @@
 import type { ComponentChildren } from 'preact';
+import { useState } from 'preact/hooks';
 import { session as api, type Session, type Status as ServerStatus } from '../api';
 import { onLink } from '../router';
 import { useData } from '../api/useData';
@@ -44,19 +45,47 @@ function Instance({ status }: { status: ServerStatus }) {
   );
 }
 
-/** Who's signed in */
+/** Who's signed in: their initial, opening their name, what they can do, and signing out */
 function Account({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
+  const [open, setOpen] = useState(false);
   if (!session.name) return null;
   return (
-    <span class="flex items-center gap-3 border-l border-base-300 pl-3 text-sm">
-      <span class="whitespace-nowrap">
-        {session.name}
-        {session.access === 'read' && <Badge size="xs" class="ml-1.5">read-only</Badge>}
-      </span>
-      <Button variant="link" onClick={onSignOut}>
-        Sign out
-      </Button>
-    </span>
+    <div
+      class="relative"
+      onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
+      onFocusOut={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as globalThis.Node | null)) setOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        class="avatar avatar-placeholder cursor-pointer"
+        title={session.name}
+        aria-label={`Signed in as ${session.name}`}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <div class="w-8 rounded-full bg-primary text-sm font-semibold text-primary-content">
+          <span>{session.name.slice(0, 1).toUpperCase()}</span>
+        </div>
+      </button>
+      {open && (
+        <div class="absolute top-[calc(100%+8px)] right-0 z-20 w-56 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg">
+          <div class="text-xs text-base-content/60">Signed in as</div>
+          <div class="mt-0.5 flex items-center gap-2 font-semibold">
+            <span class="truncate">{session.name}</span>
+            <Badge size="xs" tone={session.access === 'write' ? 'primary' : 'neutral'}>
+              {session.access === 'write' ? 'read & write' : 'read-only'}
+            </Badge>
+          </div>
+          <div class="mt-3 border-t border-base-300 pt-2">
+            <Button variant="link" onClick={onSignOut}>
+              Sign out
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -101,9 +130,9 @@ export function Layout({ path, session, onSignOut, children }: Props) {
       <header class="border-b border-base-300 bg-base-100">
         <div class={`${WIDTH} flex h-14 items-center gap-3`}>
           <Brand version={ready?.version} />
-          <PaletteButton />
-          <div class="ml-auto flex items-center gap-3">
+          <div class="ml-auto flex items-center gap-2">
             {ready && <Instance status={ready} />}
+            <PaletteButton />
             <ThemeToggle />
             <Account session={session} onSignOut={signOut} />
           </div>
