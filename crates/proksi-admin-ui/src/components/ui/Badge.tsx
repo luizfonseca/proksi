@@ -60,7 +60,7 @@ export function Chip({ href, children }: { href?: string; children: ComponentChi
 
 /**
  * What a host or block serves: HTTP requests, or TCP connections. For a host's HTTP, `tls` says
- * whether it's HTTPS, or plain HTTP (marked as a warning: nothing is encrypted).
+ * whether it's HTTPS (green, with a lock, as browsers show a secure page) or plain HTTP (blue).
  */
 export function ProtocolBadge({ protocol, tls }: { protocol: 'http' | 'tcp'; tls?: boolean }) {
   if (protocol === 'tcp') {
@@ -80,7 +80,7 @@ export function ProtocolBadge({ protocol, tls }: { protocol: 'http' | 'tcp'; tls
   return (
     <Badge
       size="xs"
-      tone={tls ? 'info' : 'warning'}
+      tone={tls ? 'success' : 'info'}
       class="gap-1 font-mono font-semibold"
       title={tls ? 'HTTPS: served with TLS' : 'Plain HTTP: no TLS, nothing is encrypted'}
     >
