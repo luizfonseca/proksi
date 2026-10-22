@@ -3,8 +3,7 @@ import { get, type Host } from '../../api';
 import { useCanWrite } from '../../api/session';
 import type { ComponentType } from 'preact';
 import { Status } from '../../components/ui/Badge';
-import { Clock, Globe, Moon, Pencil, Plus, Pulse, Search, Server, Shield, SignOut } from '../../components/ui/icons';
-import { toggleTheme } from '../../components/ui/Theme';
+import { Clock, Globe, Pencil, Plus, Pulse, Search, Server, Shield, SignOut } from '../../components/ui/icons';
 import { navigate } from '../../router';
 import { ACTIONS, type Command, GROUPS, hostCommands, type IconName, PAGES, search } from './commands';
 
@@ -21,7 +20,6 @@ const ICONS: Record<IconName, ComponentType<{ class?: string }>> = {
   new: Plus,
   edit: Pencil,
   history: Clock,
-  theme: Moon,
   'sign-out': SignOut,
 };
 
@@ -118,7 +116,6 @@ export function Palette({ onSignOut }: { onSignOut: () => void }) {
     if (!command) return;
     setOpen(false);
     if ('href' in command.run) navigate(command.run.href);
-    else if (command.run.action === 'theme') toggleTheme();
     else onSignOut();
   };
   const onKeyDown = (event: KeyboardEvent) => {

@@ -29,4 +29,4 @@ Tests sit next to the file they test (`ruleModel.ts`, `ruleModel.test.ts`).
 
 ## Styles
 
-`src/styles.css` uses daisyUI's own `light` theme, and `black` when the system prefers dark, with Proksi's colors and rounder corners. Pages are built from the components in `components/ui/` rather than class names. The build keeps only the CSS the sources use: Tailwind's classes found in `src/`, and the daisyUI parts listed in `include` there. A component that starts using another daisyUI part adds it to that list.
+`src/styles.css` uses daisyUI's own `black` theme, the only one, with Proksi's colors and rounder corners. Pages are built from the components in `components/ui/` rather than class names. The build keeps only the CSS the sources use: Tailwind's classes found in `src/`, and the daisyUI parts listed in `include` there. A component that starts using another daisyUI part adds it to that list.

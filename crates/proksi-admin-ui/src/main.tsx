@@ -2,7 +2,6 @@ import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { session, type Session, Unauthorized } from './api';
 import { Alert } from './components/ui/Alert';
-import { applyTheme } from './components/ui/Theme';
 import { Layout } from './components/Layout';
 import { Certificates } from './pages/Certificates';
 import { EditHost } from './pages/EditHost';
@@ -65,5 +64,4 @@ function App() {
   );
 }
 
-applyTheme();
 render(<App />, document.getElementById('app')!);

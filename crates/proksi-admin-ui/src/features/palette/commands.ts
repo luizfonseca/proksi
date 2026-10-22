@@ -4,7 +4,7 @@ import type { Host } from '../../api';
 export const GROUPS = ['Hosts', 'Pages', 'Actions'] as const;
 
 /** Icons of pages and actions (hosts show their health) */
-export type IconName = 'overview' | 'hosts' | 'certificates' | 'server' | 'new' | 'edit' | 'history' | 'theme' | 'sign-out';
+export type IconName = 'overview' | 'hosts' | 'certificates' | 'server' | 'new' | 'edit' | 'history' | 'sign-out';
 
 /** Something the palette opens or does */
 export type Command = {
@@ -21,7 +21,7 @@ export type Command = {
   /** Shown only once something is typed (each host's editor and history) */
   searched?: boolean;
   /** A page of the UI, or something to do */
-  run: { href: string } | { action: 'theme' | 'sign-out' };
+  run: { href: string } | { action: 'sign-out' };
 };
 
 export const PAGES: Command[] = [
@@ -32,7 +32,6 @@ export const PAGES: Command[] = [
 ];
 
 export const ACTIONS: Command[] = [
-  { title: 'Switch theme', group: 'Actions', icon: 'theme', keywords: 'dark light mode', run: { action: 'theme' } },
   { title: 'Sign out', group: 'Actions', icon: 'sign-out', keywords: 'log out', run: { action: 'sign-out' } },
 ];
 

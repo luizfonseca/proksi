@@ -3,38 +3,20 @@
 @source './';
 
 /*
- * daisyUI's own themes, light and (when the system prefers it) black, with Proksi's color as their
- * primary, and rounder corners. Only the parts of daisyUI the UI uses are built: a class name that
- * appears anywhere in the sources (a variable named `steps`, `list`, `filter`) would otherwise bring
- * its part in. Add a part here when a component starts using it.
+ * daisyUI's own `black` theme, the only one, with Proksi's colors and rounder corners. Only the
+ * parts of daisyUI the UI uses are built: a class name that appears anywhere in the sources (a
+ * variable named `steps`, `list`, `filter`) would otherwise bring its part in. Add a part here when
+ * a component starts using it.
  */
 @plugin 'daisyui' {
-  themes: light --default, black --prefersdark;
+  themes: black --default;
   logs: false;
   include: rootcolor, scrollbar, radius, alert, avatar, badge, breadcrumbs, button, checkbox, input, kbd, link, menu, modal, progress, select, skeleton, stat, status, tab, table, textarea;
 }
 
 @plugin 'daisyui/theme' {
-  name: 'light';
-  default: true;
-  --color-primary: #e11d48;
-  --color-primary-content: #ffffff;
-  /* Light's own are pink (too close to the primary), cyan, and a yellow too pale for text */
-  --color-secondary: #7c3aed;
-  --color-secondary-content: #ffffff;
-  --color-info: #2563eb;
-  --color-info-content: #ffffff;
-  --color-warning: #d97706;
-  --color-warning-content: #ffffff;
-  /* Rounder than daisyUI's own */
-  --radius-selector: 0.5rem;
-  --radius-field: 0.5rem;
-  --radius-box: 0.75rem;
-}
-
-@plugin 'daisyui/theme' {
   name: 'black';
-  prefersdark: true;
+  default: true;
   --color-primary: #fb7185;
   --color-primary-content: #18181b;
   /* A near-black page, cards a step lighter with a faint border, softer status colors */

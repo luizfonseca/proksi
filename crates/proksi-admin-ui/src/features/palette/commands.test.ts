@@ -44,7 +44,6 @@ describe('the palette', () => {
       'Certificates',
       'Server',
       'New host',
-      'Switch theme',
       'Sign out',
     ]);
   });

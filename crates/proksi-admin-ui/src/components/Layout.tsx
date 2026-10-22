@@ -6,7 +6,6 @@ import { useData } from '../api/useData';
 import { Badge, Status } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Globe, Pulse, Server, Shield } from './ui/icons';
-import { ThemeToggle } from './ui/Theme';
 import { Palette, PaletteButton } from '../features/palette/Palette';
 
 const NAV = [
@@ -134,7 +133,6 @@ export function Layout({ path, session, onSignOut, children }: Props) {
           <div class="ml-auto flex items-center gap-2">
             {ready && <Instance status={ready} />}
             <PaletteButton />
-            <ThemeToggle />
             <Account session={session} onSignOut={signOut} />
           </div>
         </div>
