@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ms, percent, rate } from '../../lib/format';
 import { type Card, type Flow as FlowData, type FlowEdge, type FlowNode, type Focus, NODE_HEIGHT } from './flowGraph';
+import { useChanged } from '../../lib/motion';
 
 /** A title that fits its node (about 6.8px a character) */
 function fit(text: string, width: number): string {
@@ -46,9 +47,11 @@ function Node({
 }) {
   const top = node.y - NODE_HEIGHT / 2;
   const select = onSelect && node.filter ? () => onSelect(node) : undefined;
+  // Its border pulses once when its state changes (flowing to failing, or back)
+  const changed = useChanged(node.tone);
   return (
     <g
-      class={`node ${node.tone} ${select ? 'selectable' : ''} ${selected ? 'selected' : ''}`}
+      class={`node ${node.tone} ${select ? 'selectable' : ''} ${selected ? 'selected' : ''} ${changed ? 'changed' : ''}`}
       onMouseEnter={() => onHover(node)}
       onMouseLeave={() => onHover(null)}
       onClick={select}

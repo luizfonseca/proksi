@@ -135,6 +135,14 @@
     stroke: var(--color-base-content);
     stroke-opacity: 0.5;
   }
+  svg.flow .node.changed rect {
+    animation: node-flash 1.2s ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    svg.flow .node.changed rect {
+      animation: none;
+    }
+  }
   svg.flow .node.selected rect {
     stroke: var(--color-primary);
     stroke-opacity: 1;
@@ -197,6 +205,51 @@
   /* A location the traffic view links to */
   .location:target {
     @apply border-primary ring-3 ring-primary/20;
+  }
+}
+
+/* A page fades in as it opens */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* A request just arrived slides in from the top */
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+/* A status that changed: a ring of its color, once */
+@keyframes dot-flash {
+  from {
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  to {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+/* A line drawn from its start, the first time it's shown */
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+/* A box of the traffic graph whose state changed */
+@keyframes node-flash {
+  0%,
+  100% {
+    stroke-width: 1;
+  }
+  30% {
+    stroke-width: 3;
+    stroke-opacity: 1;
   }
 }
 

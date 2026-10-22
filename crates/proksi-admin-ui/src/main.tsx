@@ -58,7 +58,9 @@ function App() {
   return (
     <SessionContext.Provider value={signedIn}>
       <Layout path={path} session={signedIn} onSignOut={() => setSignedIn(null)}>
-        <Page key={path} path={path} />
+        <div key={path} class="motion-safe:animate-[page-in_160ms_ease-out]">
+          <Page path={path} />
+        </div>
       </Layout>
     </SessionContext.Provider>
   );

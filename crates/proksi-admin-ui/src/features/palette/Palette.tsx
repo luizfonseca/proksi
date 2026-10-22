@@ -130,7 +130,7 @@ export function Palette({ onSignOut }: { onSignOut: () => void }) {
   };
 
   return (
-    <dialog ref={dialog} class="modal items-start pt-[12vh]" onClose={() => setOpen(false)} aria-label="Search pages, hosts and actions">
+    <dialog ref={dialog} class="modal items-start pt-[12vh] backdrop-blur-[2px]" onClose={() => setOpen(false)} aria-label="Search pages, hosts and actions">
       <div class="modal-box max-w-xl p-0">
         <label class="flex items-center gap-3 border-b border-base-300 px-4">
           <Search class="size-4 text-base-content/45" />

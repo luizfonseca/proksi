@@ -133,7 +133,7 @@ export function Sparkline({
   const top = niceMax(Math.max(0, ...shown.filter((value): value is number => value !== null)));
   return (
     <svg class={`sparkline w-full ${placed}`} viewBox={`0 0 ${WIDTH} 40`} preserveAspectRatio="none" aria-hidden="true">
-      <path d={path(shown, span, top, 40)} stroke={color} />
+      <path class="motion-safe:animate-[draw_900ms_ease-out]" pathLength={1} stroke-dasharray="1" d={path(shown, span, top, 40)} stroke={color} />
     </svg>
   );
 }

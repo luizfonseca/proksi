@@ -26,7 +26,7 @@ export function Drawer({
     if (!open && element?.open) element.close();
   }, [open]);
   return (
-    <dialog ref={dialog} class="modal modal-bottom" onClose={onClose}>
+    <dialog ref={dialog} class="modal modal-bottom backdrop-blur-[2px]" onClose={onClose}>
       <div class="modal-box flex max-h-[70vh] flex-col p-0">
         <div class="border-b border-base-300 py-4">
           <div class={`${ROW} flex items-center justify-between gap-3`}>

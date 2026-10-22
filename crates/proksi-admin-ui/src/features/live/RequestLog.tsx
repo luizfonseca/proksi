@@ -60,6 +60,15 @@ function Request({ served, host, onClose }: { served: Served | null; host?: stri
   );
 }
 
+/** A key for each request, so rows already shown aren't drawn (or animated) again */
+const keys = new WeakMap<Served, number>();
+let nextKey = 0;
+const keyOf = (served: Served) => {
+  let key = keys.get(served);
+  if (key === undefined) keys.set(served, (key = nextKey++));
+  return key;
+};
+
 /** Requests of one location or upstream only, picked in the host's traffic: `label` names it */
 export type RequestFocus = { label: string; location: string; upstreams?: string[] };
 
@@ -126,7 +135,7 @@ export function RequestLog({
         <div class="font-mono text-xs [&_th]:font-sans" onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)}>
           <Table height={420} columns={['Time', 'Status', 'Request', 'Duration', 'Client', 'Upstream']}>
             {shown.slice(0, DRAWN).map((served) => (
-              <Row onClick={() => setSelected(served)}>
+              <Row key={keyOf(served)} class="motion-safe:animate-[row-in_240ms_ease-out]" onClick={() => setSelected(served)}>
                 <Cell class="text-base-content/45">{new Date(served.time).toLocaleTimeString()}</Cell>
                 <Cell>
                   <Badge class="font-sans" tone={tone(served.status)}>

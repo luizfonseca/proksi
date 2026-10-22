@@ -14,6 +14,7 @@ import { bytes, ms, percent, rate } from '../lib/format';
 import { activeHosts, type Point, type Stats, useLive } from '../features/live/live';
 import { useData } from '../api/useData';
 import { Time } from '../components/ui/Time';
+import { useTween } from '../lib/motion';
 
 const SPANS = [
   { label: '1m', points: 60 },
@@ -32,9 +33,29 @@ const COLORS = {
 };
 
 /** A number, with a line of its latest values across the bottom */
-function Card({ label, value, detail, values, color }: { label: string; value: string; detail?: string; values: (number | null)[]; color: string }) {
+/** A number as it changes: rolling to each new value */
+function Rolling({ value, format }: { value: number | null; format: (value: number) => string }) {
+  const shown = useTween(value);
+  return <>{shown === null ? '—' : format(shown)}</>;
+}
+
+function Card({
+  label,
+  value,
+  format,
+  detail,
+  values,
+  color,
+}: {
+  label: string;
+  value: number | null;
+  format: (value: number) => string;
+  detail?: string;
+  values: (number | null)[];
+  color: string;
+}) {
   return (
-    <Stat class="relative content-start overflow-hidden pb-11" title={label} value={value} detail={detail}>
+    <Stat class="relative content-start overflow-hidden pb-11" title={label} value={<Rolling value={value} format={format} />} detail={detail}>
       <Sparkline values={values} color={color} />
     </Stat>
   );
@@ -163,24 +184,27 @@ export function Overview() {
       />
 
       <Cards columns={5}>
-        <Card label="Requests" value={last ? rate(last.requests) : '—'} values={take(history, (point) => point.requests)} color="var(--color-success)" />
+        <Card label="Requests" value={last?.requests ?? null} format={rate} values={take(history, (point) => point.requests)} color="var(--color-success)" />
         <Card
           label="Errors (5xx)"
-          value={last ? percent(last.errors * 100) : '—'}
+          value={last ? last.errors * 100 : null}
+          format={percent}
           values={take(history, (point) => point.errors * 100)}
           color="var(--color-error)"
         />
-        <Card label="Latency p99" value={last ? ms(last.p99) : '—'} detail={last ? `p50 ${ms(last.p50)}` : undefined} values={take(history, (point) => point.p99)} color="var(--chart-3)" />
+        <Card label="Latency p99" value={last?.p99 ?? null} format={ms} detail={last ? `p50 ${ms(last.p50)}` : undefined} values={take(history, (point) => point.p99)} color="var(--chart-3)" />
         <Card
           label="CPU"
-          value={last ? percent(last.cpu) : '—'}
+          value={last?.cpu ?? null}
+          format={percent}
           detail={process?.cpu_limit ? `of 1 core · limit ${process.cpu_limit} cores` : 'of 1 core'}
           values={take(history, (point) => point.cpu)}
           color="var(--chart-2)"
         />
         <Card
           label="Memory"
-          value={last ? bytes(last.memory) : '—'}
+          value={last?.memory ?? null}
+          format={bytes}
           detail={memoryLimit ? `of ${bytes(memoryLimit)}` : last ? `allocator ${bytes(last.allocator)}` : undefined}
           values={take(history, (point) => point.memory)}
           color="var(--chart-4)"

@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { onLink } from '../../router';
 import { Lock } from './icons';
+import { useChanged } from '../../lib/motion';
 
 const TONES = {
   neutral: 'border-base-300 bg-base-200 text-base-content/70',
@@ -40,7 +41,9 @@ const STATUSES = { success: 'status-success', warning: 'status-warning', error: 
 
 /** A dot: healthy, failing, or neither */
 export function Status({ tone, title }: { tone: keyof typeof STATUSES; title?: string }) {
-  return <span class={`status ${STATUSES[tone]}`} title={title} />;
+  // A ring around it, once, when it changes (healthy to failing, or back)
+  const changed = useChanged(tone);
+  return <span class={`status ${STATUSES[tone]} ${changed ? 'animate-[dot-flash_1.2s_ease-out]' : ''}`} title={title} />;
 }
 
 /** A short code-like name: a block, an address, a tag. A link to a page of the UI with `href`. */
