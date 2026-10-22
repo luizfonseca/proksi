@@ -155,7 +155,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    if: ${{ needs.release.outputs.release_created }} && ${{ needs.build.result == 'success' }}
+    if: ${{ needs.release.outputs.release_created && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
