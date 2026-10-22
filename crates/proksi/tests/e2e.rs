@@ -4030,7 +4030,7 @@ host "contract.test" {
     upstream "127.0.0.1:{http_upstream_port}" {}
 
     openapi {
-      spec            = "{spec}"
+      file            = "{spec}"
       base_path       = "/api"
       on_missing_spec = "deny"
     }

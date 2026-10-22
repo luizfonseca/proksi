@@ -1,4 +1,4 @@
-//! `openapi { spec = "/etc/proksi/api.json" }`: only lets through requests in an API's
+//! `openapi { file = "/etc/proksi/api.json" }`: only lets through requests in an API's
 //! contract, as an `OpenAPI` 3 spec (JSON or YAML) says: a path of the spec (`404` otherwise), one
 //! of its methods (`405`, with `Allow`), and its required query and header parameters (`400`).
 //! Bodies aren't checked.
@@ -42,13 +42,13 @@ pub(crate) struct OpenApi {
 impl OpenApi {
     pub(crate) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
         let settings: super::settings::OpenApi = super::settings::read("openapi", plugin)?;
-        let origin = match (settings.spec, settings.url) {
+        let origin = match (settings.file, settings.url) {
             (Some(file), None) => Origin::File(file.into()),
             (None, Some(url)) if url.starts_with("http://") || url.starts_with("https://") => {
                 Origin::Url(url)
             }
             (None, Some(url)) => return Err(format!("openapi: url {url:?} isn't an http(s) URL")),
-            _ => return Err("openapi: give either `spec` (a file) or `url`".to_string()),
+            _ => return Err("openapi: give either `file` or `url`".to_string()),
         };
         let refresh = match &settings.refresh {
             None => DEFAULT_REFRESH,
@@ -164,28 +164,28 @@ mod tests {
     #[test]
     fn test_settings() {
         let api =
-            block(serde_json::json!({ "spec": "/nonexistent/api.json", "base_path": "/api/" }))
+            block(serde_json::json!({ "file": "/nonexistent/api.json", "base_path": "/api/" }))
                 .unwrap();
         assert_eq!(api.base_path.as_deref(), Some("/api"));
         for (config, err) in [
             (
                 serde_json::json!({}),
-                "openapi: give either `spec` (a file) or `url`",
+                "openapi: give either `file` or `url`",
             ),
             (
-                serde_json::json!({ "spec": "a.json", "url": "https://a.test/a.json" }),
-                "openapi: give either `spec` (a file) or `url`",
+                serde_json::json!({ "file": "a.json", "url": "https://a.test/a.json" }),
+                "openapi: give either `file` or `url`",
             ),
             (
                 serde_json::json!({ "url": "ftp://a.test/a.json" }),
                 "openapi: url \"ftp://a.test/a.json\" isn't an http(s) URL",
             ),
             (
-                serde_json::json!({ "spec": "a.json", "base_path": "api" }),
+                serde_json::json!({ "file": "a.json", "base_path": "api" }),
                 "openapi: base_path \"api\" must start with `/`",
             ),
             (
-                serde_json::json!({ "spec": "a.json", "refresh": "often" }),
+                serde_json::json!({ "file": "a.json", "refresh": "often" }),
                 "openapi: refresh \"often\" is not a duration such as \"30s\" or \"5m\"",
             ),
         ] {

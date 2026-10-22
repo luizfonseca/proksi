@@ -19,7 +19,7 @@ host "api.example.com" {
     upstream "api:8080" {}
 
     openapi {
-      spec      = "/etc/proksi/specs/api.yaml"
+      file      = "/etc/proksi/specs/api.yaml"
       base_path = "/v1"
     }
   }
@@ -30,7 +30,7 @@ host "api.example.com" {
 
 | Name | Description |
 | --- | --- |
-| `spec` | The spec's file, JSON or YAML |
+| `file` | The spec's file, JSON or YAML |
 | `url` | The spec's URL, instead of a file |
 | `refresh` | How often the spec is looked at for a change, such as `"30s"` (default: `"1m"`) |
 | `base_path` | Removed from a request's path before it's matched: `"/v1"` for a spec whose paths start at `/users`, served at `/v1/users` |

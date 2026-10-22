@@ -139,8 +139,8 @@ where
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct OpenApi {
-    /// The spec's file
-    pub spec: Option<String>,
+    /// The spec's file, JSON or YAML
+    pub file: Option<String>,
     /// The spec's URL, instead of a file
     pub url: Option<String>,
     /// How often the spec is looked at for a change, such as "1m" (default)
