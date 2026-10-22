@@ -491,11 +491,7 @@ where
 
         let mut downstream_state = DownstreamStateMachine::new(session.as_mut().is_body_done());
 
-        // proksi: a body read by a filter, else the one read before a retry
-        let buffer = self
-            .inner
-            .buffered_request_body(ctx)
-            .or_else(|| session.as_ref().get_retry_buffer());
+        let buffer = session.as_ref().get_retry_buffer();
 
         // retry, send buffer if it exists or body empty
         if buffer.is_some() || session.as_mut().is_body_empty() {

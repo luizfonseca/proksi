@@ -6,7 +6,7 @@
 //! a plugin needs from proksi for a request (its host, its client, applying the location's
 //! response blocks to an answer) it asks through [`RequestCtx`].
 
-use std::{borrow::Cow, collections::HashMap, net::IpAddr, sync::Arc, time::Duration};
+use std::{any::Any, borrow::Cow, collections::HashMap, net::IpAddr, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -37,7 +37,6 @@ use waiting_room::WaitingRoom;
 pub mod allocations;
 mod bandwidth_limit;
 mod basic_auth;
-pub mod body;
 pub mod body_limit;
 mod body_rewrite;
 mod compress;
@@ -107,11 +106,8 @@ pub trait RequestCtx: Send {
     /// Adds a header to the response, whoever answers the request
     fn add_response_header(&mut self, name: http::HeaderName, value: http::HeaderValue);
 
-    /// The request body, if a block already read it all
-    fn request_body(&self) -> Option<&Bytes>;
-
-    /// Sends `body` upstream instead of the client's, which a block read all
-    fn set_request_body(&mut self, body: Bytes);
+    /// What blocks keep for this request, by block: see [`block_state`]
+    fn block_states(&mut self) -> &mut Vec<(usize, Box<dyn Any + Send + Sync>)>;
 
     /// The store shared by the replicas (memory, Redis or SQL)
     fn store(&self) -> Arc<dyn proksi_store::Store>;
@@ -131,14 +127,16 @@ pub trait Middleware: Send + Sync {
         Ok(false)
     }
 
-    /// Each part of the request body, as it's proxied. An error ends the request.
+    /// Each part of the request body, as it's proxied, which a block can change (the last one
+    /// with `end_of_stream`).
     ///
     /// # Errors
     ///
     /// An error ends the request.
     fn request_body(
         &self,
-        _body: Option<&Bytes>,
+        _body: &mut Option<Bytes>,
+        _end_of_stream: bool,
         _ctx: &mut dyn RequestCtx,
     ) -> pingora::Result<()> {
         Ok(())
@@ -383,4 +381,19 @@ mod tests {
         // And every set of settings is a plugin's (none missing from `Kind::ALL`)
         assert!(schemas.keys().all(|name| Kind::from_name(name).is_some()));
     }
+}
+
+/// What the block `owner` keeps for the current request, if it set something
+pub fn block_state<T: Any>(ctx: &mut dyn RequestCtx, owner: usize) -> Option<&mut T> {
+    ctx.block_states()
+        .iter_mut()
+        .find(|(id, state)| *id == owner && state.is::<T>())
+        .and_then(|(_, state)| state.downcast_mut())
+}
+
+/// Keeps `state` for the block `owner` for the current request, replacing what it kept
+pub fn set_block_state<T: Any + Send + Sync>(ctx: &mut dyn RequestCtx, owner: usize, state: T) {
+    let states = ctx.block_states();
+    states.retain(|(id, kept)| !(*id == owner && kept.is::<T>()));
+    states.push((owner, Box::new(state)));
 }

@@ -56,12 +56,8 @@ impl RequestCtx for RouterContext {
         self.response_headers.push((name, value));
     }
 
-    fn request_body(&self) -> Option<&Bytes> {
-        self.request_body.as_ref()
-    }
-
-    fn set_request_body(&mut self, body: Bytes) {
-        self.request_body = Some(body);
+    fn block_states(&mut self) -> &mut Vec<(usize, Box<dyn std::any::Any + Send + Sync>)> {
+        &mut self.block_states
     }
 
     fn store(&self) -> Arc<dyn Store> {

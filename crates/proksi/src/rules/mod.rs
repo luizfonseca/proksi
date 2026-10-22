@@ -186,7 +186,11 @@ impl Applied {
 }
 
 /// Each part of the request body, as it's proxied: an error ends the request
-pub fn request_body(body: Option<&Bytes>, ctx: &mut RouterContext) -> pingora::Result<()> {
+pub fn request_body(
+    body: &mut Option<Bytes>,
+    end_of_stream: bool,
+    ctx: &mut RouterContext,
+) -> pingora::Result<()> {
     if ctx.rules.is_empty() {
         return Ok(());
     }
@@ -194,7 +198,11 @@ pub fn request_body(body: Option<&Bytes>, ctx: &mut RouterContext) -> pingora::R
     let result = applied
         .0
         .iter()
-        .try_for_each(|then| then.blocks.request_body(body, ctx).map_err(|(_, err)| err));
+        .try_for_each(|then| {
+            then.blocks
+                .request_body(body, end_of_stream, ctx)
+                .map_err(|(_, err)| err)
+        });
     ctx.rules = applied;
     result
 }

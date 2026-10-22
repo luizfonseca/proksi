@@ -1,62 +1,60 @@
 //! `body_rewrite { json { set = { ... }, remove = [...] }, replace { pattern, with } }`: changes
-//! the request body before it's sent upstream. The body is read whole first (up to `max_size`,
-//! `413` beyond), and sent with its new `Content-Length`.
-
-use std::borrow::Cow;
+//! the request body as it's proxied, a part at a time, without holding it: JSON values by path
+//! (`stream`), then regular expressions (`replace`). The new body's length isn't known when the
+//! request is sent upstream, so it's sent without `Content-Length` (chunked to HTTP/1.1
+//! upstreams).
 
 use anyhow::Result;
 use async_trait::async_trait;
 use bytes::Bytes;
-use http::{header, StatusCode};
-use pingora::{http::ResponseHeader, proxy::Session};
+use http::{header, Version};
+use pingora::{http::RequestHeader, proxy::Session};
 
-use crate::{
-    body::{self, Unread},
-    body_limit::parse_size,
-    respond::respond,
-    RequestCtx, RoutePlugin,
-};
+use crate::{block_state, body_limit::parse_size, set_block_state, RequestCtx, RoutePlugin};
 
 use super::Middleware;
 
-use json::Edit;
+use path::Step;
+use replace::{Replace, Replacing};
+use stream::{Action, Editor, Target};
 
-mod json;
 mod path;
+mod replace;
+mod stream;
 
-const DEFAULT_MAX_SIZE: u64 = 1024 * 1024;
+const DEFAULT_MAX_MATCH: usize = 1024;
 
 /// Compiled patterns are limited, as for regex locations
 const REGEX_SIZE_LIMIT: usize = 1024 * 1024;
 
 pub(crate) struct BodyRewrite {
-    max_size: u64,
-    /// Changes to JSON bodies, in order
-    edits: Vec<Edit>,
-    replaces: Vec<(regex::bytes::Regex, Vec<u8>)>,
+    /// Changes to JSON bodies
+    targets: Vec<Target>,
+    replaces: Vec<Replace>,
+}
+
+/// Where the changes are in a request's body
+struct Rewriting {
+    json: Option<Editor>,
+    replacing: Vec<Replacing>,
 }
 
 impl BodyRewrite {
     pub(crate) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
         let settings: super::settings::BodyRewrite = super::settings::read("body_rewrite", plugin)?;
         let in_block = |err: String| format!("body_rewrite: {err}");
-        let max_size = match &settings.max_size {
-            None => DEFAULT_MAX_SIZE,
-            Some(size) => parse_size(size).ok_or_else(|| {
-                in_block(format!(
-                    "max_size {size:?} is not a size such as \"512KiB\" or \"1MiB\""
-                ))
-            })?,
-        };
 
         let json = settings.json.unwrap_or_default();
-        let sets = json
-            .set
+        let sets = json.set.iter().flatten().map(|(path, value)| {
+            let value = serde_json::to_vec(value).map_err(|err| err.to_string())?;
+            target(path, Action::Set(value))
+        });
+        let removes = json
+            .remove
             .iter()
             .flatten()
-            .map(|(path, value)| Edit::set(path, value));
-        let removes = json.remove.iter().flatten().map(|path| Edit::remove(path));
-        let edits = sets
+            .map(|path| target(path, Action::Remove));
+        let targets = sets
             .chain(removes)
             .collect::<Result<Vec<_>, _>>()
             .map_err(in_block)?;
@@ -68,45 +66,55 @@ impl BodyRewrite {
                 let regex = regex::bytes::RegexBuilder::new(&replace.pattern)
                     .size_limit(REGEX_SIZE_LIMIT)
                     .build()
-                    .map_err(|err| in_block(format!("pattern {:?}: {err}", replace.pattern)))?;
-                Ok((regex, replace.with.into_bytes()))
+                    .map_err(|err| format!("pattern {:?}: {err}", replace.pattern))?;
+                let max_match = match &replace.max_match {
+                    None => DEFAULT_MAX_MATCH,
+                    Some(size) => parse_size(size)
+                        .and_then(|size| usize::try_from(size).ok())
+                        .ok_or_else(|| {
+                            format!("max_match {size:?} is not a size such as \"1KiB\"")
+                        })?,
+                };
+                Ok(Replace {
+                    regex,
+                    with: replace.with.into_bytes(),
+                    max_match,
+                })
             })
-            .collect::<Result<Vec<_>, String>>()?;
+            .collect::<Result<Vec<_>, String>>()
+            .map_err(in_block)?;
 
-        if edits.is_empty() && replaces.is_empty() {
+        if targets.is_empty() && replaces.is_empty() {
             return Err(in_block(
                 "nothing to change: add `json` or `replace`".to_string(),
             ));
         }
-        Ok(Self {
-            max_size,
-            edits,
-            replaces,
-        })
+        Ok(Self { targets, replaces })
     }
 
-    /// `body` changed, or `None` when nothing applies to it
-    fn rewrite(&self, body: &[u8], is_json: bool) -> Option<Vec<u8>> {
-        let mut changed: Option<Vec<u8>> = None;
-        for edit in self.edits.iter().filter(|_| is_json) {
-            let new = edit.apply(changed.as_deref().unwrap_or(body));
-            changed = new.or(changed);
-        }
-        for (regex, with) in &self.replaces {
-            if let Cow::Owned(new) =
-                regex.replace_all(changed.as_deref().unwrap_or(body), with.as_slice())
-            {
-                changed = Some(new);
-            }
-        }
-        changed
+    /// This block, among the blocks keeping something for a request
+    fn id(&self) -> usize {
+        std::ptr::from_ref(self) as usize
     }
 }
 
+/// A path, compiled
+fn target(path: &str, action: Action) -> Result<Target, String> {
+    let steps = path::parse(path)?;
+    let key = match (&action, steps.last()) {
+        (Action::Set(_), Some(Step::Key(key))) => {
+            Some(serde_json::to_vec(key).map_err(|err| err.to_string())?)
+        }
+        _ => None,
+    };
+    Ok(Target { steps, action, key })
+}
+
 /// `application/json`, or a type ending with `+json` (`application/merge-patch+json`)
-fn is_json(session: &Session) -> bool {
-    let content_type = session.req_header().headers.get(header::CONTENT_TYPE);
-    let media_type = content_type
+fn is_json(request: &RequestHeader) -> bool {
+    let media_type = request
+        .headers
+        .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
         .map(str::trim)
@@ -117,32 +125,59 @@ fn is_json(session: &Session) -> bool {
             .is_some_and(|suffix| suffix.eq_ignore_ascii_case("+json"))
 }
 
-#[async_trait]
-impl Middleware for BodyRewrite {
-    async fn request(&self, session: &mut Session, ctx: &mut dyn RequestCtx) -> Result<bool> {
-        let body = match body::read(session, ctx, self.max_size).await {
-            Ok(body) => body,
-            Err(Unread::TooLarge) => {
-                return refuse(session, ctx, StatusCode::PAYLOAD_TOO_LARGE).await
-            }
-            Err(Unread::Failed) => return refuse(session, ctx, StatusCode::BAD_REQUEST).await,
-        };
-        if let Some(changed) = self.rewrite(&body, is_json(session)) {
-            ctx.set_request_body(Bytes::from(changed));
-        }
-        Ok(false)
-    }
+/// Whether the request has a body (a length that isn't 0, or a chunked one)
+fn has_body(request: &RequestHeader) -> bool {
+    let length = request.headers.get(header::CONTENT_LENGTH);
+    length.is_some_and(|length| length.as_bytes() != b"0")
+        || request.headers.contains_key(header::TRANSFER_ENCODING)
 }
 
-async fn refuse(
-    session: &mut Session,
-    ctx: &mut dyn RequestCtx,
-    status: StatusCode,
-) -> Result<bool> {
-    let mut response = ResponseHeader::build_no_case(status, Some(1))?;
-    response.insert_header(header::CONTENT_LENGTH, "0")?;
-    respond(session, ctx, response).await?;
-    Ok(true)
+#[async_trait]
+impl Middleware for BodyRewrite {
+    /// Decides whether the body is changed, and sends the request without its length if so.
+    /// Runs for each upstream tried: a retried body starts again.
+    async fn upstream_request(
+        &self,
+        _session: &mut Session,
+        request: &mut RequestHeader,
+        ctx: &mut dyn RequestCtx,
+    ) -> Result<()> {
+        let json = !self.targets.is_empty() && is_json(request);
+        if !has_body(request) || (!json && self.replaces.is_empty()) {
+            return Ok(());
+        }
+        request.remove_header(&header::CONTENT_LENGTH);
+        // HTTP/2 frames the body itself; Pingora removed `Transfer-Encoding` for it
+        if request.version != Version::HTTP_2 {
+            request.insert_header(header::TRANSFER_ENCODING, "chunked")?;
+        }
+        let rewriting = Rewriting {
+            json: json.then(Editor::default),
+            replacing: self.replaces.iter().map(|_| Replacing::default()).collect(),
+        };
+        set_block_state(ctx, self.id(), rewriting);
+        Ok(())
+    }
+
+    fn request_body(
+        &self,
+        body: &mut Option<Bytes>,
+        end_of_stream: bool,
+        ctx: &mut dyn RequestCtx,
+    ) -> pingora::Result<()> {
+        let Some(rewriting) = block_state::<Rewriting>(ctx, self.id()) else {
+            return Ok(());
+        };
+        let mut part = body.take().unwrap_or_default();
+        if let Some(editor) = &mut rewriting.json {
+            part = editor.edit(&self.targets, &part, end_of_stream);
+        }
+        for (replace, replacing) in self.replaces.iter().zip(&mut rewriting.replacing) {
+            part = replacing.replace(replace, &part, end_of_stream);
+        }
+        *body = Some(part);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -158,22 +193,15 @@ mod tests {
         })
     }
 
-    fn rewrite(block: &BodyRewrite, body: &str, is_json: bool) -> Option<String> {
-        block
-            .rewrite(body.as_bytes(), is_json)
-            .map(|out| String::from_utf8(out).unwrap())
-    }
-
     #[test]
     fn test_settings() {
         let edits = block(serde_json::json!({
-            "max_size": "64KiB",
             "json": { "set": { "$.role": "guest" }, "remove": ["$.debug"] },
-            "replace": { "pattern": "secret-[0-9]+", "with": "[redacted]" },
+            "replace": { "pattern": "secret-[0-9]+", "with": "[redacted]", "max_match": "64B" },
         }))
         .unwrap();
-        assert_eq!(edits.max_size, 64 * 1024);
-        assert_eq!((edits.edits.len(), edits.replaces.len()), (2, 1));
+        assert_eq!((edits.targets.len(), edits.replaces.len()), (2, 1));
+        assert_eq!(edits.replaces[0].max_match, 64);
 
         for (config, err) in [
             (
@@ -185,37 +213,13 @@ mod tests {
                 "body_rewrite: \"$.items[*]\": wildcards (`[*]`) aren't supported yet",
             ),
             (
-                serde_json::json!({ "max_size": "big", "json": { "remove": ["$.a"] } }),
-                "body_rewrite: max_size \"big\" is not a size such as \"512KiB\" or \"1MiB\"",
+                serde_json::json!({ "replace": { "pattern": "a", "with": "b", "max_match": "big" } }),
+                "body_rewrite: max_match \"big\" is not a size such as \"1KiB\"",
             ),
         ] {
             assert_eq!(block(config).err().as_deref(), Some(err));
         }
         let bad = block(serde_json::json!({ "replace": [{ "pattern": "(", "with": "" }] })).err();
         assert!(bad.is_some_and(|err| err.starts_with("body_rewrite: pattern \"(\":")));
-    }
-
-    #[test]
-    fn test_json_changes_then_replacements_in_order() {
-        let block = block(serde_json::json!({
-            "json": { "set": { "$.user.role": "guest" }, "remove": ["$.debug"] },
-            "replace": [
-                { "pattern": "secret-([0-9]+)", "with": "hidden-$1" },
-                { "pattern": "hidden", "with": "gone" },
-            ],
-        }))
-        .unwrap();
-        let body = r#"{"user": {"role": "admin", "note": "secret-42"}, "debug": true}"#;
-        assert_eq!(
-            rewrite(&block, body, true).as_deref(),
-            Some(r#"{"user": {"role": "guest", "note": "gone-42"}}"#)
-        );
-        // Not JSON: only the replacements
-        assert_eq!(
-            rewrite(&block, "token=secret-7", false).as_deref(),
-            Some("token=gone-7")
-        );
-        // Nothing to change
-        assert_eq!(rewrite(&block, "plain", false), None);
     }
 }

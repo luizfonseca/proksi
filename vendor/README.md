@@ -2,7 +2,7 @@
 
 ## pingora-proxy
 
-Unmodified `pingora-proxy` 0.9.0 from crates.io, with three changes (marked with
+Unmodified `pingora-proxy` 0.9.0 from crates.io, with two changes (marked with
 `proksi:`).
 
 ### Websockets closed after their upgrade (`src/proxy_h1.rs`)
@@ -20,14 +20,6 @@ Each `HttpProxy` creates its own upstream connector, and each connector loads it
 own copy of the system's trusted certificates (about 1 MB). proksi creates a proxy
 per listening service (HTTP, HTTPS, TLS passthrough addresses), so they share one.
 
-### A request body read by a filter (`src/proxy_trait.rs`, `src/proxy_h1.rs`, `src/proxy_h2.rs`, `src/proxy_custom.rs`)
-
-Blocks that check or change a request's body (`body_rewrite`) read it whole in
-`request_filter`, before anything is sent upstream. Pingora only sends a body it read
-before proxying from its retry buffer, which keeps 64 KiB: a larger one would never be
-sent. `ProxyHttp::buffered_request_body` gives Pingora the body to send instead (and
-again on a retry); proksi sets its `Content-Length` in `upstream_request_filter`.
-
 Remove this directory and the `[patch.crates-io]` entry in the root `Cargo.toml`
-once a pingora release includes the websocket fix, lets proxies share a connector,
-and sends a body read by a filter.
+once a pingora release includes the websocket fix and lets proxies share a
+connector.

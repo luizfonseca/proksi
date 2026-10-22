@@ -3,22 +3,11 @@
 //! (`[*]`), recursive descent (`..`), slices and filters are refused, with what isn't supported
 //! in the error, so that paths written today keep their meaning when they're added.
 
-use sonic_rs::PointerNode;
-
 /// One step of a path: a member of an object, or an element of an array
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Step {
     Key(String),
     Index(usize),
-}
-
-impl Step {
-    pub(super) fn node(&self) -> PointerNode {
-        match self {
-            Step::Key(key) => PointerNode::Key(key.clone().into()),
-            Step::Index(index) => PointerNode::Index(*index),
-        }
-    }
 }
 
 /// The steps of `path`, or why it isn't one

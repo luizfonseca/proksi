@@ -70,8 +70,6 @@ pub struct BandwidthLimit {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BodyRewrite {
-    /// The largest body read, such as "1MiB" (default): larger ones are refused with `413`
-    pub max_size: Option<String>,
     /// Changes to JSON bodies (`Content-Type: application/json`, or `+json`), by path
     pub json: Option<BodyRewriteJson>,
     /// Regular expressions replaced in the body, in order
@@ -104,6 +102,9 @@ pub struct BodyReplace {
     pub pattern: String,
     /// What replaces each match: `$1`, `$name` are its groups (`$$` for a `$`)
     pub with: String,
+    /// The longest match, such as "1KiB" (default): longer ones may be missed where parts of
+    /// the body meet
+    pub max_match: Option<String>,
 }
 
 /// A block written once (an object) or repeated (a list)

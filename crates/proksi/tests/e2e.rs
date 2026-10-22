@@ -3929,7 +3929,6 @@ host "body.test" {
     upstream "127.0.0.1:{http_upstream_port}" {}
 
     body_rewrite {
-      max_size = "512KiB"
       json {
         set    = { "$.user.role" = "guest", "$.source" = "proksi" }
         remove = ["$.debug"]
@@ -3960,10 +3959,10 @@ async fn test_body_rewrite() {
         let upstream = |res: reqwest::Response| async move {
             assert_eq!(res.status(), 200);
             let echoed: serde_json::Value = res.json().await.unwrap();
-            let body = echoed["body"].as_str().unwrap().to_string();
-            // Sent whole, with its own length
-            assert_eq!(echoed["headers"]["content-length"].as_str(), Some(body.len().to_string().as_str()));
-            body
+            // Its length isn't known when it's sent: chunked (to this HTTP/1.1 upstream)
+            assert_eq!(echoed["headers"]["content-length"], serde_json::Value::Null);
+            assert_eq!(echoed["headers"]["transfer-encoding"].as_str(), Some("chunked"));
+            echoed["body"].as_str().unwrap().to_string()
         };
 
         // JSON: set, added, removed, then replaced
@@ -3979,7 +3978,7 @@ async fn test_body_rewrite() {
         let sent = upstream(send("text/plain", "token secret-7, debug".to_string()).await.unwrap()).await;
         assert_eq!(sent, "token [redacted], debug");
 
-        // Larger than a read buffer, still whole
+        // Larger than a part, changed as it streams
         let items = (0..20_000).map(|i| format!("{{\"id\":{i}}}")).collect::<Vec<_>>().join(",");
         let body = format!(r#"{{"debug": 1, "items": [{items}]}}"#);
         assert!(body.len() > 200_000);
@@ -3989,9 +3988,10 @@ async fn test_body_rewrite() {
         assert_eq!(sent.get("debug"), None);
         assert_eq!(sent["source"], "proksi");
 
-        // Over `max_size`: refused, the upstream never sees it
-        let res = send("application/json", "x".repeat(600_000)).await.unwrap();
-        assert_eq!(res.status(), 413);
+        // A body nothing applies to is sent as it is, with its length
+        let res = client.post(&url).header("content-type", "text/plain").body("nothing here").send().await.unwrap();
+        let echoed: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(echoed["body"], "nothing here");
     }
 
     proksi.assert_healthy();
