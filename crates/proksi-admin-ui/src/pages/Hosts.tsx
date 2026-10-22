@@ -58,7 +58,7 @@ function DeletedHosts() {
   );
 }
 
-function HostName({ host, tcp }: { host: Host; tcp: boolean }) {
+function HostName({ host }: { host: Host }) {
   return (
     <Stack class="font-semibold">
       {host.host}
@@ -67,6 +67,14 @@ function HostName({ host, tcp }: { host: Host; tcp: boolean }) {
       ) : (
         <span class="text-warning" title="Plain HTTP: no TLS"><Unlock class="size-3.5" /></span>
       )}
+    </Stack>
+  );
+}
+
+/** What a host serves: HTTP requests, TCP connections, or both */
+function Serves({ host, tcp }: { host: Host; tcp: boolean }) {
+  return (
+    <Stack gap={1}>
       {host.locations.length > 0 && <ProtocolBadge protocol="http" />}
       {tcp && <ProtocolBadge protocol="tcp" />}
     </Stack>
@@ -109,12 +117,13 @@ export function Hosts() {
                     {hosts.length === 0 ? 'Add a host block to the configuration file.' : 'Try another search.'}
                   </Empty>
                 ) : (
-                  <Table columns={['Host', 'Source', { label: 'Locations', phone: false }, 'Upstreams', { label: 'Plugins', phone: false }]}>
+                  <Table columns={['Host', 'Serves', 'Source', { label: 'Locations', phone: false }, 'Upstreams', { label: 'Plugins', phone: false }]}>
                     {shown.map((host) => {
                       const blocks = [...new Set(host.locations.flatMap((location) => location.blocks))];
                       return (
                         <Row onClick={() => navigate(`/hosts/${encodeURIComponent(host.host)}`)}>
-                          <Cell><HostName host={host} tcp={tcpHosts.has(host.host)} /></Cell>
+                          <Cell><HostName host={host} /></Cell>
+                          <Cell><Serves host={host} tcp={tcpHosts.has(host.host)} /></Cell>
                           <Cell><SourceBadge source={host.source} /></Cell>
                           <Cell phone={false} numeric>{host.locations.length}</Cell>
                           <Cell><Health host={host} /></Cell>

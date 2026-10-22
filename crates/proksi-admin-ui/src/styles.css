@@ -19,6 +19,11 @@
   default: true;
   --color-primary: #e11d48;
   --color-primary-content: #ffffff;
+  /* Light's own are pink (too close to the primary) and cyan */
+  --color-secondary: #7c3aed;
+  --color-secondary-content: #ffffff;
+  --color-info: #2563eb;
+  --color-info-content: #ffffff;
   /* Rounder than daisyUI's own */
   --radius-selector: 0.5rem;
   --radius-field: 0.5rem;

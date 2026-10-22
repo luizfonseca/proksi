@@ -37,3 +37,15 @@ export const Sun = ({ class: size = 'size-4' }: Icon) => (
 export const Moon = ({ class: size = 'size-4' }: Icon) => (
   <svg {...props} class={`shrink-0 ${size}`}><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>
 );
+export const Plus = ({ class: size = 'size-4' }: Icon) => (
+  <svg {...props} class={`shrink-0 ${size}`}><path d="M12 5v14M5 12h14" /></svg>
+);
+export const Pencil = ({ class: size = 'size-4' }: Icon) => (
+  <svg {...props} class={`shrink-0 ${size}`}><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M13.5 6.5l4 4" /></svg>
+);
+export const Clock = ({ class: size = 'size-4' }: Icon) => (
+  <svg {...props} class={`shrink-0 ${size}`}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+);
+export const SignOut = ({ class: size = 'size-4' }: Icon) => (
+  <svg {...props} class={`shrink-0 ${size}`}><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /><path d="M10 16l-4-4 4-4M6 12h10" /></svg>
+);

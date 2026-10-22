@@ -93,13 +93,14 @@ function Account({ session, onSignOut }: { session: Session; onSignOut: () => vo
 function Nav({ path }: { path: string }) {
   return (
     <nav class="border-t border-base-300">
-      <ul class={`${WIDTH} flex gap-1 overflow-x-auto`}>
+      {/* Sideways on phones, without a scrollbar */}
+      <ul class={`${WIDTH} flex gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none]`}>
         {NAV.map(({ href, label, icon: Icon }) => {
           const current = path.startsWith(href);
           return (
             <li key={href}>
               <a
-                class={`-mb-px flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium whitespace-nowrap ${
+                class={`flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium whitespace-nowrap ${
                   current ? 'border-primary text-base-content' : 'border-transparent text-base-content/60 hover:text-base-content'
                 }`}
                 href={href}

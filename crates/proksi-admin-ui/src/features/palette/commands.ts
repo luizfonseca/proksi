@@ -1,50 +1,69 @@
 import type { Host } from '../../api';
 
+/** The groups of the palette, in the order they're shown */
+export const GROUPS = ['Hosts', 'Pages', 'Actions'] as const;
+
+/** Icons of pages and actions (hosts show their health) */
+export type IconName = 'overview' | 'hosts' | 'certificates' | 'server' | 'new' | 'edit' | 'history' | 'theme' | 'sign-out';
+
 /** Something the palette opens or does */
 export type Command = {
   /** What it's called, and what it's found by */
   title: string;
-  /** What kind of thing it is, shown beside it */
-  group: 'Page' | 'Host' | 'Action';
+  group: (typeof GROUPS)[number];
+  /** Shown at its right, in monospace */
+  detail?: string;
+  icon?: IconName;
+  /** A host's health: its upstreams all up, some down, or none */
+  health?: 'up' | 'down' | 'none';
   /** Other words it's found by */
   keywords?: string;
+  /** Shown only once something is typed (each host's editor and history) */
+  searched?: boolean;
   /** A page of the UI, or something to do */
   run: { href: string } | { action: 'theme' | 'sign-out' };
 };
 
 export const PAGES: Command[] = [
-  { title: 'Overview', group: 'Page', keywords: 'dashboard metrics live', run: { href: '/overview' } },
-  { title: 'Hosts', group: 'Page', keywords: 'routes sites', run: { href: '/hosts' } },
-  { title: 'Certificates', group: 'Page', keywords: 'tls https letsencrypt', run: { href: '/certificates' } },
-  { title: 'Server', group: 'Page', keywords: 'settings configuration', run: { href: '/server' } },
+  { title: 'Overview', group: 'Pages', icon: 'overview', keywords: 'dashboard metrics live', run: { href: '/overview' } },
+  { title: 'Hosts', group: 'Pages', icon: 'hosts', keywords: 'routes sites', run: { href: '/hosts' } },
+  { title: 'Certificates', group: 'Pages', icon: 'certificates', keywords: 'tls https letsencrypt', run: { href: '/certificates' } },
+  { title: 'Server', group: 'Pages', icon: 'server', keywords: 'settings configuration', run: { href: '/server' } },
 ];
 
 export const ACTIONS: Command[] = [
-  { title: 'Switch theme', group: 'Action', keywords: 'dark light mode', run: { action: 'theme' } },
-  { title: 'Sign out', group: 'Action', keywords: 'log out', run: { action: 'sign-out' } },
+  { title: 'Switch theme', group: 'Actions', icon: 'theme', keywords: 'dark light mode', run: { action: 'theme' } },
+  { title: 'Sign out', group: 'Actions', icon: 'sign-out', keywords: 'log out', run: { action: 'sign-out' } },
 ];
 
-/** Each host's page, and its history and editor when it's in the store and `canWrite` */
+function health(host: Host): Command['health'] {
+  const upstreams = host.locations.flatMap((location) => location.upstreams);
+  if (upstreams.length === 0) return 'none';
+  return upstreams.every((upstream) => upstream.healthy) ? 'up' : 'down';
+}
+
+/** Each host's page, and its editor and history when it's in the store and `canWrite` */
 export function hostCommands(hosts: Host[], canWrite: boolean): Command[] {
-  const commands: Command[] = canWrite ? [{ title: 'New host', group: 'Action', keywords: 'add create', run: { href: '/hosts/new' } }] : [];
+  const commands: Command[] = [];
+  const actions: Command[] = canWrite ? [{ title: 'New host', group: 'Actions', icon: 'new', keywords: 'add create', run: { href: '/hosts/new' } }] : [];
   for (const host of hosts) {
     const page = `/hosts/${encodeURIComponent(host.host)}`;
-    commands.push({ title: host.host, group: 'Host', keywords: host.source ?? '', run: { href: page } });
+    commands.push({ title: host.host, group: 'Hosts', detail: host.source ?? undefined, health: health(host), run: { href: page } });
     if (canWrite && host.source === 'store') {
-      commands.push({ title: `${host.host}: edit`, group: 'Host', run: { href: `${page}/edit` } });
-      commands.push({ title: `${host.host}: history`, group: 'Host', keywords: 'versions rollback', run: { href: `${page}/history` } });
+      actions.push({ title: `Edit ${host.host}`, group: 'Actions', icon: 'edit', searched: true, run: { href: `${page}/edit` } });
+      actions.push({ title: `History of ${host.host}`, group: 'Actions', icon: 'history', keywords: 'versions rollback', searched: true, run: { href: `${page}/history` } });
     }
   }
-  return commands;
+  return [...commands, ...actions];
 }
 
 /**
- * How well `query` matches `command`: 0 when it doesn't. Each word of the query must start a word
- * of its title or keywords (best), or be found in it anywhere.
+ * How well `query` matches `command`: 0 when it doesn't. Each word of the query must start its
+ * title (best), start a word of its title or keywords, or be found in them anywhere.
  */
 export function score(command: Command, query: string): number {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return 1;
+  if (words.length === 0) return command.searched ? 0 : 1;
   const title = command.title.toLowerCase();
   const text = `${title} ${command.keywords?.toLowerCase() ?? ''}`;
   let total = 0;
@@ -61,12 +80,16 @@ function escape(word: string) {
   return word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** The commands matching `query`, best first (in their order when as good) */
-export function search(commands: Command[], query: string, limit = 12): Command[] {
-  return commands
+/** The commands matching `query`, by group, best first in each (in their order when as good) */
+export function search(commands: Command[], query: string, perGroup = 6): Command[] {
+  const scored = commands
     .map((command, index) => ({ command, index, score: score(command, query) }))
     .filter((found) => found.score > 0)
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, limit)
-    .map((found) => found.command);
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+  return GROUPS.flatMap((group) =>
+    scored
+      .filter((found) => found.command.group === group)
+      .slice(0, perGroup)
+      .map((found) => found.command),
+  );
 }

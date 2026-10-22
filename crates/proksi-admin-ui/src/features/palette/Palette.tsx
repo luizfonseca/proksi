@@ -1,15 +1,52 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { get, type Host } from '../../api';
 import { useCanWrite } from '../../api/session';
-import { Search } from '../../components/ui/icons';
+import type { ComponentType } from 'preact';
+import { Status } from '../../components/ui/Badge';
+import { Clock, Globe, Moon, Pencil, Plus, Pulse, Search, Server, Shield, SignOut } from '../../components/ui/icons';
 import { toggleTheme } from '../../components/ui/Theme';
 import { navigate } from '../../router';
-import { ACTIONS, type Command, hostCommands, PAGES, search } from './commands';
+import { ACTIONS, type Command, GROUPS, hostCommands, type IconName, PAGES, search } from './commands';
 
 /** Sent on `window` to open the palette */
 const OPEN = 'proksi-palette';
 
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+
+const ICONS: Record<IconName, ComponentType<{ class?: string }>> = {
+  overview: Pulse,
+  hosts: Globe,
+  certificates: Shield,
+  server: Server,
+  new: Plus,
+  edit: Pencil,
+  history: Clock,
+  theme: Moon,
+  'sign-out': SignOut,
+};
+
+const HEALTH = { up: 'success', down: 'error', none: 'neutral' } as const;
+
+/** A row of the palette: its icon (or a host's health), its title, and its detail */
+function Item({ command, active, onHover, onRun }: { command: Command; active: boolean; onHover: () => void; onRun: () => void }) {
+  const Icon = command.icon ? ICONS[command.icon] : null;
+  return (
+    <li role="option" aria-selected={active}>
+      <button
+        type="button"
+        class={`flex w-full items-center gap-3 rounded-field px-3 py-2 text-left ${active ? 'bg-base-200' : ''}`}
+        onMouseMove={onHover}
+        onClick={onRun}
+      >
+        <span class="grid size-4 place-items-center text-base-content/60">
+          {Icon ? <Icon /> : <Status tone={HEALTH[command.health ?? 'none']} />}
+        </span>
+        <span class="truncate">{command.title}</span>
+        {command.detail && <span class="ml-auto shrink-0 font-mono text-xs text-base-content/45">{command.detail}</span>}
+      </button>
+    </li>
+  );
+}
 
 /** A key, outlined and quiet */
 const KEY = 'kbd kbd-xs border-base-300 bg-transparent text-base-content/60 shadow-none';
@@ -101,7 +138,7 @@ export function Palette({ onSignOut }: { onSignOut: () => void }) {
         <label class="flex items-center gap-3 border-b border-base-300 px-4">
           <Search class="size-4 text-base-content/45" />
           <input
-            class="h-12 grow bg-transparent outline-none"
+            class="h-14 grow bg-transparent text-base outline-none"
             placeholder="Search pages, hosts and actions"
             value={query}
             autoFocus
@@ -116,21 +153,23 @@ export function Palette({ onSignOut }: { onSignOut: () => void }) {
         {found.length === 0 ? (
           <p class="px-4 py-8 text-center text-sm text-base-content/60">Nothing matches “{query.trim()}”</p>
         ) : (
-          <ul class="max-h-80 overflow-y-auto p-2" role="listbox">
-            {found.map((command, index) => (
-              <li role="option" aria-selected={index === active}>
-                <button
-                  type="button"
-                  class={`flex w-full items-center justify-between gap-3 rounded-field px-3 py-2 text-left text-sm ${index === active ? 'bg-base-200' : ''}`}
-                  onMouseMove={() => setActive(index)}
-                  onClick={() => run(command)}
-                >
-                  <span class="truncate">{command.title}</span>
-                  <span class="shrink-0 text-xs text-base-content/45">{command.group}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div class="max-h-96 overflow-y-auto p-2" role="listbox">
+            {GROUPS.map((group) => {
+              const items = found.filter((command) => command.group === group);
+              if (items.length === 0) return null;
+              return (
+                <section key={group}>
+                  <h3 class="px-3 pt-2 pb-1 text-xs font-medium text-base-content/45">{group}</h3>
+                  <ul>
+                    {items.map((command) => {
+                      const index = found.indexOf(command);
+                      return <Item command={command} active={index === active} onHover={() => setActive(index)} onRun={() => run(command)} />;
+                    })}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
         )}
       </div>
       <form method="dialog" class="modal-backdrop">

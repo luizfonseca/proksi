@@ -1,16 +1,63 @@
 import { useState } from 'preact/hooks';
 import { ms } from '../../lib/format';
-import { matches, useRequests } from './requests';
+import { matches, type Served, useRequests } from './requests';
+import { Details, Drawer } from '../../components/ui/Drawer';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { SearchInput } from '../../components/ui/Form';
-import { Empty, Panel } from '../../components/ui/Page';
+import { Empty, Mono, None, Panel } from '../../components/ui/Page';
 import { Stack } from '../../components/ui/Stack';
 import { Cell, Row, Table } from '../../components/ui/Table';
-import { navigate } from '../../router';
 
 /** Rows drawn at once: the newest matching ones (up to `KEPT` are kept to search) */
 const DRAWN = 200;
+
+const tone = (status: number) => (status >= 500 ? 'error' : status >= 400 ? 'warning' : 'success');
+
+/** One request, in a drawer: everything known of it, and a way to its host (unless it's this page's) */
+function Request({ served, host, onClose }: { served: Served | null; host?: string; onClose: () => void }) {
+  const known = (value: string | null) => (value ? <Mono>{value}</Mono> : <None>none</None>);
+  return (
+    <Drawer
+      open={served !== null}
+      onClose={onClose}
+      title={
+        served && (
+          <Stack>
+            <Badge tone={tone(served.status)}>{served.status}</Badge>
+            <Mono size="md" class="truncate">
+              {served.method} {served.path}
+            </Mono>
+          </Stack>
+        )
+      }
+      footer={
+        served &&
+        !host && (
+          <Button variant="primary" href={`/hosts/${encodeURIComponent(served.host)}`}>
+            Open {served.host}
+          </Button>
+        )
+      }
+    >
+      {served && (
+        <Details
+          items={[
+            ['Time', new Date(served.time).toLocaleString()],
+            ['Host', <Mono>{served.host}</Mono>],
+            ['Method', <Mono>{served.method}</Mono>],
+            ['Path', <Mono class="break-all">{served.path}</Mono>],
+            ['Status', <Badge tone={tone(served.status)}>{served.status}</Badge>],
+            ['Duration', ms(served.duration_ms)],
+            ['Client', <Mono>{served.client_ip}</Mono>],
+            ['Location', known(served.location)],
+            ['Upstream', known(served.upstream)],
+          ]}
+        />
+      )}
+    </Drawer>
+  );
+}
 
 /** The latest requests, of every host or of `host` */
 export function RequestLog({ host }: { host?: string }) {
@@ -18,6 +65,7 @@ export function RequestLog({ host }: { host?: string }) {
   const [paused, setPaused] = useState(true);
   const [held, setHeld] = useState(false);
   const [filter, setFilter] = useState('');
+  const [selected, setSelected] = useState<Served | null>(null);
   const { requests, skipped } = useRequests(paused, held, host);
   const shown = filter.trim() ? requests.filter((served) => matches(served, filter.trim())) : requests;
   return (
@@ -50,10 +98,10 @@ export function RequestLog({ host }: { host?: string }) {
         <div class="font-mono text-xs [&_th]:font-sans" onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)}>
           <Table height={420} columns={['Time', 'Status', 'Request', 'Duration', 'Client', 'Upstream']}>
             {shown.slice(0, DRAWN).map((served) => (
-              <Row onClick={() => !host && served.host && navigate(`/hosts/${encodeURIComponent(served.host)}`)}>
+              <Row onClick={() => setSelected(served)}>
                 <Cell class="text-base-content/45">{new Date(served.time).toLocaleTimeString()}</Cell>
                 <Cell>
-                  <Badge class="font-sans" tone={served.status >= 500 ? 'error' : served.status >= 400 ? 'warning' : 'success'}>
+                  <Badge class="font-sans" tone={tone(served.status)}>
                     {served.status}
                   </Badge>
                 </Cell>
@@ -69,6 +117,7 @@ export function RequestLog({ host }: { host?: string }) {
           </Table>
         </div>
       )}
+      <Request served={selected} host={host} onClose={() => setSelected(null)} />
     </Panel>
   );
 }

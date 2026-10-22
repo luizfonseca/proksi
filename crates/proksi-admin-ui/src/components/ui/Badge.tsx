@@ -57,7 +57,7 @@ export function Chip({ href, children }: { href?: string; children: ComponentChi
 /** What a host or block serves: HTTP requests, or TCP connections */
 export function ProtocolBadge({ protocol }: { protocol: 'http' | 'tcp' }) {
   return (
-    <Badge size="xs" tone={protocol === 'http' ? 'accent' : 'secondary'} class="font-mono font-semibold">
+    <Badge size="xs" tone={protocol === 'http' ? 'info' : 'secondary'} class="font-mono font-semibold">
       {protocol.toUpperCase()}
     </Badge>
   );
