@@ -10,11 +10,11 @@ import { Cell, Row, Table } from '../../components/ui/Table';
 
 const TLS = { none: 'plain TCP', terminate: 'TLS terminated', passthrough: 'TLS passthrough' };
 
-/** A number or address, in monospace on one line */
-function Figure({ phone, children }: { phone?: boolean; children: ComponentChildren }) {
+/** A number or address, in monospace on one line (`quiet`: grey, for detail) */
+function Figure({ phone, quiet, children }: { phone?: boolean; quiet?: boolean; children: ComponentChildren }) {
   return (
     <Cell phone={phone}>
-      <Mono class="whitespace-nowrap">{children}</Mono>
+      <Mono class={`whitespace-nowrap ${quiet ? 'text-base-content/60' : ''}`}>{children}</Mono>
     </Cell>
   );
 }
@@ -101,7 +101,7 @@ export function TcpBlocks({ blocks, withHost }: { blocks: TcpBlock[]; withHost?:
               <Cell>
                 <Badge tone={failed > 0 ? 'error' : 'success'}>{failed}</Badge>
               </Cell>
-              <Figure phone={false}>
+              <Figure phone={false} quiet>
                 {stats ? `${ms(stats.duration_ms.p50)} · ${ms(stats.duration_ms.p90)} · ${ms(stats.duration_ms.p99)}` : '—'}
               </Figure>
               <Cell phone={false} class="w-[220px] pt-2.5 pb-0">
