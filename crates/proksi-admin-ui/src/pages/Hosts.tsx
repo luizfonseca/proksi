@@ -1,24 +1,31 @@
 import { useState } from 'preact/hooks';
 import type { Host, TcpBlock } from '../api';
-import { Lock, Search, Unlock } from '../components/ui/icons';
-import { Loaded, ProtocolBadge, SourceBadge } from '../components/ui/State';
-import { navigate, onLink } from '../router';
+import { Chip, ProtocolBadge, SourceBadge, Status } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { Lock, Unlock } from '../components/ui/icons';
+import { SearchInput, Segmented } from '../components/ui/Form';
+import { Empty, Hint, None, PageHead, Panel } from '../components/ui/Page';
+import { Stack } from '../components/ui/Stack';
+import { Stat, Stats } from '../components/ui/Stats';
+import { Loaded } from '../components/ui/State';
+import { Cell, Row, Table } from '../components/ui/Table';
+import { navigate } from '../router';
 import { useCanWrite } from '../api/session';
 import { useData } from '../api/useData';
 
 function Health({ host }: { host: Host }) {
   const upstreams = host.locations.flatMap((location) => location.upstreams);
-  if (upstreams.length === 0) return <span class="none">no upstreams</span>;
+  if (upstreams.length === 0) return <None>no upstreams</None>;
   const healthy = upstreams.filter((upstream) => upstream.healthy).length;
   return (
-    <span class="health">
-      <span class="dots">
+    <Stack class="text-sm text-base-content/60">
+      <Stack gap={1}>
         {upstreams.slice(0, 8).map((upstream) => (
-          <span class={`dot ${upstream.healthy ? 'ok' : 'bad'}`} title={upstream.upstream} />
+          <Status tone={upstream.healthy ? 'success' : 'error'} title={upstream.upstream} />
         ))}
-      </span>
+      </Stack>
       {healthy}/{upstreams.length}
-    </span>
+    </Stack>
   );
 }
 
@@ -27,15 +34,12 @@ function Summary({ hosts }: { hosts: Host[] }) {
   const unhealthy = upstreams.filter((upstream) => !upstream.healthy).length;
   const locations = hosts.reduce((count, host) => count + host.locations.length, 0);
   return (
-    <div class="stats">
-      <div class="panel stat"><div class="label">Hosts</div><div class="value">{hosts.length}</div></div>
-      <div class="panel stat"><div class="label">Locations</div><div class="value">{locations}</div></div>
-      <div class="panel stat"><div class="label">Upstreams</div><div class="value">{upstreams.length}</div></div>
-      <div class="panel stat">
-        <div class="label">Unhealthy upstreams</div>
-        <div class="value" style={{ color: unhealthy ? 'var(--bad)' : undefined }}>{unhealthy}</div>
-      </div>
-    </div>
+    <Stats columns={4}>
+      <Stat title="Hosts" value={hosts.length} />
+      <Stat title="Locations" value={locations} />
+      <Stat title="Upstreams" value={upstreams.length} />
+      <Stat title="Unhealthy upstreams" value={unhealthy} tone={unhealthy ? 'error' : 'none'} />
+    </Stats>
   );
 }
 
@@ -44,16 +48,28 @@ function DeletedHosts() {
   const [data] = useData<{ hosts: string[] }>('/deleted-routes', 30000);
   if (data.state !== 'ready' || data.value.hosts.length === 0) return null;
   return (
-    <section class="panel deleted-hosts">
-      <h3>Deleted hosts <small>their versions are kept: open one to restore it</small></h3>
-      <div class="chips">
+    <Panel class="mt-4 pb-3.5" title={<>Deleted hosts <Hint class="ml-1.5">their versions are kept: open one to restore it</Hint></>}>
+      <Stack gap={1} wrap class="px-4">
         {data.value.hosts.map((host) => (
-          <a class="chip" href={`/hosts/${encodeURIComponent(host)}/history`} onClick={onLink}>
-            {host}
-          </a>
+          <Chip href={`/hosts/${encodeURIComponent(host)}/history`}>{host}</Chip>
         ))}
-      </div>
-    </section>
+      </Stack>
+    </Panel>
+  );
+}
+
+function HostName({ host, tcp }: { host: Host; tcp: boolean }) {
+  return (
+    <Stack class="font-semibold">
+      {host.host}
+      {host.tls ? (
+        <span class="text-success" title="HTTPS"><Lock class="size-3.5" /></span>
+      ) : (
+        <span class="text-warning" title="Plain HTTP: no TLS"><Unlock class="size-3.5" /></span>
+      )}
+      {host.locations.length > 0 && <ProtocolBadge protocol="http" />}
+      {tcp && <ProtocolBadge protocol="tcp" />}
+    </Stack>
   );
 }
 
@@ -67,17 +83,11 @@ export function Hosts() {
 
   return (
     <>
-      <div class="page-head">
-        <div>
-          <h1>Hosts</h1>
-          <p>Every host Proksi serves, from every source.</p>
-        </div>
-        {canWrite && (
-          <div class="actions">
-            <a class="button primary" href="/hosts/new" onClick={onLink}>New host</a>
-          </div>
-        )}
-      </div>
+      <PageHead
+        title="Hosts"
+        description="Every host Proksi serves, from every source."
+        actions={canWrite && <Button variant="primary" href="/hosts/new">New host</Button>}
+      />
       <Loaded data={data}>
         {(hosts) => {
           const sources = ['all', ...new Set(hosts.map((host) => host.source ?? 'unknown'))];
@@ -89,68 +99,36 @@ export function Hosts() {
           return (
             <>
               <Summary hosts={hosts} />
-              <div class="toolbar">
-                <label class="search">
-                  <Search />
-                  <input placeholder="Search hosts" value={query} onInput={(e) => setQuery(e.currentTarget.value)} />
-                </label>
-                {sources.length > 2 && (
-                  <div class="segmented">
-                    {sources.map((name) => (
-                      <button aria-pressed={source === name} onClick={() => setSource(name)}>{name}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div class="panel">
+              <Stack class="mb-3">
+                <SearchInput class="max-w-xs flex-1" placeholder="Search hosts" value={query} onInput={setQuery} />
+                {sources.length > 2 && <Segmented label="Source" options={sources} value={source} onChange={setSource} />}
+              </Stack>
+              <Panel>
                 {shown.length === 0 ? (
-                  <div class="empty">
-                    <strong>{hosts.length === 0 ? 'No hosts yet' : 'No hosts match'}</strong>
+                  <Empty title={hosts.length === 0 ? 'No hosts yet' : 'No hosts match'}>
                     {hosts.length === 0 ? 'Add a host block to the configuration file.' : 'Try another search.'}
-                  </div>
+                  </Empty>
                 ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Host</th>
-                        <th>Source</th>
-                        <th class="hide-sm">Locations</th>
-                        <th>Upstreams</th>
-                        <th class="hide-sm">Plugins</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {shown.map((host) => {
-                        const blocks = [...new Set(host.locations.flatMap((location) => location.blocks))];
-                        return (
-                          <tr class="link" onClick={() => navigate(`/hosts/${encodeURIComponent(host.host)}`)}>
-                            <td>
-                              <span class="host-name">
-                                {host.host}
-                                {host.tls ? (
-                                  <span class="tls" title="HTTPS"><Lock /></span>
-                                ) : (
-                                  <span class="plain" title="Plain HTTP: no TLS"><Unlock /></span>
-                                )}
-                                {host.locations.length > 0 && <ProtocolBadge protocol="http" />}
-                                {tcpHosts.has(host.host) && <ProtocolBadge protocol="tcp" />}
-                              </span>
-                            </td>
-                            <td><SourceBadge source={host.source} /></td>
-                            <td class="num hide-sm">{host.locations.length}</td>
-                            <td><Health host={host} /></td>
-                            <td class="hide-sm">
-                              <div class="chips">
-                                {blocks.length === 0 ? <span class="none">none</span> : blocks.map((block) => <span class="chip">{block}</span>)}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <Table columns={['Host', 'Source', { label: 'Locations', phone: false }, 'Upstreams', { label: 'Plugins', phone: false }]}>
+                    {shown.map((host) => {
+                      const blocks = [...new Set(host.locations.flatMap((location) => location.blocks))];
+                      return (
+                        <Row onClick={() => navigate(`/hosts/${encodeURIComponent(host.host)}`)}>
+                          <Cell><HostName host={host} tcp={tcpHosts.has(host.host)} /></Cell>
+                          <Cell><SourceBadge source={host.source} /></Cell>
+                          <Cell phone={false} numeric>{host.locations.length}</Cell>
+                          <Cell><Health host={host} /></Cell>
+                          <Cell phone={false}>
+                            <Stack gap={1} wrap>
+                              {blocks.length === 0 ? <None>none</None> : blocks.map((block) => <Chip>{block}</Chip>)}
+                            </Stack>
+                          </Cell>
+                        </Row>
+                      );
+                    })}
+                  </Table>
                 )}
-              </div>
+              </Panel>
               <DeletedHosts />
             </>
           );

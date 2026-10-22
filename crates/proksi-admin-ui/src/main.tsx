@@ -1,6 +1,7 @@
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { session, type Session, Unauthorized } from './api';
+import { Alert } from './components/ui/Alert';
 import { Layout } from './components/Layout';
 import { Certificates } from './pages/Certificates';
 import { EditHost } from './pages/EditHost';
@@ -45,7 +46,13 @@ function App() {
     if (path === '/') navigate('/overview');
   }, [path]);
 
-  if (error) return <div class="signin"><div class="panel error">{error}</div></div>;
+  if (error) {
+    return (
+      <div class="grid min-h-screen place-items-center p-6">
+        <Alert class="max-w-md">{error}</Alert>
+      </div>
+    );
+  }
   if (signedIn === undefined) return null;
   if (signedIn === null) return <SignIn onSignedIn={setSignedIn} />;
   return (

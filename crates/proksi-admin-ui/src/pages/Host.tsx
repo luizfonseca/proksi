@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { type Host as HostData, routes, type TcpBlock, type Upstream } from '../api';
 import { Lock, Unlock } from '../components/ui/icons';
-import { LineChart } from '../components/ui/Chart';
+import { Legend, LineChart, Swatch } from '../components/ui/Chart';
 import { Flow } from '../features/flow/Flow';
 import { RequestLog } from '../features/live/RequestLog';
 import { Rules } from '../features/rules/Rules';
@@ -9,7 +9,11 @@ import { TcpBlocks } from '../features/tcp/Tcp';
 import { layout } from '../features/flow/flowGraph';
 import { ms, rate } from '../lib/format';
 import { useLive } from '../features/live/live';
-import { Loaded, ProtocolBadge, SourceBadge } from '../components/ui/State';
+import { Badge, Chip, ProtocolBadge, SourceBadge, Status } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { Empty, Hint, Label, Mono, None, PageHead, Panel } from '../components/ui/Page';
+import { Grid, Stack } from '../components/ui/Stack';
+import { Loaded } from '../components/ui/State';
 import { navigate, onLink } from '../router';
 import { useCanWrite } from '../api/session';
 import { useData } from '../api/useData';
@@ -17,35 +21,36 @@ import { useData } from '../api/useData';
 function UpstreamRow({ upstream }: { upstream: Upstream }) {
   // Addresses worth showing: a name's, or a service's
   const resolved = upstream.addresses.filter((address) => address.address !== upstream.upstream);
+  const tagged = Boolean(upstream.split || upstream.mirror);
   return (
-    <div class="upstream">
-      <span class={`dot ${upstream.healthy ? 'ok' : 'bad'}`} />
-      <div>
-        <div class="mono">
-          {upstream.name ? <span class="name">{upstream.name} → </span> : null}
+    <Stack gap={2.5} class="py-1">
+      <Status tone={upstream.healthy ? 'success' : 'error'} />
+      <div class="min-w-0">
+        <Mono class="block">
+          {upstream.name ? <span class="text-base-content/60">{upstream.name} → </span> : null}
           {upstream.upstream}
-        </div>
+        </Mono>
         {resolved.length > 0 && !upstream.name && (
-          <div class="addresses">
+          <Hint class="block font-mono">
             {resolved.map((address) => (
               <span title={address.healthy ? 'healthy' : 'unhealthy'}>{address.address} </span>
             ))}
-          </div>
+          </Hint>
         )}
-        {upstream.addresses.length === 0 && <div class="addresses">not resolved</div>}
+        {upstream.addresses.length === 0 && <Hint class="block font-mono">not resolved</Hint>}
       </div>
       {upstream.split && (
-        <span class="badge split" title="Traffic split: its share of clients">
+        <Badge tone="secondary" class="ml-auto" title="Traffic split: its share of clients">
           {upstream.split.name} · {upstream.split.percent}%
-        </span>
+        </Badge>
       )}
       {upstream.mirror && (
-        <span class="badge mirror" title="Mirror: gets copies of the requests, its answers are dropped">
+        <Badge tone="accent" class={upstream.split ? '' : 'ml-auto'} title="Mirror: gets copies of the requests, its answers are dropped">
           mirror
-        </span>
+        </Badge>
       )}
-      <span class="weight">weight {upstream.weight}</span>
-    </div>
+      <Hint class={`${tagged ? 'ml-2' : 'ml-auto'} whitespace-nowrap`}>weight {upstream.weight}</Hint>
+    </Stack>
   );
 }
 
@@ -61,12 +66,12 @@ function Actions({ name }: { name: string }) {
     }
   }
   return (
-    <div class="actions">
-      {error && <span class="error">{error}</span>}
-      <button type="button" class="secondary danger" onClick={remove}>Remove</button>
-      <a class="button" href={`/hosts/${encodeURIComponent(name)}/history`} onClick={onLink}>History</a>
-      <a class="button" href={`/hosts/${encodeURIComponent(name)}/edit`} onClick={onLink}>Edit</a>
-    </div>
+    <>
+      {error && <span class="self-center text-error">{error}</span>}
+      <Button variant="danger" onClick={remove}>Remove</Button>
+      <Button href={`/hosts/${encodeURIComponent(name)}/history`}>History</Button>
+      <Button href={`/hosts/${encodeURIComponent(name)}/edit`}>Edit</Button>
+    </>
   );
 }
 
@@ -79,26 +84,30 @@ function Traffic({ host }: { host: HostData }) {
     points.map((point) => (point ? value(point) : null));
   return (
     <>
-      <section class="panel traffic">
-        <div class="chart-head">
-          <h3>Traffic</h3>
-          <div class="legend">
-            <span><i style={{ background: 'var(--ok)' }} />flowing</span>
-            <span><i style={{ background: 'var(--warn)' }} />some errors</span>
-            <span><i style={{ background: 'var(--bad)' }} />failing or unhealthy</span>
+      <Panel
+        class="mb-3"
+        title="Traffic"
+        aside={
+          <Legend>
+            <Swatch color="var(--color-success)">flowing</Swatch>
+            <Swatch color="var(--color-warning)">some errors</Swatch>
+            <Swatch color="var(--color-error)">failing or unhealthy</Swatch>
             <span>over the last 5 seconds</span>
-          </div>
+          </Legend>
+        }
+      >
+        <div class="px-4 pb-2.5">
+          <Flow flow={layout(host, stats, latest?.window_seconds)} />
         </div>
-        <Flow flow={layout(host, stats, latest?.window_seconds)} />
-      </section>
-      <div class="host-charts">
+      </Panel>
+      <Grid columns={2} class="mb-3">
         <LineChart
           title="Requests"
           span={300}
           format={rate}
           series={[
-            { name: 'all', color: 'var(--ok)', values: read((point) => point.requests) },
-            { name: '5xx', color: 'var(--bad)', values: read((point) => point.errors) },
+            { name: 'all', color: 'var(--color-success)', values: read((point) => point.requests) },
+            { name: '5xx', color: 'var(--color-error)', values: read((point) => point.errors) },
           ]}
         />
         <LineChart
@@ -110,7 +119,7 @@ function Traffic({ host }: { host: HostData }) {
             { name: 'p99', color: 'var(--chart-3)', values: read((point) => point.p99) },
           ]}
         />
-      </div>
+      </Grid>
       <RequestLog host={host.host} />
     </>
   );
@@ -127,84 +136,90 @@ export function Host({ name }: { name: string }) {
         const blocks = tcp.state === 'ready' ? tcp.value.filter((block) => block.host === host?.host) : [];
         if (!host) {
           return (
-            <div class="panel empty">
-              <strong>No host named {name}</strong>
-              <a href="/hosts" onClick={onLink}>Back to hosts</a>
-            </div>
+            <Panel>
+              <Empty title={`No host named ${name}`}>
+                <Button variant="link" href="/hosts">Back to hosts</Button>
+              </Empty>
+            </Panel>
           );
         }
         return (
           <>
-            <div class="crumbs">
-              <a href="/hosts" onClick={onLink}>Hosts</a> / {host.host}
-            </div>
-            <div class="page-head">
-              <div>
-                <h1>{host.host}</h1>
-                <div class="meta" style={{ marginTop: 8 }}>
+            <PageHead
+              crumbs={
+                <ul>
+                  <li><a href="/hosts" onClick={onLink}>Hosts</a></li>
+                  <li>{host.host}</li>
+                </ul>
+              }
+              title={host.host}
+              badges={
+                <>
                   <SourceBadge source={host.source} />
                   {host.locations.length > 0 && <ProtocolBadge protocol="http" />}
                   {blocks.length > 0 && <ProtocolBadge protocol="tcp" />}
-                  <span class="badge">
-                    {host.tls ? <Lock /> : <Unlock />} {host.tls ? 'HTTPS' : 'Plain HTTP'}
-                  </span>
-                  {host.listen.map((address) => <span class="chip">{address}</span>)}
-                </div>
-              </div>
-              {canWrite && host.source === 'store' && <Actions name={host.host} />}
-            </div>
+                  <Badge class="gap-1">
+                    {host.tls ? <Lock class="size-3" /> : <Unlock class="size-3" />} {host.tls ? 'HTTPS' : 'Plain HTTP'}
+                  </Badge>
+                  {host.listen.map((address) => <Chip>{address}</Chip>)}
+                </>
+              }
+              actions={canWrite && host.source === 'store' && <Actions name={host.host} />}
+            />
             <Traffic host={host} />
             {host.rules.length > 0 && (
-              <section class="panel host-rules">
-                <h3>Host rules <small>every request, before its location is chosen</small></h3>
+              <Panel class="mb-3 px-4 py-3.5">
+                <Label>
+                  Host rules <Hint class="ml-1.5 tracking-normal normal-case">every request, before its location is chosen</Hint>
+                </Label>
                 <Rules rules={host.rules} />
-              </section>
+              </Panel>
             )}
-            <h2 class="section-title">
+            <h2 class="mt-5 mb-2.5 flex items-center gap-2 text-sm font-semibold">
               Locations
               <ProtocolBadge protocol="http" />
             </h2>
-            <div class="locations">
+            <Grid>
               {host.locations.map((location) => (
-                <div class="panel" id={encodeURIComponent(`location ${location.location}`)}>
-                  <div class="location-head">
-                    <span class="path">{location.location}</span>
-                    <span class="badge" style={{ marginLeft: 'auto' }}>
+                <Panel class="location" id={encodeURIComponent(`location ${location.location}`)}>
+                  <Stack gap={2.5} class="border-b border-base-300 px-4 py-3">
+                    <span class="font-mono text-sm font-semibold">{location.location}</span>
+                    <Badge class="ml-auto">
                       {location.upstreams.length} upstream{location.upstreams.length === 1 ? '' : 's'}
-                    </span>
-                  </div>
-                  <div class="location-body">
-                    <section>
-                      <h3>Upstreams</h3>
+                    </Badge>
+                  </Stack>
+                  <div class="grid md:grid-cols-2">
+                    <section class="px-4 py-3">
+                      <Label>Upstreams</Label>
                       {location.upstreams.length === 0 ? (
-                        <span class="none">Answered by Proksi (no upstream)</span>
+                        <None>Answered by Proksi (no upstream)</None>
                       ) : (
                         location.upstreams.map((upstream) => <UpstreamRow upstream={upstream} />)
                       )}
                       {location.mirror && (
-                        <div class="mirror-counts" title="Copies of the requests sent to the mirror since Proksi started">
+                        <div class="mt-1.5 text-xs text-base-content/45" title="Copies of the requests sent to the mirror since Proksi started">
                           Mirroring {location.mirror.percent}% · {location.mirror.sent} sent · {location.mirror.failed} failed
                           {location.mirror.dropped > 0 && ` · ${location.mirror.dropped} dropped (too many at once)`}
                           {location.mirror.too_large > 0 && ` · ${location.mirror.too_large} not copied (body too large)`}
                         </div>
                       )}
                     </section>
-                    <section>
-                      <h3>Plugins</h3>
-                      <div class="chips">
-                        {location.blocks.length === 0 ? <span class="none">None</span> : location.blocks.map((block) => <span class="chip">{block}</span>)}
-                      </div>
+                    <section class="border-t border-base-300 px-4 py-3 md:border-t-0 md:border-l">
+                      <Label>Plugins</Label>
+                      <Stack gap={1} wrap>
+                        {location.blocks.length === 0 ? <None>None</None> : location.blocks.map((block) => <Chip>{block}</Chip>)}
+                      </Stack>
                     </section>
                     {location.rules.length > 0 && (
-                      <section class="location-rules">
-                        <h3>Rules</h3>
+                      <section class="col-span-full border-t border-base-300 px-4 py-3">
+                        <Label>Rules</Label>
                         <Rules rules={location.rules} />
                       </section>
                     )}
                   </div>
-                </div>
+                </Panel>
               ))}
-            </div>
+            </Grid>
             <TcpBlocks blocks={blocks} />
           </>
         );

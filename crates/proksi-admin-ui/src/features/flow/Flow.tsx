@@ -49,8 +49,8 @@ function Node({ node, href }: { node: FlowNode; href?: string }) {
 export function Flow({ flow }: { flow: FlowData }) {
   const pad = NODE_HEIGHT / 2 + 4;
   return (
-    <div class="flow-scroll">
-      <svg class="flow" viewBox={`0 ${-pad} ${flow.width} ${flow.height + pad * 2}`} role="img" aria-label="Traffic from clients to upstreams">
+    <div class="overflow-x-auto">
+      <svg class="flow block h-auto w-full min-w-[760px] font-sans" viewBox={`0 ${-pad} ${flow.width} ${flow.height + pad * 2}`} role="img" aria-label="Traffic from clients to upstreams">
         {flow.edges.map((edge) => (
           <Edge key={`${edge.from.id}>${edge.to.id}`} edge={edge} />
         ))}

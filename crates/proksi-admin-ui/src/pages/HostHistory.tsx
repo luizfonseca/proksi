@@ -3,6 +3,12 @@ import { Conflict, type Expect, type HistoryEntry, routes } from '../api';
 import { useCanWrite } from '../api/session';
 import { Compare } from '../features/history/Compare';
 import { activeVersion } from '../features/history/versions';
+import { Alert } from '../components/ui/Alert';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { Checkbox } from '../components/ui/Form';
+import { Empty, None, PageHead, Panel } from '../components/ui/Page';
+import { Cell, Row, Table } from '../components/ui/Table';
 import { onLink } from '../router';
 
 /** The versions a change can be compared with or rolled back to */
@@ -67,7 +73,7 @@ export function HostHistory({ name }: { name: string }) {
     );
   }
 
-  if (!changes) return error ? <div class="error">{error}</div> : null;
+  if (!changes) return error ? <Alert>{error}</Alert> : null;
   const active = activeVersion(changes);
   // One version: compared with the active one. Two: the older one first.
   const pair =
@@ -79,84 +85,77 @@ export function HostHistory({ name }: { name: string }) {
 
   return (
     <>
-      <div class="crumbs">
-        <a href="/hosts" onClick={onLink}>Hosts</a> /{' '}
-        {current === null ? name : <a href={`/hosts/${encodeURIComponent(name)}`} onClick={onLink}>{name}</a>} / history
-      </div>
-      <div class="page-head">
-        <div>
-          <h1>{name}</h1>
-          <p>
-            {changes.length === 0
-              ? 'In the store, saved before versions were kept.'
-              : active === null
-                ? 'Deleted. Restore a version to serve it again.'
-                : `Serving version ${active}. Select versions to compare them.`}
-          </p>
-        </div>
-      </div>
-      {error && <div class="error" role="alert">{error}</div>}
+      <PageHead
+        crumbs={
+          <ul>
+            <li><a href="/hosts" onClick={onLink}>Hosts</a></li>
+            <li>{current === null ? name : <a href={`/hosts/${encodeURIComponent(name)}`} onClick={onLink}>{name}</a>}</li>
+            <li>history</li>
+          </ul>
+        }
+        title={name}
+        description={
+          changes.length === 0
+            ? 'In the store, saved before versions were kept.'
+            : active === null
+              ? 'Deleted. Restore a version to serve it again.'
+              : `Serving version ${active}. Select versions to compare them.`
+        }
+      />
+      {error && <Alert class="mb-4">{error}</Alert>}
 
       {changes.length === 0 ? (
-        <div class="panel empty">
-          <strong>No changes recorded yet</strong>
-          The history starts with the next change to this host. Changes made before Proksi kept versions aren't recorded.
-        </div>
+        <Panel>
+          <Empty title="No changes recorded yet">
+            The history starts with the next change to this host. Changes made before Proksi kept versions aren't recorded.
+          </Empty>
+        </Panel>
       ) : (
-      <div class="panel">
-        <table class="history">
-          <thead>
-            <tr>
-              <th>Compare</th>
-              <th>Change</th>
-              <th>By</th>
-              <th>When</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
+        <Panel class="overflow-hidden">
+          <Table columns={['Compare', 'Change', 'By', 'When', '']}>
             {changes.map((entry) => {
               const version = versionOf(entry);
+              const at = new Date(entry.at * 1000);
               return (
-                <tr>
-                  <td>
+                <Row>
+                  <Cell>
                     {version !== null && (
-                      <input
-                        type="checkbox"
-                        aria-label={`Compare version ${version}`}
+                      <Checkbox
+                        hidden
+                        label={`Compare version ${version}`}
                         checked={selected.includes(version)}
                         onChange={() => toggle(version)}
                       />
                     )}
-                  </td>
-                  <td>
+                  </Cell>
+                  <Cell>
                     {describe(entry)}
-                    {version !== null && version === active && <span class="badge" style={{ marginLeft: 8 }}>active</span>}
-                  </td>
-                  <td>{entry.author ?? <span class="none">unknown</span>}</td>
-                  <td title={new Date(entry.at * 1000).toISOString()}>{new Date(entry.at * 1000).toLocaleString()}</td>
-                  <td class="num">
+                    {version !== null && version === active && <Badge class="ml-2">active</Badge>}
+                  </Cell>
+                  <Cell>{entry.author ?? <None>unknown</None>}</Cell>
+                  <Cell>
+                    <span title={at.toISOString()}>{at.toLocaleString()}</span>
+                  </Cell>
+                  <Cell>
                     {canWrite && version !== null && version !== active && (
-                      <button type="button" class="secondary" disabled={busy} onClick={() => rollback(version)}>
+                      <Button disabled={busy} onClick={() => rollback(version)}>
                         {active === null ? 'Restore' : 'Roll back to this'}
-                      </button>
+                      </Button>
                     )}
-                  </td>
-                </tr>
+                  </Cell>
+                </Row>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+          </Table>
+        </Panel>
       )}
 
       {pair && (
-        <section class="panel compare">
-          <h3>
-            Version {pair[0]} → version {pair[1]}
-          </h3>
-          <Compare name={name} before={pair[0]} after={pair[1]} />
-        </section>
+        <Panel class="mt-4 pb-3.5" title={`Version ${pair[0]} → version ${pair[1]}`}>
+          <div class="px-4">
+            <Compare name={name} before={pair[0]} after={pair[1]} />
+          </div>
+        </Panel>
       )}
     </>
   );

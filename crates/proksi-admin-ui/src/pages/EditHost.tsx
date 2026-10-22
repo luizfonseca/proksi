@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { Conflict, routes } from '../api';
 import {
@@ -12,27 +13,37 @@ import {
 } from '../features/hosts/hostForm';
 import { navigate, onLink } from '../router';
 import { RulesEditor } from '../features/rules/RuleEditor';
+import { Alert } from '../components/ui/Alert';
+import { Button } from '../components/ui/Button';
+import { Checkbox, Field, Input } from '../components/ui/Form';
+import { Hint, PageHead, Panel } from '../components/ui/Page';
+import { Grid } from '../components/ui/Stack';
+
+/** A box of fields */
+function Fields({ children }: { children: ComponentChildren }) {
+  return <Panel class="mb-3 grid gap-3.5 p-4">{children}</Panel>;
+}
 
 /** A scope's rules: shown once there are some, or when asked for */
 function RulesSection({ title, hint, rules, onChange }: { title: string; hint: string; rules: unknown[]; onChange: (rules: unknown[]) => void }) {
   const [open, setOpen] = useState(rules.length > 0);
   if (!open) {
     return (
-      <button type="button" class="link" onClick={() => setOpen(true)}>
+      <Button variant="link" onClick={() => setOpen(true)}>
         + {title}
-      </button>
+      </Button>
     );
   }
   return (
-    <div class="rules-section">
-      <div class="rules-section-head">
-        <strong>{title}</strong> <small class="hint">{hint}</small>{' '}
-        <a class="hint" href="https://docs.proksi.info/rules" target="_blank" rel="noreferrer">
+    <Grid gap={2}>
+      <div class="text-sm">
+        <strong>{title}</strong> <Hint class="ml-1">{hint}</Hint>{' '}
+        <a class="ml-1 text-xs text-base-content/45 hover:underline" href="https://docs.proksi.info/rules" target="_blank" rel="noreferrer">
           How rules work
         </a>
       </div>
       <RulesEditor rules={rules} onChange={onChange} />
-    </div>
+    </Grid>
   );
 }
 
@@ -69,7 +80,7 @@ export function EditHost({ name }: { name: string | null }) {
       .catch((err) => setErrors([String(err.message ?? err)]));
   }, [name]);
 
-  if (!form) return errors.length ? <div class="error">{errors[0]}</div> : null;
+  if (!form) return errors.length ? <Alert>{errors[0]}</Alert> : null;
 
   const update = (change: Partial<HostForm>) => setForm({ ...form, ...change });
   const updateLocation = (index: number, change: Partial<LocationForm>) =>
@@ -102,48 +113,53 @@ export function EditHost({ name }: { name: string | null }) {
 
   const back = name ? `/hosts/${encodeURIComponent(name)}` : '/hosts';
   return (
-    <form class="editor" onSubmit={save}>
-      <div class="crumbs">
-        <a href="/hosts" onClick={onLink}>Hosts</a> / {name ? <>{name} / edit</> : 'new host'}
-      </div>
-      <div class="page-head">
-        <div>
-          <h1>{name ?? 'New host'}</h1>
-          <p>Saved to the store, and served by every instance sharing it.</p>
-        </div>
-        <div class="actions">
-          <a class="button" href={back} onClick={onLink}>Cancel</a>
-          <button class="primary" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-        </div>
-      </div>
+    <form onSubmit={save}>
+      <PageHead
+        crumbs={
+          <ul>
+            <li>
+              <a href="/hosts" onClick={onLink}>Hosts</a>
+            </li>
+            {name ? (
+              <>
+                <li>{name}</li>
+                <li>edit</li>
+              </>
+            ) : (
+              <li>new host</li>
+            )}
+          </ul>
+        }
+        title={name ?? 'New host'}
+        description="Saved to the store, and served by every instance sharing it."
+        actions={
+          <>
+            <Button href={back}>Cancel</Button>
+            <Button variant="primary" submit disabled={busy}>
+              {busy ? 'Saving…' : 'Save'}
+            </Button>
+          </>
+        }
+      />
 
       {problem && errors.length === 0 && (
-        <div class="error" role="status">
-          {problem}
-        </div>
+        <Alert class="mb-4">{problem}</Alert>
       )}
       {errors.length > 0 && (
-        <div class="error" role="alert">
+        <Alert class="mb-4 grid gap-1">
           {errors.map((error) => <div>{error}</div>)}
-        </div>
+        </Alert>
       )}
 
-      <div class="panel fields">
+      <Fields>
         {!name && (
-          <label>
-            <span>Name</span>
-            <input autoFocus placeholder="app.example.com" value={form.name} onInput={(e) => update({ name: e.currentTarget.value })} />
-          </label>
+          <Field label="Name">
+            <Input autoFocus placeholder="app.example.com" value={form.name} onInput={(e) => update({ name: e.currentTarget.value })} />
+          </Field>
         )}
-        <label class="check">
-          <input type="checkbox" checked={form.tls} onChange={(e) => update({ tls: e.currentTarget.checked })} />
-          <span>HTTPS <small>Off: plain HTTP, without certificates</small></span>
-        </label>
+        <Checkbox label="HTTPS" hint="Off: plain HTTP, without certificates" checked={form.tls} onChange={(tls) => update({ tls })} />
         {form.tls && (
-          <label class="check">
-            <input type="checkbox" checked={form.selfSigned} onChange={(e) => update({ selfSigned: e.currentTarget.checked })} />
-            <span>Self-signed certificate if none can be obtained</span>
-          </label>
+          <Checkbox label="Self-signed certificate if none can be obtained" checked={form.selfSigned} onChange={(selfSigned) => update({ selfSigned })} />
         )}
         <RulesSection
           title="Host rules"
@@ -151,63 +167,52 @@ export function EditHost({ name }: { name: string | null }) {
           rules={form.rules}
           onChange={(rules) => update({ rules })}
         />
-      </div>
+      </Fields>
 
-      <h2>Locations</h2>
+      <h2 class="mt-6 mb-2.5 text-sm font-semibold">Locations</h2>
       {form.locations.map((location, index) => (
-        <div class="panel fields">
-          <div class="row">
-            <label class="grow">
-              <span>Path</span>
-              <input class="mono" value={location.path} onInput={(e) => updateLocation(index, { path: e.currentTarget.value })} />
-            </label>
-            <label class="check">
-              <input type="checkbox" checked={location.exact} onChange={(e) => updateLocation(index, { exact: e.currentTarget.checked })} />
-              <span>Only this path</span>
-            </label>
-            <button
-              type="button"
-              class="link danger"
-              onClick={() => update({ locations: form.locations.filter((_, at) => at !== index) })}
-            >
+        <Fields>
+          <div class="flex flex-wrap items-end gap-4">
+            <Field label="Path" class="min-w-[200px] flex-1">
+              <Input mono value={location.path} onInput={(e) => updateLocation(index, { path: e.currentTarget.value })} />
+            </Field>
+            <Checkbox class="pb-2" label="Only this path" checked={location.exact} onChange={(exact) => updateLocation(index, { exact })} />
+            <Button variant="link-danger" class="pb-2" onClick={() => update({ locations: form.locations.filter((_, at) => at !== index) })}>
               Remove
-            </button>
+            </Button>
           </div>
-          <div class="upstream-grid">
-            <span>Upstream</span>
-            <span>Weight</span>
-            <span>SNI</span>
+          <div class="grid grid-cols-[minmax(160px,1fr)_80px_minmax(100px,0.6fr)_24px] items-center gap-2 max-md:grid-cols-[1fr_64px_24px] max-md:[&>:nth-child(4n+3)]:hidden">
+            <Hint>Upstream</Hint>
+            <Hint>Weight</Hint>
+            <Hint>SNI</Hint>
             <span />
             {location.upstreams.map((upstream, at) => (
               <>
-                <input class="mono" placeholder="app.internal:8080" value={upstream.address} onInput={(e) => updateUpstream(index, at, { address: e.currentTarget.value })} />
-                <input type="number" min="1" max="127" placeholder="1" value={upstream.weight} onInput={(e) => updateUpstream(index, at, { weight: e.currentTarget.value })} />
-                <input placeholder="none" value={upstream.sni} onInput={(e) => updateUpstream(index, at, { sni: e.currentTarget.value })} />
-                <button
-                  type="button"
-                  class="link danger"
+                <Input mono placeholder="app.internal:8080" value={upstream.address} onInput={(e) => updateUpstream(index, at, { address: e.currentTarget.value })} />
+                <Input type="number" min="1" max="127" placeholder="1" value={upstream.weight} onInput={(e) => updateUpstream(index, at, { weight: e.currentTarget.value })} />
+                <Input placeholder="none" value={upstream.sni} onInput={(e) => updateUpstream(index, at, { sni: e.currentTarget.value })} />
+                <Button
+                  variant="link-danger"
                   aria-label="Remove upstream"
                   onClick={() => updateLocation(index, { upstreams: location.upstreams.filter((_, other) => other !== at) })}
                 >
                   ✕
-                </button>
+                </Button>
               </>
             ))}
           </div>
-          <button type="button" class="link" onClick={() => updateLocation(index, { upstreams: [...location.upstreams, emptyUpstream()] })}>
+          <Button variant="link" onClick={() => updateLocation(index, { upstreams: [...location.upstreams, emptyUpstream()] })}>
             + Add upstream
-          </button>
+          </Button>
           <RulesSection title="Rules" hint="this location's requests, in order" rules={location.rules} onChange={(rules) => updateLocation(index, { rules })} />
           {Object.keys(location.rest).filter((key) => location.rest[key] != null).length > 0 && (
-            <p class="kept">
-              Kept as they are: {Object.keys(location.rest).filter((key) => location.rest[key] != null).join(', ')}
-            </p>
+            <Hint>Kept as they are: {Object.keys(location.rest).filter((key) => location.rest[key] != null).join(', ')}</Hint>
           )}
-        </div>
+        </Fields>
       ))}
-      <button type="button" class="link" onClick={() => update({ locations: [...form.locations, emptyLocation()] })}>
+      <Button variant="link" onClick={() => update({ locations: [...form.locations, emptyLocation()] })}>
         + Add location
-      </button>
+      </Button>
     </form>
   );
 }
