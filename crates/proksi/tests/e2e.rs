@@ -2007,6 +2007,15 @@ async fn test_admin_metrics() {
         .await
         .unwrap();
     assert!(res.starts_with("HTTP/1.1 404"), "{res}");
+    // Plain HTTP for a host with TLS: redirected
+    let res = proksi
+        .raw_http_on(
+            proksi.http_port,
+            b"GET / HTTP/1.1\r\nHost: limited.test\r\nConnection: close\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    assert!(res.starts_with("HTTP/1.1 30"), "{res}");
 
     // Answered by `rate_limit` the second time
     proksi.resolve("limited.test");
@@ -2064,7 +2073,12 @@ async fn test_admin_metrics() {
         "{res}"
     );
     assert_eq!(
-        line("proksi_requests_total{host=\"_unknown\"", "status=\"4xx\"").as_deref(),
+        line("proksi_requests_total{host=\"_unknown_host\"", "status=\"4xx\"").as_deref(),
+        Some("1"),
+        "{res}"
+    );
+    assert_eq!(
+        line("proksi_requests_total{host=\"_https_redirect\"", "status=\"3xx\"").as_deref(),
         Some("1"),
         "{res}"
     );

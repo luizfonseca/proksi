@@ -86,7 +86,7 @@ To reach it on a server, use a tunnel: `ssh -L 7555:127.0.0.1:7555 your-server`,
 | `proksi_certificate_expiry_timestamp_seconds` | `domain` | When each certificate expires (refreshed every minute) |
 | `proksi_routes` | `source` | Hosts applied from each source (`file`, `docker`, `kubernetes`, `store`) |
 
-Labels come from the configuration: `host` is the name of the host that served the request (`*` for the catch-all), `location` its path, and `upstream` its address as configured. Requests no location served (unknown hosts, redirects to HTTPS, ACME challenges) are counted under `host="_unknown"`, so clients can't create new series by sending new names or paths.
+Labels come from the configuration: `host` is the name of the host that served the request (`*` for the catch-all), `location` its path, and `upstream` its address as configured. Requests no location served are counted under a `host` that says why: `_unknown_host` (no host has the name), `_no_location` (a host does, but no location has the path), `_https_redirect`, `_acme` (Let's Encrypt challenges), or `_rules` (answered by the server's or a host's rules). Clients can't create new series by sending new names or paths.
 
 Histograms go from 0.5 ms to 10 s. With Prometheus, the 99th percentile of a host's requests over the last 5 minutes is:
 

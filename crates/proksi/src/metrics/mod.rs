@@ -27,8 +27,42 @@ pub fn enabled() -> bool {
     ENABLED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// Host label of requests that match no host
-pub const UNKNOWN: &str = "_unknown";
+/// Why no location served a request, as its host label: a fixed few, so clients can't create
+/// new series by sending new names or paths
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Unserved {
+    /// No host has the request's name
+    #[default]
+    UnknownHost,
+    /// A host has the name, but none of its locations the path
+    NoLocation,
+    /// Redirected to HTTPS
+    HttpsRedirect,
+    /// A Let's Encrypt challenge
+    Acme,
+    /// Answered by the server's or a host's rules, before a location was chosen
+    Rules,
+}
+
+impl Unserved {
+    const ALL: [Self; 5] = [
+        Self::UnknownHost,
+        Self::NoLocation,
+        Self::HttpsRedirect,
+        Self::Acme,
+        Self::Rules,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::UnknownHost => "_unknown_host",
+            Self::NoLocation => "_no_location",
+            Self::HttpsRedirect => "_https_redirect",
+            Self::Acme => "_acme",
+            Self::Rules => "_rules",
+        }
+    }
+}
 
 /// Status classes, by the first digit of the status (`none`: no response was sent)
 const STATUS_CLASSES: [&str; 6] = ["none", "1xx", "2xx", "3xx", "4xx", "5xx"];
@@ -236,11 +270,18 @@ impl LocationMetrics {
         }
     }
 
-    /// Requests that match no host (or no location of their host)
-    pub fn unknown() -> &'static Self {
-        static UNKNOWN_METRICS: Lazy<LocationMetrics> =
-            Lazy::new(|| LocationMetrics::new(UNKNOWN, "", &[]));
-        &UNKNOWN_METRICS
+    /// Requests no location served, by why
+    pub fn unserved(why: Unserved) -> &'static Self {
+        static UNSERVED: Lazy<[LocationMetrics; 5]> =
+            Lazy::new(|| Unserved::ALL.map(|why| LocationMetrics::new(why.label(), "", &[])));
+        let [unknown_host, no_location, https_redirect, acme, rules] = &*UNSERVED;
+        match why {
+            Unserved::UnknownHost => unknown_host,
+            Unserved::NoLocation => no_location,
+            Unserved::HttpsRedirect => https_redirect,
+            Unserved::Acme => acme,
+            Unserved::Rules => rules,
+        }
     }
 
     /// Records a request answered with `status` (0 if no response was sent) after `duration`
@@ -423,7 +464,7 @@ pub fn gather() -> String {
 mod tests {
     use std::time::Duration;
 
-    use super::{gather, LocationMetrics};
+    use super::{gather, LocationMetrics, Unserved};
 
     fn line<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
         text.lines().find(|line| line.starts_with(prefix))
@@ -491,11 +532,15 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown_hosts() {
-        LocationMetrics::unknown().record(404, Duration::from_millis(1));
+    fn test_requests_no_location_served() {
+        for why in Unserved::ALL {
+            assert_eq!(LocationMetrics::unserved(why).host, why.label());
+        }
+        LocationMetrics::unserved(Unserved::HttpsRedirect).record(301, Duration::from_millis(1));
 
-        assert!(gather()
-            .contains("proksi_requests_total{host=\"_unknown\",location=\"\",status=\"4xx\"}"));
+        assert!(gather().contains(
+            "proksi_requests_total{host=\"_https_redirect\",location=\"\",status=\"3xx\"}"
+        ));
     }
 
     #[test]
