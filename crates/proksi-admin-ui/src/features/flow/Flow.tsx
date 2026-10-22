@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { type Flow as FlowData, type FlowEdge, type FlowNode, NODE_HEIGHT } from './flowGraph';
 
 /** A title that fits its node (about 6.8px a character) */
@@ -45,19 +46,38 @@ function Node({ node, href }: { node: FlowNode; href?: string }) {
   return href ? <a href={href}>{box}</a> : box;
 }
 
-/** A host's traffic, from clients to upstreams, over the last seconds */
-export function Flow({ flow }: { flow: FlowData }) {
+/** A host's traffic, from clients to upstreams, over the last seconds: `draw` lays it out for the width it has, drawn at its actual size */
+export function Flow({ draw }: { draw: (width: number) => FlowData }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.floor(entry?.contentRect.width ?? 0)));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const flow = width > 0 ? draw(width) : null;
   const pad = NODE_HEIGHT / 2 + 4;
   return (
-    <div class="overflow-x-auto">
-      <svg class="flow block h-auto w-full min-w-[760px] font-sans" viewBox={`0 ${-pad} ${flow.width} ${flow.height + pad * 2}`} role="img" aria-label="Traffic from clients to upstreams">
-        {flow.edges.map((edge) => (
-          <Edge key={`${edge.from.id}>${edge.to.id}`} edge={edge} />
-        ))}
-        {flow.nodes.map((node) => (
-          <Node key={node.id} node={node} href={node.id.startsWith('location ') ? `#${encodeURIComponent(node.id)}` : undefined} />
-        ))}
-      </svg>
+    <div ref={box} class="overflow-x-auto">
+      {flow && (
+        <svg
+          class="flow block font-sans"
+          width={flow.width}
+          height={flow.height + pad * 2}
+          viewBox={`0 ${-pad} ${flow.width} ${flow.height + pad * 2}`}
+          role="img"
+          aria-label="Traffic from clients to upstreams"
+        >
+          {flow.edges.map((edge) => (
+            <Edge key={`${edge.from.id}>${edge.to.id}`} edge={edge} />
+          ))}
+          {flow.nodes.map((node) => (
+            <Node key={node.id} node={node} href={node.id.startsWith('location ') ? `#${encodeURIComponent(node.id)}` : undefined} />
+          ))}
+        </svg>
+      )}
     </div>
   );
 }

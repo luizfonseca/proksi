@@ -25,14 +25,28 @@ export type Flow = { width: number; height: number; nodes: FlowNode[]; edges: Fl
 /** Room for each upstream (or a location without any) */
 export const ROW = 64;
 export const NODE_HEIGHT = 46;
+/** The width laid out when none is given */
 export const WIDTH = 1000;
 
-const COLUMNS = {
-  clients: { x: 0, width: 110 },
-  host: { x: 160, width: 240 },
-  location: { x: 450, width: 240 },
-  upstream: { x: 740, width: 260 },
-};
+/** The widths of the columns' nodes: what's left of the width goes between them */
+const NODES = { clients: 110, host: 240, location: 240, upstream: 260 };
+
+type Column = keyof typeof NODES;
+
+/** Each column's place and width, for a graph `width` wide: nodes keep their size, gaps grow */
+function columns(width: number): Record<Column, { x: number; width: number }> {
+  const names = Object.keys(NODES) as Column[];
+  const taken = names.reduce((sum, name) => sum + NODES[name], 0);
+  // Narrower than the nodes and their smallest gaps: wider than the room, scrolled sideways
+  const gap = Math.max(40, (width - taken) / (names.length - 1));
+  let x = 0;
+  const placed = {} as Record<Column, { x: number; width: number }>;
+  for (const name of names) {
+    placed[name] = { x, width: NODES[name] };
+    x += NODES[name] + gap;
+  }
+  return placed;
+}
 
 /** How a scope's responses went: errors (5xx) as a share of all, and nothing when idle */
 export function tone(requests: number, responses: Record<string, number>): Tone {
@@ -57,15 +71,19 @@ function summary(requests: number, p99: number | null, responses?: Record<string
   return parts.join(' · ');
 }
 
-/** `window`: the seconds the stats are over (errors are counts in it) */
-export function layout(host: Host, stats: HostStats | undefined, window = 5): Flow {
+/**
+ * `window`: the seconds the stats are over (errors are counts in it); `width`: the room it's drawn
+ * in, at its actual size
+ */
+export function layout(host: Host, stats: HostStats | undefined, window = 5, width = WIDTH): Flow {
+  const COLUMNS = columns(width);
   const statsOf = (path: string): LocationStats | undefined =>
     stats?.locations.find((location) => location.location === path);
   const rows = host.locations.reduce((sum, location) => sum + Math.max(1, location.upstreams.length), 0);
   const height = Math.max(1, rows) * ROW;
   const middle = height / 2;
 
-  const node = (id: string, column: keyof typeof COLUMNS, y: number, title: string, detail: string, tone: Tone): FlowNode => ({
+  const node = (id: string, column: Column, y: number, title: string, detail: string, tone: Tone): FlowNode => ({
     id,
     x: COLUMNS[column].x,
     width: COLUMNS[column].width,
@@ -142,5 +160,5 @@ export function layout(host: Host, stats: HostStats | undefined, window = 5): Fl
     });
     row += span;
   }
-  return { width: WIDTH, height, nodes, edges };
+  return { width: COLUMNS.upstream.x + COLUMNS.upstream.width, height, nodes, edges };
 }

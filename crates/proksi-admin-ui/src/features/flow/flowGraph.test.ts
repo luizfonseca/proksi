@@ -49,6 +49,19 @@ describe('the traffic graph', () => {
     expect(tone(5, { '2xx': 3, '5xx': 1 })).toBe('bad');
   });
 
+  it('fills the width it has between its columns, keeping nodes their size', () => {
+    const at = (flow: ReturnType<typeof layout>, id: string) => flow.nodes.find((node) => node.id === id)!;
+    const wide = layout(host, stats, 5, 1280);
+    expect(wide.width).toBe(1280);
+    expect(at(wide, 'host').width).toBe(at(layout(host, stats), 'host').width);
+    expect(at(wide, 'host').x - (at(wide, 'clients').x + at(wide, 'clients').width)).toBeCloseTo(
+      at(wide, 'location /').x - (at(wide, 'host').x + at(wide, 'host').width),
+    );
+    // Too narrow for its nodes: as narrow as they allow, to scroll sideways
+    const narrow = layout(host, stats, 5, 400);
+    expect(narrow.width).toBe(110 + 240 + 240 + 260 + 3 * 40);
+  });
+
   it('lays out clients, the host, locations and upstreams', () => {
     const flow = layout(host, stats);
 

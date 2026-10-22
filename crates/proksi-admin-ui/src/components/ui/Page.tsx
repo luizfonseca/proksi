@@ -54,7 +54,8 @@ export function PageSection({
         </div>
         {aside && <div class="ml-auto">{aside}</div>}
       </div>
-      <div class="grid gap-3">{children}</div>
+      {/* One column, as wide as the page: wider content scrolls inside its panel */}
+      <div class="grid grid-cols-1 gap-3">{children}</div>
     </section>
   );
 }

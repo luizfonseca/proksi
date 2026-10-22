@@ -95,7 +95,7 @@ function Traffic({ host }: { host: HostData }) {
         }
       >
         <div class="px-4 pb-2.5">
-          <Flow flow={layout(host, stats, latest?.window_seconds)} />
+          <Flow draw={(width) => layout(host, stats, latest?.window_seconds, width)} />
         </div>
       </Panel>
       <Grid columns={2}>
