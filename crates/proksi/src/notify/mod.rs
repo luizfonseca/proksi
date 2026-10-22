@@ -394,6 +394,8 @@ mod tests {
         };
         // Without the URL, which can be a secret
         assert!(!err.contains("127.0.0.1:1/hook"), "{err}");
+        // With why it failed, not only that it did
+        assert!(err.to_lowercase().contains("connect"), "{err}");
         let last = &deliveries()["dead"];
         assert!(!last.ok);
         assert_eq!(last.event, "test");

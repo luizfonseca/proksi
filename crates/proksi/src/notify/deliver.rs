@@ -58,7 +58,7 @@ async fn post(block: &NotifyBlock, body: &serde_json::Value) -> Result<(), Strin
             format!("no answer within {}s", TIMEOUT.as_secs())
         } else {
             // Without the URL, which can be a secret
-            err.without_url().to_string()
+            reason(&err.without_url())
         }
     })?;
     let status = response.status();
@@ -67,6 +67,17 @@ async fn post(block: &NotifyBlock, body: &serde_json::Value) -> Result<(), Strin
     } else {
         Err(format!("answered {status}"))
     }
+}
+
+/// An error with what caused it (`error sending request: ... Connection refused`)
+fn reason(err: &dyn std::error::Error) -> String {
+    let mut text = err.to_string();
+    let mut source = err.source();
+    while let Some(cause) = source {
+        text = format!("{text}: {cause}");
+        source = cause.source();
+    }
+    text
 }
 
 /// `url` with most of it hidden (a webhook's URL is often its secret): `https://hook…bf3a`
