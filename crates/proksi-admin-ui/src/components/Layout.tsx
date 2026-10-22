@@ -9,6 +9,7 @@ import { Bell, Book, External, Globe, Pulse, Server, Shield } from './ui/icons';
 import { Palette, PaletteButton, SHORTCUT } from '../features/palette/Palette';
 import { Toaster } from './ui/Toast';
 import { DOCS, GITHUB, ISSUES } from '../lib/links';
+import { useNewRelease } from '../features/version/version';
 
 const NAV = [
   { href: '/overview', label: 'Overview', icon: Pulse },
@@ -34,6 +35,23 @@ function Brand({ version }: { version?: string }) {
       <img class="w-7" src="/logo.svg" alt="" />
       Proksi
       {version && <small class="font-mono text-xs font-medium text-base-content/45">v{version}</small>}
+    </a>
+  );
+}
+
+/** A newer release of Proksi than this one, opening its notes */
+function NewRelease({ version }: { version?: string }) {
+  const release = useNewRelease(version);
+  if (!release) return null;
+  return (
+    <a
+      class="badge badge-sm badge-soft badge-success gap-1 whitespace-nowrap hover:brightness-125"
+      href={release.url}
+      target="_blank"
+      rel="noreferrer"
+      title="See what's new in this release"
+    >
+      v{release.version} available <External class="size-3" />
     </a>
   );
 }
@@ -166,6 +184,7 @@ export function Layout({ path, session, onSignOut, children }: Props) {
       <header class="border-b border-base-300 bg-base-100">
         <div class={`${WIDTH} flex h-14 items-center gap-3`}>
           <Brand version={ready?.version} />
+          <NewRelease version={ready?.version} />
           <div class="ml-auto flex items-center gap-2">
             {ready && <Instance status={ready} />}
             <PaletteButton />
