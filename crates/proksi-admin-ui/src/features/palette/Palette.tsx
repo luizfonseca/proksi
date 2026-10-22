@@ -11,16 +11,23 @@ const OPEN = 'proksi-palette';
 
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
+/** A key, outlined and quiet */
+const KEY = 'kbd kbd-xs border-base-300 bg-transparent text-base-content/60 shadow-none';
+
 /** The shortcut opening the palette, as this system writes it */
 export const SHORTCUT = MAC ? '⌘K' : 'Ctrl K';
 
 /** A button in a bar, opening the palette */
 export function PaletteButton() {
   return (
-    <button type="button" class="btn btn-sm gap-2 font-normal text-base-content/60" onClick={() => dispatchEvent(new Event(OPEN))}>
+    <button
+      type="button"
+      class="btn btn-sm justify-start gap-2 border-base-300 bg-base-100 font-normal text-base-content/60 shadow-none hover:bg-base-200 md:w-52"
+      onClick={() => dispatchEvent(new Event(OPEN))}
+    >
       <Search />
       <span class="max-md:hidden">Search</span>
-      <kbd class="kbd kbd-xs max-md:hidden">{SHORTCUT}</kbd>
+      <kbd class={`${KEY} ml-auto max-md:hidden`}>{SHORTCUT}</kbd>
     </button>
   );
 }
@@ -104,7 +111,7 @@ export function Palette({ onSignOut }: { onSignOut: () => void }) {
             }}
             onKeyDown={onKeyDown}
           />
-          <kbd class="kbd kbd-xs">esc</kbd>
+          <kbd class={KEY}>esc</kbd>
         </label>
         {found.length === 0 ? (
           <p class="px-4 py-8 text-center text-sm text-base-content/60">Nothing matches “{query.trim()}”</p>
