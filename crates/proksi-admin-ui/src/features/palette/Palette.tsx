@@ -3,7 +3,7 @@ import { get, type Host } from '../../api';
 import { useCanWrite } from '../../api/session';
 import type { ComponentType } from 'preact';
 import { Status } from '../../components/ui/Badge';
-import { Clock, Globe, Pencil, Plus, Pulse, Search, Server, Shield, SignOut } from '../../components/ui/icons';
+import { Book, Clock, External, Globe, Pencil, Plus, Pulse, Search, Server, Shield, SignOut } from '../../components/ui/icons';
 import { navigate } from '../../router';
 import { ACTIONS, type Command, GROUPS, hostCommands, type IconName, PAGES, search } from './commands';
 
@@ -20,6 +20,8 @@ const ICONS: Record<IconName, ComponentType<{ class?: string }>> = {
   new: Plus,
   edit: Pencil,
   history: Clock,
+  docs: Book,
+  github: External,
   'sign-out': SignOut,
 };
 
@@ -116,6 +118,7 @@ export function Palette({ onSignOut }: { onSignOut: () => void }) {
     if (!command) return;
     setOpen(false);
     if ('href' in command.run) navigate(command.run.href);
+    else if ('url' in command.run) window.open(command.run.url, '_blank', 'noopener');
     else onSignOut();
   };
   const onKeyDown = (event: KeyboardEvent) => {

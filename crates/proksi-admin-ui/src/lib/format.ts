@@ -17,9 +17,11 @@ export function ms(value: number | null): string {
   return `${value >= 100 ? Math.round(value) : Number(value.toFixed(1))} ms`;
 }
 
+/** Requests (or connections) a second: one decimal under 100/s, even a 0, so the width holds as it changes */
 export function rate(value: number): string {
   if (value >= 1000) return `${(value / 1000).toFixed(1)}k/s`;
-  return `${value >= 100 ? Math.round(value) : Number(value.toFixed(1))}/s`;
+  const tenths = Math.round(value * 10) / 10;
+  return `${tenths >= 100 ? Math.round(value) : tenths.toFixed(1)}/s`;
 }
 
 export function percent(value: number): string {

@@ -5,9 +5,10 @@ import { onLink } from '../router';
 import { useData } from '../api/useData';
 import { Badge, Status } from './ui/Badge';
 import { Button } from './ui/Button';
-import { Globe, Pulse, Server, Shield } from './ui/icons';
-import { Palette, PaletteButton } from '../features/palette/Palette';
+import { Book, External, Globe, Pulse, Server, Shield } from './ui/icons';
+import { Palette, PaletteButton, SHORTCUT } from '../features/palette/Palette';
 import { Toaster } from './ui/Toast';
+import { DOCS, GITHUB, ISSUES } from '../lib/links';
 
 const NAV = [
   { href: '/overview', label: 'Overview', icon: Pulse },
@@ -78,7 +79,15 @@ function Account({ session, onSignOut }: { session: Session; onSignOut: () => vo
               {session.access === 'write' ? 'read & write' : 'read-only'}
             </Badge>
           </div>
-          <div class="mt-3 border-t border-base-300 pt-2">
+          <div class="mt-3 grid gap-1.5 border-t border-base-300 pt-2.5 text-sm">
+            <a class="flex items-center gap-2 text-base-content/70 hover:text-base-content" href={DOCS} target="_blank" rel="noreferrer">
+              <Book /> Documentation
+            </a>
+            <a class="flex items-center gap-2 text-base-content/70 hover:text-base-content" href={GITHUB} target="_blank" rel="noreferrer">
+              <External /> Proksi on GitHub
+            </a>
+          </div>
+          <div class="mt-2.5 border-t border-base-300 pt-2">
             <Button variant="link" onClick={onSignOut}>
               Sign out
             </Button>
@@ -86,6 +95,30 @@ function Account({ session, onSignOut }: { session: Session; onSignOut: () => vo
         </div>
       )}
     </div>
+  );
+}
+
+/** Under every page: the version, and where to read about Proksi or ask about it */
+function Footer({ version }: { version?: string }) {
+  const link = 'hover:text-base-content';
+  return (
+    <footer class="border-t border-base-300">
+      <div class={`${WIDTH} flex flex-wrap items-center gap-x-5 gap-y-1 py-5 text-xs text-base-content/45`}>
+        <span>Proksi{version && ` v${version}`}</span>
+        <a class={link} href={DOCS} target="_blank" rel="noreferrer">
+          Documentation
+        </a>
+        <a class={link} href={GITHUB} target="_blank" rel="noreferrer">
+          GitHub
+        </a>
+        <a class={link} href={ISSUES} target="_blank" rel="noreferrer">
+          Report an issue
+        </a>
+        <span class="ml-auto max-md:hidden">
+          Press <kbd class="kbd kbd-xs border-base-300 bg-transparent shadow-none">{SHORTCUT}</kbd> to search
+        </span>
+      </div>
+    </footer>
   );
 }
 
@@ -126,7 +159,7 @@ export function Layout({ path, session, onSignOut, children }: Props) {
   const ready = status.state === 'ready' ? status.value : null;
   const signOut = () => api.signOut().finally(onSignOut);
   return (
-    <div class="min-h-screen">
+    <div class="flex min-h-screen flex-col">
       <Palette onSignOut={signOut} />
       <Toaster />
       <header class="border-b border-base-300 bg-base-100">
@@ -140,7 +173,8 @@ export function Layout({ path, session, onSignOut, children }: Props) {
         </div>
       </header>
       <Nav path={path} />
-      <main class={`${WIDTH} pt-6 pb-16`}>{children}</main>
+      <main class={`${WIDTH} grow pt-6 pb-12`}>{children}</main>
+      <Footer version={ready?.version} />
     </div>
   );
 }

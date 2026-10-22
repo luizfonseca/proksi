@@ -44,6 +44,8 @@ describe('the palette', () => {
       'Certificates',
       'Server',
       'New host',
+      'Documentation',
+      'Proksi on GitHub',
       'Sign out',
     ]);
   });

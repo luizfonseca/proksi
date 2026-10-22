@@ -1,10 +1,11 @@
 import type { Host } from '../../api';
+import { DOCS, GITHUB } from '../../lib/links';
 
 /** The groups of the palette, in the order they're shown */
 export const GROUPS = ['Hosts', 'Pages', 'Actions'] as const;
 
 /** Icons of pages and actions (hosts show their health) */
-export type IconName = 'overview' | 'hosts' | 'certificates' | 'server' | 'new' | 'edit' | 'history' | 'sign-out';
+export type IconName = 'overview' | 'hosts' | 'certificates' | 'server' | 'new' | 'edit' | 'history' | 'docs' | 'github' | 'sign-out';
 
 /** Something the palette opens or does */
 export type Command = {
@@ -21,7 +22,7 @@ export type Command = {
   /** Shown only once something is typed (each host's editor and history) */
   searched?: boolean;
   /** A page of the UI, or something to do */
-  run: { href: string } | { action: 'sign-out' };
+  run: { href: string } | { url: string } | { action: 'sign-out' };
 };
 
 export const PAGES: Command[] = [
@@ -32,6 +33,8 @@ export const PAGES: Command[] = [
 ];
 
 export const ACTIONS: Command[] = [
+  { title: 'Documentation', group: 'Actions', icon: 'docs', keywords: 'docs help guide support', run: { url: DOCS } },
+  { title: 'Proksi on GitHub', group: 'Actions', icon: 'github', keywords: 'source code issues support', run: { url: GITHUB } },
   { title: 'Sign out', group: 'Actions', icon: 'sign-out', keywords: 'log out', run: { action: 'sign-out' } },
 ];
 

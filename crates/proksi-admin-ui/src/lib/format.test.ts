@@ -9,6 +9,11 @@ describe('format', () => {
     expect(ms(3.25)).toBe('3.3 ms');
     expect(ms(1500)).toBe('1.5 s');
     expect(rate(0.4)).toBe('0.4/s');
+    // One decimal under 100/s, even when it's 0: the width doesn't change as it rolls
+    expect(rate(24)).toBe('24.0/s');
+    expect(rate(24.46)).toBe('24.5/s');
+    expect(rate(0)).toBe('0.0/s');
+    expect(rate(126.4)).toBe('126/s');
     expect(rate(2500)).toBe('2.5k/s');
     expect(percent(12.34)).toBe('12%');
     expect(percent(0.25)).toBe('0.3%');

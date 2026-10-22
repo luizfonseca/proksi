@@ -83,8 +83,8 @@ describe('the traffic graph', () => {
     expect(edge('location /status')).toMatchObject({ rate: 0, tone: 'idle' });
     // Refused connections aren't answered, but they're traffic, and failing
     expect(edge('upstream / 10.0.0.3:80')).toMatchObject({ rate: 2, tone: 'bad' });
-    expect(flow.nodes.find((node) => node.id === 'upstream / 10.0.0.3:80')!.detail).toBe('2/s failed · 17%');
-    expect(flow.nodes.find((node) => node.id === 'location /')!.detail).toBe('10/s · p99 30 ms · 10% 5xx');
+    expect(flow.nodes.find((node) => node.id === 'upstream / 10.0.0.3:80')!.detail).toBe('2.0/s failed · 17%');
+    expect(flow.nodes.find((node) => node.id === 'location /')!.detail).toBe('10.0/s · p99 30 ms · 10% 5xx');
   });
 
   it('is idle without stats', () => {
@@ -100,7 +100,7 @@ describe('the traffic graph', () => {
     expect(flow.idle).toBe(false);
     // 10/s answered by the first, 2/s refused by the third
     expect(node('upstream / 10.0.0.1:80').share).toBeCloseTo(10 / 12);
-    expect(node('upstream / 10.0.0.1:80').detail).toBe('10/s · p99 28 ms · 83%');
+    expect(node('upstream / 10.0.0.1:80').detail).toBe('10.0/s · p99 28 ms · 83%');
     expect(node('upstream / 10.0.0.2:80').share).toBe(0);
   });
 
