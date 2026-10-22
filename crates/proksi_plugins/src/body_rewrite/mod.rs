@@ -110,19 +110,44 @@ fn target(path: &str, action: Action) -> Result<Target, String> {
     Ok(Target { steps, action, key })
 }
 
-/// `application/json`, or a type ending with `+json` (`application/merge-patch+json`)
-fn is_json(request: &RequestHeader) -> bool {
-    let media_type = request
+/// The request's media type (`application/json` in `application/json; charset=utf-8`), lower
+/// case
+fn media_type(request: &RequestHeader) -> String {
+    request
         .headers
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .map(str::trim)
-        .unwrap_or_default();
-    media_type.eq_ignore_ascii_case("application/json")
-        || media_type
-            .get(media_type.len().saturating_sub(5)..)
-            .is_some_and(|suffix| suffix.eq_ignore_ascii_case("+json"))
+        .map(|media_type| media_type.trim().to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+/// `application/json`, or a type ending with `+json` (`application/merge-patch+json`)
+fn is_json(media_type: &str) -> bool {
+    media_type == "application/json" || media_type.ends_with("+json")
+}
+
+/// Text that regular expressions can be replaced in: not a file, an image, or a type not given
+fn is_text(media_type: &str) -> bool {
+    media_type.starts_with("text/")
+        || is_json(media_type)
+        || media_type.ends_with("+xml")
+        || matches!(
+            media_type,
+            "application/xml"
+                | "application/x-www-form-urlencoded"
+                | "application/javascript"
+                | "application/graphql"
+                | "application/x-ndjson"
+        )
+}
+
+/// Compressed (`Content-Encoding` other than `identity`): bytes no change can be made in
+fn is_encoded(request: &RequestHeader) -> bool {
+    request
+        .headers
+        .get(header::CONTENT_ENCODING)
+        .is_some_and(|encoding| !encoding.as_bytes().eq_ignore_ascii_case(b"identity"))
 }
 
 /// Whether the request has a body (a length that isn't 0, or a chunked one)
@@ -142,8 +167,13 @@ impl Middleware for BodyRewrite {
         request: &mut RequestHeader,
         ctx: &mut dyn RequestCtx,
     ) -> Result<()> {
-        let json = !self.targets.is_empty() && is_json(request);
-        if !has_body(request) || (!json && self.replaces.is_empty()) {
+        if !has_body(request) || is_encoded(request) {
+            return Ok(());
+        }
+        let media_type = media_type(request);
+        let json = !self.targets.is_empty() && is_json(&media_type);
+        let replace = !self.replaces.is_empty() && is_text(&media_type);
+        if !json && !replace {
             return Ok(());
         }
         request.remove_header(&header::CONTENT_LENGTH);
@@ -153,7 +183,11 @@ impl Middleware for BodyRewrite {
         }
         let rewriting = Rewriting {
             json: json.then(Editor::default),
-            replacing: self.replaces.iter().map(|_| Replacing::default()).collect(),
+            replacing: if replace {
+                self.replaces.iter().map(|_| Replacing::default()).collect()
+            } else {
+                vec![]
+            },
         };
         set_block_state(ctx, self.id(), rewriting);
         Ok(())
@@ -172,6 +206,7 @@ impl Middleware for BodyRewrite {
         if let Some(editor) = &mut rewriting.json {
             part = editor.edit(&self.targets, &part, end_of_stream);
         }
+        // Empty when the body isn't text
         for (replace, replacing) in self.replaces.iter().zip(&mut rewriting.replacing) {
             part = replacing.replace(replace, &part, end_of_stream);
         }
@@ -182,9 +217,49 @@ impl Middleware for BodyRewrite {
 
 #[cfg(test)]
 mod tests {
+    use pingora::http::RequestHeader;
+
     use crate::RoutePlugin;
 
-    use super::BodyRewrite;
+    use super::{is_encoded, is_json, is_text, media_type, BodyRewrite};
+
+    #[test]
+    fn test_which_bodies_are_changed() {
+        let request = |headers: &[(&'static str, &str)]| {
+            let mut request = RequestHeader::build("POST", b"/", None).unwrap();
+            for (name, value) in headers {
+                request.insert_header(*name, *value).unwrap();
+            }
+            request
+        };
+        let typed = |value: &str| media_type(&request(&[("content-type", value)]));
+
+        assert_eq!(typed("Application/JSON; charset=utf-8"), "application/json");
+        assert!(is_json(&typed("application/merge-patch+json")));
+        assert!(!is_json(&typed("text/plain")));
+        for text in [
+            "text/plain",
+            "text/csv",
+            "application/json",
+            "application/soap+xml",
+            "application/x-www-form-urlencoded",
+        ] {
+            assert!(is_text(&typed(text)), "{text}");
+        }
+        for binary in [
+            "image/png",
+            "application/octet-stream",
+            "multipart/form-data; boundary=x",
+            "application/pdf",
+        ] {
+            assert!(!is_text(&typed(binary)), "{binary}");
+        }
+        assert!(!is_text(&media_type(&request(&[]))));
+
+        assert!(is_encoded(&request(&[("content-encoding", "gzip")])));
+        assert!(!is_encoded(&request(&[("content-encoding", "identity")])));
+        assert!(!is_encoded(&request(&[])));
+    }
 
     fn block(config: serde_json::Value) -> Result<BodyRewrite, String> {
         BodyRewrite::new(&RoutePlugin {

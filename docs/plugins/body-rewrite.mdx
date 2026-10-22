@@ -33,7 +33,7 @@ host "api.example.com" {
 | `replace { pattern, with, max_match }` | A regular expression, and what replaces each match (`$1`, `$name` are its groups, `$$` a `$`). Repeat the block for several, applied in order. `max_match` is the longest match, such as `"4KiB"` (default: `"1KiB"`): a longer one may be missed where two parts of the body meet. |
 | `priority` | When it runs among the blocks of the location (default: `25`, after authentication) |
 
-`json` only applies to JSON bodies (`Content-Type: application/json`, or a type ending in `+json`); `replace` to any body, after `json`.
+`json` only applies to JSON bodies (`Content-Type: application/json`, or a type ending in `+json`), and `replace`, after `json`, to text: `text/*`, JSON, XML, `application/x-www-form-urlencoded`, `application/javascript`, `application/graphql` and `application/x-ndjson`. Files and images, bodies without a type, and compressed bodies (`Content-Encoding` other than `identity`) are sent as they came.
 
 ## Paths
 
