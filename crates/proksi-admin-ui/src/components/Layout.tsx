@@ -7,6 +7,7 @@ import { Badge, Status } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Globe, Pulse, Server, Shield } from './ui/icons';
 import { Palette, PaletteButton } from '../features/palette/Palette';
+import { Toaster } from './ui/Toast';
 
 const NAV = [
   { href: '/overview', label: 'Overview', icon: Pulse },
@@ -127,6 +128,7 @@ export function Layout({ path, session, onSignOut, children }: Props) {
   return (
     <div class="min-h-screen">
       <Palette onSignOut={signOut} />
+      <Toaster />
       <header class="border-b border-base-300 bg-base-100">
         <div class={`${WIDTH} flex h-14 items-center gap-3`}>
           <Brand version={ready?.version} />

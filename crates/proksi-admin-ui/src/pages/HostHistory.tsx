@@ -10,6 +10,8 @@ import { Checkbox } from '../components/ui/Form';
 import { Empty, None, PageHead, Panel } from '../components/ui/Page';
 import { Cell, Row, Table } from '../components/ui/Table';
 import { onLink } from '../router';
+import { Time } from '../components/ui/Time';
+import { toast } from '../components/ui/Toast';
 
 /** The versions a change can be compared with or rolled back to */
 function versionOf(entry: HistoryEntry): number | null {
@@ -54,6 +56,7 @@ export function HostHistory({ name }: { name: string }) {
     setBusy(true);
     try {
       await routes.rollback(name, version, expect);
+      toast({ message: `${name} is back to version ${version}` });
       setSelected([]);
       await load();
     } catch (err) {
@@ -138,7 +141,7 @@ export function HostHistory({ name }: { name: string }) {
                   </Cell>
                   <Cell>{entry.author ?? <None>unknown</None>}</Cell>
                   <Cell class="text-base-content/60">
-                    <span title={at.toISOString()}>{at.toLocaleString()}</span>
+                    <Time at={at.getTime()} />
                   </Cell>
                   <Cell class="text-right">
                     {canWrite && version !== null && version !== active && (

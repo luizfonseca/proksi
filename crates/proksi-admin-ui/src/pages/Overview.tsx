@@ -13,6 +13,7 @@ import { TcpBlocks } from '../features/tcp/Tcp';
 import { bytes, ms, percent, rate } from '../lib/format';
 import { activeHosts, type Point, type Stats, useLive } from '../features/live/live';
 import { useData } from '../api/useData';
+import { Time } from '../components/ui/Time';
 
 const SPANS = [
   { label: '1m', points: 60 },
@@ -44,16 +45,9 @@ const take = (history: Point[], read: (point: Point) => number | null) => histor
 /** A rate of errors, colored by how bad it is */
 const tone = (share: number): Tone => (share >= 0.25 ? 'error' : share > 0 ? 'warning' : 'success');
 
-/** How long ago `at` was, roughly */
-function ago(at: number, now: number): string {
-  const seconds = Math.max(0, Math.round((now - at) / 1000));
-  return seconds < 60 ? `${seconds}s ago` : `${Math.round(seconds / 60)}m ago`;
-}
-
 /** The hosts being accessed now (the last 5 seconds), busiest first, then the ones accessed since the page opened */
 function ActiveHosts({ latest, history }: { latest: Stats | null; history: Point[] }) {
   const hosts = activeHosts(latest, history);
-  const now = history[history.length - 1]?.at ?? Date.now();
   const listed = new Set(hosts.map(({ host }) => host));
   const idle = (latest?.hosts ?? []).filter(({ host }) => !listed.has(host)).length;
   return (
@@ -89,7 +83,7 @@ function ActiveHosts({ latest, history }: { latest: Stats | null; history: Point
                 ) : (
                   // Across the requests and their errors
                   <Cell span={2} class="text-base-content/45">
-                    last request {ago(lastSeen, now)}
+                    last request <Time at={lastSeen} />
                   </Cell>
                 )}
                 <Cell><Mono>{ms(point.p99)}</Mono></Cell>
@@ -134,7 +128,9 @@ function Instances({ status }: { status: Status }) {
             <Cell>
               <Badge tone={replica.revision === status.store.revision ? 'success' : 'warning'}>{replica.revision}</Badge>
             </Cell>
-            <Cell class="text-base-content/45">{new Date(replica.applied_at * 1000).toLocaleTimeString()}</Cell>
+            <Cell class="text-base-content/45">
+              <Time at={replica.applied_at * 1000} />
+            </Cell>
           </Row>
         ))}
       </Table>

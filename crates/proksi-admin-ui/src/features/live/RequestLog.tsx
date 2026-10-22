@@ -8,6 +8,7 @@ import { SearchInput } from '../../components/ui/Form';
 import { Empty, Mono, None, Panel } from '../../components/ui/Page';
 import { Stack } from '../../components/ui/Stack';
 import { Cell, Row, Table } from '../../components/ui/Table';
+import { Time } from '../../components/ui/Time';
 
 /** Rows drawn at once: the newest matching ones (up to `KEPT` are kept to search) */
 const DRAWN = 200;
@@ -43,7 +44,7 @@ function Request({ served, host, onClose }: { served: Served | null; host?: stri
       {served && (
         <Details
           items={[
-            ['Time', new Date(served.time).toLocaleString()],
+            ['Time', <Time at={served.time} exact />],
             ['Host', <Mono>{served.host}</Mono>],
             ['Method', <Mono>{served.method}</Mono>],
             ['Path', <Mono class="break-all">{served.path}</Mono>],

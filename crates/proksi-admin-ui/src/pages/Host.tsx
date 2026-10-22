@@ -16,6 +16,7 @@ import { Loaded } from '../components/ui/State';
 import { navigate, onLink } from '../router';
 import { useCanWrite } from '../api/session';
 import { useData } from '../api/useData';
+import { toast } from '../components/ui/Toast';
 
 function UpstreamRow({ upstream }: { upstream: Upstream }) {
   // Addresses worth showing: a name's, or a service's
@@ -59,6 +60,7 @@ function Actions({ name }: { name: string }) {
     if (!confirm(`Remove ${name} from the store? Every instance stops serving it. Its versions are kept, to restore it.`)) return;
     try {
       await routes.delete(name);
+      toast({ message: `${name} removed`, tone: 'info', action: { label: 'Restore', href: `/hosts/${encodeURIComponent(name)}/history` } });
       navigate('/hosts');
     } catch (err) {
       setError(String((err as Error).message ?? err));

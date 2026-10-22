@@ -26,6 +26,19 @@ export function percent(value: number): string {
   return `${value >= 10 ? Math.round(value) : Number(value.toFixed(1))}%`;
 }
 
+/** How long before `now` the time `at` was (both in milliseconds), in words: "3 min ago" */
+export function relative(at: number, now: number): string {
+  const seconds = Math.floor((now - at) / 1000);
+  if (seconds < 10) return 'just now';
+  if (seconds < 60) return `${seconds} s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`;
+  const days = Math.floor(seconds / 86400);
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days} days ago`;
+  return new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 /** The smallest round number at least `value`: the top of a chart */
 export function niceMax(value: number): number {
   if (!(value > 0)) return 1;

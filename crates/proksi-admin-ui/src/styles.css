@@ -11,7 +11,7 @@
 @plugin 'daisyui' {
   themes: black --default;
   logs: false;
-  include: rootcolor, scrollbar, radius, alert, avatar, badge, breadcrumbs, button, checkbox, input, kbd, link, menu, modal, progress, select, skeleton, stat, status, tab, table, textarea;
+  include: rootcolor, scrollbar, radius, alert, avatar, badge, breadcrumbs, button, checkbox, input, kbd, link, menu, modal, progress, select, skeleton, stat, status, tab, table, textarea, toast;
 }
 
 @plugin 'daisyui/theme' {
@@ -197,6 +197,14 @@
   /* A location the traffic view links to */
   .location:target {
     @apply border-primary ring-3 ring-primary/20;
+  }
+}
+
+/* A toast slides up as it appears */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
 }
 

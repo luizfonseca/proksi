@@ -17,6 +17,7 @@ import { Button } from '../components/ui/Button';
 import { Checkbox, Input } from '../components/ui/Form';
 import { Hint, Mono, PageHead, PageSection, Panel, Section } from '../components/ui/Page';
 import { Grid, Stack } from '../components/ui/Stack';
+import { toast } from '../components/ui/Toast';
 
 /** A scope's rules: their editor once there are some, or when asked for */
 function RulesSection({ rules, onChange }: { rules: unknown[]; onChange: (rules: unknown[]) => void }) {
@@ -87,8 +88,14 @@ export function EditHost({ name }: { name: string | null }) {
     if ('errors' in result) return setErrors(result.errors);
     setBusy(true);
     try {
-      await routes.put(result.host, version === null ? 'absent' : { version });
-      navigate(`/hosts/${encodeURIComponent(result.host.name)}`);
+      const written = await routes.put(result.host, version === null ? 'absent' : { version });
+      const page = `/hosts/${encodeURIComponent(result.host.name)}`;
+      toast(
+        name
+          ? { message: `${result.host.name} saved as version ${written.revision}`, action: { label: 'History', href: `${page}/history` } }
+          : { message: `${result.host.name} created: every instance serves it within seconds` },
+      );
+      navigate(page);
     } catch (err) {
       if (err instanceof Conflict) {
         const reason = name
