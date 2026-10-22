@@ -18,7 +18,7 @@ use pingora_cache::{
     CacheKey, CacheMeta, ForcedFreshness, HitHandler, NoCacheReason, RespCacheable,
 };
 
-use crate::metrics::{LocationMetrics, UpstreamMetrics};
+use crate::metrics::{LocationMetrics, Unserved, UpstreamMetrics};
 use crate::stores::{self, routes::RouteStoreContainer};
 
 use super::{default_peer_opts, http_proxy, listener::Listener, respond::respond_error};
@@ -43,6 +43,8 @@ pub struct RouterContext {
     pub host: String,
     /// The location serving the request, once found
     pub route_container: Option<Arc<RouteStoreContainer>>,
+    /// Why no location served it, if none did (its metrics)
+    pub unserved: crate::metrics::Unserved,
     /// The request's id (`request_id` block)
     pub request_id: Option<http::HeaderValue>,
     /// Whether the response came from the cache (`cache-status`)
@@ -95,6 +97,7 @@ impl ProxyHttp for Router {
         RouterContext {
             host: String::new(),
             route_container: None,
+            unserved: crate::metrics::Unserved::UnknownHost,
             request_id: None,
             cache_state: None,
             upstream_connection: None,
@@ -137,6 +140,7 @@ impl ProxyHttp for Router {
         // The server's rules, before the host is chosen (ADR 0007)
         if let Some(rules) = crate::rules::server() {
             if rules.request(session, ctx).await {
+                ctx.unserved = Unserved::Rules;
                 return Ok(true);
             }
         }
@@ -185,6 +189,7 @@ impl ProxyHttp for Router {
         // The host's rules, before its location is chosen
         if let Some(rules) = &host_container.rules {
             if rules.request(session, ctx).await {
+                ctx.unserved = Unserved::Rules;
                 return Ok(true);
             }
         }
@@ -192,6 +197,7 @@ impl ProxyHttp for Router {
         // The most specific location of the host for the path, or a 404
         let Some(route_container) = host_container.location_for(session.req_header().uri.path())
         else {
+            ctx.unserved = Unserved::NoLocation;
             respond_error(session, ctx, 404).await?;
             return Ok(true);
         };
@@ -557,12 +563,12 @@ impl ProxyHttp for Router {
             .map(|v| v.status.as_u16())
             .unwrap_or_default();
 
-        // Requests no location served (unknown hosts, redirects to HTTPS...) are `_unknown`
+        // Requests no location served are counted by why (`_unknown_host`, `_acme`...)
         if crate::metrics::enabled() {
             ctx.route_container
                 .as_ref()
                 .and_then(|location| location.metrics.as_ref())
-                .unwrap_or_else(|| LocationMetrics::unknown())
+                .unwrap_or_else(|| LocationMetrics::unserved(ctx.unserved))
                 .record(status_code, duration);
         }
 
@@ -964,9 +970,11 @@ async fn acme_or_redirect(
     if !path.starts_with(http_proxy::ACME_CHALLENGES) {
         let port =
             stores::lookup::named_host(&ctx.host).and_then(|host| host.https_redirect_port());
+        ctx.unserved = Unserved::HttpsRedirect;
         http_proxy::redirect_to_https(session, &req_host, port).await?;
         return Ok(None);
     }
+    ctx.unserved = Unserved::Acme;
     if http_proxy::serve_acme_challenge(session, &req_host).await? {
         return Ok(None);
     }

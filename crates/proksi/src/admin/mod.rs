@@ -647,7 +647,7 @@ mod tests {
     async fn test_metrics() {
         crate::metrics::enable();
         let api = AdminApi::new(tokens(), instance());
-        crate::metrics::LocationMetrics::unknown().record(404, Duration::from_millis(1));
+        crate::metrics::LocationMetrics::unserved(crate::metrics::Unserved::UnknownHost).record(404, Duration::from_millis(1));
 
         let reply = reply(
             api.handle(request(

@@ -52,7 +52,7 @@ Recorded for every request and TCP connection, exposed in the Prometheus text fo
 | `proksi_certificate_expiry_timestamp_seconds` | gauge | `domain` |
 | `proksi_routes` | gauge (hosts applied) | `source` |
 
-- **Labels come from the configuration, not from requests.** `host` is the name of the host that matched (`*` for the catch-all), `location` its path pattern, `upstream` its address. Requests no location served (unknown hosts, redirects to HTTPS, ACME challenges) are counted under `host="_unknown"`. A client can't create new series by sending new `Host` headers or paths.
+- **Labels come from the configuration, not from requests.** `host` is the name of the host that matched (`*` for the catch-all), `location` its path pattern, `upstream` its address. Requests no location served are counted under a fixed `host` that says why (`_unknown_host`, `_no_location`, `_https_redirect`, `_acme`, `_rules`). A client can't create new series by sending new `Host` headers or paths.
 - **No lookups in the request path.** A location's metrics (one counter per status class, its histograms, one set per upstream) are created when the location is built, and kept with it. A request only increments atomics it already holds. When a location is replaced (a route change), its new metrics continue the same series.
 - Histogram buckets cover 0.5 ms to 10 s, fine enough to read percentiles from.
 
