@@ -114,7 +114,7 @@ function Instances({ status }: { status: Status }) {
   if (replicas.length === 0) return null;
   return (
     <Panel
-      title={`Instances sharing the ${status.store.type} store`}
+      title={`Sharing the ${status.store.type} store`}
       aside={
         <Legend>
           <span>
@@ -191,30 +191,45 @@ export function Overview() {
         />
       </Cards>
 
-      <PageSection title="Traffic">
-        <Grid columns={2}>
-  <LineChart
-            title="Requests by status"
-            span={span}
-            format={rate}
-            series={['2xx', '3xx', '4xx', '5xx'].map((status) => ({
-              name: status,
-              color: COLORS[status as keyof typeof COLORS],
-              values: take(history, (point) => point.responses[status] ?? 0),
-            }))}
-          />
-          <LineChart
-            title="Latency"
-            span={span}
-            format={ms}
-            series={(['p50', 'p90', 'p99'] as const).map((quantile) => ({
-              name: quantile,
-              color: COLORS[quantile],
-              values: take(history, (point) => point[quantile]),
-            }))}
-          />
-        </Grid>
-      </PageSection>
+      <Grid columns={2}>
+        <LineChart
+          title="Requests by status"
+          span={span}
+          format={rate}
+          series={['2xx', '3xx', '4xx', '5xx'].map((status) => ({
+            name: status,
+            color: COLORS[status as keyof typeof COLORS],
+            values: take(history, (point) => point.responses[status] ?? 0),
+          }))}
+        />
+        <LineChart
+          title="Latency"
+          span={span}
+          format={ms}
+          series={(['p50', 'p90', 'p99'] as const).map((quantile) => ({
+            name: quantile,
+            color: COLORS[quantile],
+            values: take(history, (point) => point[quantile]),
+          }))}
+        />
+        <LineChart
+          title="CPU"
+          span={span}
+          format={percent}
+          max={process?.cpu_limit ? Math.max(100, process.cpu_limit * 100) : undefined}
+          series={[{ name: 'used', color: 'var(--chart-2)', values: take(history, (point) => point.cpu) }]}
+        />
+        <LineChart
+          title="Memory"
+          span={span}
+          format={bytes}
+          max={memoryLimit ?? undefined}
+          series={[
+            { name: 'resident', color: 'var(--chart-4)', values: take(history, (point) => point.memory) },
+            { name: 'allocator', color: 'var(--chart-1)', values: take(history, (point) => point.allocator) },
+          ]}
+        />
+      </Grid>
 
       <PageSection title="Right now">
         <ActiveHosts latest={latest} history={history} />
@@ -225,28 +240,15 @@ export function Overview() {
         <RequestLog title={null} />
       </PageSection>
 
-      <PageSection title="This instance">
-        <Grid columns={2}>
-          <LineChart
-            title="CPU"
-            span={span}
-            format={percent}
-            max={process?.cpu_limit ? Math.max(100, process.cpu_limit * 100) : undefined}
-            series={[{ name: 'used', color: 'var(--chart-2)', values: take(history, (point) => point.cpu) }]}
-          />
-          <LineChart
-            title="Memory"
-            span={span}
-            format={bytes}
-            max={memoryLimit ?? undefined}
-            series={[
-              { name: 'resident', color: 'var(--chart-4)', values: take(history, (point) => point.memory) },
-              { name: 'allocator', color: 'var(--chart-1)', values: take(history, (point) => point.allocator) },
-            ]}
-          />
-        </Grid>
-        <Loaded data={status}>{(status) => <Instances status={status} />}</Loaded>
-      </PageSection>
+      <Loaded data={status}>
+        {(status) =>
+          status.store.replicas.length > 0 && (
+            <PageSection title="Instances">
+              <Instances status={status} />
+            </PageSection>
+          )
+        }
+      </Loaded>
     </>
   );
 }
