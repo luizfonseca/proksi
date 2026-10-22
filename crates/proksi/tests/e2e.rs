@@ -3989,11 +3989,8 @@ async fn test_body_rewrite() {
         assert_eq!(sent["source"], "proksi");
 
         // Compressed, or not text: sent as it is, with its length
-        for (content_type, encoding) in [("application/json", Some("gzip")), ("application/octet-stream", None)] {
-            let mut request = client.post(&url).header("content-type", content_type);
-            if let Some(encoding) = encoding {
-                request = request.header("content-encoding", encoding);
-            }
+        for (content_type, encoding) in [("application/json", "gzip"), ("application/octet-stream", "identity")] {
+            let request = client.post(&url).header("content-type", content_type).header("content-encoding", encoding);
             let res = request.body("secret-1 {\"debug\": true}").send().await.unwrap();
             let echoed: serde_json::Value = res.json().await.unwrap();
             assert_eq!(echoed["body"], "secret-1 {\"debug\": true}", "{content_type}");
