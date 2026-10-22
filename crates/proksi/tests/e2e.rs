@@ -3929,13 +3929,15 @@ host "body.test" {
     upstream "127.0.0.1:{http_upstream_port}" {}
 
     body_rewrite {
-      json {
-        set    = { "$.user.role" = "guest", "$.source" = "proksi" }
-        remove = ["$.debug"]
-      }
-      replace {
-        pattern = "secret-[0-9]+"
-        with    = "[redacted]"
+      request {
+        json {
+          set    = { "$.user.role" = "guest", "$.source" = "proksi" }
+          remove = ["$.debug"]
+        }
+        replace {
+          pattern = "secret-[0-9]+"
+          with    = "[redacted]"
+        }
       }
     }
   }

@@ -1,9 +1,9 @@
 ---
 title: "Body Rewrite"
-description: "Changes the request body before it's sent upstream: JSON values by path, and regular expressions."
+description: "Changes bodies as they stream through: JSON values by path, and regular expressions."
 ---
 
-Changes the body of a location's requests as they're sent upstream: values of a JSON body, by path, and any text, with regular expressions. The body is changed as it streams through, a part at a time: it's never held whole, whatever its size.
+Changes the body of a location's requests as they're sent upstream (`request`): values of a JSON body, by path, and any text, with regular expressions. The body is changed as it streams through, a part at a time: it's never held whole, whatever its size.
 
 ```hcl
 host "api.example.com" {
@@ -11,13 +11,15 @@ host "api.example.com" {
     upstream "api:8080" {}
 
     body_rewrite {
-      json {
-        set    = { "$.user.role" = "guest", "$.source" = "edge" }
-        remove = ["$.debug"]
-      }
-      replace {
-        pattern = "card=[0-9]{12}([0-9]{4})"
-        with    = "card=************$1"
+      request {
+        json {
+          set    = { "$.user.role" = "guest", "$.source" = "edge" }
+          remove = ["$.debug"]
+        }
+        replace {
+          pattern = "card=[0-9]{12}([0-9]{4})"
+          with    = "card=************$1"
+        }
       }
     }
   }
@@ -28,6 +30,7 @@ host "api.example.com" {
 
 | Name | Description |
 | --- | --- |
+| `request` | Changes to the request's body, before it's sent upstream: `json` and `replace` |
 | `json.set` | Values set, by path: the value is replaced, or added to an object that's there |
 | `json.remove` | Members or array elements removed, by path |
 | `replace { pattern, with, max_match }` | A regular expression, and what replaces each match (`$1`, `$name` are its groups, `$$` a `$`). Repeat the block for several, applied in order. `max_match` is the longest match, such as `"4KiB"` (default: `"1KiB"`): a longer one may be missed where two parts of the body meet. |
@@ -74,8 +77,10 @@ host "api.example.com" {
       }
       then {
         body_rewrite {
-          json {
-            remove = ["$.debug"]
+          request {
+            json {
+              remove = ["$.debug"]
+            }
           }
         }
       }

@@ -66,15 +66,12 @@ pub struct BandwidthLimit {
     pub priority: Priority,
 }
 
-/// `body_rewrite`: changes the request body before it's sent upstream
+/// `body_rewrite`: changes bodies as they stream through (the request's)
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BodyRewrite {
-    /// Changes to JSON bodies (`Content-Type: application/json`, or `+json`), by path
-    pub json: Option<BodyRewriteJson>,
-    /// Regular expressions replaced in the body, in order
-    #[serde(default, deserialize_with = "one_or_many")]
-    pub replace: Vec<BodyReplace>,
+    /// Changes to the request's body, before it's sent upstream
+    pub request: Option<BodyChanges>,
     // Read by `plugin_priority`
     #[allow(dead_code)]
     #[schemars(
@@ -82,6 +79,17 @@ pub struct BodyRewrite {
         range(max = 100)
     )]
     pub priority: Priority,
+}
+
+/// `request { json { ... } replace { ... } }` of `body_rewrite`
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BodyChanges {
+    /// Changes to JSON bodies (`Content-Type: application/json`, or `+json`), by path
+    pub json: Option<BodyRewriteJson>,
+    /// Regular expressions replaced in the body, in order
+    #[serde(default, deserialize_with = "one_or_many")]
+    pub replace: Vec<BodyReplace>,
 }
 
 /// `json { set = { ... }, remove = [...] }` of `body_rewrite`

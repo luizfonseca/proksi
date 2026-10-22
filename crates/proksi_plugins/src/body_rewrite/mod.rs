@@ -44,7 +44,8 @@ impl BodyRewrite {
         let settings: super::settings::BodyRewrite = super::settings::read("body_rewrite", plugin)?;
         let in_block = |err: String| format!("body_rewrite: {err}");
 
-        let json = settings.json.unwrap_or_default();
+        let request = settings.request.unwrap_or_default();
+        let json = request.json.unwrap_or_default();
         let sets = json.set.iter().flatten().map(|(path, value)| {
             let value = serde_json::to_vec(value).map_err(|err| err.to_string())?;
             target(path, Action::Set(value))
@@ -59,7 +60,7 @@ impl BodyRewrite {
             .collect::<Result<Vec<_>, _>>()
             .map_err(in_block)?;
 
-        let replaces = settings
+        let replaces = request
             .replace
             .into_iter()
             .map(|replace| {
@@ -86,7 +87,7 @@ impl BodyRewrite {
 
         if targets.is_empty() && replaces.is_empty() {
             return Err(in_block(
-                "nothing to change: add `json` or `replace`".to_string(),
+                "nothing to change: add `json` or `replace` to `request`".to_string(),
             ));
         }
         Ok(Self { targets, replaces })
@@ -276,10 +277,10 @@ mod tests {
 
     #[test]
     fn test_settings() {
-        let edits = block(serde_json::json!({
+        let edits = block(serde_json::json!({ "request": {
             "json": { "set": { "$.role": "guest" }, "remove": ["$.debug"] },
             "replace": { "pattern": "secret-[0-9]+", "with": "[redacted]", "max_match": "64B" },
-        }))
+        }}))
         .unwrap();
         assert_eq!((edits.targets.len(), edits.replaces.len()), (2, 1));
         assert_eq!(edits.replaces[0].max_match, 64);
@@ -287,20 +288,31 @@ mod tests {
         for (config, err) in [
             (
                 serde_json::json!({}),
-                "body_rewrite: nothing to change: add `json` or `replace`",
+                "body_rewrite: nothing to change: add `json` or `replace` to `request`",
             ),
             (
-                serde_json::json!({ "json": { "remove": ["$.items[*]"] } }),
+                serde_json::json!({ "request": {} }),
+                "body_rewrite: nothing to change: add `json` or `replace` to `request`",
+            ),
+            (
+                serde_json::json!({ "request": { "json": { "remove": ["$.items[*]"] } } }),
                 "body_rewrite: \"$.items[*]\": wildcards (`[*]`) aren't supported yet",
             ),
             (
-                serde_json::json!({ "replace": { "pattern": "a", "with": "b", "max_match": "big" } }),
+                serde_json::json!({ "request": { "replace": { "pattern": "a", "with": "b", "max_match": "big" } } }),
                 "body_rewrite: max_match \"big\" is not a size such as \"1KiB\"",
             ),
         ] {
             assert_eq!(block(config).err().as_deref(), Some(err));
         }
-        let bad = block(serde_json::json!({ "replace": [{ "pattern": "(", "with": "" }] })).err();
-        assert!(bad.is_some_and(|err| err.starts_with("body_rewrite: pattern \"(\":")));
+        let bad = block(
+            serde_json::json!({ "request": { "replace": [{ "pattern": "(", "with": "" }] } }),
+        );
+        let bad = bad.err().unwrap_or_default();
+        assert!(bad.starts_with("body_rewrite: pattern \"(\":"), "{bad}");
+        // Changes are written for a direction
+        let flat = block(serde_json::json!({ "json": { "remove": ["$.debug"] } }));
+        let flat = flat.err().unwrap_or_default();
+        assert!(flat.contains("unknown field `json`"), "{flat}");
     }
 }
