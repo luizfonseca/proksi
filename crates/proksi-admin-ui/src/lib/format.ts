@@ -26,6 +26,19 @@ export function percent(value: number): string {
   return `${value >= 10 ? Math.round(value) : Number(value.toFixed(1))}%`;
 }
 
+/**
+ * Availability, from the share of responses that were 5xx (0 to 1): what wasn't. Closer to 100%,
+ * with more decimals, and rounded down, so errors never show as 100%.
+ */
+export function availability(errors: number): string {
+  if (errors <= 0) return '100%';
+  const value = (1 - Math.min(1, errors)) * 100;
+  const decimals = value >= 99 ? 2 : value >= 90 ? 1 : 0;
+  const scale = 10 ** decimals;
+  // A hair over, so 99.6 isn't read as 99.59999…
+  return `${Number((Math.floor(value * scale + 1e-9) / scale).toFixed(decimals))}%`;
+}
+
 /** The smallest round number at least `value`: the top of a chart */
 export function niceMax(value: number): number {
   if (!(value > 0)) return 1;

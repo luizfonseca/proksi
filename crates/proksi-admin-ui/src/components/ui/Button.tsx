@@ -2,9 +2,9 @@ import type { ButtonHTMLAttributes, ComponentChildren } from 'preact';
 import { onLink } from '../../router';
 
 const VARIANTS = {
-  /** The page's main action: a gradient of the primary color, with a light edge on top */
+  /** The page's main action: the logo's wing, with a light edge on top and a glow of its color */
   primary:
-    'btn btn-primary border-primary/40 bg-linear-to-b from-primary to-[color-mix(in_oklab,var(--color-primary),black_28%)] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.22),0_1px_2px_rgb(0_0_0/0.4)] hover:brightness-110',
+    'btn btn-primary border-0 bg-(image:--wing) font-semibold text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_6px_18px_-8px_rgb(225_29_72/0.75)] transition hover:-translate-y-px hover:brightness-110 active:translate-y-0',
   /** Other actions, next to it */
   secondary: 'btn border-base-300 bg-base-100 font-medium shadow-none hover:bg-base-200',
   /** Removes something */

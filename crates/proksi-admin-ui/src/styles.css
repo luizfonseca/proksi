@@ -43,8 +43,9 @@
   --radius-box: 0.75rem;
 }
 
-/* Series colors of charts, and the lines between things */
+/* Series colors of charts, the lines between things, and the logo's wing (main buttons wear it) */
 :root {
+  --wing: linear-gradient(135deg, #fb7185 0%, #e11d48 45%, #9f1239 100%);
   --chart-1: var(--color-primary);
   --chart-2: var(--color-secondary);
   --chart-3: var(--color-accent);
