@@ -1,18 +1,20 @@
 import type { Certificate } from '../api';
+import { Badge } from '../components/ui/Badge';
+import { Empty, Mono, None, PageHead, Panel } from '../components/ui/Page';
 import { Loaded } from '../components/ui/State';
+import { Stack } from '../components/ui/Stack';
+import { Meter } from '../components/ui/Stats';
+import { Cell, Row, Table } from '../components/ui/Table';
 import { useData } from '../api/useData';
 
 function Expiry({ days }: { days: number | null }) {
-  if (days === null) return <span class="none">unknown</span>;
-  const tone = days < 7 ? 'bad' : days < 21 ? 'warn' : 'ok';
-  const width = Math.max(4, Math.min(100, (days / 90) * 100));
+  if (days === null) return <None>unknown</None>;
+  const tone = days < 7 ? 'error' : days < 21 ? 'warning' : 'success';
   return (
-    <div class="expiry">
-      <div class="bar">
-        <span style={{ width: `${width}%`, background: `var(--${tone})` }} />
-      </div>
-      <span class={`badge ${tone}`}>{days < 0 ? 'expired' : `${days} days`}</span>
-    </div>
+    <Stack gap={2.5} class="min-w-[180px]">
+      <Meter tone={tone} value={Math.max(4, Math.min(90, days))} max={90} />
+      <Badge tone={tone}>{days < 0 ? 'expired' : `${days} days`}</Badge>
+    </Stack>
   );
 }
 
@@ -20,45 +22,27 @@ export function Certificates() {
   const [data] = useData<Certificate[]>('/certificates', 30000);
   return (
     <>
-      <div class="page-head">
-        <div>
-          <h1>Certificates</h1>
-          <p>Issued and renewed by Proksi, or loaded from files.</p>
-        </div>
-      </div>
+      <PageHead title="Certificates" description="Issued and renewed by Proksi, or loaded from files." />
       <Loaded data={data}>
         {(certificates) => (
-          <div class="panel">
+          <Panel>
             {certificates.length === 0 ? (
-              <div class="empty">
-                <strong>No certificates</strong>
-                Hosts with TLS get one when Let's Encrypt is enabled.
-              </div>
+              <Empty title="No certificates">Hosts with TLS get one when Let's Encrypt is enabled.</Empty>
             ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Domain</th>
-                    <th>Issuer</th>
-                    <th>Expires</th>
-                    <th class="hide-sm">Renewing</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {certificates.map((certificate) => (
-                    <tr>
-                      <td class="host-name">{certificate.domain}</td>
-                      <td>
-                        {certificate.self_signed ? <span class="badge warn">self-signed</span> : certificate.issuer ?? <span class="none">unknown</span>}
-                      </td>
-                      <td><Expiry days={certificate.days_left} /></td>
-                      <td class="hide-sm">{certificate.lease_holder ? <span class="mono">{certificate.lease_holder}</span> : <span class="none">no</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <Table columns={['Domain', 'Issuer', 'Expires', { label: 'Renewing', phone: false }]}>
+                {certificates.map((certificate) => (
+                  <Row>
+                    <Cell class="font-semibold">{certificate.domain}</Cell>
+                    <Cell>
+                      {certificate.self_signed ? <Badge tone="warning">self-signed</Badge> : certificate.issuer ?? <None>unknown</None>}
+                    </Cell>
+                    <Cell><Expiry days={certificate.days_left} /></Cell>
+                    <Cell phone={false}>{certificate.lease_holder ? <Mono>{certificate.lease_holder}</Mono> : <None>no</None>}</Cell>
+                  </Row>
+                ))}
+              </Table>
             )}
-          </div>
+          </Panel>
         )}
       </Loaded>
     </>

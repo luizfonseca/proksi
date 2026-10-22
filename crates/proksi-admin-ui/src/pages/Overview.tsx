@@ -1,13 +1,20 @@
 import { useState } from 'preact/hooks';
 import type { Status, TcpBlock } from '../api';
-import { LineChart, Sparkline } from '../components/ui/Chart';
+import { Legend, LegendValue, LineChart, Sparkline } from '../components/ui/Chart';
+import { Badge, ProtocolBadge, type Tone } from '../components/ui/Badge';
+import { Segmented } from '../components/ui/Form';
+import { Empty, HostLink, Mono, PageHead, PageSection, Panel } from '../components/ui/Page';
+import { Grid, Stack } from '../components/ui/Stack';
+import { Stat, Stats as Cards } from '../components/ui/Stats';
+import { Cell, Row, Table } from '../components/ui/Table';
 import { RequestLog } from '../features/live/RequestLog';
-import { Loaded, ProtocolBadge } from '../components/ui/State';
+import { Loaded } from '../components/ui/State';
 import { TcpBlocks } from '../features/tcp/Tcp';
 import { bytes, ms, percent, rate } from '../lib/format';
 import { activeHosts, type Point, type Stats, useLive } from '../features/live/live';
-import { onLink } from '../router';
 import { useData } from '../api/useData';
+import { Time } from '../components/ui/Time';
+import { useTween } from '../lib/motion';
 
 const SPANS = [
   { label: '1m', points: 60 },
@@ -16,98 +23,104 @@ const SPANS = [
 ];
 
 const COLORS = {
-  '2xx': 'var(--ok)',
-  '3xx': 'var(--info-text)',
-  '4xx': 'var(--warn)',
-  '5xx': 'var(--bad)',
+  '2xx': 'var(--color-success)',
+  '3xx': 'var(--color-info)',
+  '4xx': 'var(--color-warning)',
+  '5xx': 'var(--color-error)',
   p50: 'var(--chart-1)',
   p90: 'var(--chart-2)',
   p99: 'var(--chart-3)',
 };
 
-function Card({ label, value, detail, values, color }: { label: string; value: string; detail?: string; values: (number | null)[]; color: string }) {
+/** A number, with a line of its latest values across the bottom */
+/** A number as it changes: rolling to each new value */
+function Rolling({ value, format }: { value: number | null; format: (value: number) => string }) {
+  const shown = useTween(value);
+  return <>{shown === null ? '—' : format(shown)}</>;
+}
+
+function Card({
+  label,
+  value,
+  format,
+  detail,
+  values,
+  color,
+}: {
+  label: string;
+  value: number | null;
+  format: (value: number) => string;
+  detail?: string;
+  values: (number | null)[];
+  color: string;
+}) {
   return (
-    <div class="panel stat">
-      <div class="label">{label}</div>
-      <div class="value">{value}</div>
-      {detail && <div class="detail">{detail}</div>}
+    <Stat class="relative content-start overflow-hidden pb-11" title={label} value={<Rolling value={value} format={format} />} detail={detail}>
       <Sparkline values={values} color={color} />
-    </div>
+    </Stat>
   );
 }
 
 const take = (history: Point[], read: (point: Point) => number | null) => history.map(read);
 
-/** How long ago `at` was, roughly */
-function ago(at: number, now: number): string {
-  const seconds = Math.max(0, Math.round((now - at) / 1000));
-  return seconds < 60 ? `${seconds}s ago` : `${Math.round(seconds / 60)}m ago`;
-}
+/** A rate of errors, colored by how bad it is */
+const tone = (share: number): Tone => (share >= 0.25 ? 'error' : share > 0 ? 'warning' : 'success');
 
 /** The hosts being accessed now (the last 5 seconds), busiest first, then the ones accessed since the page opened */
 function ActiveHosts({ latest, history }: { latest: Stats | null; history: Point[] }) {
   const hosts = activeHosts(latest, history);
-  const now = history[history.length - 1]?.at ?? Date.now();
   const listed = new Set(hosts.map(({ host }) => host));
   const idle = (latest?.hosts ?? []).filter(({ host }) => !listed.has(host)).length;
   return (
-    <section class="panel">
-      <div class="chart-head">
-        <h3>
-          Hosts right now
+    <Panel
+      title={
+        <Stack>
+          Hosts
           <ProtocolBadge protocol="http" />
-        </h3>
-        <div class="legend">
+        </Stack>
+      }
+      aside={
+        <Legend>
           <span>over the last 5 seconds, and since this page opened{idle > 0 ? ` · ${idle} without requests` : ''}</span>
-        </div>
-      </div>
+        </Legend>
+      }
+    >
       {hosts.length === 0 ? (
-        <div class="empty">
-          <strong>{latest ? 'No requests' : 'Waiting for data…'}</strong>
-          Hosts appear here once they're accessed, and stay while this page is open.
-        </div>
+        <Empty title={latest ? 'No requests' : 'Waiting for data…'}>Hosts appear here once they're accessed, and stay while this page is open.</Empty>
       ) : (
-        <table class="active-hosts">
-          <thead>
-            <tr>
-              <th>Host</th>
-              <th>Requests</th>
-              <th>5xx</th>
-              <th>p99</th>
-              <th class="trend">Last 2 minutes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {hosts.map(({ host, point, lastSeen }) => {
-              const errors = point.requests ? point.errors / point.requests : 0;
-              return (
-                <tr class={point.requests > 0 ? undefined : 'quiet'}>
-                  <td>
-                    <a href={`/hosts/${encodeURIComponent(host)}`} onClick={onLink}>
-                      {host}
-                    </a>
-                  </td>
-                  {point.requests > 0 ? (
-                    <>
-                      <td class="mono">{rate(point.requests)}</td>
-                      <td>
-                        <span class={`badge ${errors >= 0.25 ? 'bad' : errors > 0 ? 'warn' : 'ok'}`}>{percent(errors * 100)}</span>
-                      </td>
-                    </>
-                  ) : (
-                    <td class="muted" colSpan={2}>last request {ago(lastSeen, now)}</td>
-                  )}
-                  <td class="mono">{ms(point.p99)}</td>
-                  <td class="trend">
-                    <Sparkline values={history.map((one) => one.hosts[host]?.requests ?? 0)} color={errors > 0 ? 'var(--warn)' : 'var(--ok)'} />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <Table columns={['Host', 'Requests', '5xx', 'p99', { label: 'Last 2 minutes', phone: false, class: 'w-[220px]' }]}>
+          {hosts.map(({ host, point, lastSeen }) => {
+            const errors = point.requests ? point.errors / point.requests : 0;
+            return (
+              <Row>
+                <Cell>
+                  <HostLink host={host} quiet={point.requests === 0} />
+                </Cell>
+                {point.requests > 0 ? (
+                  <>
+                    <Cell><Mono>{rate(point.requests)}</Mono></Cell>
+                    <Cell><Badge tone={tone(errors)}>{percent(errors * 100)}</Badge></Cell>
+                  </>
+                ) : (
+                  // Across the requests and their errors
+                  <Cell span={2} class="text-base-content/45">
+                    last request <Time at={lastSeen} />
+                  </Cell>
+                )}
+                <Cell><Mono>{ms(point.p99)}</Mono></Cell>
+                <Cell phone={false} class="w-[220px] py-0">
+                  <Sparkline
+                    class="block h-7"
+                    values={history.map((one) => one.hosts[host]?.requests ?? 0)}
+                    color={errors > 0 ? 'var(--color-warning)' : 'var(--color-success)'}
+                  />
+                </Cell>
+              </Row>
+            );
+          })}
+        </Table>
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -115,39 +128,34 @@ function Instances({ status }: { status: Status }) {
   const replicas = status.store.replicas;
   if (replicas.length === 0) return null;
   return (
-    <section class="panel">
-      <div class="chart-head">
-        <h3>Instances sharing the {status.store.type} store</h3>
-        <div class="legend">
-          <span>store revision <b>{status.store.revision ?? '—'}</b></span>
-        </div>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Hostname</th>
-            <th>Version</th>
-            <th>Applied revision</th>
-            <th>Reported</th>
-          </tr>
-        </thead>
-        <tbody>
-          {replicas.map((replica) => (
-            <tr>
-              <td>
-                {replica.hostname}
-                {replica.id === status.replica && <span class="badge" style={{ marginLeft: 8 }}>this one</span>}
-              </td>
-              <td class="mono">{replica.version}</td>
-              <td>
-                <span class={`badge ${replica.revision === status.store.revision ? 'ok' : 'warn'}`}>{replica.revision}</span>
-              </td>
-              <td class="muted">{new Date(replica.applied_at * 1000).toLocaleTimeString()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <Panel
+      title={`Sharing the ${status.store.type} store`}
+      aside={
+        <Legend>
+          <span>
+            store revision <LegendValue>{status.store.revision ?? '—'}</LegendValue>
+          </span>
+        </Legend>
+      }
+    >
+      <Table columns={['Hostname', 'Version', 'Applied revision', 'Reported']}>
+        {replicas.map((replica) => (
+          <Row>
+            <Cell>
+              {replica.hostname}
+              {replica.id === status.replica && <Badge class="ml-2">this one</Badge>}
+            </Cell>
+            <Cell><Mono>{replica.version}</Mono></Cell>
+            <Cell>
+              <Badge tone={replica.revision === status.store.revision ? 'success' : 'warning'}>{replica.revision}</Badge>
+            </Cell>
+            <Cell class="text-base-content/45">
+              <Time at={replica.applied_at * 1000} />
+            </Cell>
+          </Row>
+        ))}
+      </Table>
+    </Panel>
   );
 }
 
@@ -162,48 +170,48 @@ export function Overview() {
 
   return (
     <>
-      <div class="page-head">
-        <div>
-          <h1>Overview</h1>
-          <p>Live, from the moment this page was opened. Nothing more is kept by Proksi.</p>
-        </div>
-        <div class="actions">
-          <div class="segmented" role="group" aria-label="Time span">
-            {SPANS.map((option) => (
-              <button type="button" aria-pressed={span === option.points} onClick={() => setSpan(option.points)}>
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      <PageHead
+        title="Overview"
+        description="Live, from the moment this page was opened."
+        actions={
+          <Segmented
+            label="Time span"
+            options={SPANS.map((option) => ({ value: String(option.points), label: option.label }))}
+            value={String(span)}
+            onChange={(points) => setSpan(Number(points))}
+          />
+        }
+      />
 
-      <div class="stats overview-cards">
-        <Card label="Requests" value={last ? rate(last.requests) : '—'} values={take(history, (point) => point.requests)} color="var(--chart-1)" />
+      <Cards columns={5}>
+        <Card label="Requests" value={last?.requests ?? null} format={rate} values={take(history, (point) => point.requests)} color="var(--color-success)" />
         <Card
           label="Errors (5xx)"
-          value={last ? percent(last.errors * 100) : '—'}
+          value={last ? last.errors * 100 : null}
+          format={percent}
           values={take(history, (point) => point.errors * 100)}
-          color="var(--bad)"
+          color="var(--color-error)"
         />
-        <Card label="Latency p99" value={last ? ms(last.p99) : '—'} detail={last ? `p50 ${ms(last.p50)}` : undefined} values={take(history, (point) => point.p99)} color="var(--chart-3)" />
+        <Card label="Latency p99" value={last?.p99 ?? null} format={ms} detail={last ? `p50 ${ms(last.p50)}` : undefined} values={take(history, (point) => point.p99)} color="var(--chart-3)" />
         <Card
           label="CPU"
-          value={last ? percent(last.cpu) : '—'}
+          value={last?.cpu ?? null}
+          format={percent}
           detail={process?.cpu_limit ? `of 1 core · limit ${process.cpu_limit} cores` : 'of 1 core'}
           values={take(history, (point) => point.cpu)}
           color="var(--chart-2)"
         />
         <Card
           label="Memory"
-          value={last ? bytes(last.memory) : '—'}
+          value={last?.memory ?? null}
+          format={bytes}
           detail={memoryLimit ? `of ${bytes(memoryLimit)}` : last ? `allocator ${bytes(last.allocator)}` : undefined}
           values={take(history, (point) => point.memory)}
           color="var(--chart-4)"
         />
-      </div>
+      </Cards>
 
-      <div class="charts">
+      <Grid columns={2}>
         <LineChart
           title="Requests by status"
           span={span}
@@ -241,12 +249,26 @@ export function Overview() {
             { name: 'allocator', color: 'var(--chart-1)', values: take(history, (point) => point.allocator) },
           ]}
         />
-      </div>
+      </Grid>
 
-      <ActiveHosts latest={latest} history={history} />
-      {tcp.state === 'ready' && <TcpBlocks blocks={tcp.value} withHost />}
-      <RequestLog />
-      <Loaded data={status}>{(status) => <Instances status={status} />}</Loaded>
+      <PageSection title="Right now">
+        <ActiveHosts latest={latest} history={history} />
+        {tcp.state === 'ready' && <TcpBlocks blocks={tcp.value} withHost />}
+      </PageSection>
+
+      <PageSection title="Latest requests">
+        <RequestLog title={null} />
+      </PageSection>
+
+      <Loaded data={status}>
+        {(status) =>
+          status.store.replicas.length > 0 && (
+            <PageSection title="Instances">
+              <Instances status={status} />
+            </PageSection>
+          )
+        }
+      </Loaded>
     </>
   );
 }

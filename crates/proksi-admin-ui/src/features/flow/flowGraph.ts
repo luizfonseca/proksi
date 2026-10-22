@@ -3,9 +3,26 @@
 
 import type { Host } from '../../api';
 import { ms, percent, rate } from '../../lib/format';
-import type { HostStats, LocationStats } from '../live/live';
+import type { HostStats, LocationStats, Percentiles } from '../live/live';
 
 export type Tone = 'idle' | 'ok' | 'warn' | 'bad';
+
+/**
+ * The requests going through a node, to show in the request log when it's clicked: its location's,
+ * and for an upstream, those sent to any of its addresses (as written, and as resolved)
+ */
+export type Focus = { location: string; upstreams?: string[] };
+
+/** What a node's card shows when it's hovered */
+export type Card = {
+  requests: number;
+  /** Responses by status class, over the window */
+  responses?: Record<string, number>;
+  duration?: Percentiles;
+  /** Failed (refused, timed out), a second */
+  failed?: number;
+  health?: 'healthy' | 'unhealthy';
+};
 
 export type FlowNode = {
   id: string;
@@ -16,23 +33,43 @@ export type FlowNode = {
   /** Below the title: what goes through it */
   detail: string;
   tone: Tone;
+  /** Locations and upstreams: the requests through them */
+  filter?: Focus;
+  /** Upstreams: their part of their location's traffic, from 0 to 1 */
+  share?: number;
+  card: Card;
 };
 
 export type FlowEdge = { from: FlowNode; to: FlowNode; rate: number; tone: Tone };
 
-export type Flow = { width: number; height: number; nodes: FlowNode[]; edges: FlowEdge[] };
+/** `idle`: nothing went through it over the window */
+export type Flow = { width: number; height: number; nodes: FlowNode[]; edges: FlowEdge[]; idle: boolean };
 
 /** Room for each upstream (or a location without any) */
 export const ROW = 64;
 export const NODE_HEIGHT = 46;
+/** The width laid out when none is given */
 export const WIDTH = 1000;
 
-const COLUMNS = {
-  clients: { x: 0, width: 110 },
-  host: { x: 160, width: 240 },
-  location: { x: 450, width: 240 },
-  upstream: { x: 740, width: 260 },
-};
+/** The widths of the columns' nodes: what's left of the width goes between them */
+const NODES = { clients: 110, host: 240, location: 240, upstream: 260 };
+
+type Column = keyof typeof NODES;
+
+/** Each column's place and width, for a graph `width` wide: nodes keep their size, gaps grow */
+function columns(width: number): Record<Column, { x: number; width: number }> {
+  const names = Object.keys(NODES) as Column[];
+  const taken = names.reduce((sum, name) => sum + NODES[name], 0);
+  // Narrower than the nodes and their smallest gaps: wider than the room, scrolled sideways
+  const gap = Math.max(40, (width - taken) / (names.length - 1));
+  let x = 0;
+  const placed = {} as Record<Column, { x: number; width: number }>;
+  for (const name of names) {
+    placed[name] = { x, width: NODES[name] };
+    x += NODES[name] + gap;
+  }
+  return placed;
+}
 
 /** How a scope's responses went: errors (5xx) as a share of all, and nothing when idle */
 export function tone(requests: number, responses: Record<string, number>): Tone {
@@ -57,15 +94,19 @@ function summary(requests: number, p99: number | null, responses?: Record<string
   return parts.join(' · ');
 }
 
-/** `window`: the seconds the stats are over (errors are counts in it) */
-export function layout(host: Host, stats: HostStats | undefined, window = 5): Flow {
+/**
+ * `window`: the seconds the stats are over (errors are counts in it); `width`: the room it's drawn
+ * in, at its actual size
+ */
+export function layout(host: Host, stats: HostStats | undefined, window = 5, width = WIDTH): Flow {
+  const COLUMNS = columns(width);
   const statsOf = (path: string): LocationStats | undefined =>
     stats?.locations.find((location) => location.location === path);
   const rows = host.locations.reduce((sum, location) => sum + Math.max(1, location.upstreams.length), 0);
   const height = Math.max(1, rows) * ROW;
   const middle = height / 2;
 
-  const node = (id: string, column: keyof typeof COLUMNS, y: number, title: string, detail: string, tone: Tone): FlowNode => ({
+  const node = (id: string, column: Column, y: number, title: string, detail: string, tone: Tone, card: Card, more?: Partial<FlowNode>): FlowNode => ({
     id,
     x: COLUMNS[column].x,
     width: COLUMNS[column].width,
@@ -73,6 +114,8 @@ export function layout(host: Host, stats: HostStats | undefined, window = 5): Fl
     title,
     detail,
     tone,
+    card,
+    ...more,
   });
 
   // The host: its locations added up
@@ -86,8 +129,9 @@ export function layout(host: Host, stats: HostStats | undefined, window = 5): Fl
     null,
   );
   const hostTone = tone(requests, responses);
-  const clients = node('clients', 'clients', middle, 'Clients', requests > 0 ? rate(requests) : 'idle', hostTone);
-  const hostNode = node('host', 'host', middle, host.host, summary(requests, p99, responses), hostTone);
+  const hostCard: Card = { requests, responses, duration: { p50: null, p90: null, p99 } };
+  const clients = node('clients', 'clients', middle, 'Clients', requests > 0 ? rate(requests) : 'idle', hostTone, { requests });
+  const hostNode = node('host', 'host', middle, host.host, summary(requests, p99, responses), hostTone, hostCard);
 
   const nodes = [clients, hostNode];
   const edges: FlowEdge[] = [{ from: clients, to: hostNode, rate: requests, tone: hostTone }];
@@ -105,16 +149,24 @@ export function layout(host: Host, stats: HostStats | undefined, window = 5): Fl
       location.location,
       summary(locationRate, located?.duration_ms.p99 ?? null, located?.responses),
       locationTone,
+      { requests: locationRate, responses: located?.responses ?? {}, duration: located?.duration_ms ?? { p50: null, p90: null, p99: null } },
+      { filter: { location: location.location } },
     );
     nodes.push(locationNode);
     edges.push({ from: hostNode, to: locationNode, rate: locationRate, tone: locationTone });
 
-    location.upstreams.forEach((upstream, index) => {
+    // Each upstream's traffic: answered, and failed (connection refused, timed out), which
+    // isn't in its latency
+    const traffic = location.upstreams.map((upstream) => {
       const used = located?.upstreams.find((candidate) => candidate.upstream === upstream.upstream);
-      // Answered, and failed (connection refused, timed out): failures aren't in its latency
       const answered = used?.requests_per_second ?? 0;
       const failed = (used?.errors ?? 0) / (window || 1);
-      const upstreamRate = answered + failed;
+      return { used, answered, failed, rate: answered + failed };
+    });
+    const locationTraffic = traffic.reduce((sum, one) => sum + one.rate, 0);
+    location.upstreams.forEach((upstream, index) => {
+      const { used, answered, failed, rate: upstreamRate } = traffic[index] ?? { used: undefined, answered: 0, failed: 0, rate: 0 };
+      const share = locationTraffic > 0 ? upstreamRate / locationTraffic : 0;
       const upstreamTone: Tone = !upstream.healthy
         ? 'bad'
         : upstreamRate <= 0
@@ -124,9 +176,11 @@ export function layout(host: Host, stats: HostStats | undefined, window = 5): Fl
             : failed / upstreamRate >= 0.25
               ? 'bad'
               : 'warn';
+      // Its share, when it's one of several taking traffic
+      const shared = location.upstreams.length > 1 && share > 0 && share < 1 ? percent(share * 100) : '';
       const detail = !upstream.healthy
         ? 'unhealthy'
-        : [summary(answered, used?.duration_ms.p99 ?? null), failed > 0 ? `${rate(failed)} failed` : '']
+        : [summary(answered, used?.duration_ms.p99 ?? null), failed > 0 ? `${rate(failed)} failed` : '', shared]
             .filter((part) => part && part !== 'idle')
             .join(' · ') || 'idle';
       const upstreamNode = node(
@@ -136,11 +190,21 @@ export function layout(host: Host, stats: HostStats | undefined, window = 5): Fl
         upstream.name ? `${upstream.name} → ${upstream.upstream}` : upstream.upstream,
         detail,
         upstreamTone,
+        {
+          requests: answered,
+          duration: used?.duration_ms ?? { p50: null, p90: null, p99: null },
+          failed,
+          health: upstream.healthy ? 'healthy' : 'unhealthy',
+        },
+        {
+          filter: { location: location.location, upstreams: [upstream.upstream, ...upstream.addresses.map(({ address }) => address)] },
+          share,
+        },
       );
       nodes.push(upstreamNode);
       edges.push({ from: locationNode, to: upstreamNode, rate: upstreamRate, tone: upstreamTone });
     });
     row += span;
   }
-  return { width: WIDTH, height, nodes, edges };
+  return { width: COLUMNS.upstream.x + COLUMNS.upstream.width, height, nodes, edges, idle: requests <= 0 && edges.every((edge) => edge.rate <= 0) };
 }

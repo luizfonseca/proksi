@@ -1,5 +1,10 @@
+import type { ComponentChildren } from 'preact';
 import { useState } from 'preact/hooks';
 import { asList } from '../../lib/lists';
+import { Button } from '../../components/ui/Button';
+import { Checkbox, Input, ListInput, Select } from '../../components/ui/Form';
+import { Mono, None } from '../../components/ui/Page';
+import { Grid } from '../../components/ui/Stack';
 import { input, type JsonSchema, resolve } from './schema';
 
 type Value = Record<string, unknown>;
@@ -11,61 +16,30 @@ const SECRET = /pass|secret/;
 /** A description as plain text (they're written for Markdown) */
 const plain = (text?: string) => text?.replace(/`/g, '').replace(/\s*\n\s*/g, ' ');
 
-/** A list of words: typed, then added with Enter or a comma */
-export function ListInput({ value, onChange, placeholder }: { value: string[]; onChange: (value: string[]) => void; placeholder?: string }) {
-  const [draft, setDraft] = useState('');
-  const commit = () => {
-    const words = draft.split(',').map((word) => word.trim()).filter(Boolean);
-    if (words.length) onChange([...value, ...words]);
-    setDraft('');
-  };
-  return (
-    <div class="list-input">
-      {value.map((word, index) => (
-        <span class="chip">
-          {word}
-          <button type="button" aria-label={`Remove ${word}`} onClick={() => onChange(value.filter((_, at) => at !== index))}>
-            ✕
-          </button>
-        </span>
-      ))}
-      <input
-        value={draft}
-        placeholder={value.length ? '' : placeholder ?? 'Type, then Enter'}
-        onInput={(e) => setDraft(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ',') {
-            e.preventDefault();
-            commit();
-          } else if (e.key === 'Backspace' && !draft && value.length) {
-            onChange(value.slice(0, -1));
-          }
-        }}
-        onBlur={commit}
-      />
-    </div>
-  );
-}
-
 function MapInput({ value, onChange }: { value: Record<string, string>; onChange: (value: Record<string, string>) => void }) {
   const entries = Object.entries(value);
   const set = (next: [string, string][]) => onChange(Object.fromEntries(next));
   return (
-    <div class="map-input">
+    <Grid gap={2}>
       {entries.map(([key, text], index) => (
-        <div class="map-row">
-          <input class="mono" placeholder="name" value={key} onInput={(e) => set(entries.map((entry, at) => (at === index ? [e.currentTarget.value, entry[1]] : entry)))} />
-          <input class="mono" placeholder="value" value={text} onInput={(e) => set(entries.map((entry, at) => (at === index ? [entry[0], e.currentTarget.value] : entry)))} />
-          <button type="button" class="link danger" aria-label="Remove" onClick={() => set(entries.filter((_, at) => at !== index))}>
+        <div class="grid grid-cols-[1fr_1fr_20px] items-center gap-1.5">
+          <Input mono placeholder="name" value={key} onInput={(e) => set(entries.map((entry, at) => (at === index ? [e.currentTarget.value, entry[1]] : entry)))} />
+          <Input mono placeholder="value" value={text} onInput={(e) => set(entries.map((entry, at) => (at === index ? [entry[0], e.currentTarget.value] : entry)))} />
+          <Button variant="link-danger" aria-label="Remove" onClick={() => set(entries.filter((_, at) => at !== index))}>
             ✕
-          </button>
+          </Button>
         </div>
       ))}
-      <button type="button" class="link" onClick={() => set([...entries, ['', '']])}>
+      <Button variant="link" onClick={() => set([...entries, ['', '']])}>
         + Add
-      </button>
-    </div>
+      </Button>
+    </Grid>
   );
+}
+
+/** Settings of a setting, with a line down their side */
+function Nested({ children }: { children: ComponentChildren }) {
+  return <div class="grid gap-1.5 border-l-2 border-base-300 pl-2.5">{children}</div>;
 }
 
 /** One setting's input */
@@ -76,15 +50,11 @@ function Setting({ name, schema, root, value, onChange }: { name: string; schema
     {
       const text = (value as string) ?? '';
       const set = (e: { currentTarget: HTMLInputElement }) => onChange(e.currentTarget.value === '' ? undefined : e.currentTarget.value);
-      return SECRET.test(name) ? (
-        <input class="mono" type="password" value={text} onInput={set} />
-      ) : (
-        <input class={name === 'body' ? undefined : 'mono'} value={text} onInput={set} />
-      );
+      return SECRET.test(name) ? <Input mono type="password" value={text} onInput={set} /> : <Input mono={name !== 'body'} value={text} onInput={set} />;
     }
     case 'integer':
       return (
-        <input
+        <Input
           type="number"
           min={resolved.minimum}
           max={resolved.maximum}
@@ -94,18 +64,18 @@ function Setting({ name, schema, root, value, onChange }: { name: string; schema
       );
     case 'boolean':
       return (
-        <select value={value === undefined ? '' : String(value)} onChange={(e) => onChange(e.currentTarget.value === '' ? undefined : e.currentTarget.value === 'true')}>
+        <Select class="self-start" value={value === undefined ? '' : String(value)} onChange={(e) => onChange(e.currentTarget.value === '' ? undefined : e.currentTarget.value === 'true')}>
           <option value="">default</option>
           <option value="true">yes</option>
           <option value="false">no</option>
-        </select>
+        </Select>
       );
     case 'choice':
       return (
-        <select value={(value as string) ?? ''} onChange={(e) => onChange(e.currentTarget.value || undefined)}>
+        <Select class="self-start" value={(value as string) ?? ''} onChange={(e) => onChange(e.currentTarget.value || undefined)}>
           <option value="">—</option>
           {resolved.enum?.map((option) => <option value={option}>{option}</option>)}
-        </select>
+        </Select>
       );
     case 'list':
       return <ListInput value={asList(value)} onChange={(next) => onChange(next.length ? next : undefined)} />;
@@ -113,19 +83,16 @@ function Setting({ name, schema, root, value, onChange }: { name: string; schema
       const options = resolve(resolved.items ?? {}, root).enum ?? [];
       const chosen = asList(value);
       return (
-        <div class="choices">
+        <div class="flex flex-wrap gap-3.5">
           {options.map((option) => (
-            <label class="check">
-              <input
-                type="checkbox"
-                checked={chosen.includes(option)}
-                onChange={(e) => {
-                  const next = e.currentTarget.checked ? [...chosen, option] : chosen.filter((one) => one !== option);
-                  onChange(next.length ? next : undefined);
-                }}
-              />
-              <span class="mono">{option}</span>
-            </label>
+            <Checkbox
+              label={<Mono>{option}</Mono>}
+              checked={chosen.includes(option)}
+              onChange={(checked) => {
+                const next = checked ? [...chosen, option] : chosen.filter((one) => one !== option);
+                onChange(next.length ? next : undefined);
+              }}
+            />
           ))}
         </div>
       );
@@ -134,32 +101,32 @@ function Setting({ name, schema, root, value, onChange }: { name: string; schema
       return <MapInput value={(value as Record<string, string>) ?? {}} onChange={(next) => onChange(Object.keys(next).length ? next : undefined)} />;
     case 'object':
       return (
-        <div class="nested-form">
+        <Nested>
           <SchemaForm schema={resolved} root={root} value={(value as Value) ?? {}} onChange={(next) => onChange(Object.keys(next).length ? next : undefined)} />
-        </div>
+        </Nested>
       );
     case 'objects': {
       const items = (value as Value[]) ?? [];
       const item = resolve(resolved.items ?? {}, root);
       const set = (next: Value[]) => onChange(next.length ? next : undefined);
       return (
-        <div class="objects">
+        <Grid gap={2}>
           {items.map((entry, index) => (
-            <div class="nested-form">
+            <Nested>
               <SchemaForm schema={item} root={root} value={entry} onChange={(next) => set(items.map((one, at) => (at === index ? next : one)))} />
-              <button type="button" class="link danger" onClick={() => set(items.filter((_, at) => at !== index))}>
+              <Button variant="link-danger" onClick={() => set(items.filter((_, at) => at !== index))}>
                 Remove
-              </button>
-            </div>
+              </Button>
+            </Nested>
           ))}
-          <button type="button" class="link" onClick={() => set([...items, {}])}>
+          <Button variant="link" onClick={() => set([...items, {}])}>
             + Add
-          </button>
-        </div>
+          </Button>
+        </Grid>
       );
     }
     default:
-      return <span class="none">Edit as JSON</span>;
+      return <None>Edit as JSON</None>;
   }
 }
 
@@ -172,13 +139,16 @@ export function SchemaForm({ schema, root = schema, value, onChange }: Props) {
   const shown = properties.filter(([name]) => more || required.includes(name) || value[name] !== undefined);
   const hidden = properties.length - shown.length;
   return (
-    <div class="schema-form">
+    <Grid gap={2.5}>
       {shown.map(([name, property]) => (
-        <label class="setting">
-          <span class="setting-name">
-            <span class="mono">{name}</span>
-            {required.includes(name) && <span class="required">required</span>}
+        <label class="flex flex-col gap-1 text-xs">
+          <span class="flex items-center gap-1.5 text-base-content/60">
+            <span class="font-mono">{name}</span>
+            {required.includes(name) && <span class="text-xs text-primary">required</span>}
           </span>
+          {plain(resolve(property, root).description) && (
+            <small class="text-xs leading-snug text-base-content/45">{plain(resolve(property, root).description)}</small>
+          )}
           <Setting
             name={name}
             schema={property}
@@ -191,14 +161,13 @@ export function SchemaForm({ schema, root = schema, value, onChange }: Props) {
               onChange(copy);
             }}
           />
-          {plain(resolve(property, root).description) && <small class="hint">{plain(resolve(property, root).description)}</small>}
         </label>
       ))}
       {hidden > 0 && (
-        <button type="button" class="link more-settings" onClick={() => setMore(true)}>
+        <Button variant="link" onClick={() => setMore(true)}>
           More settings ({hidden})
-        </button>
+        </Button>
       )}
-    </div>
+    </Grid>
   );
 }

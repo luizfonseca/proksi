@@ -68,9 +68,14 @@ Of the many features Proksi offers is the ability to load balance to your infras
 - Hosts with their own ports, plain HTTP hosts (e.g. behind another load balancer) and a catch-all host
 - Running many servers with the same routes and certificates (Redis, SQLite, Postgres)
 - TCP proxying for anything that isn't HTTP, with or without TLS
+- An **admin UI**: live traffic from clients to upstreams, the latest requests, and hosts and their rules to add and change
 - Configuration through **HCL** with support for functions (get environment variables, etc)
 - Powerful plugin system for adding new middlewares and other features using **WebAssembly (WASM)**
 - Many others.
+
+<img src="./docs/assets/admin/live-traffic.png" alt="The admin UI: a host's traffic as it happens, from clients to its locations and upstreams, with each one's requests a second, latency and errors" width="900">
+
+See the [admin UI documentation](https://docs.proksi.info/admin-ui) for a tour of its pages.
 
 # Quick start
 

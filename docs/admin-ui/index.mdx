@@ -28,9 +28,9 @@ admin {
 }
 ```
 
-Then open `http://127.0.0.1:7555` and sign in with a token's secret.
+Then open `http://127.0.0.1:7555` and sign in with a token's name and its secret.
 
-<Image src="/assets/admin/sign-in.png" alt="The sign-in page, asking for a token" />
+<Image src="/assets/admin/sign-in.png" alt="The sign-in page, asking for a token's name and secret" />
 
 - A token can only read unless it has `access = "write"`. `access` is `"read"` or `"write"`.
 - Without any `token` block, `listen` must be a loopback address (`127.0.0.1`, `::1`), and anyone who reaches it can read and write.

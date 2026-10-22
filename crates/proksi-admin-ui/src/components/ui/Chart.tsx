@@ -1,9 +1,14 @@
+import type { ComponentChildren } from 'preact';
 import { useState } from 'preact/hooks';
 import { niceMax } from '../../lib/format';
+import { Panel } from './Page';
 
 export type Series = { name: string; color: string; values: (number | null)[] };
 
 const WIDTH = 1000;
+
+/** A value on the chart's left, over its grid line */
+const TICK = 'pointer-events-none absolute left-0 bg-base-100 pr-1 text-xs leading-none text-base-content/45';
 
 /** The last `span` values, newest at the right, as an SVG path (gaps where there's no value) */
 function path(values: (number | null)[], span: number, max: number, height: number): string {
@@ -35,7 +40,7 @@ type Props = {
 };
 
 /** Lines over time, with a legend of the latest values and the values under the pointer */
-export function LineChart({ title, series, span, format, height = 140, max }: Props) {
+export function LineChart({ title, series, span, format, height = 80, max }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const shown = series.map((one) => ({ ...one, values: one.values.slice(-span) }));
   const largest = Math.max(0, ...shown.flatMap((one) => one.values.filter((value): value is number => value !== null)));
@@ -49,34 +54,35 @@ export function LineChart({ title, series, span, format, height = 140, max }: Pr
   };
 
   return (
-    <div class="panel chart">
-      <div class="chart-head">
-        <h3>{title}</h3>
-        <div class="legend">
+    <Panel
+      title={title}
+      aside={
+        <Legend>
           {shown.map((one) => {
             const value = valueAt(one.values);
             return (
-              <span>
-                <i style={{ background: one.color }} />
-                {one.name} <b>{value === null ? '—' : format(value)}</b>
-              </span>
+              <Swatch color={one.color}>
+                {one.name} <LegendValue>{value === null ? '—' : format(value)}</LegendValue>
+              </Swatch>
             );
           })}
-        </div>
-      </div>
+        </Legend>
+      }
+    >
       <div
-        class="plot"
-        style={{ height }}
+        class="plot relative mx-4 mb-3"
+        style={{ height: `${height}px` }}
         onMouseMove={(event) => {
           const box = event.currentTarget.getBoundingClientRect();
           setHover(Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)));
         }}
         onMouseLeave={() => setHover(null)}
       >
-        <span class="tick top">{format(top)}</span>
-        <span class="tick middle">{format(top / 2)}</span>
+        <span class={`${TICK} top-0.5`}>{format(top)}</span>
+        <span class={`${TICK} top-[calc(50%+2px)]`}>{format(top / 2)}</span>
         <svg viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" role="img" aria-label={title}>
-          {[0, 0.5, 1].map((share) => (
+          {/* The middle and the bottom: a line at the top would read as the header's border */}
+          {[0.5, 1].map((share) => (
             <line class="grid" x1="0" x2={WIDTH} y1={height * share} y2={height * share} />
           ))}
           {shown.map((one) => (
@@ -84,21 +90,50 @@ export function LineChart({ title, series, span, format, height = 140, max }: Pr
           ))}
           {hover !== null && <line class="cursor" x1={hover * WIDTH} x2={hover * WIDTH} y1="0" y2={height} />}
         </svg>
-        {length === 0 && <span class="waiting">Waiting for data…</span>}
+        {length === 0 && <span class="absolute inset-0 grid place-items-center text-xs text-base-content/45">Waiting for data…</span>}
       </div>
-    </div>
+    </Panel>
   );
 }
 
+/** What's beside a panel's title: what its lines are, and their latest values */
+export function Legend({ children }: { children: ComponentChildren }) {
+  return <div class="flex flex-wrap items-center gap-3 text-xs text-base-content/60">{children}</div>;
+}
+
+/** A color in a legend, and what it means */
+export function Swatch({ color, children }: { color: string; children: ComponentChildren }) {
+  return (
+    <span class="inline-flex items-center">
+      <i class="mr-1.5 inline-block size-2 rounded-xs" style={{ background: color }} />
+      {children}
+    </span>
+  );
+}
+
+/** A value in a legend, darker than what names it */
+export function LegendValue({ children }: { children: ComponentChildren }) {
+  return <b class="ml-0.5 font-semibold text-base-content tabular-nums">{children}</b>;
+}
+
 /** A small line of the latest values, for a card */
-export function Sparkline({ values, color }: { values: (number | null)[]; color: string }) {
+export function Sparkline({
+  values,
+  color,
+  class: placed = 'absolute inset-x-0 bottom-0 h-10',
+}: {
+  values: (number | null)[];
+  color: string;
+  /** Where it's drawn: across the bottom of a card, unless placed otherwise */
+  class?: string;
+}) {
   // The last 2 minutes, across the card from the first point
   const span = Math.min(120, Math.max(30, values.length));
   const shown = values.slice(-span);
   const top = niceMax(Math.max(0, ...shown.filter((value): value is number => value !== null)));
   return (
-    <svg class="sparkline" viewBox={`0 0 ${WIDTH} 40`} preserveAspectRatio="none" aria-hidden="true">
-      <path d={path(shown, span, top, 40)} stroke={color} />
+    <svg class={`sparkline w-full ${placed}`} viewBox={`0 0 ${WIDTH} 40`} preserveAspectRatio="none" aria-hidden="true">
+      <path class="motion-safe:animate-[draw_900ms_ease-out]" pathLength={1} stroke-dasharray="1" d={path(shown, span, top, 40)} stroke={color} />
     </svg>
   );
 }
