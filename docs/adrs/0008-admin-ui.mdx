@@ -62,7 +62,7 @@ admin {
 
 `access` is `"read"` unless written as `"write"`. `token = "..."` (ADR 0004) is replaced by `token` blocks.
 
-**The UI signs in with a token.** `POST /api/v1/session` exchanges it for a session cookie:
+**The UI signs in with a token's name and secret.** `POST /api/v1/session` exchanges them for a session cookie (without a name, the secret of any token is accepted, as `Authorization: Bearer` does):
 
 - `HttpOnly` (scripts can't read it), `SameSite=Strict` (other sites can't send it), and `Secure` unless the admin listener is reached over plain HTTP on a loopback address.
 - A random id, kept in Proksi's memory: sessions end when Proksi restarts, and each instance has its own. A session also ends after 12 hours without a request, or when signing out.

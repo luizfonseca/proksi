@@ -65,6 +65,18 @@ impl Tokens {
         found
     }
 
+    /// The token named `name`, if this is its secret. An unknown name costs the same comparison,
+    /// so the time it takes doesn't tell which names there are.
+    fn named(&self, name: &str, secret: &str) -> Option<(&String, Access)> {
+        let Some((name, token)) = self.tokens.get_key_value(name) else {
+            let _ = openssl::memcmp::eq(secret.as_bytes(), secret.as_bytes());
+            return None;
+        };
+        let same = secret.len() == token.secret.len()
+            && openssl::memcmp::eq(secret.as_bytes(), token.secret.as_bytes());
+        same.then_some((name, token.access))
+    }
+
     /// Who's calling, from `Authorization: Bearer <secret>` or the session cookie
     pub fn caller(&self, authorization: Option<&str>, cookie: Option<&str>) -> Option<Caller> {
         if self.open() {
@@ -96,9 +108,13 @@ impl Tokens {
         })
     }
 
-    /// A new session for the token with this secret: its id and caller
-    pub fn sign_in(&self, secret: &str) -> Option<(String, Caller)> {
-        let (name, access) = self.token(secret)?;
+    /// A new session for the token named `name` with this secret (without a name, any token's):
+    /// its id and caller
+    pub fn sign_in(&self, name: Option<&str>, secret: &str) -> Option<(String, Caller)> {
+        let (name, access) = match name {
+            Some(name) => self.named(name, secret)?,
+            None => self.token(secret)?,
+        };
         let mut bytes = [0u8; 32];
         openssl::rand::rand_bytes(&mut bytes).ok()?;
         let id = bytes
@@ -240,11 +256,27 @@ mod tests {
     }
 
     #[test]
+    fn test_signing_in_by_name() {
+        let tokens = tokens();
+
+        let (_, caller) = tokens.sign_in(Some("grafana"), "read-secret").unwrap();
+        assert_eq!(caller.name.as_deref(), Some("grafana"));
+        assert_eq!(caller.access, Access::Read);
+        // Only that token's secret
+        assert!(tokens.sign_in(Some("ops"), "read-secret").is_none());
+        assert!(tokens.sign_in(Some("nobody"), "read-secret").is_none());
+        assert!(tokens.sign_in(Some("grafana"), "wrong").is_none());
+        // Without a name, any token's
+        let (_, caller) = tokens.sign_in(None, "write-secret").unwrap();
+        assert_eq!(caller.name.as_deref(), Some("ops"));
+    }
+
+    #[test]
     fn test_sessions() {
         let tokens = tokens();
-        assert!(tokens.sign_in("wrong").is_none());
+        assert!(tokens.sign_in(None, "wrong").is_none());
 
-        let (id, caller) = tokens.sign_in("read-secret").unwrap();
+        let (id, caller) = tokens.sign_in(None, "read-secret").unwrap();
         assert_eq!(id.len(), 64);
         assert_eq!(caller.name.as_deref(), Some("grafana"));
         let cookie = format!("theme=dark; proksi_session={id}");
