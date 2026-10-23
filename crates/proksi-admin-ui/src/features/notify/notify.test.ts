@@ -5,6 +5,7 @@ import { covered, hostMatches, notifying } from './notify';
 const block = (name: string, hosts: string[]): Notification => ({
   name,
   source: 'file',
+  version: null,
   url: 'https://hook…bf3a',
   format: 'json',
   on: [],

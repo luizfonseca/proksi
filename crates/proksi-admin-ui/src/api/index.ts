@@ -1,3 +1,4 @@
+import type { NotifyBody } from '../features/notify/notifyForm';
 import type { Rule } from '../features/rules/ruleTree';
 
 // The admin API. Signing in exchanges a token for a session cookie (HttpOnly): the page never
@@ -168,6 +169,9 @@ export type Delivery = { event: string; /** Unix timestamp (seconds) */ at: numb
 export type Notification = {
   name: string;
   source: 'file' | 'store';
+  /** The revision it was saved at, for a block in the store: what a change is made from */
+  version: number | null;
+  /** Masked: the API never sends it back */
   url: string;
   format: 'json' | 'slack' | 'discord';
   /** The events it's sent (none: all of them) */
@@ -180,7 +184,13 @@ export type Notification = {
 };
 export type Notifications = { notifications: Notification[]; events: string[] };
 
+const notifyPath = (name: string) => `/notifications/${encodeURIComponent(name)}`;
+
 export const notifications = {
+  /** Saves a block to the store (an empty `url` or header value keeps the saved one) */
+  put: (name: string, block: NotifyBody, expect?: Expect) =>
+    request<{ name: string; revision: number }>('PUT', notifyPath(name), block, conditions(expect)),
+  delete: (name: string, expect?: Expect) => request<{ name: string; revision: number }>('DELETE', notifyPath(name), undefined, conditions(expect)),
   /** Sends a `test` event to the block's webhook: rejected with the error when it fails */
   test: (name: string) => request<{ ok: true }>('POST', `/notifications/${encodeURIComponent(name)}/test`),
 };

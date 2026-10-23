@@ -42,6 +42,18 @@ function Block({ block, hosts, onTested }: { block: Notification; hosts: string[
   const canWrite = useCanWrite();
   const [testing, setTesting] = useState(false);
 
+  async function remove() {
+    if (!confirm(`Remove ${block.name}? Every instance stops sending it events.`)) return;
+    try {
+      await api.delete(block.name, block.version === null ? undefined : { version: block.version });
+      toast({ message: `${block.name} removed` });
+    } catch (err) {
+      toast({ message: `${block.name} wasn't removed: ${(err as Error).message ?? err}`, tone: 'info' });
+    } finally {
+      onTested();
+    }
+  }
+
   async function test() {
     setTesting(true);
     try {
@@ -63,9 +75,17 @@ function Block({ block, hosts, onTested }: { block: Notification; hosts: string[
         <Badge tone="info">{block.format}</Badge>
         <Mono class="text-base-content/60">{block.url}</Mono>
         {canWrite && (
-          <Button class="ml-auto whitespace-nowrap" disabled={testing} onClick={test}>
-            {testing ? 'Sending…' : 'Send a test'}
-          </Button>
+          <Stack gap={2} class="ml-auto">
+            {block.source === 'store' && (
+              <>
+                <Button variant="link-danger" onClick={remove}>Remove</Button>
+                <Button href={`/notifications/${encodeURIComponent(block.name)}/edit`}>Edit</Button>
+              </>
+            )}
+            <Button class="whitespace-nowrap" disabled={testing} onClick={test}>
+              {testing ? 'Sending…' : 'Send a test'}
+            </Button>
+          </Stack>
         )}
       </Stack>
       <Section label="Events">
@@ -96,6 +116,7 @@ function Block({ block, hosts, onTested }: { block: Notification; hosts: string[
 
 export function Notifications() {
   const [data, reload] = useData<Data>('/notifications', 15000);
+  const canWrite = useCanWrite();
   const [served] = useData<Host[]>('/hosts', 30000);
   const hosts = served.state === 'ready' ? served.value.map((host) => host.host) : null;
   return (
@@ -103,13 +124,20 @@ export function Notifications() {
       <PageHead
         title="Notifications"
         description="Webhooks told when upstreams go down, certificates fail or expire, or the configuration or the store change."
+        actions={
+          canWrite && (
+            <Button variant="primary" href="/notifications/new">
+              New notification
+            </Button>
+          )
+        }
       />
       <Loaded data={data}>
         {({ notifications }) =>
           notifications.length === 0 ? (
             <Panel>
               <Empty title="Nothing configured">
-                Add a <Mono>notify</Mono> block to the configuration to send events to a webhook.{' '}
+                Add a <Mono>notify</Mono> block to the configuration{canWrite && ', or create one here,'} to send events to a webhook.{' '}
                 <Button variant="link" href={`${DOCS}/configuration/notify`} external>
                   How
                 </Button>

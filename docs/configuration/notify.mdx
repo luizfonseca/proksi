@@ -87,11 +87,21 @@ With several instances sharing a [store](/configuration/redis), each sees the sa
 
 The admin UI's **Notifications** page lists each block with the hosts it's told about, how its last send went, and a button to send it a test. A host's page shows the blocks told about it.
 
+## Blocks in the store
+
+With a token that can write, blocks can also be created, changed and removed from the admin UI or API. They're saved to the [store](/configuration/redis), and every instance sharing it uses them within a sync interval, without a restart. Blocks of the configuration file are changed there: a block in the store with the same name is left unused while the file has one.
+
+The admin API never sends a block's URL or its headers' values back. To change a block without them, leave them out or empty: the saved ones are kept. They're kept in the store as written, like the rest of a host's settings, so keep the store private.
+
 A webhook's URL is often its secret: the admin API and UI show it masked (`https://hook…bf3a`), and headers by name only. Errors never include it.
 
 | Endpoint | |
 | --- | --- |
-| `GET /api/v1/notifications` | Every `notify` block, with its masked URL, format, events, hosts, header names, and how its last send went |
-| `POST /api/v1/notifications/<name>/test` | Sends a `test` event to the block's webhook, once, and answers how it went: `{"ok": true}`, or `502` with the error. Needs a token that can write |
+| `GET /api/v1/notifications` | Every `notify` block, from the file and the store, with its masked URL, format, events, hosts, header names, and how its last send went |
+| `PUT /api/v1/notifications/<name>` | Saves a block to the store, as the configuration writes it (`{"url": "...", "format": "slack", "on": [...]}`). With `If-None-Match: *`, only if it doesn't exist; with `If-Match: "<version>"`, only if it's still on that version (`412` otherwise) |
+| `DELETE /api/v1/notifications/<name>` | Removes a block from the store, also with `If-Match` |
+| `POST /api/v1/notifications/<name>/test` | Sends a `test` event to the block's webhook, once, and answers how it went: `{"ok": true}`, or `502` with the error |
+
+Each block says where it's from (`source`: `file` or `store`), and for blocks in the store, the `version` to send as `If-Match`. Changes and tests need a token that can write.
 
 Sends are counted in `proksi_notifications_total`, by `notify` (the block's name), `event` and `result` (`sent`, `failed` or `dropped`). Events dropped before reaching a block are counted with an empty `notify`.
