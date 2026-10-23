@@ -4,6 +4,7 @@ use std::{error::Error, hash::RandomState, time::Duration};
 
 use crate::{
     certificates::Certificate,
+    notify::{NotifyRecord, NotifySnapshot},
     route::{HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write},
     waiting_room::{Admission, RoomLimits},
 };
@@ -46,6 +47,21 @@ pub trait Store: Send + Sync + 'static {
 
     /// Hosts that were deleted and still have versions, which a rollback restores
     async fn deleted_routes(&self) -> Result<Vec<String>, StoreError>;
+
+    /// Revision of the `notify` blocks, incremented by every change to one
+    async fn notify_revision(&self) -> Result<u64, StoreError>;
+
+    /// All stored `notify` blocks, with the revision they belong to
+    async fn notify_blocks(&self) -> Result<NotifySnapshot, StoreError>;
+
+    /// Saves a `notify` block, returning the new revision of the blocks.
+    ///
+    /// Refused with [`StoreError::Conflict`] when the block isn't as `write` expects.
+    async fn put_notify(&self, block: NotifyRecord, write: &Write) -> Result<u64, StoreError>;
+
+    /// Removes a `notify` block, returning the new revision (unchanged if it wasn't in the
+    /// store and nothing was expected of it)
+    async fn delete_notify(&self, name: &str, write: &Write) -> Result<u64, StoreError>;
 
     /// Reports the status of this replica (e.g. the applied revision), expiring after `ttl`
     async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError>;

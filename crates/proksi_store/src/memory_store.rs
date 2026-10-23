@@ -13,6 +13,7 @@ use std::{
 
 use crate::{
     certificates::Certificate,
+    notify::{self, NotifyRecord, NotifySnapshot},
     route::{
         Change, Expect, HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot,
         StoreError, Write, DEFAULT_HISTORY,
@@ -28,6 +29,8 @@ pub struct MemoryStore {
     inner_challenges: papaya::HashMap<String, (String, String)>,
     /// Routes, their revision and replicas (changed together)
     route_data: Mutex<MemoryRoutes>,
+    /// `notify` blocks, by name (with the revision each was saved at), and their revision
+    notify: Mutex<(u64, BTreeMap<String, NotifyRecord>)>,
     /// Leases, by name: their holder and when they expire
     leases: Mutex<HashMap<String, (String, Instant)>>,
     certificates_revision: AtomicU64,
@@ -116,6 +119,7 @@ impl MemoryStore {
             inner_certs: papaya::HashMap::new(),
             inner_challenges: papaya::HashMap::new(),
             route_data: Mutex::new(MemoryRoutes::default()),
+            notify: Mutex::new((0, BTreeMap::new())),
             leases: Mutex::new(HashMap::new()),
             certificates_revision: AtomicU64::new(0),
             history: DEFAULT_HISTORY,
@@ -233,6 +237,38 @@ impl Store for MemoryStore {
             .iter()
             .filter(|(_, state)| state.active.is_none() && !state.versions.is_empty());
         Ok(deleted.map(|(host, _)| host.clone()).collect())
+    }
+
+    async fn notify_revision(&self) -> Result<u64, StoreError> {
+        Ok(self.notify.lock().unwrap_or_else(PoisonError::into_inner).0)
+    }
+
+    async fn notify_blocks(&self) -> Result<NotifySnapshot, StoreError> {
+        let notify = self.notify.lock().unwrap_or_else(PoisonError::into_inner);
+        Ok(NotifySnapshot {
+            revision: notify.0,
+            blocks: notify.1.values().cloned().collect(),
+        })
+    }
+
+    async fn put_notify(&self, mut block: NotifyRecord, write: &Write) -> Result<u64, StoreError> {
+        let mut notify = self.notify.lock().unwrap_or_else(PoisonError::into_inner);
+        let (revision, blocks) = &mut *notify;
+        notify::check(write.expect, blocks.get(&block.name).map(|saved| saved.version))?;
+        *revision += 1;
+        block.version = *revision;
+        blocks.insert(block.name.clone(), block);
+        Ok(*revision)
+    }
+
+    async fn delete_notify(&self, name: &str, write: &Write) -> Result<u64, StoreError> {
+        let mut notify = self.notify.lock().unwrap_or_else(PoisonError::into_inner);
+        let (revision, blocks) = &mut *notify;
+        notify::check(write.expect, blocks.get(name).map(|saved| saved.version))?;
+        if blocks.remove(name).is_some() {
+            *revision += 1;
+        }
+        Ok(*revision)
     }
 
     async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
@@ -406,6 +442,11 @@ mod tests {
     #[tokio::test]
     async fn test_routes_contract() {
         crate::contract_tests::routes_contract(&MemoryStore::new()).await;
+    }
+
+    #[tokio::test]
+    async fn test_notify_contract() {
+        crate::contract_tests::notify_contract(&MemoryStore::new()).await;
     }
 
     #[tokio::test]

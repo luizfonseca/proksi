@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use crate::{
     certificates::Certificate,
+    notify::NotifyRecord,
     route::{Change, Expect, ReplicaStatus, RouteRecord, StoreError, Write},
     store_trait::Store,
     test_util::certificate,
@@ -35,6 +36,78 @@ fn by(author: &str, expect: Expect) -> Write {
         author: Some(author.to_string()),
         expect,
     }
+}
+
+/// `notify` blocks: kept as written, with a revision of their own
+pub async fn notify_contract(store: &dyn Store) {
+    let routes = store.revision().await.unwrap();
+    let initial = store.notify_revision().await.unwrap();
+    assert!(store.notify_blocks().await.unwrap().blocks.is_empty());
+
+    let ops = r#"{"url":"https://hooks.example.com/a"}"#;
+    let revision = store
+        .put_notify(NotifyRecord::new("ops", ops.into()), &by("ops", Expect::Absent))
+        .await
+        .unwrap();
+    assert_eq!(revision, initial + 1);
+    assert_eq!(store.notify_revision().await.unwrap(), revision);
+    // Blocks don't change the routes' revision: replicas don't rebuild their routes for them
+    assert_eq!(store.revision().await.unwrap(), routes);
+
+    let snapshot = store.notify_blocks().await.unwrap();
+    assert_eq!(snapshot.revision, revision);
+    assert_eq!(
+        snapshot.blocks,
+        vec![NotifyRecord {
+            version: revision,
+            ..NotifyRecord::new("ops", ops.into())
+        }]
+    );
+
+    // Created once: a second create is refused, with the version saved
+    let again = store
+        .put_notify(NotifyRecord::new("ops", "{}".into()), &by("ops", Expect::Absent))
+        .await;
+    assert_eq!(again, Err(StoreError::Conflict { version: revision }));
+
+    // Changed from the version read; a change from an older one is refused
+    let changed = r#"{"url":"https://hooks.example.com/b"}"#;
+    let next = store
+        .put_notify(NotifyRecord::new("ops", changed.into()), &by("ops", Expect::Version(revision)))
+        .await
+        .unwrap();
+    assert_eq!(next, revision + 1);
+    let stale = store
+        .put_notify(NotifyRecord::new("ops", "{}".into()), &by("ops", Expect::Version(revision)))
+        .await;
+    assert_eq!(stale, Err(StoreError::Conflict { version: next }));
+    let other = store
+        .put_notify(NotifyRecord::new("pager", "{}".into()), &Write::default())
+        .await
+        .unwrap();
+    let names: Vec<String> = store
+        .notify_blocks()
+        .await
+        .unwrap()
+        .blocks
+        .into_iter()
+        .map(|block| block.name)
+        .collect();
+    assert_eq!(names, vec!["ops".to_string(), "pager".to_string()]);
+
+    // Removed: from an older version refused, then removed; removing it again changes nothing
+    let stale = store.delete_notify("ops", &by("ops", Expect::Version(revision))).await;
+    assert_eq!(stale, Err(StoreError::Conflict { version: next }));
+    let removed = store.delete_notify("ops", &by("ops", Expect::Version(next))).await.unwrap();
+    assert_eq!(removed, other + 1);
+    assert_eq!(store.delete_notify("ops", &Write::default()).await.unwrap(), removed);
+    assert_eq!(
+        store.delete_notify("ops", &by("ops", Expect::Version(next))).await,
+        Err(StoreError::Conflict { version: 0 })
+    );
+    let blocks = store.notify_blocks().await.unwrap();
+    assert_eq!(blocks.revision, removed);
+    assert_eq!(blocks.blocks.len(), 1);
 }
 
 /// Routes and revisions
