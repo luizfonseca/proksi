@@ -49,6 +49,10 @@ pub enum Endpoint<'a> {
     DeletedRoutes,
     /// `GET /api/v1/notifications`: the `notify` blocks (URLs masked), and their last delivery
     Notifications,
+    /// `PUT /api/v1/notifications/<name>`: saves a `notify` block to the store
+    PutNotification(&'a str),
+    /// `DELETE /api/v1/notifications/<name>`: removes a `notify` block from the store
+    DeleteNotification(&'a str),
     /// `POST /api/v1/notifications/<name>/test`: sends a test event to a block's webhook
     TestNotification(&'a str),
     /// `GET /api/v1/session`: who's signed in
@@ -72,6 +76,8 @@ impl<'a> Endpoint<'a> {
             Endpoint::PutRoute(_)
                 | Endpoint::DeleteRoute(_)
                 | Endpoint::RollbackRoute(_)
+                | Endpoint::PutNotification(_)
+                | Endpoint::DeleteNotification(_)
                 // Sends a request out, from Proksi
                 | Endpoint::TestNotification(_)
         )
@@ -104,6 +110,8 @@ mod tests {
         assert!(!Endpoint::Route("a.test").changes());
         assert!(!Endpoint::SignIn.changes());
         assert!(Endpoint::TestNotification("ops").changes());
+        assert!(Endpoint::PutNotification("ops").changes());
+        assert!(Endpoint::DeleteNotification("ops").changes());
         assert!(!Endpoint::Notifications.changes());
     }
 }
