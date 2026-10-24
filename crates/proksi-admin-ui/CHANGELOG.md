@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.17.1](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.17.0...proksi-admin-ui-v0.17.1) (2026-10-24)
+
+
+### Features
+
+* keep notify blocks in the store editable in the admin UI ([#566](https://github.com/luizfonseca/proksi/issues/566)) ([8a1fbc7](https://github.com/luizfonseca/proksi/commit/8a1fbc7700c2335ad83d14e2445f7b87e4ea6039))
+* show in the admin UI when a newer Proksi is released ([518be04](https://github.com/luizfonseca/proksi/commit/518be047685754cc04c7c559050f49a0a6c60bcd))
+
+
+### Miscellaneous Chores
+
+* release 0.17.1 ([880169a](https://github.com/luizfonseca/proksi/commit/880169aa88f2272fdde0ea28fffe1e63fd5e1aa0))
+
 ## [0.17.0](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.16.1...proksi-admin-ui-v0.17.0) (2026-10-22)
 
 
