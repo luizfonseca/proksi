@@ -12,6 +12,8 @@ use crate::{respond::respond, RequestCtx, RoutePlugin};
 
 use super::Middleware;
 
+mod gcra;
+
 const INVALID_PER: &str = "rate_limit: `per` must be a duration such as \"10s\", \"1m\" or \"1h\"";
 
 /// Counts the requests of each client (by IP address) in windows of `per`. Counts use a
