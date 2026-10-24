@@ -44,7 +44,8 @@ host "mywebsite.com" {
 - Requests are spread evenly over `per`: with `requests = 60` and `per = "1m"`, a client gets one more request each second. A client can make `requests + burst` at once, and `Retry-After` says how many seconds until its next request is let through.
 - `burst` is added to `requests`. In [`bandwidth_limit`](/plugins/bandwidth-limit), `burst` is the whole allowance instead.
 - Each location, and each rule, counts its own requests.
-- Counts are kept in memory, on each Proksi server, and start over when the host's configuration changes.
+- With the [Redis store](/configuration/redis), every Proksi server using it shares each block's limit. Each server decides on its own, without waiting for Redis, and syncs every 250ms: a client can go over by about what it sends in 250ms to each other server, plus its first requests on a server that hasn't seen it yet. If Redis can't be reached, each server keeps limiting on its own until it can.
+- With the memory and SQL stores, counts are kept on each Proksi server, and start over when the host's configuration changes.
 - Counts use a fixed amount of memory and are estimates: with a very large number of clients in the same period, a client can be limited slightly before reaching `requests`, never after.
 - Clients are identified by the IP address of the connection. Behind another proxy or load balancer, every request comes from its address, so the limit would apply to all clients together. List it in `server.trusted_proxies`, and the client is the address it forwards in `X-Forwarded-For` instead:
 

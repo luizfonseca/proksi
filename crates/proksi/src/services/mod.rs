@@ -13,6 +13,7 @@
 //! - The store's routes, certificates and `notify` blocks, synced: [`crate::routing::store_source`]
 //! - Metrics: certificates' expiry, and the admin API's live stats: [`crate::metrics`]
 //! - The JWKS of `jwt` blocks, refreshed: `proksi_plugins::jwt::jwks`
+//! - Rate limits, shared through Redis: `proksi_plugins::rate_limit::sync`
 //! - Connections drained on shutdown: [`crate::proxy_server::connections`]
 //!
 //! In a service of its own, started in `main`: access and error logs, [`logger::LoggerService`].
@@ -161,6 +162,18 @@ impl pingora::services::ServiceWithDependents for BackgroundFunctionService {
         // Keys of the `jwt` blocks' JWKS URLs: waits while no block uses one
         let jwks = crate::blocks::jwt::jwks::refresh();
 
+        // Rate limits, shared by the replicas of a redis store (per instance otherwise)
+        let rate_limits = async {
+            let store_type = &self.config.store.store_type;
+            let redis = matches!(store_type, StoreType::Redis);
+            let sql = matches!(store_type, StoreType::Sqlite | StoreType::Postgres);
+            let store = redis.then(|| stores::global::get_store().clone());
+            let sync = proksi_plugins::rate_limit::sync::run(store, sql);
+            if let Err(err) = spawn_isolated(sync).await {
+                tracing::error!("rate limit sync stopped: {err}");
+            }
+        };
+
         let ready = ready(&self.config, shared, ready_notifier);
 
         let drain = crate::proxy_server::connections::exit_when_drained(
@@ -176,6 +189,7 @@ impl pingora::services::ServiceWithDependents for BackgroundFunctionService {
             certificate_metrics,
             live_stats,
             jwks,
+            rate_limits,
             Service::start_service(&mut routing_service, None, shutdown.clone(), listeners),
             Service::start_service(&mut health_service, None, shutdown.clone(), listeners),
             Service::start_service(&mut config_server, None, shutdown.clone(), listeners),

@@ -66,7 +66,6 @@ pub(super) struct RateLimit {
 /// What the sync reads and raises (see `sync`)
 pub(crate) struct Shared {
     /// Where it's written, hashed (see `block_id`)
-    #[allow(dead_code)]
     block: String,
     limits: Gcra,
     /// Requests let through since the last sync, while sharing
@@ -86,13 +85,13 @@ impl RateLimit {
             return Err(RateLimitError::NoBurst);
         }
 
-        Ok(Self {
-            shared: Arc::new(Shared {
-                block: block_id(id),
-                limits: Gcra::new(requests, per, settings.burst.unwrap_or(0)),
-                usage: Usage::new(),
-            }),
-        })
+        let shared = Arc::new(Shared {
+            block: block_id(id),
+            limits: Gcra::new(requests, per, settings.burst.unwrap_or(0)),
+            usage: Usage::new(),
+        });
+        sync::register(&shared);
+        Ok(Self { shared })
     }
 
     /// Counts a request of `client` if it's let through, or says how long until one would be

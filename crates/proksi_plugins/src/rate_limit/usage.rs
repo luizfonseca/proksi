@@ -106,7 +106,11 @@ mod tests {
         let usage = Usage::new();
         usage.reserve(16);
         (0..=255).for_each(|last| usage.record(ip(last)));
-        let capacity: usize = usage.shards.iter().map(|shard| shard.lock().unwrap().capacity()).sum();
+        let capacity: usize = usage
+            .shards
+            .iter()
+            .map(|shard| shard.lock().unwrap().capacity())
+            .sum();
         assert!(usage.take().len() <= capacity);
         (0..=255).for_each(|last| usage.record(ip(last)));
         crate::allocations::assert_no_allocations("recording a new client in a full shard", || {
