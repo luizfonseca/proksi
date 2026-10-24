@@ -78,7 +78,7 @@ impl LetsencryptService {
         order: &mut NewOrder<PersistType>,
     ) -> Result<(), anyhow::Error> {
         for auth in order.authorizations()? {
-            let challenge = auth.http_challenge();
+            let challenge = auth.http_challenge()?;
 
             info!("HTTP-01 challenge for domain: {}", auth.domain_name());
 
@@ -111,7 +111,7 @@ impl LetsencryptService {
         provider: &dyn DnsProvider,
     ) -> Result<(), anyhow::Error> {
         for auth in order.authorizations()? {
-            let challenge = auth.dns_challenge();
+            let challenge = auth.dns_challenge()?;
             let name = dns::challenge_name(auth.domain_name());
             let proof = challenge.dns_proof();
             info!("DNS-01 challenge for domain: {}", auth.domain_name());
@@ -270,7 +270,7 @@ impl LetsencryptService {
         };
 
         // Order OK
-        let pkey = acme_v2::create_p384_key();
+        let pkey = acme_v2::create_p384_key()?;
         let order_cert = order_csr.finalize_pkey(pkey, 5000)?;
 
         info!("certificate created for order {:?}", order_cert.api_order());
@@ -343,7 +343,13 @@ impl LetsencryptService {
             return;
         };
 
-        let valid_days_left = cert.valid_days_left();
+        let valid_days_left = match cert.valid_days_left() {
+            Ok(days) => days,
+            Err(err) => {
+                tracing::warn!("failed to read the certificate of {domain}: {err}");
+                return;
+            }
+        };
         tracing::info!("certificate for domain {domain} expires in {valid_days_left} days",);
         // Each `notify` block says from how many days left it's told (`expiring_days`)
         if valid_days_left <= crate::notify::EXPIRING_DAYS_MAX {
@@ -365,7 +371,10 @@ impl LetsencryptService {
                 .certificate(domain)
                 .ok()
                 .flatten()
-                .is_some_and(|cert| cert.valid_days_left() <= DEFAULT_RENEW_INTERVAL_DAYS)
+                .is_some_and(|cert| {
+                    cert.valid_days_left()
+                        .is_ok_and(|days| days <= DEFAULT_RENEW_INTERVAL_DAYS)
+                })
         };
         let outcome = with_lease(
             stores::global::get_store().as_ref(),

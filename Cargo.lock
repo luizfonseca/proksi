@@ -16,17 +16,15 @@ dependencies = [
 
 [[package]]
 name = "acme-v2"
-version = "0.9.4"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38de4008e14b1a3da15ce6c17256ffdd2b5801c5cfe724271b0df59d0bc7dfe2"
+checksum = "b2ce4e777d4752b9a599aa23abc73c3ee08c7e2cc643f6edf3e3a59ba74cbfdc"
 dependencies = [
  "base64 0.22.1",
- "lazy_static",
  "log",
  "openssl",
  "serde",
  "serde_json",
- "time",
  "ureq",
 ]
 
