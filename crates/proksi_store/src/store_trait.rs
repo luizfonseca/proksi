@@ -5,6 +5,7 @@ use std::{error::Error, hash::RandomState, time::Duration};
 use crate::{
     certificates::Certificate,
     notify::{NotifyRecord, NotifySnapshot},
+    rate_limit::{Rate, Used},
     route::{HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write},
     waiting_room::{Admission, RoomLimits},
 };
@@ -94,6 +95,16 @@ pub trait Store: Send + Sync + 'static {
     /// The key of waiting rooms' cookies: random, created on first use, and the same for every
     /// replica sharing the store
     async fn waiting_room_key(&self) -> Result<[u8; 32], StoreError>;
+
+    /// Counts the requests each client of the rate limit `block` made (as one replica saw them),
+    /// answering, for each, how many microseconds ahead of now its arrival time is. Empty when
+    /// the store doesn't share rate limits.
+    async fn sync_rate_limit(
+        &self,
+        block: &str,
+        rate: Rate,
+        used: &[Used],
+    ) -> Result<Vec<u64>, StoreError>;
 
     /// Revision of the certificates, incremented by every certificate written
     async fn certificates_revision(&self) -> Result<u64, StoreError>;

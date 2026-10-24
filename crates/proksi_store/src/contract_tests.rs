@@ -5,6 +5,7 @@ use std::time::Duration;
 use crate::{
     certificates::Certificate,
     notify::NotifyRecord,
+    rate_limit::{Rate, Used},
     route::{Change, Expect, ReplicaStatus, RouteRecord, StoreError, Write},
     store_trait::Store,
     test_util::certificate,
@@ -396,4 +397,56 @@ pub async fn waiting_rooms_contract(store: &dyn Store) {
     let key = store.waiting_room_key().await.unwrap();
     assert_ne!(key, [0; 32]);
     assert_eq!(store.waiting_room_key().await.unwrap(), key);
+}
+
+pub(crate) async fn rate_limits_contract(store: &dyn Store) {
+    // 1 a second, 3 at once
+    let rate = Rate {
+        interval_us: 1_000_000,
+        capacity_us: 3_000_000,
+    };
+    let used = |client: &str, requests| Used {
+        client: client.to_string(),
+        requests,
+    };
+
+    // Counted, and answered as how far ahead each client is
+    let ahead = store
+        .sync_rate_limit("b1", rate, &[used("10.0.0.1", 2), used("10.0.0.2", 1)])
+        .await
+        .unwrap();
+    assert!((1_990_000..=2_000_000).contains(&ahead[0]), "{ahead:?}");
+    assert!((990_000..=1_000_000).contains(&ahead[1]), "{ahead:?}");
+    // Another replica's requests add up
+    let ahead = store
+        .sync_rate_limit("b1", rate, &[used("10.0.0.1", 2)])
+        .await
+        .unwrap();
+    assert!((3_980_000..=4_000_000).contains(&ahead[0]), "{ahead:?}");
+    // Each block is its own
+    let ahead = store
+        .sync_rate_limit("b2", rate, &[used("10.0.0.1", 1)])
+        .await
+        .unwrap();
+    assert!((990_000..=1_000_000).contains(&ahead[0]), "{ahead:?}");
+    // Nothing to count: nothing to answer
+    assert!(
+        store
+            .sync_rate_limit("b1", rate, &[])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+pub(crate) async fn tiny_intervals_contract(store: &dyn Store) {
+    let rate = Rate {
+        interval_us: 0,
+        capacity_us: 0,
+    };
+    let used = [Used {
+        client: "10.0.0.9".to_string(),
+        requests: 5,
+    }];
+    assert!(store.sync_rate_limit("tiny", rate, &used).await.unwrap()[0] >= 5);
 }

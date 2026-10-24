@@ -6,7 +6,8 @@ use std::{error::Error, hash::RandomState, time::Duration};
 use crate::{
     certificates::{Certificate, SerializableCertificate},
     notify::{NotifyRecord, NotifySnapshot},
-    redis_history, redis_notify, redis_waiting_room,
+    rate_limit::{Rate, Used},
+    redis_history, redis_notify, redis_rate_limit, redis_waiting_room,
     route::{
         HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write,
         DEFAULT_HISTORY,
@@ -302,6 +303,15 @@ impl Store for RedisStore {
         redis_waiting_room::key(&mut *self.connection()?)
     }
 
+    async fn sync_rate_limit(
+        &self,
+        block: &str,
+        rate: Rate,
+        used: &[Used],
+    ) -> Result<Vec<u64>, StoreError> {
+        redis_rate_limit::count(&mut *self.connection()?, block, rate, used)
+    }
+
     async fn notify_revision(&self) -> Result<u64, StoreError> {
         redis_notify::revision(&mut *self.connection()?)
     }
@@ -508,6 +518,14 @@ mod tests {
             .query(&mut store.pool.get().unwrap())
             .unwrap();
         Some(store)
+    }
+
+    #[tokio::test]
+    async fn test_rate_limits_contract() {
+        if let Some(store) = test_store(6) {
+            crate::contract_tests::rate_limits_contract(&store).await;
+            crate::contract_tests::tiny_intervals_contract(&store).await;
+        }
     }
 
     #[tokio::test]

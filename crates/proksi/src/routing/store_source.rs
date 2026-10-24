@@ -360,6 +360,15 @@ mod tests {
             self.check()?;
             self.inner.waiting_room_key().await
         }
+        async fn sync_rate_limit(
+            &self,
+            block: &str,
+            rate: proksi_store::Rate,
+            used: &[proksi_store::Used],
+        ) -> Result<Vec<u64>, StoreError> {
+            self.check()?;
+            self.inner.sync_rate_limit(block, rate, used).await
+        }
         async fn certificates_revision(&self) -> Result<u64, StoreError> {
             self.check()?;
             self.inner.certificates_revision().await

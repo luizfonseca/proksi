@@ -14,6 +14,7 @@ use std::{
 use crate::{
     certificates::Certificate,
     notify::{self, NotifyRecord, NotifySnapshot},
+    rate_limit::{Arrivals, Rate, Used},
     route::{
         Change, Expect, HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot,
         StoreError, Write, DEFAULT_HISTORY,
@@ -38,6 +39,8 @@ pub struct MemoryStore {
     history: usize,
     /// Waiting rooms, by name
     rooms: Mutex<HashMap<String, Room>>,
+    /// Rate limits' arrival times
+    arrivals: Mutex<Arrivals>,
     /// The key of waiting rooms' cookies, created on first use
     room_key: Mutex<Option<[u8; 32]>>,
 }
@@ -124,6 +127,7 @@ impl MemoryStore {
             certificates_revision: AtomicU64::new(0),
             history: DEFAULT_HISTORY,
             rooms: Mutex::new(HashMap::new()),
+            arrivals: Mutex::default(),
             room_key: Mutex::new(None),
         }
     }
@@ -354,6 +358,16 @@ impl Store for MemoryStore {
         }
     }
 
+    async fn sync_rate_limit(
+        &self,
+        block: &str,
+        rate: Rate,
+        used: &[Used],
+    ) -> Result<Vec<u64>, StoreError> {
+        let mut arrivals = self.arrivals.lock().unwrap_or_else(PoisonError::into_inner);
+        Ok(arrivals.count(block, rate, used))
+    }
+
     async fn reload_certificates(&self) -> Result<(), StoreError> {
         // Not shared: the certificates are already the store's
         Ok(())
@@ -467,6 +481,12 @@ mod tests {
     #[tokio::test]
     async fn test_leases_contract() {
         crate::contract_tests::leases_contract(&MemoryStore::new()).await;
+    }
+
+    #[tokio::test]
+    async fn test_rate_limits_contract() {
+        crate::contract_tests::rate_limits_contract(&MemoryStore::new()).await;
+        crate::contract_tests::tiny_intervals_contract(&MemoryStore::new()).await;
     }
 
     #[tokio::test]

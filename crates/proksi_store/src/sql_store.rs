@@ -9,6 +9,7 @@ use sqlx::{any::AnyPoolOptions, AnyPool, Row};
 use crate::{
     certificates::{Certificate, SerializableCertificate},
     notify::{NotifyRecord, NotifySnapshot},
+    rate_limit::{Rate, Used},
     route::{
         HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write,
         DEFAULT_HISTORY,
@@ -314,6 +315,16 @@ impl Store for SqlStore {
 
     async fn waiting_room_key(&self) -> Result<[u8; 32], StoreError> {
         self.run(sql_waiting_room::key(self.pool.clone())).await
+    }
+
+    async fn sync_rate_limit(
+        &self,
+        _block: &str,
+        _rate: Rate,
+        _used: &[Used],
+    ) -> Result<Vec<u64>, StoreError> {
+        // Not shared: a row per client per sync costs more than it's worth
+        Ok(vec![])
     }
 
     async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
@@ -786,6 +797,21 @@ mod tests {
         if let Some(store) = postgres_store("proksi_test_replicas") {
             contract_tests::replicas_contract(&store).await;
         }
+    }
+
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_sqlite_doesnt_share_rate_limits() {
+        let (store, _dir) = sqlite_store();
+        let rate = crate::Rate {
+            interval_us: 1,
+            capacity_us: 1,
+        };
+        let used = [crate::Used {
+            client: "10.0.0.1".to_string(),
+            requests: 1,
+        }];
+        assert_eq!(store.sync_rate_limit("b", rate, &used).await.unwrap(), Vec::<u64>::new());
     }
 
     #[cfg(feature = "sqlite")]
