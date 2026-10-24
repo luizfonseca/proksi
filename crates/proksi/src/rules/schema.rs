@@ -142,7 +142,7 @@ mod tests {
                 let condition = condition(field, operator);
                 let rule = Rule(json!({ "name": "a", "and": condition, "then": { "respond": {} } }));
 
-                let compiled = Rules::compile(&[rule]);
+                let compiled = Rules::compile(&[rule], "");
 
                 let listed = field.operators.contains(&operator.name);
                 assert_eq!(
@@ -167,7 +167,7 @@ mod tests {
         // Every action is one `then` takes
         for name in actions.keys() {
             let rule = Rule(json!({ "name": "a", "and": { "method": { "eq": "GET" } }, "then": { name: {} } }));
-            let err = Rules::compile(&[rule]).err().unwrap_or_default();
+            let err = Rules::compile(&[rule], "").err().unwrap_or_default();
             assert!(!err.contains("unknown field"), "{name}: {err}");
         }
     }

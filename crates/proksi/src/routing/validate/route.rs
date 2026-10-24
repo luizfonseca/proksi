@@ -15,7 +15,7 @@ pub fn validate_route(route: &Route) -> Result<(), String> {
     validate_headers(route.headers.as_ref())?;
     // The plugins, headers and cache of the route, as building blocks
     for location in Host::from_route(route).locations {
-        Blocks::build(&location)?;
+        Blocks::build(&location, "")?;
     }
     Ok(())
 }

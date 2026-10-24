@@ -15,7 +15,7 @@ pub fn build_host_container(host: &Host) -> Option<HostContainer> {
         .collect::<Option<Vec<_>>>()?;
 
     let mut container = HostContainer::new(locations, &host.tls);
-    container.rules = match crate::rules::Rules::compile(&host.rules) {
+    container.rules = match crate::rules::Rules::compile(&host.rules, &host.name) {
         Ok(rules) => rules,
         Err(err) => {
             tracing::warn!("invalid host {}: {err}", host.name);

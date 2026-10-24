@@ -341,7 +341,7 @@ mod tests {
                 "then": { "respond": { "status": 403 } },
             })));
         }
-        (Index::build(&compile(&rules).unwrap()).unwrap(), count)
+        (Index::build(&compile(&rules, "").unwrap()).unwrap(), count)
     }
 
     fn candidates(index: &(Index, usize), method: Method, host: &str, path: &str) -> Vec<usize> {

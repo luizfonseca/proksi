@@ -216,7 +216,7 @@ pub(super) mod tests {
 
     /// The names of the rules a request matches
     fn matching(rules: &[serde_json::Value], request: &TestRequest) -> Vec<String> {
-        let compiled = compile(&rules.iter().cloned().map(Rule).collect::<Vec<_>>()).unwrap();
+        let compiled = compile(&rules.iter().cloned().map(Rule).collect::<Vec<_>>(), "").unwrap();
         let mut state = State::new(&compiled);
         compiled
             .rules

@@ -24,6 +24,12 @@ mod cache;
 mod context;
 mod headers;
 
+/// Where a location's blocks are written: blocks keeping counts (`rate_limit`) share them with
+/// the blocks written at the same place on other replicas
+pub fn location_id(host: &str, path: &str) -> String {
+    format!("{host} {path}")
+}
+
 /// A block of a location
 #[derive(Clone)]
 pub struct Block {
@@ -41,13 +47,14 @@ pub struct Blocks {
 }
 
 impl Blocks {
-    /// The blocks of `location`, or why its configuration is invalid
-    pub fn build(location: &Location) -> Result<Self, String> {
+    /// The blocks of `location`, written at `id` (see `location_id`, `rules::rule_id`), or why
+    /// its configuration is invalid
+    pub fn build(location: &Location, id: &str) -> Result<Self, String> {
         let mut blocks = vec![];
 
         for plugin in location.plugins.iter().flatten() {
             // Other plugins of `routes = [...]` and docker labels are ignored, as before
-            let Some(plugin) = proksi_plugins::build(plugin, &location.path) else {
+            let Some(plugin) = proksi_plugins::build(plugin, &location.path, id) else {
                 continue;
             };
             let plugin = plugin?;
@@ -224,7 +231,7 @@ mod tests {
             "cache": { "enabled": true },
             "headers": { "add": [{ "name": "x-a", "value": "1" }] },
             "plugins": [basic_auth(), { "name": "request_id" }],
-        })))
+        })), "")
         .unwrap();
 
         assert_eq!(
@@ -246,7 +253,7 @@ mod tests {
                 { "name": "rate_limit", "config": { "requests": 10, "per": "1m" } },
                 { "name": "request_id" },
             ],
-        })))
+        })), "")
         .unwrap();
 
         assert_eq!(
@@ -263,7 +270,7 @@ mod tests {
                 { "name": "body_limit", "config": { "max": "1MiB" } },
                 { "name": "rate_limit", "config": { "requests": 10, "per": "1m" } },
             ],
-        })))
+        })), "")
         .unwrap();
 
         assert_eq!(
@@ -277,7 +284,7 @@ mod tests {
         let blocks = Blocks::build(&location(serde_json::json!({
             "headers": { "add": [{ "name": "x-a", "value": "1" }], "priority": 10 },
             "plugins": [basic_auth(), { "name": "request_id", "config": { "priority": 60 } }],
-        })))
+        })), "")
         .unwrap();
 
         assert_eq!(
@@ -291,7 +298,7 @@ mod tests {
         let blocks = Blocks::build(&location(serde_json::json!({
             "headers": { "add": [{ "name": "x-a", "value": "1" }], "priority": 20 },
             "plugins": [{ "name": "request_id", "config": { "priority": 20 } }, basic_auth()],
-        })))
+        })), "")
         .unwrap();
 
         assert_eq!(
@@ -304,7 +311,7 @@ mod tests {
     fn test_priority_must_be_between_0_and_100() {
         let err = Blocks::build(&location(serde_json::json!({
             "plugins": [{ "name": "request_id", "config": { "priority": 101 } }],
-        })))
+        })), "")
         .err();
 
         assert_eq!(
@@ -335,7 +342,7 @@ mod tests {
                 "oauth2: unknown variant `other`, expected `github` or `workos`",
             ),
         ] {
-            let err = Blocks::build(&location(serde_json::json!({ "plugins": [plugin] }))).err();
+            let err = Blocks::build(&location(serde_json::json!({ "plugins": [plugin] })), "").err();
             assert_eq!(err.as_deref(), Some(expected));
         }
     }
@@ -346,7 +353,7 @@ mod tests {
             "cache": { "enabled": false },
             "headers": { "add": [], "remove": [] },
             "plugins": [{ "name": "unknown" }],
-        })))
+        })), "")
         .unwrap();
 
         assert!(blocks.iter().next().is_none());

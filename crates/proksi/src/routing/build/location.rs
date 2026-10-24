@@ -84,14 +84,15 @@ pub(super) fn build_location_container(
         .map(|upstream| format!("{}:{}", upstream.ip, upstream.port))
         .collect::<Vec<_>>();
 
-    container.blocks = match Blocks::build(location) {
+    let id = crate::blocks::location_id(host, &location.path);
+    container.blocks = match Blocks::build(location, &id) {
         Ok(blocks) => blocks,
         Err(err) => {
             tracing::warn!("invalid location {} of host {host}: {err}", location.path);
             return None;
         }
     };
-    container.rules = match crate::rules::Rules::compile(&location.rules) {
+    container.rules = match crate::rules::Rules::compile(&location.rules, &id) {
         Ok(rules) => rules,
         Err(err) => {
             tracing::warn!("invalid location {} of host {host}: {err}", location.path);

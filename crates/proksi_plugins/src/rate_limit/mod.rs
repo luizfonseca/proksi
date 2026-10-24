@@ -2,7 +2,11 @@
 //! limit. Clients are decided with GCRA (see `gcra`): `requests + burst` at once, then
 //! `requests` per `per`, spread evenly.
 
-use std::{fmt, net::IpAddr, time::Duration};
+use std::{
+    fmt::{self, Write},
+    net::IpAddr,
+    time::Duration,
+};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -52,11 +56,15 @@ impl std::error::Error for RateLimitError {}
 /// The requests of each client (by IP address), in a fixed amount of memory: clients sharing a
 /// slot can only be limited early, never late
 pub(super) struct RateLimit {
+    /// Where it's written, hashed (see `block_id`)
+    #[allow(dead_code)]
+    block: String,
     limits: Gcra,
 }
 
 impl RateLimit {
-    pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, RateLimitError> {
+    /// `id` says where the block is written: blocks written in the same place share their counts
+    pub(super) fn new(plugin: &RoutePlugin, id: &str) -> Result<Self, RateLimitError> {
         let settings: super::settings::RateLimit =
             super::settings::read("rate_limit", plugin).map_err(RateLimitError::Settings)?;
         let requests = Some(settings.requests)
@@ -68,6 +76,7 @@ impl RateLimit {
         }
 
         Ok(Self {
+            block: block_id(id),
             limits: Gcra::new(requests, per, settings.burst.unwrap_or(0)),
         })
     }
@@ -96,6 +105,20 @@ impl Middleware for RateLimit {
     }
 }
 
+/// A block's id in the store: the first 8 bytes of the SHA-256 of where it's written, in hex
+/// (it may hold `{` or `}`, which Redis reads as the key's hash slot)
+fn block_id(id: &str) -> String {
+    let digest = aws_lc_rs::digest::digest(&aws_lc_rs::digest::SHA256, id.as_bytes());
+    digest
+        .as_ref()
+        .iter()
+        .take(8)
+        .fold(String::with_capacity(16), |mut id, byte| {
+            let _ = write!(id, "{byte:02x}");
+            id
+        })
+}
+
 /// `Retry-After`: whole seconds, rounded up, at least 1
 fn retry_after(wait: Duration) -> u64 {
     wait.as_secs()
@@ -122,7 +145,7 @@ mod tests {
 
     use crate::RoutePlugin;
 
-    use super::{RateLimit, RateLimitError, parse_duration, retry_after};
+    use super::{RateLimit, RateLimitError, block_id, parse_duration, retry_after};
 
     fn plugin(config: serde_json::Value) -> RoutePlugin {
         serde_json::from_value(serde_json::json!({ "name": "rate_limit", "config": config }))
@@ -142,8 +165,11 @@ mod tests {
 
     #[test]
     fn test_requests_over_the_limit_are_exceeded() {
-        let limit =
-            RateLimit::new(&plugin(serde_json::json!({ "requests": 2, "per": "1m" }))).unwrap();
+        let limit = RateLimit::new(
+            &plugin(serde_json::json!({ "requests": 2, "per": "1m" })),
+            "",
+        )
+        .unwrap();
         let client: IpAddr = "10.0.0.1".parse().unwrap();
         let other: IpAddr = "10.0.0.2".parse().unwrap();
 
@@ -156,9 +182,10 @@ mod tests {
 
     #[test]
     fn test_burst_lets_more_through_at_once() {
-        let limit = RateLimit::new(&plugin(
-            serde_json::json!({ "requests": 2, "per": "1m", "burst": 1 }),
-        ))
+        let limit = RateLimit::new(
+            &plugin(serde_json::json!({ "requests": 2, "per": "1m", "burst": 1 })),
+            "",
+        )
         .unwrap();
         let client: IpAddr = "10.0.0.1".parse().unwrap();
         assert!((0..3).all(|_| limit.exceeded(&client).is_none()));
@@ -168,9 +195,10 @@ mod tests {
     #[test]
     fn test_retry_after_is_at_least_one_second() {
         // 1000 per second: the next request is 1ms away, which is still `Retry-After: 1`
-        let limit = RateLimit::new(&plugin(
-            serde_json::json!({ "requests": 1000, "per": "1s" }),
-        ))
+        let limit = RateLimit::new(
+            &plugin(serde_json::json!({ "requests": 1000, "per": "1s" })),
+            "",
+        )
         .unwrap();
         let client: IpAddr = "10.0.0.1".parse().unwrap();
         for _ in 0..1000 {
@@ -199,7 +227,10 @@ mod tests {
                 RateLimitError::NoBurst,
             ),
         ] {
-            assert_eq!(RateLimit::new(&plugin(config)).err(), Some(expected));
+            assert_eq!(
+                RateLimit::new(&plugin(config), "test invalid").err(),
+                Some(expected)
+            );
         }
     }
 
@@ -225,5 +256,14 @@ mod tests {
         ] {
             assert_eq!(error.to_string(), message);
         }
+    }
+
+    #[test]
+    fn test_block_ids_are_stable_and_safe_for_redis() {
+        assert_eq!(block_id("a.test /"), block_id("a.test /"));
+        assert_ne!(block_id("a.test /"), block_id("a.test /api"));
+        let id = block_id("a.test /{x}");
+        assert_eq!(id.len(), 16);
+        assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }

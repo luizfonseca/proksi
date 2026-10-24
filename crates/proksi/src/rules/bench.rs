@@ -72,7 +72,7 @@ pub(super) fn rules(count: usize) -> Vec<Rule> {
 /// Nanoseconds to run every rule of a scope on a request matching none of them
 fn cost(rules: &[Rule]) -> f64 {
     let count = rules.len();
-    let rules = Rules::compile(rules).unwrap().unwrap();
+    let rules = Rules::compile(rules, "").unwrap().unwrap();
     let request = TestRequest::new("GET", "www.example.com", "/products/42?ref=home")
         .header(
             "user-agent",
@@ -132,7 +132,7 @@ fn bench_text_lists() {
     for count in [1, 5, 50, 500, 5000, 100_000] {
         for operator in ["prefix", "suffix", "contains", "in", "client in"] {
             let rule = named(list_condition(operator, count), 0);
-            let rules = Rules::compile(&[rule]).unwrap().unwrap();
+            let rules = Rules::compile(&[rule], "").unwrap().unwrap();
             let nanos = time(&rules, &request, 2_000_000 / count + 1_000);
             println!("{operator:>9}, {count:>6} values: {nanos:>9.1}ns");
         }
