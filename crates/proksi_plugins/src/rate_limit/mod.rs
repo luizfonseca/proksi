@@ -1,27 +1,27 @@
-//! `rate_limit { requests = 120, per = "1m" }`: answers `429` to clients over the limit
+//! `rate_limit { requests = 120, per = "1m", burst = 30 }`: answers `429` to clients over the
+//! limit. Clients are decided with GCRA (see `gcra`): `requests + burst` at once, then
+//! `requests` per `per`, spread evenly.
 
 use std::{net::IpAddr, time::Duration};
 
 use anyhow::Result;
 use async_trait::async_trait;
-use http::{header, StatusCode};
+use http::{StatusCode, header};
 use pingora::{http::ResponseHeader, proxy::Session};
-use pingora_limits::rate::Rate;
 
-use crate::{respond::respond, RequestCtx, RoutePlugin};
+use crate::{RequestCtx, RoutePlugin, respond::respond};
 
 use super::Middleware;
+use gcra::Gcra;
 
 mod gcra;
 
 const INVALID_PER: &str = "rate_limit: `per` must be a duration such as \"10s\", \"1m\" or \"1h\"";
 
-/// Counts the requests of each client (by IP address) in windows of `per`. Counts use a
-/// fixed amount of memory and are estimates, which can only be higher than the real count.
+/// The requests of each client (by IP address), in a fixed amount of memory: clients sharing a
+/// slot can only be limited early, never late
 pub(super) struct RateLimit {
-    requests: isize,
-    per: Duration,
-    counts: Rate,
+    limits: Gcra,
 }
 
 impl RateLimit {
@@ -29,20 +29,20 @@ impl RateLimit {
         let settings: super::settings::RateLimit = super::settings::read("rate_limit", plugin)?;
         let requests = Some(settings.requests)
             .filter(|requests| *requests > 0)
-            .and_then(|requests| isize::try_from(requests).ok())
             .ok_or("rate_limit: `requests` must be a number greater than 0")?;
         let per = parse_duration(&settings.per).ok_or(INVALID_PER)?;
+        if settings.burst == Some(0) {
+            return Err("rate_limit: `burst` must be a number greater than 0".to_string());
+        }
 
         Ok(Self {
-            requests,
-            per,
-            counts: Rate::new(per),
+            limits: Gcra::new(requests, per, settings.burst.unwrap_or(0)),
         })
     }
 
-    /// Counts a request of `client`, returning whether it's over the limit
-    fn exceeded(&self, client: &IpAddr) -> bool {
-        self.counts.observe(client, 1) > self.requests
+    /// Counts a request of `client` if it's let through, or says how long until one would be
+    fn exceeded(&self, client: &IpAddr) -> Option<Duration> {
+        self.limits.check(client, self.limits.now()).err()
     }
 }
 
@@ -52,16 +52,23 @@ impl Middleware for RateLimit {
         let Some(client) = ctx.client(session) else {
             return Ok(false);
         };
-        if !self.exceeded(&client) {
+        let Some(wait) = self.exceeded(&client) else {
             return Ok(false);
-        }
+        };
 
         let mut response = ResponseHeader::build_no_case(StatusCode::TOO_MANY_REQUESTS, Some(1))?;
-        response.insert_header(header::RETRY_AFTER, self.per.as_secs().to_string())?;
+        response.insert_header(header::RETRY_AFTER, retry_after(wait).to_string())?;
         response.insert_header(header::CONTENT_LENGTH, "0")?;
         respond(session, ctx, response).await?;
         Ok(true)
     }
+}
+
+/// `Retry-After`: whole seconds, rounded up, at least 1
+fn retry_after(wait: Duration) -> u64 {
+    wait.as_secs()
+        .saturating_add(u64::from(wait.subsec_nanos() > 0))
+        .max(1)
 }
 
 /// A duration like `10s`, `1m` or `1h`
@@ -83,7 +90,7 @@ mod tests {
 
     use crate::RoutePlugin;
 
-    use super::{parse_duration, RateLimit};
+    use super::{RateLimit, parse_duration, retry_after};
 
     fn plugin(config: serde_json::Value) -> RoutePlugin {
         serde_json::from_value(serde_json::json!({ "name": "rate_limit", "config": config }))
@@ -108,11 +115,36 @@ mod tests {
         let client: IpAddr = "10.0.0.1".parse().unwrap();
         let other: IpAddr = "10.0.0.2".parse().unwrap();
 
-        assert!(!limit.exceeded(&client));
-        assert!(!limit.exceeded(&client));
-        assert!(limit.exceeded(&client));
+        assert!(limit.exceeded(&client).is_none());
+        assert!(limit.exceeded(&client).is_none());
+        assert!(limit.exceeded(&client).is_some());
         // Each client has its own count
-        assert!(!limit.exceeded(&other));
+        assert!(limit.exceeded(&other).is_none());
+    }
+
+    #[test]
+    fn test_burst_lets_more_through_at_once() {
+        let limit = RateLimit::new(&plugin(
+            serde_json::json!({ "requests": 2, "per": "1m", "burst": 1 }),
+        ))
+        .unwrap();
+        let client: IpAddr = "10.0.0.1".parse().unwrap();
+        assert!((0..3).all(|_| limit.exceeded(&client).is_none()));
+        assert!(limit.exceeded(&client).is_some());
+    }
+
+    #[test]
+    fn test_retry_after_is_at_least_one_second() {
+        // 1000 per second: the next request is 1ms away, which is still `Retry-After: 1`
+        let limit = RateLimit::new(&plugin(
+            serde_json::json!({ "requests": 1000, "per": "1s" }),
+        ))
+        .unwrap();
+        let client: IpAddr = "10.0.0.1".parse().unwrap();
+        for _ in 0..1000 {
+            limit.exceeded(&client);
+        }
+        assert_eq!(limit.exceeded(&client).map(retry_after), Some(1));
     }
 
     #[test]
@@ -133,6 +165,10 @@ mod tests {
             (
                 serde_json::json!({ "requests": 10, "per": "1x" }),
                 "rate_limit: `per` must be a duration such as \"10s\", \"1m\" or \"1h\"",
+            ),
+            (
+                serde_json::json!({ "requests": 10, "per": "1m", "burst": 0 }),
+                "rate_limit: `burst` must be a number greater than 0",
             ),
         ] {
             assert_eq!(

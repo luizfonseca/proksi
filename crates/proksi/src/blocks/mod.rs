@@ -317,8 +317,8 @@ mod tests {
     fn test_invalid_block_settings_are_rejected() {
         for (plugin, expected) in [
             (
-                serde_json::json!({ "name": "rate_limit", "config": { "requests": 1, "per": "1m", "burst": 2 } }),
-                "rate_limit: unknown field `burst`, expected one of `requests`, `per`, `priority`",
+                serde_json::json!({ "name": "rate_limit", "config": { "requests": 1, "per": "1m", "window": 2 } }),
+                "rate_limit: unknown field `window`, expected one of `requests`, `per`, `burst`, `priority`",
             ),
             (
                 serde_json::json!({ "name": "basic_auth", "config": { "user": "u" } }),

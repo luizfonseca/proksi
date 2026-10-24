@@ -617,7 +617,8 @@ async fn test_rate_limit() {
     }
     let res = proksi.get("limited.test", "/login").await.unwrap();
     assert_eq!(res.status, 429);
-    assert_eq!(res.header("retry-after"), Some("60"));
+    // 2 a minute: the next one is let through 30s later
+    assert_eq!(res.header("retry-after"), Some("30"));
 
     // The limit belongs to its location
     assert_eq!(proksi.get("limited.test", "/").await.unwrap().status, 200);

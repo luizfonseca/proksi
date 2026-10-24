@@ -147,11 +147,8 @@ mod tests {
         std::thread::scope(|scope| {
             for _ in 0..8 {
                 scope.spawn(|| {
-                    for _ in 0..100 {
-                        if gcra.check(&ip(1), 0).is_ok() {
-                            allowed.fetch_add(1, Ordering::Relaxed);
-                        }
-                    }
+                    let ok = (0..100).filter(|_| gcra.check(&ip(1), 0).is_ok()).count();
+                    allowed.fetch_add(ok, Ordering::Relaxed);
                 });
             }
         });

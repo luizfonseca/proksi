@@ -3060,15 +3060,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pingora-limits"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f17248f7a1586c1f1244481f058a70e4d44707d8f936bf0b2323c8c85c40c8c0"
-dependencies = [
- "ahash",
-]
-
-[[package]]
 name = "pingora-load-balancing"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3403,7 +3394,6 @@ dependencies = [
  "openssl",
  "path-tree",
  "pingora",
- "pingora-limits",
  "proksi_store",
  "rand 0.8.8",
  "regex",
