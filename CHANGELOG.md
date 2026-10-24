@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.17.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.17.0...proksi-v0.17.1) (2026-10-24)
+
+
+### Features
+
+* keep notify blocks in the store editable in the admin UI ([#566](https://github.com/luizfonseca/proksi/issues/566)) ([8a1fbc7](https://github.com/luizfonseca/proksi/commit/8a1fbc7700c2335ad83d14e2445f7b87e4ea6039))
+
+
+### Bug Fixes
+
+* update acme-v2 to 0.9.4, for TLS with OpenSSL and the system's root certificates ([#570](https://github.com/luizfonseca/proksi/issues/570)) ([9b1815b](https://github.com/luizfonseca/proksi/commit/9b1815bd9175b3d4575eb90ce86fdf24afc11f30))
+* update acme-v2 to 1.0.0, which returns errors where it panicked ([#571](https://github.com/luizfonseca/proksi/issues/571)) ([5d6cc41](https://github.com/luizfonseca/proksi/commit/5d6cc41f21ecf1a2ba90320314aeee251d84be18))
+* use aws-lc-rs instead of ring, and jsonwebtoken's aws-lc backend instead of the rsa crate ([#569](https://github.com/luizfonseca/proksi/issues/569)) ([e8b15a5](https://github.com/luizfonseca/proksi/commit/e8b15a5a57254f6d86ab016cc409b07e2679d873))
+
+
+### Miscellaneous Chores
+
+* release 0.17.1 ([880169a](https://github.com/luizfonseca/proksi/commit/880169aa88f2272fdde0ea28fffe1e63fd5e1aa0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.17.0 to 0.17.1
+    * proksi_plugins bumped from 0.17.0 to 0.17.1
+    * proksi_store bumped from 0.17.0 to 0.17.1
+  * dev-dependencies
+    * proksi_plugins bumped from 0.17.0 to 0.17.1
+    * proksi_store bumped from 0.17.0 to 0.17.1
+
+## [0.17.1](https://github.com/luizfonseca/proksi/compare/plugins_api-v0.1.2...plugins_api-v0.17.1) (2026-10-24)
+
+
+### Miscellaneous Chores
+
+* release 0.17.1 ([880169a](https://github.com/luizfonseca/proksi/commit/880169aa88f2272fdde0ea28fffe1e63fd5e1aa0))
+
 ## [0.17.0](https://github.com/luizfonseca/proksi/compare/proksi-v0.16.1...proksi-v0.17.0) (2026-10-22)
 
 
