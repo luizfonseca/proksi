@@ -3861,16 +3861,25 @@ async fn test_jwt() {
     jwk.common.key_id = Some("k1".to_string());
     // And one too short to be trusted (under 2048 bits)
     let weak = openssl::rsa::Rsa::generate(1024).unwrap();
-    let weak_key = EncodingKey::from_rsa_pem(&weak.private_key_to_pem().unwrap()).unwrap();
-    let mut weak_jwk = Jwk::from_encoding_key(&weak_key, Algorithm::RS256).unwrap();
-    weak_jwk.common.key_id = Some("k2".to_string());
+    // Made with OpenSSL: jsonwebtoken refuses such keys before signing
+    let weak_jwk = serde_json::json!({
+        "kty": "RSA", "kid": "k2", "alg": "RS256",
+        "n": base64_url(&weak.n().to_vec()), "e": base64_url(&weak.e().to_vec()),
+    });
     let jwks_port =
         jwks_server(serde_json::json!({ "keys": [jwk, weak_jwk] }).to_string()).await;
     let mut jwt_header = Header::new(Algorithm::RS256);
     jwt_header.kid = Some("k1".to_string());
     let signed = encode(&jwt_header, &claims, &rsa_key).unwrap();
-    jwt_header.kid = Some("k2".to_string());
-    let weakly_signed = encode(&jwt_header, &claims, &weak_key).unwrap();
+    let weakly_signed = {
+        let header = base64_url(br#"{"alg":"RS256","typ":"JWT","kid":"k2"}"#);
+        let message = format!("{header}.{}", base64_url(claims.to_string().as_bytes()));
+        let key = openssl::pkey::PKey::from_rsa(weak).unwrap();
+        let mut signer =
+            openssl::sign::Signer::new(openssl::hash::MessageDigest::sha256(), &key).unwrap();
+        let signature = signer.sign_oneshot_to_vec(message.as_bytes()).unwrap();
+        format!("{message}.{}", base64_url(&signature))
+    };
 
     let config = HOST_WITH_JWT.replace("{jwks_port}", &jwks_port.to_string());
     let mut proksi = Harness::start_without_https(&config).await;
@@ -4886,4 +4895,12 @@ host "least.test" {
     );
     // Round robin would have sent it 10
     assert!(slow <= 2 && slow + fast == 20, "slow {slow}, fast {fast}");
+}
+
+/// Base64url without padding, as JWTs and JWKs have it
+fn base64_url(bytes: &[u8]) -> String {
+    openssl::base64::encode_block(bytes)
+        .trim_end_matches('=')
+        .replace('+', "-")
+        .replace('/', "_")
 }

@@ -297,7 +297,7 @@ fn file_fingerprint(metadata: &std::fs::Metadata) -> Fingerprint {
 
 fn sha256(bytes: &[u8]) -> String {
     use std::fmt::Write;
-    let digest = ring::digest::digest(&ring::digest::SHA256, bytes);
+    let digest = aws_lc_rs::digest::digest(&aws_lc_rs::digest::SHA256, bytes);
     digest
         .as_ref()
         .iter()

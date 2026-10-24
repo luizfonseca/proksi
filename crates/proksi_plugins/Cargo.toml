@@ -26,7 +26,7 @@ httpdate = "1.0.3"
 ipnet = "2.11.0"
 itertools = "0.15.0"
 memchr = "2"
-jsonwebtoken = { version = "11.1.0", default-features = false, features = ["rust_crypto", "use_pem"] }
+jsonwebtoken = { version = "11.1.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 mimalloc = { version = "0.1.52", default-features = false, optional = true }
 memmap2 = "0.9"
 openssl = { version = "0.10", features = ["vendored"] }
@@ -38,7 +38,6 @@ rand = "0.8"
 regex = "1"
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "query", "native-tls-no-alpn", "charset", "http2", "system-proxy"] }
 short-crypt = "1.0.28"
-ring = "0.17.14"
 schemars = "1.2.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
@@ -48,6 +47,7 @@ time = { version = "0.3.55", features = ["macros"] }
 tokio = { version = "1.48.0", features = ["sync", "time"] }
 tracing = "0.1.43"
 uuid = { version = "1.18.1", features = ["v4"] }
+aws-lc-rs = "1.18.2"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.52", default-features = false }
