@@ -14,7 +14,8 @@ const SLOTS: usize = 4096;
 
 /// The arrival times of clients, in a fixed-size table. One row: a count-min style minimum over
 /// several rows would let racing requests through, each seeing room in a different row. Clients
-/// sharing a slot add up (limited early, never late).
+/// sharing a slot add up (limited early, never late). The interval is rounded down, which only
+/// matters when `requests` nears `per` in nanoseconds.
 pub(crate) struct Gcra {
     /// Nanoseconds between two requests
     interval: u64,
@@ -55,19 +56,14 @@ impl Gcra {
         let Some(slot) = self.slot(client) else {
             return Ok(());
         };
-        let interval = self.interval;
-        let previous = slot.update(Ordering::Relaxed, Ordering::Relaxed, |arrival| {
-            arrival.max(now).saturating_add(interval)
-        });
-        let ahead = previous.max(now).saturating_add(interval) - now;
-        if ahead <= self.capacity {
-            return Ok(());
-        }
-        // Refused requests don't count
-        slot.update(Ordering::Relaxed, Ordering::Relaxed, |arrival| {
-            arrival.saturating_sub(interval)
-        });
-        Err(Duration::from_nanos(ahead - self.capacity))
+        let (interval, capacity) = (self.interval, self.capacity);
+        let ahead = |arrival: u64| arrival.max(now).saturating_add(interval) - now;
+        // Refused requests aren't written: one compare-and-swap, only when let through
+        slot.try_update(Ordering::Relaxed, Ordering::Relaxed, |arrival| {
+            (ahead(arrival) <= capacity).then(|| arrival.max(now).saturating_add(interval))
+        })
+        .map(|_| ())
+        .map_err(|arrival| Duration::from_nanos(ahead(arrival) - capacity))
     }
 
     fn slot(&self, client: &IpAddr) -> Option<&AtomicU64> {
@@ -153,6 +149,27 @@ mod tests {
             }
         });
         assert_eq!(allowed.into_inner(), 15);
+    }
+
+    #[test]
+    fn test_racing_clocks_never_exceed_capacity() {
+        // Threads see different times: each period of `per` lets at most `requests` through
+        for _ in 0..200 {
+            let gcra = Gcra::new(1, Duration::from_millis(1), 0);
+            let allowed = AtomicUsize::new(0);
+            std::thread::scope(|scope| {
+                for thread in 0..8u64 {
+                    let (gcra, allowed) = (&gcra, &allowed);
+                    scope.spawn(move || {
+                        let times = (0..1000u64).map(|i| (i * 8 + thread) * 125_000);
+                        let ok = times.filter(|now| gcra.check(&ip(1), *now).is_ok()).count();
+                        allowed.fetch_add(ok, Ordering::Relaxed);
+                    });
+                }
+            });
+            // 1s of requests at 1 per ms: 1000, plus the first one
+            assert!(allowed.into_inner() <= 1001);
+        }
     }
 
     #[test]
