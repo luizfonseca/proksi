@@ -1,0 +1,39 @@
+name: Security audit
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Scheduled runs open an issue for each new advisory
+      issues: write
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # rsa has no fix for the Marvin attack, which needs private-key operations: Proksi
+          # only verifies JWTs with RSA public keys
+          ignore: RUSTSEC-2023-0071
