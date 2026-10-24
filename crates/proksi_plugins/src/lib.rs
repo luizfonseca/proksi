@@ -50,7 +50,7 @@ pub mod ip_set;
 pub mod jwt;
 mod oauth2;
 mod priority;
-mod rate_limit;
+pub mod rate_limit;
 mod redirect;
 mod request_id;
 pub mod respond;

@@ -5,6 +5,7 @@
 use std::{
     fmt::{self, Write},
     net::IpAddr,
+    sync::{Arc, atomic::Ordering},
     time::Duration,
 };
 
@@ -17,8 +18,11 @@ use crate::{RequestCtx, RoutePlugin, respond::respond};
 
 use super::Middleware;
 use gcra::Gcra;
+use usage::Usage;
 
 mod gcra;
+pub mod sync;
+mod usage;
 
 /// Why a `rate_limit` block can't be used
 #[derive(Debug, Clone, PartialEq)]
@@ -56,10 +60,17 @@ impl std::error::Error for RateLimitError {}
 /// The requests of each client (by IP address), in a fixed amount of memory: clients sharing a
 /// slot can only be limited early, never late
 pub(super) struct RateLimit {
+    shared: Arc<Shared>,
+}
+
+/// What the sync reads and raises (see `sync`)
+pub(crate) struct Shared {
     /// Where it's written, hashed (see `block_id`)
     #[allow(dead_code)]
     block: String,
     limits: Gcra,
+    /// Requests let through since the last sync, while sharing
+    usage: Usage,
 }
 
 impl RateLimit {
@@ -76,14 +87,22 @@ impl RateLimit {
         }
 
         Ok(Self {
-            block: block_id(id),
-            limits: Gcra::new(requests, per, settings.burst.unwrap_or(0)),
+            shared: Arc::new(Shared {
+                block: block_id(id),
+                limits: Gcra::new(requests, per, settings.burst.unwrap_or(0)),
+                usage: Usage::new(),
+            }),
         })
     }
 
     /// Counts a request of `client` if it's let through, or says how long until one would be
     fn exceeded(&self, client: &IpAddr) -> Option<Duration> {
-        self.limits.check(client, self.limits.now()).err()
+        let Shared { limits, usage, .. } = &*self.shared;
+        let refused = limits.check(client, limits.now()).err();
+        if refused.is_none() && sync::SHARING.load(Ordering::Relaxed) {
+            usage.record(*client);
+        }
+        refused
     }
 }
 
