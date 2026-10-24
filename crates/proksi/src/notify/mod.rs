@@ -24,6 +24,7 @@ use crate::config::notify::{Kind, NotifyBlock};
 mod deliver;
 mod hold;
 mod message;
+pub mod stored;
 
 pub use deliver::masked;
 
@@ -83,6 +84,21 @@ impl Event {
 /// The blocks in use
 type Blocks = BTreeMap<String, NotifyBlock>;
 
+/// A block saved in the store, with the revision it was saved at
+#[derive(Debug, Clone, PartialEq)]
+pub struct Stored {
+    pub block: NotifyBlock,
+    pub version: u64,
+}
+
+/// The blocks of the configuration file
+static FILE: LazyLock<ArcSwap<Blocks>> = LazyLock::new(|| ArcSwap::from_pointee(Blocks::new()));
+
+/// The blocks saved in the store
+static STORED: LazyLock<ArcSwap<BTreeMap<String, Stored>>> =
+    LazyLock::new(|| ArcSwap::from_pointee(BTreeMap::new()));
+
+/// Both, the file's taking a name both have
 static BLOCKS: LazyLock<ArcSwap<Blocks>> = LazyLock::new(|| ArcSwap::from_pointee(Blocks::new()));
 
 /// Whether there's any block: without, events aren't even built
@@ -104,10 +120,37 @@ static QUEUE: LazyLock<Queue> = LazyLock::new(|| {
     }
 });
 
-/// Uses `blocks` from now on (at startup, and when the configuration is reloaded)
+/// Uses the configuration file's `blocks` from now on (at startup, and when it's reloaded)
 pub fn configure(blocks: Blocks) {
+    FILE.store(Arc::new(blocks));
+    combine();
+}
+
+/// Uses the blocks saved in the store from now on (when their revision changes)
+pub fn configure_stored(blocks: BTreeMap<String, Stored>) {
+    STORED.store(Arc::new(blocks));
+    combine();
+}
+
+fn combine() {
+    let mut blocks: Blocks = STORED
+        .load()
+        .iter()
+        .map(|(name, stored)| (name.clone(), stored.block.clone()))
+        .collect();
+    blocks.extend(FILE.load().iter().map(|(name, block)| (name.clone(), block.clone())));
     ENABLED.store(!blocks.is_empty(), Ordering::Relaxed);
     BLOCKS.store(Arc::new(blocks));
+}
+
+/// The blocks saved in the store
+pub fn stored() -> Arc<BTreeMap<String, Stored>> {
+    STORED.load_full()
+}
+
+/// Whether the configuration file has a block named `name` (which can't be changed elsewhere)
+pub fn in_file(name: &str) -> bool {
+    FILE.load().contains_key(name)
 }
 
 /// The blocks in use
@@ -318,7 +361,7 @@ mod tests {
 
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    use super::{Event, configure, deliveries, emit, test};
+    use super::{Event, Stored, blocks, configure, configure_stored, deliveries, emit, in_file, test};
     use crate::config::notify::{Format, Kind, NotifyBlock};
 
     /// The blocks in use are shared: these tests take turns
@@ -420,6 +463,35 @@ mod tests {
             "{:?}",
             start.elapsed()
         );
+    }
+
+    #[test]
+    fn test_the_files_blocks_take_names_from_stored_ones() {
+        let _turn = TURN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let saved = |url: &str| Stored {
+            block: block(url.to_string(), Format::Json),
+            version: 3,
+        };
+        configure_stored(BTreeMap::from([
+            ("ops".to_string(), saved("https://stored.example.com/ops")),
+            ("pager".to_string(), saved("https://stored.example.com/pager")),
+        ]));
+        configure(BTreeMap::from([(
+            "ops".to_string(),
+            block("https://file.example.com/ops".into(), Format::Slack),
+        )]));
+        let both = blocks();
+        assert_eq!(both["ops"].url, "https://file.example.com/ops");
+        assert_eq!(both["pager"].url, "https://stored.example.com/pager");
+        assert!(in_file("ops") && !in_file("pager"));
+
+        // Without the file's, the stored one is used again
+        configure(BTreeMap::new());
+        assert_eq!(blocks()["ops"].url, "https://stored.example.com/ops");
+        configure_stored(BTreeMap::new());
+        assert!(blocks().is_empty());
     }
 
     #[test]

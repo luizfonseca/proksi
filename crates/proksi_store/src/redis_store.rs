@@ -5,7 +5,8 @@ use std::{error::Error, hash::RandomState, time::Duration};
 
 use crate::{
     certificates::{Certificate, SerializableCertificate},
-    redis_history, redis_waiting_room,
+    notify::{NotifyRecord, NotifySnapshot},
+    redis_history, redis_notify, redis_waiting_room,
     route::{
         HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write,
         DEFAULT_HISTORY,
@@ -301,6 +302,22 @@ impl Store for RedisStore {
         redis_waiting_room::key(&mut *self.connection()?)
     }
 
+    async fn notify_revision(&self) -> Result<u64, StoreError> {
+        redis_notify::revision(&mut *self.connection()?)
+    }
+
+    async fn notify_blocks(&self) -> Result<NotifySnapshot, StoreError> {
+        redis_notify::blocks(&mut *self.connection()?)
+    }
+
+    async fn put_notify(&self, block: NotifyRecord, write: &Write) -> Result<u64, StoreError> {
+        redis_notify::put(&mut *self.connection()?, &block, write)
+    }
+
+    async fn delete_notify(&self, name: &str, write: &Write) -> Result<u64, StoreError> {
+        redis_notify::delete(&mut *self.connection()?, name, write)
+    }
+
     async fn certificates_revision(&self) -> Result<u64, StoreError> {
         let revision: Option<u64> = self
             .connection()?
@@ -497,6 +514,13 @@ mod tests {
     async fn test_routes_contract() {
         if let Some(store) = test_store(14) {
             crate::contract_tests::routes_contract(&store).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_notify_contract() {
+        if let Some(store) = test_store(8) {
+            crate::contract_tests::notify_contract(&store).await;
         }
     }
 

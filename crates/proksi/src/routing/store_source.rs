@@ -1,11 +1,11 @@
 //! Routes kept in the store (shared by every replica)
 
-use std::{sync::Arc, time::Duration};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use crate::config::notify::Kind;
 
 use proksi_store::{ReplicaStatus, Store, StoreError};
 
-use crate::stores::stored_route::HostStore;
+use crate::{notify::Stored, stores::stored_route::HostStore};
 
 use super::{RouteSnapshot, RouteSourceKind, SnapshotSender};
 
@@ -22,6 +22,10 @@ pub struct StoreSource {
     applied_at: u64,
     /// Revision of the certificates last loaded from the store
     certificates_revision: Option<u64>,
+    /// The revision of the `notify` blocks in use
+    notify_revision: Option<u64>,
+    /// Where the stored `notify` blocks go: `notify` uses them
+    use_notify: fn(BTreeMap<String, Stored>),
 }
 
 /// Wakes the store sync up, e.g. after the admin API wrote a route, so this instance applies it
@@ -46,6 +50,8 @@ impl StoreSource {
             applied_revision: None,
             applied_at: 0,
             certificates_revision: None,
+            notify_revision: None,
+            use_notify: crate::notify::configure_stored,
         }
     }
 
@@ -90,6 +96,9 @@ impl StoreSource {
         if let Err(err) = self.sync_certificates().await {
             tracing::warn!("failed to sync certificates from the store: {err}");
         }
+        if let Err(err) = self.sync_notify().await {
+            tracing::warn!("failed to sync notify blocks from the store: {err}");
+        }
 
         if let Some(status) = self.replica_status() {
             if let Err(err) = self
@@ -111,6 +120,30 @@ impl StoreSource {
             self.store.reload_certificates().await?;
             self.certificates_revision = Some(revision);
         }
+        Ok(())
+    }
+
+    /// Uses the `notify` blocks saved in the store, when they changed (blocks that can't be
+    /// used are skipped)
+    async fn sync_notify(&mut self) -> Result<(), StoreError> {
+        let revision = self.store.notify_revision().await?;
+        if self.notify_revision == Some(revision) {
+            return Ok(());
+        }
+        let saved = self.store.notify_blocks().await?;
+        let blocks = saved
+            .blocks
+            .iter()
+            .filter_map(|record| match crate::notify::stored::decode(record) {
+                Ok(stored) => Some((record.name.clone(), stored)),
+                Err(err) => {
+                    tracing::warn!("skipping notify \"{}\" from the store: {err}", record.name);
+                    None
+                }
+            })
+            .collect();
+        (self.use_notify)(blocks);
+        self.notify_revision = Some(saved.revision);
         Ok(())
     }
 
@@ -190,8 +223,9 @@ mod tests {
     use std::{
         sync::{
             atomic::{AtomicBool, AtomicUsize, Ordering},
-            Arc,
+            Arc, Mutex,
         },
+        collections::BTreeMap,
         time::Duration,
     };
 
@@ -199,11 +233,12 @@ mod tests {
     use papaya::HashMapRef;
 
     use proksi_store::{
-        Certificate, HistoryEntry, MemoryStore, ReplicaStatus, RouteRecord, RouteVersion,
-        RoutesSnapshot, Store, StoreError, Write,
+        Certificate, HistoryEntry, MemoryStore, NotifyRecord, NotifySnapshot, ReplicaStatus,
+        RouteRecord, RouteVersion, RoutesSnapshot, Store, StoreError, Write,
     };
 
     use crate::{
+        config::notify::{Format, NotifyBlock},
         routing::{test_utils::host, RouteSnapshot, RouteSourceKind},
         stores::stored_route::{HostStore, StoredRoute},
     };
@@ -273,6 +308,20 @@ mod tests {
         }
         async fn deleted_routes(&self) -> Result<Vec<String>, StoreError> {
             self.inner.deleted_routes().await
+        }
+        async fn notify_revision(&self) -> Result<u64, StoreError> {
+            self.check()?;
+            self.inner.notify_revision().await
+        }
+        async fn notify_blocks(&self) -> Result<NotifySnapshot, StoreError> {
+            self.check()?;
+            self.inner.notify_blocks().await
+        }
+        async fn put_notify(&self, block: NotifyRecord, write: &Write) -> Result<u64, StoreError> {
+            self.inner.put_notify(block, write).await
+        }
+        async fn delete_notify(&self, name: &str, write: &Write) -> Result<u64, StoreError> {
+            self.inner.delete_notify(name, write).await
         }
         async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
             self.check()?;
@@ -351,10 +400,10 @@ mod tests {
 
     fn source(store: Arc<FlakyStore>) -> (StoreSource, tokio::sync::mpsc::Receiver<RouteSnapshot>) {
         let (sender, receiver) = tokio::sync::mpsc::channel(8);
-        (
-            StoreSource::new(store, sender, Duration::from_secs(10)),
-            receiver,
-        )
+        let mut source = StoreSource::new(store, sender, Duration::from_secs(10));
+        // `notify`'s blocks are shared by every test: these leave them alone
+        source.use_notify = |_| {};
+        (source, receiver)
     }
 
     fn hosts(snapshot: &RouteSnapshot) -> Vec<String> {
@@ -405,6 +454,34 @@ mod tests {
             .unwrap();
         source.sync_once().await.unwrap();
         assert_eq!(store.reloads.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn test_store_source_uses_the_notify_blocks_saved() {
+        static USED: Mutex<Vec<Vec<String>>> = Mutex::new(Vec::new());
+        let store = Arc::new(FlakyStore::default());
+        let (mut source, _receiver) = source(store.clone());
+        source.use_notify = |blocks| USED.lock().unwrap().push(blocks.into_keys().collect());
+        let block = |url: &str| NotifyBlock {
+            url: url.to_string(),
+            format: Format::Json,
+            on: vec![],
+            hosts: vec![],
+            headers: BTreeMap::new(),
+            expiring_days: 14,
+        };
+        let save = |name: &str, url: &str| crate::notify::stored::encode(name, &block(url)).unwrap();
+        store.put_notify(save("ops", "https://hooks.example.com/a"), &Write::default()).await.unwrap();
+        // Saved by an older or newer Proksi, or broken: skipped
+        store.put_notify(save("broken", "ftp://hooks.example.com"), &Write::default()).await.unwrap();
+
+        source.sync_once().await.unwrap();
+        source.sync_once().await.unwrap();
+        // Used once, until they change
+        assert_eq!(*USED.lock().unwrap(), vec![vec!["ops".to_string()]]);
+        store.put_notify(save("pager", "https://hooks.example.com/b"), &Write::default()).await.unwrap();
+        source.sync_once().await.unwrap();
+        assert_eq!(USED.lock().unwrap().last().unwrap(), &vec!["ops".to_string(), "pager".to_string()]);
     }
 
     #[tokio::test]

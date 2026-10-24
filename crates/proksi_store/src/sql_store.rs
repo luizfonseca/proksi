@@ -8,11 +8,12 @@ use sqlx::{any::AnyPoolOptions, AnyPool, Row};
 
 use crate::{
     certificates::{Certificate, SerializableCertificate},
+    notify::{NotifyRecord, NotifySnapshot},
     route::{
         HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write,
         DEFAULT_HISTORY,
     },
-    sql_history, sql_waiting_room,
+    sql_history, sql_notify, sql_waiting_room,
     store_trait::Store,
     waiting_room::{Admission, RoomLimits},
 };
@@ -417,6 +418,24 @@ impl Store for SqlStore {
         .await
     }
 
+    async fn notify_revision(&self) -> Result<u64, StoreError> {
+        let pool = self.pool.clone();
+        self.run(async move { sql_notify::revision(&pool).await }).await
+    }
+
+    async fn notify_blocks(&self) -> Result<NotifySnapshot, StoreError> {
+        self.run(sql_notify::blocks(self.pool.clone())).await
+    }
+
+    async fn put_notify(&self, block: NotifyRecord, write: &Write) -> Result<u64, StoreError> {
+        self.run(sql_notify::put(self.pool.clone(), block, write.clone())).await
+    }
+
+    async fn delete_notify(&self, name: &str, write: &Write) -> Result<u64, StoreError> {
+        let task = sql_notify::delete(self.pool.clone(), name.to_string(), write.clone());
+        self.run(task).await
+    }
+
     async fn certificates_revision(&self) -> Result<u64, StoreError> {
         let pool = self.pool.clone();
         self.run(async move {
@@ -707,6 +726,13 @@ mod tests {
 
     #[cfg(feature = "sqlite")]
     #[tokio::test]
+    async fn test_sqlite_notify_contract() {
+        let (store, _dir) = sqlite_store();
+        contract_tests::notify_contract(&store).await;
+    }
+
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
     async fn test_sqlite_history_contract() {
         let (store, _dir) = sqlite_store();
         contract_tests::history_contract(&store.with_history(3)).await;
@@ -743,6 +769,14 @@ mod tests {
     async fn test_postgres_routes_contract() {
         if let Some(store) = postgres_store("proksi_test_routes") {
             contract_tests::routes_contract(&store).await;
+        }
+    }
+
+    #[cfg(feature = "postgres")]
+    #[tokio::test]
+    async fn test_postgres_notify_contract() {
+        if let Some(store) = postgres_store("proksi_test_notify") {
+            contract_tests::notify_contract(&store).await;
         }
     }
 

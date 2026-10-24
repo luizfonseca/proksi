@@ -223,7 +223,7 @@ fn unavailable(err: impl std::fmt::Display) -> Refused {
 }
 
 /// Why the store refused a change
-fn refused(err: StoreError) -> Refused {
+pub(super) fn refused(err: StoreError) -> Refused {
     match err {
         StoreError::Conflict { version } => Refused::Conflict { version },
         StoreError::NoVersion(version) => Refused::NotFound(format!("no version {version}")),

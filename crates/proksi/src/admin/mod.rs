@@ -22,6 +22,7 @@ use crate::{
 mod access;
 mod endpoint;
 mod router;
+mod notify;
 pub mod routes;
 pub mod server;
 pub mod status;
@@ -240,7 +241,13 @@ impl AdminApi {
                 )
             }
             Endpoint::DeletedRoutes => routes_reply(routes::deleted(store).await),
-            Endpoint::Notifications => Reply::ok(&notifications()),
+            Endpoint::Notifications => Reply::ok(&notify::list()),
+            Endpoint::PutNotification(name) => {
+                notify::reply(notify::put(store, name, request.body, &write).await, &write)
+            }
+            Endpoint::DeleteNotification(name) => {
+                notify::reply(notify::delete(store, name, &write).await, &write)
+            }
             Endpoint::TestNotification(name) => match crate::notify::test(name).await {
                 None => Reply::not_found(),
                 Some(Ok(())) => Reply::ok(&serde_json::json!({ "ok": true })),
@@ -407,32 +414,6 @@ fn write(caller: &access::Caller, request: Request<'_>) -> Result<proksi_store::
     Ok(proksi_store::Write {
         author: caller.name.clone(),
         expect,
-    })
-}
-
-/// The `notify` blocks, without their secrets (URLs masked, header names only), each with its
-/// last delivery, and every event they can ask for
-fn notifications() -> serde_json::Value {
-    let deliveries = crate::notify::deliveries();
-    let blocks: Vec<serde_json::Value> = crate::notify::blocks()
-        .iter()
-        .map(|(name, block)| {
-            serde_json::json!({
-                "name": name,
-                "source": "file",
-                "url": crate::notify::masked(&block.url),
-                "format": block.format,
-                "on": block.on.iter().map(|kind| kind.name()).collect::<Vec<_>>(),
-                "hosts": block.hosts,
-                "headers": block.headers.keys().collect::<Vec<_>>(),
-                "expiring_days": block.expiring_days,
-                "last": deliveries.get(name),
-            })
-        })
-        .collect();
-    serde_json::json!({
-        "notifications": blocks,
-        "events": crate::config::notify::Kind::ALL.iter().map(|kind| kind.name()).collect::<Vec<_>>(),
     })
 }
 

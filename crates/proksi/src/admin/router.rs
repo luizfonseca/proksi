@@ -33,12 +33,13 @@ enum Path {
     RouteRollback,
     DeletedRoutes,
     Notifications,
+    Notification,
     NotificationTest,
     Session,
 }
 
 /// Every path of the API
-const PATHS: [(&str, Path); 20] = [
+const PATHS: [(&str, Path); 21] = [
     ("/metrics", Path::Metrics),
     ("/api/v1/stats", Path::Stats),
     ("/api/v1/stats/stream", Path::StatsStream),
@@ -57,6 +58,7 @@ const PATHS: [(&str, Path); 20] = [
     ("/api/v1/routes/:host/rollback", Path::RouteRollback),
     ("/api/v1/deleted-routes", Path::DeletedRoutes),
     ("/api/v1/notifications", Path::Notifications),
+    ("/api/v1/notifications/:name", Path::Notification),
     ("/api/v1/notifications/:name/test", Path::NotificationTest),
     ("/api/v1/session", Path::Session),
 ];
@@ -103,6 +105,8 @@ pub fn parse<'a>(
         (Path::RouteRollback, "POST") => Endpoint::RollbackRoute(host),
         (Path::DeletedRoutes, "GET") => Endpoint::DeletedRoutes,
         (Path::Notifications, "GET") => Endpoint::Notifications,
+        (Path::Notification, "PUT") => Endpoint::PutNotification(host),
+        (Path::Notification, "DELETE") => Endpoint::DeleteNotification(host),
         (Path::NotificationTest, "POST") => Endpoint::TestNotification(host),
         (Path::Session, "GET") => Endpoint::Session,
         (Path::Session, "POST") => Endpoint::SignIn,
@@ -224,6 +228,18 @@ mod tests {
         assert_eq!(
             parse(Method::POST, "/api/v1/session", None),
             Ok(Endpoint::SignIn)
+        );
+        assert_eq!(
+            parse(Method::PUT, "/api/v1/notifications/ops", None),
+            Ok(Endpoint::PutNotification("ops"))
+        );
+        assert_eq!(
+            parse(Method::DELETE, "/api/v1/notifications/ops", None),
+            Ok(Endpoint::DeleteNotification("ops"))
+        );
+        assert_eq!(
+            parse(Method::POST, "/api/v1/notifications/ops/test", None),
+            Ok(Endpoint::TestNotification("ops"))
         );
 
         assert_eq!(
