@@ -90,7 +90,7 @@ Mind the defaults that differ:
 
 | nginx | Proksi |
 | --- | --- |
-| `limit_req_zone` / `limit_req` | [`rate_limit { requests, per }`](/plugins/rate-limit), per client |
+| `limit_req_zone` / `limit_req` | [`rate_limit { requests, per, burst }`](/plugins/rate-limit), per client (as `burst=... nodelay`: requests over the limit are refused, not delayed) |
 | `client_max_body_size` | [`body_limit { max }`](/plugins/body-limit) |
 | `auth_basic` | [`basic_auth { user, pass }`](/plugins/basic-auth) (one user, no htpasswd file) |
 | `add_header` | `headers { response { add = { ... } } }` |
@@ -157,7 +157,7 @@ ingress-nginx has been retired by the Kubernetes project. Proksi serves the same
 | --- | --- |
 | `ssl-redirect`, `force-ssl-redirect` | Built in; `proksi.ingress/tls: "false"` for plain HTTP |
 | `proxy-body-size` | `body_limit { max = "..." }` in `proksi.ingress/blocks` |
-| `limit-rps`, `limit-rpm` | `rate_limit { ... }` in `proksi.ingress/blocks` |
+| `limit-rps`, `limit-rpm`, `limit-burst-multiplier` | `rate_limit { ... }` in `proksi.ingress/blocks`, with `burst` = `requests × (multiplier − 1)` (ingress-nginx's default multiplier is 5) |
 | `auth-type: basic`, `auth-secret` | `basic_auth {}` in `proksi.ingress/blocks`, and `proksi.ingress/auth-secret`, naming a `Secret` labelled `proksi.ingress/auth` with `user` and `pass` keys (not an htpasswd file) |
 | `configuration-snippet` (`more_set_headers`) | `headers { response { add = { ... } } }` in `proksi.ingress/blocks` |
 | `proxy-connect-timeout`, `proxy-read-timeout`, `proxy-send-timeout` | `timeouts { upstream { connect_secs, read_secs, write_secs } }` in `proksi.ingress/blocks` |
