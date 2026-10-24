@@ -583,7 +583,7 @@ impl ProxyHttp for Router {
 
         // Nothing to build when access logs aren't written
         let info = tracing::enabled!(tracing::Level::INFO);
-        if !info || !crate::services::logger::access_logs_enabled() {
+        if !info || !crate::logger::access_logs_enabled() {
             return;
         }
         let duration_ms = duration.as_millis();

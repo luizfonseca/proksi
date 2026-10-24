@@ -25,6 +25,7 @@ pub mod notify;
 pub mod server_tls;
 pub mod tcp;
 pub mod validate;
+pub mod watch;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ValueEnum)]
 pub enum StoreType {

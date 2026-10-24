@@ -13,7 +13,7 @@ use std::sync::{atomic::AtomicU64, Arc};
 
 use pingora::server::configuration::{Opt, ServerConf};
 
-use services::{logger::ProxyLoggerReceiver, BackgroundFunctionService};
+use services::{logger::LoggerService, BackgroundFunctionService};
 
 use proksi_plugins::ip_set;
 
@@ -24,8 +24,12 @@ mod blocks;
 mod cache;
 mod channel;
 mod config;
+mod docker;
+mod health_check;
 #[cfg(feature = "kubernetes")]
 mod kubernetes;
+mod letsencrypt;
+mod logger;
 mod metrics;
 mod notify;
 mod proxy_server;
@@ -107,12 +111,12 @@ fn main() -> Result<(), anyhow::Error> {
     );
 
     // Logging channel
-    let (log_sender, log_receiver) = services::logger::log_queue();
+    let (log_sender, log_receiver) = logger::log_queue();
     let dropped_logs = Arc::new(AtomicU64::new(0));
 
     // Route sources send their routes to the reconciler through this channel
     let (route_sender, route_receiver) = routing::service::snapshot_channel();
-    let appender = services::logger::ProxyLog::new(
+    let appender = logger::ProxyLog::new(
         log_sender,
         dropped_logs.clone(),
         proxy_config.logging.enabled,
@@ -189,11 +193,11 @@ fn main() -> Result<(), anyhow::Error> {
     ));
 
     // Dedicated logger service
-    pingora_server.add_service(ProxyLoggerReceiver::new(
+    pingora_server.add_service(LoggerService::new(logger::ProxyLoggerReceiver::new(
         log_receiver,
         dropped_logs,
         &proxy_config,
-    ));
+    )));
 
     set_server_settings(&proxy_config.server)?;
     for listening in add_listeners(
@@ -308,14 +312,14 @@ fn add_listeners(
 }
 
 /// Creates the tracing/logging subscriber based on the configuration provided
-fn init_tracing(proxy_config: &config::Config, appender: services::logger::ProxyLog) {
+fn init_tracing(proxy_config: &config::Config, appender: logger::ProxyLog) {
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-    services::logger::set_access_logs(
+    logger::set_access_logs(
         proxy_config.logging.enabled && proxy_config.logging.access_logs_enabled,
     );
     let level = &proxy_config.logging.level;
-    let handshake_errors = services::logger::handshake_error_filter::HandshakeErrorFilter {
+    let handshake_errors = logger::handshake_error_filter::HandshakeErrorFilter {
         debug: matches!(level, LogLevel::Debug | LogLevel::Trace),
     };
     if proxy_config.logging.format == LogFormat::Json {

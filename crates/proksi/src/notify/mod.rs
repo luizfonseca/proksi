@@ -12,11 +12,6 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use async_trait::async_trait;
-use pingora::{
-    server::{ListenFds, ShutdownWatch},
-    services::Service,
-};
 use tokio::sync::{Semaphore, mpsc};
 
 use crate::config::notify::{Kind, NotifyBlock};
@@ -293,58 +288,33 @@ fn dispatch(event: Event) {
 }
 
 /// Sends events as they're raised, for as long as Proksi runs (on shutdown, until it exits:
-/// `instance_stopping` goes out while connections drain)
-pub struct NotifyService;
-
-impl NotifyService {
-    /// Starts with the configuration's `notify` blocks
-    pub fn new(blocks: BTreeMap<String, NotifyBlock>) -> Self {
-        configure(blocks);
-        Self
+/// `instance_stopping` goes out while connections drain). Returns at once when it's already
+/// running.
+pub async fn run() {
+    let Some(mut receiver) = QUEUE
+        .receiver
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take()
+    else {
+        return;
+    };
+    // The client is ready before the first event
+    if ENABLED.load(Ordering::Relaxed) {
+        deliver::ready().await;
     }
-}
-
-#[async_trait]
-impl Service for NotifyService {
-    async fn start_service(
-        &mut self,
-        _fds: Option<ListenFds>,
-        _shutdown: ShutdownWatch,
-        _listeners_per_fd: usize,
-    ) {
-        let Some(mut receiver) = QUEUE
-            .receiver
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
-        else {
-            return;
-        };
-        // The client is ready before the first event
-        if ENABLED.load(Ordering::Relaxed) {
-            deliver::ready().await;
-        }
-        let mut hold = hold::Hold::new(HELD);
-        let mut tick = tokio::time::interval(Duration::from_secs(1));
-        loop {
-            tokio::select! {
-                event = receiver.recv() => {
-                    let Some(event) = event else { return };
-                    if let Some(event) = hold.offer(event, Instant::now()) {
-                        dispatch(event);
-                    }
+    let mut hold = hold::Hold::new(HELD);
+    let mut tick = tokio::time::interval(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            event = receiver.recv() => {
+                let Some(event) = event else { return };
+                if let Some(event) = hold.offer(event, Instant::now()) {
+                    dispatch(event);
                 }
-                _ = tick.tick() => hold.due(Instant::now()).into_iter().for_each(dispatch),
             }
+            _ = tick.tick() => hold.due(Instant::now()).into_iter().for_each(dispatch),
         }
-    }
-
-    fn name(&self) -> &'static str {
-        "notify"
-    }
-
-    fn threads(&self) -> Option<usize> {
-        Some(1)
     }
 }
 

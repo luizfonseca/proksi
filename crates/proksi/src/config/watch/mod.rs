@@ -4,14 +4,9 @@ use std::{
     sync::Arc,
 };
 
-use async_trait::async_trait;
 use crate::config::notify::Kind;
 use clap::Parser;
 use notify::{EventHandler, Watcher};
-use pingora::{
-    server::{ListenFds, ShutdownWatch},
-    services::Service,
-};
 
 use crate::{
     config::{load_from_path, Config},
@@ -22,34 +17,51 @@ use reload::{config_files, is_config_file, reload_action, ReloadAction};
 
 pub mod reload;
 
-pub struct FileWatcherService {
-    config: Arc<Config>,
+/// A watcher of the configuration files, and of `auto_reload.paths`: polled, it applies the
+/// changes (see `FileWatcherServiceHandler`)
+pub fn watcher(
+    config: &Arc<Config>,
+    config_path: &str,
     sender: SnapshotSender,
-}
+) -> Option<notify::poll::PollWatcher> {
+    let handler = FileWatcherServiceHandler {
+        config: config.clone(),
+        config_path: config_path.to_string(),
+        sender,
+    };
+    let Ok(mut watcher) = config_watcher(handler) else {
+        tracing::error!("could not create config watcher, auto_reload will not work");
+        return None;
+    };
 
-impl FileWatcherService {
-    pub fn new(config: Arc<Config>, sender: SnapshotSender) -> Self {
-        Self { config, sender }
+    for config_file in config_files(Path::new(config_path)) {
+        watch_file_or_dir(&mut watcher, &config_file);
     }
 
-    /// Watchs a file or directory for changes
-    /// If the file or directory does not exist, it will be ignored
-    pub fn watch_file_or_dir(watcher: &mut notify::poll::PollWatcher, path: &std::path::Path) {
-        // if the path is not absolute, make it absolute
-        let Ok(absolute_path) = path::absolute(path) else {
-            tracing::error!("could not get absolute path, auto_reload will not work");
-            return;
-        };
+    // Watch for paths in the config
+    for watch_path in &config.auto_reload.paths {
+        watch_file_or_dir(&mut watcher, watch_path);
+    }
+    Some(watcher)
+}
 
-        tracing::info!("auto_reload path: {:?}", absolute_path);
+/// Watchs a file or directory for changes
+/// If the file or directory does not exist, it will be ignored
+fn watch_file_or_dir(watcher: &mut notify::poll::PollWatcher, path: &std::path::Path) {
+    // if the path is not absolute, make it absolute
+    let Ok(absolute_path) = path::absolute(path) else {
+        tracing::error!("could not get absolute path, auto_reload will not work");
+        return;
+    };
 
-        if absolute_path.exists() {
-            if let Err(err) = watcher.watch(&absolute_path, notify::RecursiveMode::Recursive) {
-                tracing::error!("failed to watch {absolute_path:?}: {err}");
-            }
-        } else {
-            tracing::debug!("file or directory does not exist: {:?}", absolute_path);
+    tracing::info!("auto_reload path: {:?}", absolute_path);
+
+    if absolute_path.exists() {
+        if let Err(err) = watcher.watch(&absolute_path, notify::RecursiveMode::Recursive) {
+            tracing::error!("failed to watch {absolute_path:?}: {err}");
         }
+    } else {
+        tracing::debug!("file or directory does not exist: {:?}", absolute_path);
     }
 }
 
@@ -152,68 +164,6 @@ fn restart() {
         nix::sys::signal::Signal::SIGQUIT,
     ) {
         tracing::error!("failed to stop the current process: {err}");
-    }
-}
-
-#[async_trait]
-impl Service for FileWatcherService {
-    async fn start_service(
-        &mut self,
-        _fds: Option<ListenFds>,
-        _shutdown: ShutdownWatch,
-        _listeners_per_fd: usize,
-    ) {
-        if self.config.auto_reload.enabled.is_some_and(|v| !v) {
-            // Nothing to do, auto reload is  disabled
-            return;
-        }
-
-        // watch main config file:
-        let Some(config_path) = &self.config.config_path else {
-            // No config path provided, nothing to watch
-            tracing::info!("No config path provided, config watcher service not started");
-            return;
-        };
-        tracing::info!("starting config watcher service");
-
-        let handler = FileWatcherServiceHandler {
-            config: self.config.clone(),
-            config_path: config_path.to_string(),
-            sender: self.sender.clone(),
-        };
-        let Ok(mut watcher) = config_watcher(handler) else {
-            tracing::error!("could not create config watcher, auto_reload will not work");
-            return;
-        };
-
-        for config_file in config_files(Path::new(config_path.as_ref())) {
-            Self::watch_file_or_dir(&mut watcher, &config_file);
-        }
-
-        // Watch for paths in the config
-        for watch_path in &self.config.auto_reload.paths {
-            Self::watch_file_or_dir(&mut watcher, watch_path);
-        }
-
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
-            self.config.auto_reload.interval_secs.unwrap_or(60),
-        ));
-        interval.tick().await;
-
-        loop {
-            interval.tick().await;
-            if watcher.poll().is_ok() {
-                tracing::debug!("config watcher service tick");
-            }
-        }
-    }
-
-    fn name(&self) -> &'static str {
-        "config_watcher_service"
-    }
-
-    fn threads(&self) -> Option<usize> {
-        Some(1)
     }
 }
 
