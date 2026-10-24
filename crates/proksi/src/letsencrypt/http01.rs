@@ -3,13 +3,7 @@ use crate::config::notify::Kind;
 
 use acme_v2::{order::NewOrder, Account, DirectoryUrl};
 use anyhow::anyhow;
-use async_trait::async_trait;
-
 use openssl::{pkey::PKey, x509::X509};
-use pingora::{
-    server::{ListenFds, ShutdownWatch},
-    services::Service,
-};
 use proksi_store::Certificate;
 use tokio::time;
 use tracing::info;
@@ -31,14 +25,14 @@ const DEFAULT_RENEW_INTERVAL_DAYS: i64 = 30;
 /// Lease taken while creating (or reading) the Let's Encrypt account
 const ACCOUNT_LEASE: &str = "acme:account";
 
-/// A service that handles the creation of certificates using the Let's Encrypt API
-pub struct LetsencryptService {
+/// Creates and renews certificates with the Let's Encrypt API
+pub struct Acme {
     pub(crate) config: Arc<Config>,
     /// Where DNS-01 challenges are written, if configured (ADR 0009)
     dns: Option<Box<dyn DnsProvider>>,
 }
 
-impl LetsencryptService {
+impl Acme {
     pub fn new(config: Arc<Config>) -> Self {
         let dns = config.lets_encrypt.dns.as_ref().map(dns::provider);
         Self { config, dns }
@@ -203,7 +197,7 @@ impl LetsencryptService {
     /// Creates or retrieves the account, holding a lease so replicas starting together don't
     /// each create one. If another replica holds it, waits for it (up to a minute) and then
     /// reads the account it created.
-    async fn get_account_with_lease(&self) -> Result<Account<PersistType>, anyhow::Error> {
+    pub async fn get_account_with_lease(&self) -> Result<Account<PersistType>, anyhow::Error> {
         let store = stores::global::get_store();
         let holder = stores::replica_id();
         for _ in 0..12 {
@@ -283,7 +277,7 @@ impl LetsencryptService {
     }
 
     /// Watch for route changes and create or update certificates for new routes
-    async fn watch_for_route_changes(&self, account: &Account<PersistType>) {
+    pub async fn watch_for_route_changes(&self, account: &Account<PersistType>) {
         let mut interval = time::interval(Duration::from_secs(20));
 
         loop {
@@ -318,7 +312,7 @@ impl LetsencryptService {
     }
 
     /// Check for certificates expiration and renew them if needed
-    async fn check_for_certificates_expiration(&self, account: &Account<PersistType>) {
+    pub async fn check_for_certificates_expiration(&self, account: &Account<PersistType>) {
         let mut interval = time::interval(Duration::from_secs(
             self.config
                 .lets_encrypt
@@ -445,46 +439,6 @@ fn log_outcome(domain: &str, action: &str, outcome: &Outcome) {
     }
 }
 
-#[async_trait]
-impl Service for LetsencryptService {
-    async fn start_service(
-        &mut self,
-        _fds: Option<ListenFds>,
-        mut _shutdown: ShutdownWatch,
-        _listeners_per_fd: usize,
-    ) {
-        if self.config.lets_encrypt.enabled.is_some_and(|v| !v) {
-            // Nothing to do, lets encrypt is disabled
-            return;
-        }
-        info!("started LetsEncrypt service");
-
-        // Retry until the account is available (e.g. network not ready yet)
-        let account = loop {
-            match self.get_account_with_lease().await {
-                Ok(account) => break account,
-                Err(err) => {
-                    tracing::error!("failed to setup LetsEncrypt, retrying in 60s: {err}");
-                    time::sleep(Duration::from_secs(60)).await;
-                }
-            }
-        };
-
-        let _ = tokio::join!(
-            self.watch_for_route_changes(&account),
-            self.check_for_certificates_expiration(&account)
-        );
-    }
-
-    fn name(&self) -> &'static str {
-        "lets_encrypt_service"
-    }
-
-    fn threads(&self) -> Option<usize> {
-        Some(1)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use proksi_store::test_util::signed;
@@ -499,7 +453,7 @@ mod tests {
             .join("\n");
         let key = String::from_utf8(key.private_key_to_pem_pkcs8().unwrap()).unwrap();
 
-        super::LetsencryptService::insert_certificate("acme-chain.test", &bundle, &key)
+        super::Acme::insert_certificate("acme-chain.test", &bundle, &key)
             .await
             .unwrap();
 

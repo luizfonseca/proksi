@@ -4,25 +4,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use async_trait::async_trait;
-use pingora::{
-    lb::{selection::RoundRobin, LoadBalancer},
-    server::{ListenFds, ShutdownWatch},
-    services::Service,
-};
+use pingora::lb::{selection::RoundRobin, LoadBalancer};
 
 use crate::stores::{self};
-
-/// Health check service that will run health checks on all upstreams
-/// And update the route store with the new healthy upstreams.
-/// This service will run in a separate thread.
-pub struct HealthService {}
-
-impl HealthService {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
 
 /// How often upstream names are resolved again (ADR 0006)
 const RESOLVE_INTERVAL: Duration = Duration::from_secs(5);
@@ -50,7 +34,7 @@ fn load_balancers() -> Vec<(String, Arc<LoadBalancer<RoundRobin>>)> {
 
 /// Checks the upstreams of each load balancer on its own interval (`health_check_frequency`,
 /// unset when its checks are off)
-async fn run_health_check_loop() {
+pub async fn run_health_check_loop() {
     let mut interval = tokio::time::interval(Duration::from_secs(1));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     // When each load balancer (by address) was last checked
@@ -94,7 +78,7 @@ async fn check_when_due(
 }
 
 /// Resolves upstream names again, replacing their addresses when they changed
-async fn run_resolve_loop() {
+pub async fn run_resolve_loop() {
     let mut interval = tokio::time::interval(RESOLVE_INTERVAL);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     interval.tick().await;
@@ -126,28 +110,6 @@ fn record_location_health(location: &stores::routes::RouteStoreContainer) {
         if let Some(upstream) = metrics.upstream(index) {
             upstream.set_healthy(healthy);
         }
-    }
-}
-
-#[async_trait]
-impl Service for HealthService {
-    async fn start_service(
-        &mut self,
-        _fds: Option<ListenFds>,
-        _shutdown: ShutdownWatch,
-        _listeners_per_fd: usize,
-    ) {
-        tracing::info!("Starting health check service");
-
-        tokio::join!(run_health_check_loop(), run_resolve_loop());
-    }
-
-    fn name(&self) -> &'static str {
-        "health_check_service"
-    }
-
-    fn threads(&self) -> Option<usize> {
-        Some(1)
     }
 }
 

@@ -6,13 +6,6 @@ use std::{
     },
 };
 
-use async_trait::async_trait;
-
-use pingora::{
-    server::{ListenFds, ShutdownWatch},
-    services::Service,
-};
-
 use rotation::Rotation;
 use tokio::sync::mpsc::{error::TrySendError, Receiver, Sender};
 use tracing_subscriber::fmt::MakeWriter;
@@ -151,7 +144,7 @@ impl io::Write for LogWriter {
     }
 }
 
-/// A background service that receives logs from the main thread and writes them to stdout
+/// Receives logs from the main thread and writes them to stdout, or a file
 pub struct ProxyLoggerReceiver {
     receiver: Receiver<Vec<u8>>,
     dropped: Arc<AtomicU64>,
@@ -184,6 +177,12 @@ impl ProxyLoggerReceiver {
             },
             rotation: Rotation(crate::config::LogRotation::Never),
         }
+    }
+
+    /// Writes logs as they're queued, until all senders are dropped
+    pub async fn run(&mut self) {
+        self.prepare_buf_writer();
+        self.write_logs().await;
     }
 
     /// Writes all queued logs, waiting for new ones when the queue is empty.
@@ -304,33 +303,6 @@ impl ProxyLoggerReceiver {
             self.bufwriter.flush().ok();
             self.file_buf_writer(date);
         }
-    }
-}
-
-#[async_trait]
-impl Service for ProxyLoggerReceiver {
-    async fn start_service(
-        &mut self,
-        _fds: Option<ListenFds>,
-        _shutdown: ShutdownWatch,
-        _listeners_per_fd: usize,
-    ) {
-        tracing::info!("starting logger service");
-        self.prepare_buf_writer();
-        self.write_logs().await;
-    }
-
-    /// Listens on nothing: inherited sockets no service declares are closed after an upgrade
-    fn listen_addresses(&self) -> Option<Vec<String>> {
-        Some(vec![])
-    }
-
-    fn name(&self) -> &'static str {
-        "logging_service"
-    }
-
-    fn threads(&self) -> Option<usize> {
-        Some(1)
     }
 }
 

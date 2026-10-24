@@ -13,8 +13,7 @@ use std::sync::{atomic::AtomicU64, Arc};
 
 use pingora::server::configuration::{Opt, ServerConf};
 
-use logger::ProxyLoggerReceiver;
-use services::BackgroundFunctionService;
+use services::{logger::LoggerService, BackgroundFunctionService};
 
 use proksi_plugins::ip_set;
 
@@ -194,11 +193,11 @@ fn main() -> Result<(), anyhow::Error> {
     ));
 
     // Dedicated logger service
-    pingora_server.add_service(ProxyLoggerReceiver::new(
+    pingora_server.add_service(LoggerService::new(logger::ProxyLoggerReceiver::new(
         log_receiver,
         dropped_logs,
         &proxy_config,
-    ));
+    )));
 
     set_server_settings(&proxy_config.server)?;
     for listening in add_listeners(
