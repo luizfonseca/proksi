@@ -421,6 +421,27 @@ impl Drop for TcpConnection {
     }
 }
 
+/// Keeps `proksi_certificate_expiry_timestamp_seconds` up to date
+pub async fn certificate_expiry() {
+    // Once hosts (and their certificates) had time to load, then every minute
+    let mut interval = tokio::time::interval_at(
+        tokio::time::Instant::now() + Duration::from_secs(5),
+        Duration::from_secs(60),
+    );
+    loop {
+        interval.tick().await;
+        let expiry = crate::stores::global::get_store()
+            .get_certificates()
+            .await
+            .iter()
+            .filter_map(|(domain, certificate)| {
+                expiry_timestamp(certificate).map(|expiry| (domain.clone(), expiry))
+            })
+            .collect::<Vec<_>>();
+        set_certificates(&expiry);
+    }
+}
+
 /// When each domain's certificate expires (Unix timestamp), replacing the previous ones
 pub fn set_certificates(expiry: &[(String, i64)]) {
     if !enabled() {

@@ -191,7 +191,7 @@ impl LetsencryptService {
     // Creates or retrieves the existing LetsEncrypt account
     fn get_account(&self) -> Result<Account<PersistType>, anyhow::Error> {
         let persist =
-            crate::services::letsencrypt::storage::CertificatePersist::new(self.config.clone());
+            crate::letsencrypt::storage::CertificatePersist::new(self.config.clone());
 
         let dir = acme_v2::Directory::from_url(persist.get_persist()?, self.get_lets_encrypt_url())
             .map_err(|err| anyhow!("failed to create LetsEncrypt directory: {err}"))?;

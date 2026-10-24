@@ -1,9 +1,26 @@
+//! Everything that runs in the background, started here: each service's code lives with the
+//! rest of its feature.
+//!
+//! In one service, on one thread (`BackgroundFunctionService`):
+//!
+//! - Routes, applied as their sources send them: [`crate::routing::service`]
+//! - The configuration files, reloaded when they change: [`crate::config::watch`]
+//! - Docker labels: [`crate::docker`]
+//! - Kubernetes `Ingress`es: `crate::kubernetes::source`
+//! - The store's routes, certificates and `notify` blocks, synced: [`crate::routing::store_source`]
+//! - Health checks of upstreams: [`crate::health_check`]
+//! - Let's Encrypt certificates, ordered and renewed: [`crate::letsencrypt`]
+//! - `notify` webhooks, delivered: [`crate::notify`]
+//! - Metrics: certificates' expiry, and the admin API's live stats: [`crate::metrics`]
+//! - The JWKS of `jwt` blocks, refreshed: `proksi_plugins::jwt::jwks`
+//! - Connections drained on shutdown: [`crate::proxy_server::connections`]
+//!
+//! In a service of its own, started in `main`: access and error logs, written by
+//! [`crate::logger`].
+
 use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use config::FileWatcherService;
-use docker::LabelService;
-use letsencrypt::http01::LetsencryptService;
 use pingora::{
     server::{ListenFds, ShutdownWatch},
     services::{Service, ServiceReadyNotifier},
@@ -11,7 +28,10 @@ use pingora::{
 use tokio::sync::mpsc::Receiver;
 
 use crate::{
-    config::{Config, StoreType},
+    config::{watch::FileWatcherService, Config, StoreType},
+    docker::LabelService,
+    health_check,
+    letsencrypt::http01::LetsencryptService,
     routing::{
         file_source::file_snapshot,
         service::RoutingService,
@@ -21,13 +41,7 @@ use crate::{
     stores,
 };
 
-pub mod config;
-pub mod docker;
-pub mod health_check;
-pub mod letsencrypt;
-pub mod logger;
-
-/// Exploring: what if we grouped all the services into a single service using a single thread?
+/// The background services above, on one thread
 pub struct BackgroundFunctionService {
     config: Arc<Config>,
     route_sender: SnapshotSender,
@@ -105,7 +119,7 @@ impl pingora::services::ServiceWithDependents for BackgroundFunctionService {
             if !crate::metrics::enabled() {
                 return;
             }
-            if let Err(err) = spawn_isolated(certificate_metrics()).await {
+            if let Err(err) = spawn_isolated(crate::metrics::certificate_expiry()).await {
                 tracing::error!("certificate metrics stopped: {err}");
             }
         };
@@ -200,25 +214,4 @@ async fn ready(config: &Config, store_routes: bool, ready_notifier: ServiceReady
     #[cfg(target_os = "linux")]
     crate::supervisor::notify_ready();
     crate::notify::emit(|| crate::notify::Event::new(crate::config::notify::Kind::InstanceStarted));
-}
-
-/// Keeps `proksi_certificate_expiry_timestamp_seconds` up to date
-async fn certificate_metrics() {
-    // Once hosts (and their certificates) had time to load, then every minute
-    let mut interval = tokio::time::interval_at(
-        tokio::time::Instant::now() + Duration::from_secs(5),
-        Duration::from_secs(60),
-    );
-    loop {
-        interval.tick().await;
-        let expiry = stores::global::get_store()
-            .get_certificates()
-            .await
-            .iter()
-            .filter_map(|(domain, certificate)| {
-                crate::metrics::expiry_timestamp(certificate).map(|expiry| (domain.clone(), expiry))
-            })
-            .collect::<Vec<_>>();
-        crate::metrics::set_certificates(&expiry);
-    }
 }

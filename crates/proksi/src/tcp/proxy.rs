@@ -98,7 +98,7 @@ impl TcpProxy {
 
         let mut forwarded = Forwarded::default();
         let error = Self::copy(&mut downstream, target, &mut forwarded).await.err();
-        if !crate::services::logger::access_logs_enabled() {
+        if !crate::logger::access_logs_enabled() {
             return;
         }
 

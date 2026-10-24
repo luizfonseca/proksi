@@ -30,7 +30,7 @@ use super::{
 };
 
 /// The `tcp` blocks, ready to accept connections (their upstreams are health checked with
-/// the ones of the locations, see `services::health_check`)
+/// the ones of the locations, see `health_check`)
 pub fn tcp_targets(routes: &[TcpRoute]) -> Result<Arc<Vec<TcpTarget>>, anyhow::Error> {
     let mut targets = vec![];
     for route in routes {
