@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.2](https://github.com/luizfonseca/proksi/compare/proksi_store-v0.17.1...proksi_store-v0.17.2) (2026-10-25)
+
+
+### Features
+
+* share rate limits between replicas through redis ([#574](https://github.com/luizfonseca/proksi/issues/574)) ([bb393cf](https://github.com/luizfonseca/proksi/commit/bb393cfbde0c55213c4e20b152d5e42247227c6f))
+
+
+### Miscellaneous Chores
+
+* release 0.17.2 ([de6055b](https://github.com/luizfonseca/proksi/commit/de6055bee0e17149893cc2167d7bf9b1bbfb2399))
+
 ## [0.17.1](https://github.com/luizfonseca/proksi/compare/proksi_store-v0.17.0...proksi_store-v0.17.1) (2026-10-24)
 
 

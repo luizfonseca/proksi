@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.17.2](https://github.com/luizfonseca/proksi/compare/proksi-v0.17.1...proksi-v0.17.2) (2026-10-25)
+
+
+### Features
+
+* let clients burst over rate limits ([#573](https://github.com/luizfonseca/proksi/issues/573)) ([1b580f0](https://github.com/luizfonseca/proksi/commit/1b580f05f7284fc2ac2e96ec80f2656a8e2163f0))
+* share rate limits between replicas through redis ([#574](https://github.com/luizfonseca/proksi/issues/574)) ([bb393cf](https://github.com/luizfonseca/proksi/commit/bb393cfbde0c55213c4e20b152d5e42247227c6f))
+
+
+### Miscellaneous Chores
+
+* release 0.17.2 ([de6055b](https://github.com/luizfonseca/proksi/commit/de6055bee0e17149893cc2167d7bf9b1bbfb2399))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.17.1 to 0.17.2
+    * proksi_plugins bumped from 0.17.1 to 0.17.2
+    * proksi_store bumped from 0.17.1 to 0.17.2
+  * dev-dependencies
+    * proksi_plugins bumped from 0.17.1 to 0.17.2
+    * proksi_store bumped from 0.17.1 to 0.17.2
+
+## [0.17.2](https://github.com/luizfonseca/proksi/compare/plugins_api-v0.17.1...plugins_api-v0.17.2) (2026-10-25)
+
+
+### Miscellaneous Chores
+
+* release 0.17.2 ([de6055b](https://github.com/luizfonseca/proksi/commit/de6055bee0e17149893cc2167d7bf9b1bbfb2399))
+
 ## [0.17.1](https://github.com/luizfonseca/proksi/compare/proksi-v0.17.0...proksi-v0.17.1) (2026-10-24)
 
 
