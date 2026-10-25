@@ -1,7 +1,7 @@
 [package]
 name = "proksi_plugins"
 description = "Proksi's built-in plugins: authentication, limits, CORS, redirects, static files and more."
-version = "0.17.2"
+version = "0.17.3"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["The Proksi Contributors <toaster.chicory-0b@icloud.com>"]
@@ -31,7 +31,7 @@ memmap2 = "0.9"
 openssl = { version = "0.10", features = ["vendored"] }
 path-tree = "0.8.3"
 pingora = { version = "0.9.0", features = ["lb", "openssl", "proxy", "cache"] }
-proksi_store = { path = "../proksi_store", version = "0.17.2" }
+proksi_store = { path = "../proksi_store", version = "0.17.3" }
 rand = "0.8"
 regex = "1"
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "query", "native-tls-no-alpn", "charset", "http2", "system-proxy"] }
