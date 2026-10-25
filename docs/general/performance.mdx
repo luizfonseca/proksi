@@ -33,7 +33,7 @@ All proxies forward plain HTTP and HTTPS requests to the same nginx upstream, wi
 | **Proksi** | 144k / 129k | 26.4 / 29.6 µs | 0.9 ms | 39 → 49 MB |
 | Traefik | 109k / 106k | 35.4 / 36.3 µs | 2.2 ms | 91 → 119 MB |
 
-On Linux, Proksi commits its memory upfront ([mimalloc](https://github.com/microsoft/mimalloc)), which is ~15MB of the numbers above. Set `MIMALLOC_ARENA_EAGER_COMMIT=0` to commit it as it's used instead (the default in the Docker image), at the same speed.
+These numbers were taken with [mimalloc](https://github.com/microsoft/mimalloc). Proksi now uses the system's allocator (musl's, in the release binaries and the Docker image), which gives memory back once traffic drops: in a container with 2 CPUs, under load it peaked at about 46 MB instead of 72 MB, and was back to about 30 MB a minute later instead of 40–60 MB, for about 9% fewer requests per second. With many cores busy at once the gap in requests per second grows, since musl's allocator serves one thread at a time.
 
 These numbers come from a single machine, where the proxy, the upstream and the load generator share the same CPUs. Treat them as a comparison, not as the throughput you will get in production.
 

@@ -164,7 +164,6 @@ Without running Prometheus, `GET /api/v1/stats?window=60` returns what happened 
     "cpu_percent": 12.4,
     "cpu_seconds": 1830.2,
     "memory_bytes": 72351744,
-    "allocator_bytes": 28311552,
     "memory_limit_bytes": 536870912,
     "cpu_limit": 1.5
   },
@@ -211,7 +210,7 @@ Without running Prometheus, `GET /api/v1/stats?window=60` returns what happened 
 curl -N -H "Authorization: Bearer $PROKSI_ADMIN_TOKEN" "http://127.0.0.1:7555/api/v1/stats/stream?window=10"
 ```
 
-`total` adds up every host and location. `process` is Proksi's own: CPU used over the window (`cpu_percent`, of one core), resident memory, memory committed by the allocator, and in a container, its limits (cgroups v2; `null` otherwise).
+`total` adds up every host and location. `process` is Proksi's own: CPU used over the window (`cpu_percent`, of one core), resident memory (`memory_bytes`), and in a container, its limits (cgroups v2; `null` otherwise).
 
 The stats come from the same metrics, sampled every second while someone reads them, so they cost nothing more per request, and nothing at all when no one looks: 5 minutes after the last read, sampling stops until the next one (whose window then starts at that read). Samples are kept every second for a minute, then every 10 seconds up to 5 minutes: longer windows are within 10 seconds of the one asked for (`window_seconds` says which). Percentiles are interpolated within the histogram buckets (as Prometheus' `histogram_quantile` does), and `null` when there were no requests. Each Proksi instance has its own stats; to combine several, use Prometheus.
 

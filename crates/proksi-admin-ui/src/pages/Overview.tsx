@@ -205,7 +205,7 @@ export function Overview() {
           label="Memory"
           value={last?.memory ?? null}
           format={bytes}
-          detail={memoryLimit ? `of ${bytes(memoryLimit)}` : last ? `allocator ${bytes(last.allocator)}` : undefined}
+          detail={memoryLimit ? `of ${bytes(memoryLimit)}` : undefined}
           values={take(history, (point) => point.memory)}
           color="var(--chart-4)"
         />
@@ -244,10 +244,7 @@ export function Overview() {
           span={span}
           format={bytes}
           max={memoryLimit ?? undefined}
-          series={[
-            { name: 'resident', color: 'var(--chart-4)', values: take(history, (point) => point.memory) },
-            { name: 'allocator', color: 'var(--chart-1)', values: take(history, (point) => point.allocator) },
-          ]}
+          series={[{ name: 'resident', color: 'var(--chart-4)', values: take(history, (point) => point.memory) }]}
         />
       </Grid>
 

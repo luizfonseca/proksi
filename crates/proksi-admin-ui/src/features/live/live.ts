@@ -43,7 +43,6 @@ export type Stats = {
   process: {
     cpu_percent: number;
     memory_bytes: number;
-    allocator_bytes: number;
     memory_limit_bytes: number | null;
     cpu_limit: number | null;
   };
@@ -70,7 +69,6 @@ export type Point = {
   p99: number | null;
   cpu: number;
   memory: number;
-  allocator: number;
   hosts: Record<string, HostPoint>;
   tcp: Record<string, TcpPoint>;
 };
@@ -108,7 +106,6 @@ export function point(stats: Stats, at: number): Point {
     p99: stats.total.duration_ms.p99,
     cpu: stats.process.cpu_percent,
     memory: stats.process.memory_bytes,
-    allocator: stats.process.allocator_bytes,
     hosts: Object.fromEntries((stats.hosts ?? []).map((host) => [host.host, hostPoint(host, window)])),
     tcp: Object.fromEntries(
       (stats.tcp ?? []).map((block) => [

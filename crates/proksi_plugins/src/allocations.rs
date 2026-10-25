@@ -2,18 +2,16 @@
 //! allocates nothing (here, and in proksi).
 
 use std::{
-    alloc::{GlobalAlloc, Layout},
+    alloc::{GlobalAlloc, Layout, System},
     cell::Cell,
 };
-
-use mimalloc::MiMalloc;
 
 thread_local! {
     /// The allocations made on this thread while measured
     static COUNT: Cell<Option<usize>> = const { Cell::new(None) };
 }
 
-/// The allocator of the tests: mimalloc, counting
+/// The allocator of the tests: the system's, counting
 pub struct Counting;
 
 fn count() {
@@ -24,29 +22,29 @@ fn count() {
     });
 }
 
-// SAFETY: each call goes to mimalloc as it came
+// SAFETY: each call goes to the system's allocator as it came
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         count();
         // SAFETY: as `GlobalAlloc::alloc`'s caller guarantees
-        unsafe { MiMalloc.alloc(layout) }
+        unsafe { System.alloc(layout) }
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         count();
         // SAFETY: as `GlobalAlloc::alloc_zeroed`'s caller guarantees
-        unsafe { MiMalloc.alloc_zeroed(layout) }
+        unsafe { System.alloc_zeroed(layout) }
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         count();
         // SAFETY: as `GlobalAlloc::realloc`'s caller guarantees
-        unsafe { MiMalloc.realloc(ptr, layout, new_size) }
+        unsafe { System.realloc(ptr, layout, new_size) }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         // SAFETY: as `GlobalAlloc::dealloc`'s caller guarantees
-        unsafe { MiMalloc.dealloc(ptr, layout) }
+        unsafe { System.dealloc(ptr, layout) }
     }
 }
 

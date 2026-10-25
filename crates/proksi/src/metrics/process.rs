@@ -1,8 +1,15 @@
 //! The process (ADR 0008): CPU time and memory, read with each live stats sample (once a
 //! second), and the container's limits (cgroups v2), read once
 
-use std::sync::OnceLock;
+use std::{ffi::c_long, sync::OnceLock};
 
+use nix::{
+    sys::{
+        resource::{getrusage, UsageWho},
+        time::{TimeVal, TimeValLike},
+    },
+    unistd::{sysconf, SysconfVar},
+};
 use serde::Serialize;
 
 /// CPU time and memory, now
@@ -12,8 +19,6 @@ pub struct Reading {
     pub cpu_seconds: f64,
     /// Resident memory
     pub rss_bytes: u64,
-    /// Memory the allocator has committed
-    pub allocator_bytes: u64,
 }
 
 /// The container's limits, if any
@@ -24,42 +29,39 @@ pub struct Limits {
     pub cpus: Option<f64>,
 }
 
-extern "C" {
-    fn mi_process_info(
-        elapsed_msecs: *mut usize,
-        user_msecs: *mut usize,
-        system_msecs: *mut usize,
-        current_rss: *mut usize,
-        peak_rss: *mut usize,
-        current_commit: *mut usize,
-        peak_commit: *mut usize,
-        page_faults: *mut usize,
-    );
+/// The process' CPU time, and its resident memory (on Linux; elsewhere, the most it had)
+pub fn read() -> Reading {
+    let Ok(usage) = getrusage(UsageWho::RUSAGE_SELF) else {
+        return Reading::default();
+    };
+    #[allow(clippy::cast_precision_loss)]
+    let seconds = |time: TimeVal| time.num_microseconds() as f64 / 1e6;
+    Reading {
+        cpu_seconds: seconds(usage.user_time()) + seconds(usage.system_time()),
+        rss_bytes: rss_bytes().unwrap_or_else(|| peak_rss_bytes(usage.max_rss())),
+    }
 }
 
-/// The process' CPU time and memory, from mimalloc (the global allocator)
-pub fn read() -> Reading {
-    let (mut elapsed, mut user, mut system) = (0, 0, 0);
-    let (mut rss, mut peak_rss, mut commit, mut peak_commit, mut faults) = (0, 0, 0, 0, 0);
-    // SAFETY: mimalloc writes each value through its pointer, all valid for the call
-    unsafe {
-        mi_process_info(
-            &raw mut elapsed,
-            &raw mut user,
-            &raw mut system,
-            &raw mut rss,
-            &raw mut peak_rss,
-            &raw mut commit,
-            &raw mut peak_commit,
-            &raw mut faults,
-        );
-    }
-    #[allow(clippy::cast_precision_loss)]
-    let cpu_seconds = (user + system) as f64 / 1000.0;
-    Reading {
-        cpu_seconds,
-        rss_bytes: rss as u64,
-        allocator_bytes: commit as u64,
+/// Resident memory now, from `/proc/self/statm`
+fn rss_bytes() -> Option<u64> {
+    let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
+    let page = sysconf(SysconfVar::PAGE_SIZE).ok().flatten()?;
+    resident(&statm, u64::try_from(page).ok()?)
+}
+
+/// `statm`'s resident pages (its second field), in bytes
+fn resident(statm: &str, page: u64) -> Option<u64> {
+    let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+    pages.checked_mul(page)
+}
+
+/// `getrusage`'s peak resident memory, in bytes: macOS counts bytes, others KiB
+fn peak_rss_bytes(max_rss: c_long) -> u64 {
+    let max_rss = u64::try_from(max_rss).unwrap_or(0);
+    if cfg!(target_os = "macos") {
+        max_rss
+    } else {
+        max_rss.saturating_mul(1024)
     }
 }
 
@@ -90,13 +92,20 @@ fn cpu_max(value: &str) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{cpu_max, memory_max, read};
+    use super::{cpu_max, memory_max, read, resident};
 
     #[test]
     fn test_reading() {
         let reading = read();
         assert!(reading.rss_bytes > 0, "{reading:?}");
         assert!(reading.cpu_seconds >= 0.0);
+    }
+
+    #[test]
+    fn test_resident_memory_from_statm() {
+        // size resident shared text lib data dt, in pages
+        assert_eq!(resident("12345 678 90 1 0 2 0\n", 4096), Some(678 * 4096));
+        assert_eq!(resident("", 4096), None);
     }
 
     #[test]
