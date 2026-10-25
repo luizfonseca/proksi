@@ -5,15 +5,15 @@
   </picture>
 </p>
 
-<p align="center">
+# Proksi
+
+Automatic SSL, HTTP, and DNS Proxy built on Cloudflare Pingora. 
+<p>
     <a href="https://discord.gg/b22TRMew2m">
         <img src="https://github.com/luizfonseca/proksi/blob/main/assets/discord.png?raw=true" alt="discord-logo" width="100"/>
     </a>
 </p>
 
-# Proksi
-
-## Automatic SSL, HTTP, and DNS Proxy
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/proksi-flow-dark.svg">
   <img src="./docs/assets/proksi-flow-light.svg" alt="Requests from clients go through Proksi to upstreams; some are answered from its cache" width="720">
