@@ -5,14 +5,6 @@
   </picture>
 </p>
 
-# Proksi
-
-Automatic SSL, HTTP, and DNS Proxy built on Cloudflare Pingora. 
-<p>
-    <a href="https://discord.gg/b22TRMew2m">
-        <img src="https://github.com/luizfonseca/proksi/blob/main/assets/discord.png?raw=true" alt="discord-logo" width="100"/>
-    </a>
-</p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/proksi-flow-dark.svg">
@@ -20,6 +12,15 @@ Automatic SSL, HTTP, and DNS Proxy built on Cloudflare Pingora.
 </picture>
 
 
+# Proksi
+
+Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in [Rust](https://www.rust-lang.org/) and uses [Pingora](https://github.com/cloudflare/pingora) as its core networking library.
+
+<p>
+    <a href="https://discord.gg/b22TRMew2m">
+        <img src="https://github.com/luizfonseca/proksi/blob/main/assets/discord.png?raw=true" alt="discord-logo" width="100"/>
+    </a>
+</p>
 
 ## Contents
 
@@ -50,10 +51,6 @@ Automatic SSL, HTTP, and DNS Proxy built on Cloudflare Pingora.
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
-
-# About
-
-Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in [Rust](https://www.rust-lang.org/) and uses [Pingora](https://github.com/cloudflare/pingora) as its core networking library.
 
 
 # Features
