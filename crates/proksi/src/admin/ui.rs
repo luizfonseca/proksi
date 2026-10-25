@@ -8,9 +8,10 @@ use proksi_admin_ui::Asset;
 
 use super::{Answer, Reply};
 
-/// Nothing but the UI's own files, and no framing
-const CONTENT_SECURITY_POLICY: &str =
-    "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+/// Nothing but the UI's own files (and GitHub's releases, for the "new version" notice), and no
+/// framing
+const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; connect-src 'self' https://api.github.com; \
+     frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
 /// How a file is sent
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -121,8 +122,16 @@ pub async fn write(
 mod tests {
     use http::Method;
 
-    use super::{answer, serves, Encoding};
+    use super::{answer, serves, Encoding, CONTENT_SECURITY_POLICY};
     use crate::admin::Answer;
+
+    #[test]
+    fn test_pages_only_reach_their_own_origin_and_github_releases() {
+        let directives: Vec<&str> = CONTENT_SECURITY_POLICY.split("; ").collect();
+        assert!(directives.contains(&"default-src 'self'"));
+        // The "new version" notice reads GitHub's releases
+        assert!(directives.contains(&"connect-src 'self' https://api.github.com"));
+    }
 
     #[test]
     fn test_the_ui_has_every_path_but_the_api() {
