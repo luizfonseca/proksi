@@ -97,9 +97,10 @@ impl RateLimit {
     /// Counts a request of `client` if it's let through, or says how long until one would be
     fn exceeded(&self, client: &IpAddr) -> Option<Duration> {
         let Shared { limits, usage, .. } = &*self.shared;
-        let refused = limits.check(client, limits.now()).err();
+        let hash = limits.hash(client);
+        let refused = limits.check_hashed(hash, limits.now()).err();
         if refused.is_none() && sync::SHARING.load(Ordering::Relaxed) {
-            usage.record(*client);
+            usage.record(*client, hash);
         }
         refused
     }
@@ -185,7 +186,7 @@ mod tests {
     fn test_requests_over_the_limit_are_exceeded() {
         let limit = RateLimit::new(
             &plugin(serde_json::json!({ "requests": 2, "per": "1m" })),
-            "",
+            "test over the limit",
         )
         .unwrap();
         let client: IpAddr = "10.0.0.1".parse().unwrap();
@@ -202,7 +203,7 @@ mod tests {
     fn test_burst_lets_more_through_at_once() {
         let limit = RateLimit::new(
             &plugin(serde_json::json!({ "requests": 2, "per": "1m", "burst": 1 })),
-            "",
+            "test burst",
         )
         .unwrap();
         let client: IpAddr = "10.0.0.1".parse().unwrap();
@@ -215,7 +216,7 @@ mod tests {
         // 1000 per second: the next request is 1ms away, which is still `Retry-After: 1`
         let limit = RateLimit::new(
             &plugin(serde_json::json!({ "requests": 1000, "per": "1s" })),
-            "",
+            "test retry after",
         )
         .unwrap();
         let client: IpAddr = "10.0.0.1".parse().unwrap();

@@ -41,11 +41,38 @@ fn unavailable(err: impl std::fmt::Display) -> StoreError {
 }
 
 pub struct RedisStore {
-    pool: r2d2::Pool<redis::Client>,
+    pool: r2d2::Pool<Timed>,
     cache: papaya::HashMap<String, Certificate>,
     challenge_cache: papaya::HashMap<String, (String, String)>,
     /// Versions kept per host (besides the active one)
     history: usize,
+}
+
+/// How long connecting to Redis, or a command, may take before it's given up on: a Redis that
+/// stops answering must not hold up whoever asks
+const TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Connections that time out after `TIMEOUT`: connecting, and every command
+pub(crate) struct Timed(Client);
+
+impl r2d2::ManageConnection for Timed {
+    type Connection = redis::Connection;
+    type Error = redis::RedisError;
+
+    fn connect(&self) -> Result<Self::Connection, Self::Error> {
+        let connection = self.0.get_connection_with_timeout(TIMEOUT)?;
+        connection.set_read_timeout(Some(TIMEOUT))?;
+        connection.set_write_timeout(Some(TIMEOUT))?;
+        Ok(connection)
+    }
+
+    fn is_valid(&self, connection: &mut Self::Connection) -> Result<(), Self::Error> {
+        self.0.is_valid(connection)
+    }
+
+    fn has_broken(&self, connection: &mut Self::Connection) -> bool {
+        self.0.has_broken(connection)
+    }
 }
 
 impl RedisStore {
@@ -56,7 +83,9 @@ impl RedisStore {
     /// When the URL is invalid or the server can't be reached
     pub fn new(redis_url: &str) -> Result<Self, Box<dyn Error>> {
         let client = Client::open(redis_url)?;
-        let pool = r2d2::Pool::builder().build(client)?;
+        let pool = r2d2::Pool::builder()
+            .connection_timeout(TIMEOUT)
+            .build(Timed(client))?;
 
         Ok(RedisStore {
             pool,
@@ -73,7 +102,7 @@ impl RedisStore {
         self
     }
 
-    fn connection(&self) -> Result<r2d2::PooledConnection<redis::Client>, StoreError> {
+    fn connection(&self) -> Result<r2d2::PooledConnection<Timed>, StoreError> {
         self.pool.get().map_err(unavailable)
     }
 
@@ -518,6 +547,27 @@ mod tests {
             .query(&mut store.pool.get().unwrap())
             .unwrap();
         Some(store)
+    }
+
+    #[test]
+    fn test_a_server_that_doesnt_answer_times_out() {
+        // Accepts connections, and never answers
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let held: Vec<_> = listener.incoming().collect();
+            drop(held);
+        });
+
+        let (done, finished) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            done.send(RedisStore::new(&format!("redis://127.0.0.1:{port}")).is_err())
+                .ok();
+        });
+        let failed = finished
+            .recv_timeout(super::TIMEOUT * 3)
+            .expect("still waiting on a server that doesn't answer");
+        assert!(failed);
     }
 
     #[tokio::test]

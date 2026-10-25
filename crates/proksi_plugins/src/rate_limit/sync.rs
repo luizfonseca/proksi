@@ -23,9 +23,6 @@ pub static SHARING: AtomicBool = AtomicBool::new(false);
 /// How often blocks sync
 const SYNC_EVERY: Duration = Duration::from_millis(250);
 
-/// Clients a block counts between two syncs; more are decided locally only until the next
-const CLIENTS: usize = 1024;
-
 /// The blocks in use (dropped ones are pruned as blocks are added and synced)
 static BLOCKS: LazyLock<Mutex<Vec<Weak<Shared>>>> = LazyLock::new(Mutex::default);
 
@@ -42,21 +39,24 @@ fn live() -> Vec<Arc<Shared>> {
     blocks.iter().filter_map(Weak::upgrade).collect()
 }
 
-/// Syncs every block once
-pub(crate) async fn sync_once(store: &dyn Store) -> Result<(), StoreError> {
+/// Syncs every block once, saying whether the store was asked anything (with nothing to send,
+/// it can't tell whether the store is up)
+pub(crate) async fn sync_once(store: &dyn Store) -> Result<bool, StoreError> {
+    let mut asked = false;
     for shared in live() {
-        shared.usage.reserve(CLIENTS);
-        sync_block(store, &shared).await?;
+        shared.usage.make_room();
+        asked |= sync_block(store, &shared).await?;
     }
-    Ok(())
+    Ok(asked)
 }
 
-/// Sends a block's requests, raising its clients to what the store answers. Requests counted
-/// when the store can't be reached aren't sent again.
-async fn sync_block(store: &dyn Store, shared: &Shared) -> Result<(), StoreError> {
+/// Sends a block's requests, raising its clients to what the store answers, and says whether
+/// there was anything to send. Requests counted when the store can't be reached aren't sent
+/// again.
+async fn sync_block(store: &dyn Store, shared: &Shared) -> Result<bool, StoreError> {
     let used: Vec<(IpAddr, u64)> = shared.usage.take();
     if used.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
     let rate = Rate {
         interval_us: shared.limits.interval() / 1000,
@@ -76,7 +76,7 @@ async fn sync_block(store: &dyn Store, shared: &Shared) -> Result<(), StoreError
             .limits
             .raise(client, Duration::from_micros(ahead), now);
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Syncs blocks with `store` for as long as Proksi runs. Without a store that shares rate
@@ -104,7 +104,7 @@ pub async fn run(store: Option<Arc<dyn Store>>, warn: bool) {
                 tracing::warn!("failed to sync rate limits, limiting on this instance only: {err}");
                 failing = true;
             }
-            Ok(()) if failing => {
+            Ok(true) if failing => {
                 tracing::info!("syncing rate limits again");
                 failing = false;
             }
@@ -117,8 +117,11 @@ pub async fn run(store: Option<Arc<dyn Store>>, warn: bool) {
 mod tests {
     use std::{net::IpAddr, sync::atomic::Ordering};
 
-    use super::{SHARING, sync_once};
+    use super::{SHARING, sync_block, sync_once};
     use crate::{RoutePlugin, rate_limit::RateLimit};
+
+    /// `sync_once` syncs every block: tests syncing take turns, so none takes another's counts
+    static SYNCING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     fn limit(id: &str) -> RateLimit {
         let plugin: RoutePlugin = serde_json::from_value(serde_json::json!({
@@ -129,14 +132,24 @@ mod tests {
         RateLimit::new(&plugin, id).unwrap()
     }
 
+    /// A block that saw a request, so the sync made room to count its clients
+    async fn used(store: &dyn proksi_store::Store, id: &str) -> RateLimit {
+        let limit = limit(id);
+        limit.exceeded(&"10.9.9.9".parse().unwrap());
+        sync_once(store).await.unwrap();
+        limit
+    }
+
     #[tokio::test]
     async fn test_replicas_share_a_limit() {
+        let _turn = SYNCING.lock().await;
         let store = proksi_store::MemoryStore::new();
         SHARING.store(true, Ordering::Relaxed);
         // The same block on two replicas: 2 a minute
-        let (a, b) = (limit("h / shared"), limit("h / shared"));
-        // Room to count, as the sync makes before it's needed
-        sync_once(&store).await.unwrap();
+        let (a, b) = (
+            used(&store, "h / shared").await,
+            used(&store, "h / shared").await,
+        );
         let client: IpAddr = "10.0.0.1".parse().unwrap();
         assert!(a.exceeded(&client).is_none());
         assert!(a.exceeded(&client).is_none());
@@ -149,11 +162,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_counting_doesnt_allocate() {
+    async fn test_syncing_says_whether_it_reached_the_store() {
+        let _turn = SYNCING.lock().await;
         let store = proksi_store::MemoryStore::new();
         SHARING.store(true, Ordering::Relaxed);
-        let limit = limit("h / allocations");
-        sync_once(&store).await.unwrap();
+        let limit = used(&store, "h / reached").await;
+        let client: IpAddr = "10.0.0.3".parse().unwrap();
+        limit.exceeded(&client);
+        assert_eq!(sync_block(&store, &limit.shared).await, Ok(true));
+        // Nothing to send: the store wasn't asked, so it can't tell it's up
+        assert_eq!(sync_block(&store, &limit.shared).await, Ok(false));
+    }
+
+    #[tokio::test]
+    async fn test_counting_doesnt_allocate() {
+        let _turn = SYNCING.lock().await;
+        let store = proksi_store::MemoryStore::new();
+        SHARING.store(true, Ordering::Relaxed);
+        let limit = used(&store, "h / allocations").await;
         let client: IpAddr = "10.0.0.2".parse().unwrap();
         limit.exceeded(&client);
         crate::allocations::assert_no_allocations("counting a request to sync", || {
