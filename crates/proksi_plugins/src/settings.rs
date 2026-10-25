@@ -40,6 +40,9 @@ pub struct RateLimit {
     pub requests: u64,
     /// The period, such as "10s", "1m" or "1h"
     pub per: String,
+    /// Requests a client may make at once on top of `requests`, refilled at the same rate (more
+    /// than 0)
+    pub burst: Option<u64>,
     // Read by `plugin_priority`
     #[allow(dead_code)]
     #[schemars(
@@ -556,9 +559,9 @@ mod tests {
             |config| read::<RateLimit>("rate_limit", &plugin("rate_limit", config)).map(|_| ());
 
         assert_eq!(read_limit(serde_json::json!({ "requests": 10, "per": "1m" })), Ok(()));
-        let unknown = read_limit(serde_json::json!({ "requests": 10, "per": "1m", "burst": 5 }));
+        let unknown = read_limit(serde_json::json!({ "requests": 10, "per": "1m", "window": 5 }));
         assert!(
-            unknown.as_ref().is_err_and(|err| err.starts_with("rate_limit: unknown field `burst`")),
+            unknown.as_ref().is_err_and(|err| err.starts_with("rate_limit: unknown field `window`")),
             "{unknown:?}"
         );
         let mistyped = read_limit(serde_json::json!({ "requests": "ten", "per": "1m" }));
