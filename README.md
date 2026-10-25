@@ -5,21 +5,21 @@
   </picture>
 </p>
 
-![GitHub Release](https://img.shields.io/github/v/release/luizfonseca/proksi?style=for-the-badge)
-![Crates.io MSRV](https://img.shields.io/crates/msrv/proksi?style=for-the-badge)
-![Crates.io License](https://img.shields.io/crates/l/proksi?style=for-the-badge)
-[![Crates.io Total Downloads](https://img.shields.io/crates/d/proksi?style=for-the-badge)](https://crates.io/crates/proksi)
+<p align="center">
+    <a href="https://discord.gg/b22TRMew2m">
+        <img src="https://github.com/luizfonseca/proksi/blob/main/assets/discord.png?raw=true" alt="discord-logo" width="100"/>
+    </a>
+</p>
 
-# Proksi: Automatic SSL, HTTP, and DNS Proxy
+# Proksi
 
+## Automatic SSL, HTTP, and DNS Proxy
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/proksi-flow-dark.svg">
   <img src="./docs/assets/proksi-flow-light.svg" alt="Requests from clients go through Proksi to upstreams; some are answered from its cache" width="720">
 </picture>
 
-<a href="https://discord.gg/b22TRMew2m">
-<img src="./assets/discord.png" alt="discord-logo" width="200"/>
-</a>
+
 
 ## Contents
 
