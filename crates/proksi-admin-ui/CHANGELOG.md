@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.3](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.17.2...proksi-admin-ui-v0.17.3) (2026-10-25)
+
+
+### Bug Fixes
+
+* use the system's allocator, which gives memory back once traffic drops ([#580](https://github.com/luizfonseca/proksi/issues/580)) ([c3ef54e](https://github.com/luizfonseca/proksi/commit/c3ef54e8f5912f998e999280bc7cc3d36574b14a))
+
 ## [0.17.2](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.17.1...proksi-admin-ui-v0.17.2) (2026-10-25)
 
 
