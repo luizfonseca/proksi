@@ -5,7 +5,6 @@ use std::{error::Error, hash::RandomState, time::Duration};
 use crate::{
     certificates::Certificate,
     notify::{NotifyRecord, NotifySnapshot},
-    rate_limit::{Rate, Used},
     route::{HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write},
     waiting_room::{Admission, RoomLimits},
 };
@@ -96,14 +95,14 @@ pub trait Store: Send + Sync + 'static {
     /// replica sharing the store
     async fn waiting_room_key(&self) -> Result<[u8; 32], StoreError>;
 
-    /// Counts the requests each client of the rate limit `block` made (as one replica saw them),
-    /// answering, for each, how many microseconds ahead of now its arrival time is. Empty when
-    /// the store doesn't share rate limits.
-    async fn sync_rate_limit(
+    /// Moves each cursor of `namespace` (by key) forward: to the store's now if it's behind,
+    /// plus its step, in microseconds. A cursor expires once the store's now passes it. Answers
+    /// how many microseconds ahead of now each one is, in order. Empty when the store doesn't
+    /// keep cursors.
+    async fn advance_cursors(
         &self,
-        block: &str,
-        rate: Rate,
-        used: &[Used],
+        namespace: &str,
+        steps: &[(String, u64)],
     ) -> Result<Vec<u64>, StoreError>;
 
     /// Revision of the certificates, incremented by every certificate written

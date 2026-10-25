@@ -7,10 +7,10 @@
 pub mod certificates;
 mod memory_store;
 mod notify;
-mod rate_limit;
+mod cursors;
 mod redis_history;
 mod redis_notify;
-mod redis_rate_limit;
+mod redis_cursors;
 mod redis_store;
 mod redis_waiting_room;
 mod route;
@@ -33,7 +33,6 @@ pub mod test_util;
 pub use certificates::{Certificate, SerializableCertificate};
 pub use memory_store::MemoryStore;
 pub use notify::{NotifyRecord, NotifySnapshot};
-pub use rate_limit::{Rate, Used};
 pub use redis_store::RedisStore;
 pub use route::{
     Change, Expect, HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError,

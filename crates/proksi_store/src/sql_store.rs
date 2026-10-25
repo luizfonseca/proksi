@@ -9,7 +9,6 @@ use sqlx::{any::AnyPoolOptions, AnyPool, Row};
 use crate::{
     certificates::{Certificate, SerializableCertificate},
     notify::{NotifyRecord, NotifySnapshot},
-    rate_limit::{Rate, Used},
     route::{
         HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write,
         DEFAULT_HISTORY,
@@ -317,13 +316,12 @@ impl Store for SqlStore {
         self.run(sql_waiting_room::key(self.pool.clone())).await
     }
 
-    async fn sync_rate_limit(
+    async fn advance_cursors(
         &self,
-        _block: &str,
-        _rate: Rate,
-        _used: &[Used],
+        _namespace: &str,
+        _steps: &[(String, u64)],
     ) -> Result<Vec<u64>, StoreError> {
-        // Not shared: a row per client per sync costs more than it's worth
+        // Not kept: a row written per cursor per call costs more than it's worth
         Ok(vec![])
     }
 
@@ -801,17 +799,10 @@ mod tests {
 
     #[cfg(feature = "sqlite")]
     #[tokio::test]
-    async fn test_sqlite_doesnt_share_rate_limits() {
+    async fn test_sqlite_doesnt_keep_cursors() {
         let (store, _dir) = sqlite_store();
-        let rate = crate::Rate {
-            interval_us: 1,
-            capacity_us: 1,
-        };
-        let used = [crate::Used {
-            client: "10.0.0.1".to_string(),
-            requests: 1,
-        }];
-        assert_eq!(store.sync_rate_limit("b", rate, &used).await.unwrap(), Vec::<u64>::new());
+        let steps = [("a".to_string(), 1)];
+        assert_eq!(store.advance_cursors("n", &steps).await.unwrap(), Vec::<u64>::new());
     }
 
     #[cfg(feature = "sqlite")]

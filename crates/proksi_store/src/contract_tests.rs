@@ -5,7 +5,6 @@ use std::time::Duration;
 use crate::{
     certificates::Certificate,
     notify::NotifyRecord,
-    rate_limit::{Rate, Used},
     route::{Change, Expect, ReplicaStatus, RouteRecord, StoreError, Write},
     store_trait::Store,
     test_util::certificate,
@@ -399,54 +398,25 @@ pub async fn waiting_rooms_contract(store: &dyn Store) {
     assert_eq!(store.waiting_room_key().await.unwrap(), key);
 }
 
-pub(crate) async fn rate_limits_contract(store: &dyn Store) {
-    // 1 a second, 3 at once
-    let rate = Rate {
-        interval_us: 1_000_000,
-        capacity_us: 3_000_000,
-    };
-    let used = |client: &str, requests| Used {
-        client: client.to_string(),
-        requests,
-    };
+pub(crate) async fn cursors_contract(store: &dyn Store) {
+    let step = |key: &str, step_us| (key.to_string(), step_us);
 
-    // Counted, and answered as how far ahead each client is
+    // Each cursor starts at the store's now, moves by its step, and says how far ahead it is
     let ahead = store
-        .sync_rate_limit("b1", rate, &[used("10.0.0.1", 2), used("10.0.0.2", 1)])
+        .advance_cursors("n1", &[step("a", 2_000_000), step("b", 1_000_000)])
         .await
         .unwrap();
     assert!((1_990_000..=2_000_000).contains(&ahead[0]), "{ahead:?}");
     assert!((990_000..=1_000_000).contains(&ahead[1]), "{ahead:?}");
-    // Another replica's requests add up
-    let ahead = store
-        .sync_rate_limit("b1", rate, &[used("10.0.0.1", 2)])
-        .await
-        .unwrap();
+    // A cursor ahead of now moves on from where it is
+    let ahead = store.advance_cursors("n1", &[step("a", 2_000_000)]).await.unwrap();
     assert!((3_980_000..=4_000_000).contains(&ahead[0]), "{ahead:?}");
-    // Each block is its own
-    let ahead = store
-        .sync_rate_limit("b2", rate, &[used("10.0.0.1", 1)])
-        .await
-        .unwrap();
+    // Each namespace is its own
+    let ahead = store.advance_cursors("n2", &[step("a", 1_000_000)]).await.unwrap();
     assert!((990_000..=1_000_000).contains(&ahead[0]), "{ahead:?}");
-    // Nothing to count: nothing to answer
-    assert!(
-        store
-            .sync_rate_limit("b1", rate, &[])
-            .await
-            .unwrap()
-            .is_empty()
-    );
-}
-
-pub(crate) async fn tiny_intervals_contract(store: &dyn Store) {
-    let rate = Rate {
-        interval_us: 0,
-        capacity_us: 0,
-    };
-    let used = [Used {
-        client: "10.0.0.9".to_string(),
-        requests: 5,
-    }];
-    assert!(store.sync_rate_limit("tiny", rate, &used).await.unwrap()[0] >= 5);
+    // No step: it's read
+    let ahead = store.advance_cursors("n1", &[step("b", 0)]).await.unwrap();
+    assert!((900_000..=1_000_000).contains(&ahead[0]), "{ahead:?}");
+    // Nothing to move: nothing to answer
+    assert!(store.advance_cursors("n1", &[]).await.unwrap().is_empty());
 }

@@ -88,11 +88,6 @@ impl Gcra {
         self.interval
     }
 
-    /// How far ahead of now a client's arrival time may be, in nanoseconds
-    pub(crate) fn capacity(&self) -> u64 {
-        self.capacity
-    }
-
     /// The client's hash, which others may reuse (its high bits; the slot takes the low ones)
     pub(crate) fn hash(&self, client: &IpAddr) -> u64 {
         self.hasher.hash_one(client)

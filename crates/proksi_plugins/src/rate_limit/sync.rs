@@ -1,8 +1,9 @@
-//! Rate limits shared by replicas through the store: every `SYNC_EVERY`, each block sends the
-//! requests its clients made since the last sync, and learns how far ahead each client's
-//! arrival time is cluster-wide, raising its own (never lowering it). Requests are decided
-//! locally, without waiting for the store; a client can go over by about what it sends in
-//! `SYNC_EVERY` on each other replica.
+//! Rate limits shared by replicas through the store: every `SYNC_EVERY`, each block moves its
+//! clients' cursors in the store (a cursor per client, in a namespace per block) by what their
+//! requests since the last sync cost, and learns how far ahead each client's arrival time is
+//! cluster-wide, raising its own (never lowering it). Requests are decided locally, without
+//! waiting for the store; a client can go over by about what it sends in `SYNC_EVERY` on each
+//! other replica.
 
 use std::{
     net::IpAddr,
@@ -13,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-use proksi_store::{Rate, Store, StoreError, Used};
+use proksi_store::{Store, StoreError};
 
 use super::Shared;
 
@@ -58,18 +59,8 @@ async fn sync_block(store: &dyn Store, shared: &Shared) -> Result<bool, StoreErr
     if used.is_empty() {
         return Ok(false);
     }
-    let rate = Rate {
-        interval_us: shared.limits.interval() / 1000,
-        capacity_us: shared.limits.capacity() / 1000,
-    };
-    let counted: Vec<Used> = used
-        .iter()
-        .map(|(client, requests)| Used {
-            client: client.to_string(),
-            requests: *requests,
-        })
-        .collect();
-    let ahead = store.sync_rate_limit(&shared.block, rate, &counted).await?;
+    let steps = steps(&used, shared.limits.interval());
+    let ahead = store.advance_cursors(&shared.block, &steps).await?;
     let now = shared.limits.now();
     for ((client, _), ahead) in used.iter().zip(ahead) {
         shared
@@ -77,6 +68,15 @@ async fn sync_block(store: &dyn Store, shared: &Shared) -> Result<bool, StoreErr
             .raise(client, Duration::from_micros(ahead), now);
     }
     Ok(true)
+}
+
+/// How far each client's cursor moves: its requests times `interval` (in nanoseconds), in
+/// microseconds rounded up, so a request never counts for less than it costs
+fn steps(used: &[(IpAddr, u64)], interval: u64) -> Vec<(String, u64)> {
+    let interval_us = interval.div_ceil(1000).max(1);
+    used.iter()
+        .map(|(client, requests)| (client.to_string(), requests.saturating_mul(interval_us)))
+        .collect()
 }
 
 /// Syncs blocks with `store` for as long as Proksi runs. Without a store that shares rate
@@ -117,7 +117,7 @@ pub async fn run(store: Option<Arc<dyn Store>>, warn: bool) {
 mod tests {
     use std::{net::IpAddr, sync::atomic::Ordering};
 
-    use super::{SHARING, sync_block, sync_once};
+    use super::{SHARING, steps, sync_block, sync_once};
     use crate::{RoutePlugin, rate_limit::RateLimit};
 
     /// `sync_once` syncs every block: tests syncing take turns, so none takes another's counts
@@ -138,6 +138,21 @@ mod tests {
         limit.exceeded(&"10.9.9.9".parse().unwrap());
         sync_once(store).await.unwrap();
         limit
+    }
+
+    #[test]
+    fn test_steps_round_up_to_whole_microseconds() {
+        let client: IpAddr = "10.0.0.4".parse().unwrap();
+        // 1.5µs between requests: 3 requests move the client 6µs (never less than they cost)
+        assert_eq!(
+            steps(&[(client, 3)], 1_500),
+            vec![("10.0.0.4".to_string(), 6)]
+        );
+        // Under 1µs between requests: 1µs each
+        assert_eq!(
+            steps(&[(client, 5)], 300),
+            vec![("10.0.0.4".to_string(), 5)]
+        );
     }
 
     #[tokio::test]

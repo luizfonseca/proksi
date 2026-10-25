@@ -13,8 +13,8 @@ use std::{
 
 use crate::{
     certificates::Certificate,
+    cursors::Cursors,
     notify::{self, NotifyRecord, NotifySnapshot},
-    rate_limit::{Arrivals, Rate, Used},
     route::{
         Change, Expect, HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot,
         StoreError, Write, DEFAULT_HISTORY,
@@ -39,8 +39,8 @@ pub struct MemoryStore {
     history: usize,
     /// Waiting rooms, by name
     rooms: Mutex<HashMap<String, Room>>,
-    /// Rate limits' arrival times
-    arrivals: Mutex<Arrivals>,
+    /// Cursors, by namespace and key
+    cursors: Mutex<Cursors>,
     /// The key of waiting rooms' cookies, created on first use
     room_key: Mutex<Option<[u8; 32]>>,
 }
@@ -127,7 +127,7 @@ impl MemoryStore {
             certificates_revision: AtomicU64::new(0),
             history: DEFAULT_HISTORY,
             rooms: Mutex::new(HashMap::new()),
-            arrivals: Mutex::default(),
+            cursors: Mutex::default(),
             room_key: Mutex::new(None),
         }
     }
@@ -358,14 +358,13 @@ impl Store for MemoryStore {
         }
     }
 
-    async fn sync_rate_limit(
+    async fn advance_cursors(
         &self,
-        block: &str,
-        rate: Rate,
-        used: &[Used],
+        namespace: &str,
+        steps: &[(String, u64)],
     ) -> Result<Vec<u64>, StoreError> {
-        let mut arrivals = self.arrivals.lock().unwrap_or_else(PoisonError::into_inner);
-        Ok(arrivals.count(block, rate, used))
+        let mut cursors = self.cursors.lock().unwrap_or_else(PoisonError::into_inner);
+        Ok(cursors.advance(namespace, steps))
     }
 
     async fn reload_certificates(&self) -> Result<(), StoreError> {
@@ -484,9 +483,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_rate_limits_contract() {
-        crate::contract_tests::rate_limits_contract(&MemoryStore::new()).await;
-        crate::contract_tests::tiny_intervals_contract(&MemoryStore::new()).await;
+    async fn test_cursors_contract() {
+        crate::contract_tests::cursors_contract(&MemoryStore::new()).await;
     }
 
     #[tokio::test]
