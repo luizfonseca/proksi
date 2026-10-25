@@ -12,6 +12,8 @@ use std::{
 /// Slots of the table: clients are spread over them by a hash of their address
 const SLOTS: usize = 4096;
 
+/// GCRA = Generic Cell Rate Algorithm.
+///
 /// The arrival times of clients, in a fixed-size table. One row: a count-min style minimum over
 /// several rows would let racing requests through, each seeing room in a different row. Clients
 /// sharing a slot add up (limited early, never late). The interval is rounded down, which only
@@ -177,9 +179,11 @@ mod tests {
         let hourly = Gcra::new(1, Duration::from_secs(3600), 0);
         assert!(hourly.check(&ip(1), 0).is_ok());
         assert_eq!(hourly.check(&ip(1), 0), Err(Duration::from_secs(3600)));
+
         // More requests than nanoseconds in `per`: never limited, no zero interval
         let fast = Gcra::new(u64::MAX, Duration::from_secs(1), 0);
         assert!((0..1000).all(|_| fast.check(&ip(1), 0).is_ok()));
+
         let huge_burst = Gcra::new(1, Duration::from_secs(1), u64::MAX);
         assert!((0..1000).all(|_| huge_burst.check(&ip(1), u64::MAX / 2).is_ok()));
     }

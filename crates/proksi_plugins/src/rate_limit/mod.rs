@@ -2,7 +2,7 @@
 //! limit. Clients are decided with GCRA (see `gcra`): `requests + burst` at once, then
 //! `requests` per `per`, spread evenly.
 
-use std::{net::IpAddr, time::Duration};
+use std::{fmt, net::IpAddr, time::Duration};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -16,7 +16,38 @@ use gcra::Gcra;
 
 mod gcra;
 
-const INVALID_PER: &str = "rate_limit: `per` must be a duration such as \"10s\", \"1m\" or \"1h\"";
+/// Why a `rate_limit` block can't be used
+#[derive(Debug, Clone, PartialEq)]
+pub(super) enum RateLimitError {
+    /// Its settings can't be read (missing, mistyped or unknown), as `settings::read` says
+    Settings(String),
+    /// `requests` is 0
+    NoRequests,
+    /// `per` isn't a duration
+    InvalidPer,
+    /// `burst` is 0
+    NoBurst,
+}
+
+impl fmt::Display for RateLimitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RateLimitError::Settings(err) => write!(f, "{err}"),
+            RateLimitError::NoRequests => {
+                write!(f, "rate_limit: `requests` must be a number greater than 0")
+            }
+            RateLimitError::InvalidPer => write!(
+                f,
+                "rate_limit: `per` must be a duration such as \"10s\", \"1m\" or \"1h\""
+            ),
+            RateLimitError::NoBurst => {
+                write!(f, "rate_limit: `burst` must be a number greater than 0")
+            }
+        }
+    }
+}
+
+impl std::error::Error for RateLimitError {}
 
 /// The requests of each client (by IP address), in a fixed amount of memory: clients sharing a
 /// slot can only be limited early, never late
@@ -25,14 +56,15 @@ pub(super) struct RateLimit {
 }
 
 impl RateLimit {
-    pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
-        let settings: super::settings::RateLimit = super::settings::read("rate_limit", plugin)?;
+    pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, RateLimitError> {
+        let settings: super::settings::RateLimit =
+            super::settings::read("rate_limit", plugin).map_err(RateLimitError::Settings)?;
         let requests = Some(settings.requests)
             .filter(|requests| *requests > 0)
-            .ok_or("rate_limit: `requests` must be a number greater than 0")?;
-        let per = parse_duration(&settings.per).ok_or(INVALID_PER)?;
+            .ok_or(RateLimitError::NoRequests)?;
+        let per = parse_duration(&settings.per).ok_or(RateLimitError::InvalidPer)?;
         if settings.burst == Some(0) {
-            return Err("rate_limit: `burst` must be a number greater than 0".to_string());
+            return Err(RateLimitError::NoBurst);
         }
 
         Ok(Self {
@@ -90,7 +122,7 @@ mod tests {
 
     use crate::RoutePlugin;
 
-    use super::{RateLimit, parse_duration, retry_after};
+    use super::{RateLimit, RateLimitError, parse_duration, retry_after};
 
     fn plugin(config: serde_json::Value) -> RoutePlugin {
         serde_json::from_value(serde_json::json!({ "name": "rate_limit", "config": config }))
@@ -152,29 +184,46 @@ mod tests {
         for (config, expected) in [
             (
                 serde_json::json!({ "per": "1m" }),
-                "rate_limit: `requests` is required",
+                RateLimitError::Settings("rate_limit: `requests` is required".to_string()),
             ),
             (
                 serde_json::json!({ "requests": 0, "per": "1m" }),
-                "rate_limit: `requests` must be a number greater than 0",
-            ),
-            (
-                serde_json::json!({ "requests": 10 }),
-                "rate_limit: `per` is required",
+                RateLimitError::NoRequests,
             ),
             (
                 serde_json::json!({ "requests": 10, "per": "1x" }),
-                "rate_limit: `per` must be a duration such as \"10s\", \"1m\" or \"1h\"",
+                RateLimitError::InvalidPer,
             ),
             (
                 serde_json::json!({ "requests": 10, "per": "1m", "burst": 0 }),
+                RateLimitError::NoBurst,
+            ),
+        ] {
+            assert_eq!(RateLimit::new(&plugin(config)).err(), Some(expected));
+        }
+    }
+
+    #[test]
+    fn test_errors_say_what_is_wrong() {
+        for (error, message) in [
+            (
+                RateLimitError::Settings("rate_limit: `per` is required".to_string()),
+                "rate_limit: `per` is required",
+            ),
+            (
+                RateLimitError::NoRequests,
+                "rate_limit: `requests` must be a number greater than 0",
+            ),
+            (
+                RateLimitError::InvalidPer,
+                "rate_limit: `per` must be a duration such as \"10s\", \"1m\" or \"1h\"",
+            ),
+            (
+                RateLimitError::NoBurst,
                 "rate_limit: `burst` must be a number greater than 0",
             ),
         ] {
-            assert_eq!(
-                RateLimit::new(&plugin(config)).err().as_deref(),
-                Some(expected)
-            );
+            assert_eq!(error.to_string(), message);
         }
     }
 }
