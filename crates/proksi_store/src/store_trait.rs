@@ -95,6 +95,16 @@ pub trait Store: Send + Sync + 'static {
     /// replica sharing the store
     async fn waiting_room_key(&self) -> Result<[u8; 32], StoreError>;
 
+    /// Moves each cursor of `namespace` (by key) forward: to the store's now if it's behind,
+    /// plus its step, in microseconds. A cursor expires once the store's now passes it. Answers
+    /// how many microseconds ahead of now each one is, in order. Empty when the store doesn't
+    /// keep cursors.
+    async fn advance_cursors(
+        &self,
+        namespace: &str,
+        steps: &[(String, u64)],
+    ) -> Result<Vec<u64>, StoreError>;
+
     /// Revision of the certificates, incremented by every certificate written
     async fn certificates_revision(&self) -> Result<u64, StoreError>;
 

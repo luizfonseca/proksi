@@ -360,6 +360,14 @@ mod tests {
             self.check()?;
             self.inner.waiting_room_key().await
         }
+        async fn advance_cursors(
+            &self,
+            namespace: &str,
+            steps: &[(String, u64)],
+        ) -> Result<Vec<u64>, StoreError> {
+            self.check()?;
+            self.inner.advance_cursors(namespace, steps).await
+        }
         async fn certificates_revision(&self) -> Result<u64, StoreError> {
             self.check()?;
             self.inner.certificates_revision().await

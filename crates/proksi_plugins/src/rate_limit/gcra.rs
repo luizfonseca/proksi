@@ -52,10 +52,16 @@ impl Gcra {
         u64::try_from(self.start.elapsed().as_nanos()).unwrap_or(u64::MAX)
     }
 
+    #[cfg(test)]
     /// Counts a request of `client` at `now` (see `now`) if it's let through, or says how long
     /// until one would be
     pub(crate) fn check(&self, client: &IpAddr, now: u64) -> Result<(), Duration> {
-        let Some(slot) = self.slot(client) else {
+        self.check_hashed(self.hash(client), now)
+    }
+
+    /// `check`, for a client hashed with `hash`
+    pub(crate) fn check_hashed(&self, hash: u64, now: u64) -> Result<(), Duration> {
+        let Some(slot) = self.slot(hash) else {
             return Ok(());
         };
         let (interval, capacity) = (self.interval, self.capacity);
@@ -68,9 +74,28 @@ impl Gcra {
         .map_err(|arrival| Duration::from_nanos(ahead(arrival) - capacity))
     }
 
-    fn slot(&self, client: &IpAddr) -> Option<&AtomicU64> {
+    /// Moves `client`'s arrival time to `ahead` of `now`, if it's earlier: what the other
+    /// replicas counted (see `sync`). Never moves it back.
+    pub(crate) fn raise(&self, client: &IpAddr, ahead: Duration, now: u64) {
+        let ahead = u64::try_from(ahead.as_nanos()).unwrap_or(u64::MAX);
+        if let Some(slot) = self.slot(self.hash(client)) {
+            slot.fetch_max(now.saturating_add(ahead), Ordering::Relaxed);
+        }
+    }
+
+    /// Nanoseconds between two requests
+    pub(crate) fn interval(&self) -> u64 {
+        self.interval
+    }
+
+    /// The client's hash, which others may reuse (its high bits; the slot takes the low ones)
+    pub(crate) fn hash(&self, client: &IpAddr) -> u64 {
+        self.hasher.hash_one(client)
+    }
+
+    fn slot(&self, hash: u64) -> Option<&AtomicU64> {
         let slots = u64::try_from(self.slots.len()).ok()?;
-        let index = usize::try_from(self.hasher.hash_one(client) % slots).ok()?;
+        let index = usize::try_from(hash % slots).ok()?;
         self.slots.get(index)
     }
 }
@@ -172,6 +197,18 @@ mod tests {
             // 1s of requests at 1 per ms: 1000, plus the first one
             assert!(allowed.into_inner() <= 1001);
         }
+    }
+
+    #[test]
+    fn test_raising_a_client_refuses_it_until_then() {
+        let gcra = Gcra::new(10, Duration::from_secs(1), 0);
+        // The cluster used 20 of its 10
+        gcra.raise(&ip(1), Duration::from_secs(2), 0);
+        // A request now would be 2.1s ahead: it fits 1.1s from now
+        assert_eq!(gcra.check(&ip(1), 0), Err(Duration::from_millis(1100)));
+        // Never lowered
+        gcra.raise(&ip(1), Duration::ZERO, 0);
+        assert!(gcra.check(&ip(1), 0).is_err());
     }
 
     #[test]

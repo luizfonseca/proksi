@@ -50,7 +50,7 @@ pub mod ip_set;
 pub mod jwt;
 mod oauth2;
 mod priority;
-mod rate_limit;
+pub mod rate_limit;
 mod redirect;
 mod request_id;
 pub mod respond;
@@ -324,7 +324,11 @@ pub struct Plugin {
 /// The plugin `plugin` configures in the location at `location_path`, `None` for names that
 /// aren't plugins, or why its configuration is invalid (with the plugin's name in the message)
 #[must_use]
-pub fn build(plugin: &RoutePlugin, location_path: &str) -> Option<Result<Plugin, String>> {
+pub fn build(
+    plugin: &RoutePlugin,
+    location_path: &str,
+    id: &str,
+) -> Option<Result<Plugin, String>> {
     let built = |kind, middleware: Result<Arc<dyn Middleware>, String>| {
         Some(middleware.and_then(|middleware| {
             Ok(Plugin {
@@ -340,7 +344,7 @@ pub fn build(plugin: &RoutePlugin, location_path: &str) -> Option<Result<Plugin,
         Kind::RequestId => arc(RequestId::new(plugin)),
         Kind::IpFilter => arc(IpFilter::new(plugin)),
         Kind::Cors => arc(Cors::new(plugin)),
-        Kind::RateLimit => arc(RateLimit::new(plugin).map_err(|err| err.to_string())),
+        Kind::RateLimit => arc(RateLimit::new(plugin, id).map_err(|err| err.to_string())),
         Kind::BandwidthLimit => arc(BandwidthLimit::new(plugin)),
         Kind::WaitingRoom => arc(WaitingRoom::new(plugin, location_path)),
         Kind::BodyLimit => arc(BodyLimit::new(plugin)),

@@ -397,3 +397,26 @@ pub async fn waiting_rooms_contract(store: &dyn Store) {
     assert_ne!(key, [0; 32]);
     assert_eq!(store.waiting_room_key().await.unwrap(), key);
 }
+
+pub(crate) async fn cursors_contract(store: &dyn Store) {
+    let step = |key: &str, step_us| (key.to_string(), step_us);
+
+    // Each cursor starts at the store's now, moves by its step, and says how far ahead it is
+    let ahead = store
+        .advance_cursors("n1", &[step("a", 2_000_000), step("b", 1_000_000)])
+        .await
+        .unwrap();
+    assert!((1_990_000..=2_000_000).contains(&ahead[0]), "{ahead:?}");
+    assert!((990_000..=1_000_000).contains(&ahead[1]), "{ahead:?}");
+    // A cursor ahead of now moves on from where it is
+    let ahead = store.advance_cursors("n1", &[step("a", 2_000_000)]).await.unwrap();
+    assert!((3_980_000..=4_000_000).contains(&ahead[0]), "{ahead:?}");
+    // Each namespace is its own
+    let ahead = store.advance_cursors("n2", &[step("a", 1_000_000)]).await.unwrap();
+    assert!((990_000..=1_000_000).contains(&ahead[0]), "{ahead:?}");
+    // No step: it's read
+    let ahead = store.advance_cursors("n1", &[step("b", 0)]).await.unwrap();
+    assert!((900_000..=1_000_000).contains(&ahead[0]), "{ahead:?}");
+    // Nothing to move: nothing to answer
+    assert!(store.advance_cursors("n1", &[]).await.unwrap().is_empty());
+}

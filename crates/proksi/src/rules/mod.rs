@@ -39,6 +39,11 @@ use actions::Then;
 use compile::Compiled;
 use fields::Request;
 
+/// Where a rule's blocks are written, for blocks keeping counts (`rate_limit`)
+pub fn rule_id(scope: &str, name: &str) -> String {
+    format!("{scope} rule {name}")
+}
+
 /// The compiled rules of a scope (the server, a host or a location)
 pub struct Rules {
     compiled: Compiled,
@@ -49,12 +54,13 @@ pub struct Rules {
 }
 
 impl Rules {
-    /// `None` without rules: a scope without rules costs nothing
-    pub fn compile(rules: &[Rule]) -> Result<Option<Arc<Self>>, String> {
+    /// `None` without rules: a scope without rules costs nothing. `scope` says where they're
+    /// written: `"server"`, a host's name, or a location's `blocks::location_id`.
+    pub fn compile(rules: &[Rule], scope: &str) -> Result<Option<Arc<Self>>, String> {
         if rules.is_empty() {
             return Ok(None);
         }
-        let compiled = compile::compile(rules)?;
+        let compiled = compile::compile(rules, scope)?;
         let index = index::Index::build(&compiled);
         Ok(Some(Arc::new(Self {
             compiled,
@@ -166,7 +172,7 @@ static SERVER: OnceLock<Option<Arc<Rules>>> = OnceLock::new();
 
 /// Sets the server's rules (`server { rule ... }`), once, when proksi starts
 pub fn set_server_rules(rules: &[Rule]) -> Result<(), String> {
-    let _ = SERVER.set(Rules::compile(rules)?);
+    let _ = SERVER.set(Rules::compile(rules, "server")?);
     Ok(())
 }
 
@@ -369,7 +375,7 @@ mod tests {
                 "query": { "ref": { "eq": "home" } },
             } })),
         ];
-        let rules = Rules::compile(&rules).unwrap().unwrap();
+        let rules = Rules::compile(&rules, "").unwrap().unwrap();
         let request =
             super::eval::tests::TestRequest::new("GET", "www.example.com", "/products/42?ref=home")
                 .header("x-client", "web")
@@ -379,7 +385,7 @@ mod tests {
 
         // Scopes with many rules: more tests than fit in a word
         let many = super::bench::rules(100);
-        let many = Rules::compile(&many).unwrap().unwrap();
+        let many = Rules::compile(&many, "").unwrap().unwrap();
         crate::allocations::assert_no_allocations("running 100 rules", || many.matching(&request));
 
         // Long lists of values, matched in a time that doesn't grow with them
@@ -393,7 +399,7 @@ mod tests {
                 .map(|i| format!("10.{}.{}.0/24", i / 256, i % 256))
                 .collect::<Vec<_>>() } } })),
         ];
-        let lists = Rules::compile(&lists).unwrap().unwrap();
+        let lists = Rules::compile(&lists, "").unwrap().unwrap();
         crate::allocations::assert_no_allocations("lists of 1000 values", || {
             lists.matching(&request)
         });
@@ -408,7 +414,7 @@ mod tests {
             "then": { "respond": { "status": 403 } },
         }))];
 
-        let compiled = Rules::compile(&rules).unwrap().unwrap();
+        let compiled = Rules::compile(&rules, "").unwrap().unwrap();
 
         assert_eq!(compiled.source(), rules.as_slice());
     }
@@ -491,7 +497,7 @@ mod tests {
         let mut found = vec![];
         rules(&value, &mut found);
         for scope in &found {
-            if let Err(err) = Rules::compile(scope) {
+            if let Err(err) = Rules::compile(scope, "") {
                 panic!("{page}: {err}\n{example}");
             }
         }
@@ -517,5 +523,20 @@ mod tests {
                 load(page, example);
             }
         }
+    }
+
+    #[test]
+    fn test_blocks_have_their_own_identity() {
+        let ids = [
+            crate::blocks::location_id("a.test", "/"),
+            crate::blocks::location_id("a.test", "/api"),
+            crate::blocks::location_id("b.test", "/"),
+            super::rule_id("server", "slow"),
+            super::rule_id("a.test", "slow"),
+            super::rule_id(&crate::blocks::location_id("a.test", "/"), "slow"),
+            super::rule_id(&crate::blocks::location_id("a.test", "/"), "fast"),
+        ];
+        let unique: std::collections::HashSet<_> = ids.iter().collect();
+        assert_eq!(unique.len(), ids.len(), "{ids:?}");
     }
 }

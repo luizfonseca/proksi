@@ -316,6 +316,15 @@ impl Store for SqlStore {
         self.run(sql_waiting_room::key(self.pool.clone())).await
     }
 
+    async fn advance_cursors(
+        &self,
+        _namespace: &str,
+        _steps: &[(String, u64)],
+    ) -> Result<Vec<u64>, StoreError> {
+        // Not kept: a row written per cursor per call costs more than it's worth
+        Ok(vec![])
+    }
+
     async fn report(&self, status: ReplicaStatus, ttl: Duration) -> Result<(), StoreError> {
         let pool = self.pool.clone();
         let data = serde_json::to_string(&status).map_err(invalid)?;
@@ -786,6 +795,14 @@ mod tests {
         if let Some(store) = postgres_store("proksi_test_replicas") {
             contract_tests::replicas_contract(&store).await;
         }
+    }
+
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn test_sqlite_doesnt_keep_cursors() {
+        let (store, _dir) = sqlite_store();
+        let steps = [("a".to_string(), 1)];
+        assert_eq!(store.advance_cursors("n", &steps).await.unwrap(), Vec::<u64>::new());
     }
 
     #[cfg(feature = "sqlite")]

@@ -160,8 +160,9 @@ fn test_in<'a>(
     Some((group_index, group, test))
 }
 
-/// Compiles a scope's rules; errors name the rule and the path to what's wrong in it
-pub(super) fn compile(rules: &[Rule]) -> Result<Compiled, String> {
+/// Compiles the rules of `scope` (see `rule_id`); errors name the rule and the path to what's
+/// wrong in it
+pub(super) fn compile(rules: &[Rule], scope: &str) -> Result<Compiled, String> {
     if rules.len() > MAX_RULES {
         return Err(format!("more than {MAX_RULES} rules"));
     }
@@ -170,7 +171,7 @@ pub(super) fn compile(rules: &[Rule]) -> Result<Compiled, String> {
     let mut names = std::collections::HashSet::new();
     for (index, rule) in rules.iter().enumerate() {
         let rule = builder
-            .rule(&rule.0)
+            .rule(&rule.0, scope)
             .map_err(|err| match rule_name(&rule.0) {
                 Some(name) => format!("rule \"{name}\": {err}"),
                 None => format!("rule {}: {err}", index + 1),
@@ -314,7 +315,7 @@ fn one_or(mut nodes: Vec<Node>, combine: fn(Box<[Node]>) -> Node) -> Node {
 }
 
 impl Builder {
-    fn rule(&mut self, rule: &Value) -> Result<CompiledRule, String> {
+    fn rule(&mut self, rule: &Value, scope: &str) -> Result<CompiledRule, String> {
         let Value::Object(map) = rule else {
             return Err("must be a block".to_string());
         };
@@ -332,7 +333,8 @@ impl Builder {
             Some(then) => then,
             None => return Err("needs a `then` block".to_string()),
         };
-        let then = Then::build(then).map_err(|err| format!("then: {err}"))?;
+        let then = Then::build(then, &super::rule_id(scope, &name))
+            .map_err(|err| format!("then: {err}"))?;
 
         let mut rest = map.clone();
         rest.remove("name");
@@ -663,7 +665,7 @@ pub(super) mod tests {
     use crate::rules::model::Rule;
 
     fn rules(values: &[serde_json::Value]) -> Result<super::Compiled, String> {
-        compile(&values.iter().cloned().map(Rule).collect::<Vec<_>>())
+        compile(&values.iter().cloned().map(Rule).collect::<Vec<_>>(), "")
     }
 
     fn err(value: serde_json::Value) -> String {

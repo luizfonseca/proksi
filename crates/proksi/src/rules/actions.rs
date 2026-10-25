@@ -194,7 +194,8 @@ pub(crate) struct Then {
 }
 
 impl Then {
-    pub(super) fn build(value: &serde_json::Value) -> Result<Self, String> {
+    /// `id` says where the rule is written (see `rule_id`)
+    pub(super) fn build(value: &serde_json::Value, id: &str) -> Result<Self, String> {
         let then = ThenBlock::deserialize(value).map_err(|err| err.to_string())?;
 
         let plugins = [
@@ -232,7 +233,7 @@ impl Then {
             ),
             None => (Changes::default(), Changes::default(), None),
         };
-        let blocks = Blocks::build(&blocks_location(plugins, &response, priority))?;
+        let blocks = Blocks::build(&blocks_location(plugins, &response, priority), id)?;
         let (add, remove) = request_changes(&request)?;
         let method = then
             .method
@@ -299,28 +300,28 @@ mod tests {
     use super::Then;
 
     fn err(then: serde_json::Value) -> String {
-        Then::build(&then).err().unwrap_or_default()
+        Then::build(&then, "").err().unwrap_or_default()
     }
 
     #[test]
     fn test_then_turns_retries_off() {
-        let then = Then::build(&json!({ "retry": false })).unwrap();
+        let then = Then::build(&json!({ "retry": false }), "").unwrap();
         assert_eq!(then.retry, Some(false));
-        assert!(Then::build(&json!({ "retry": 2 })).is_err());
+        assert!(Then::build(&json!({ "retry": 2 }), "").is_err());
     }
 
     #[test]
     fn test_then_chooses_to_mirror() {
-        let then = Then::build(&json!({ "mirror": true })).unwrap();
+        let then = Then::build(&json!({ "mirror": true }), "").unwrap();
         assert_eq!(then.mirror, Some(true));
-        let then = Then::build(&json!({ "mirror": false })).unwrap();
+        let then = Then::build(&json!({ "mirror": false }), "").unwrap();
         assert_eq!(then.mirror, Some(false));
-        assert!(Then::build(&json!({ "mirror": "yes" })).is_err());
+        assert!(Then::build(&json!({ "mirror": "yes" }), "").is_err());
     }
 
     #[test]
     fn test_then_chooses_a_traffic_split() {
-        let then = Then::build(&json!({ "traffic_split": "v2" })).unwrap();
+        let then = Then::build(&json!({ "traffic_split": "v2" }), "").unwrap();
         assert_eq!(then.split.as_deref(), Some("v2"));
         assert_eq!(
             err(json!({ "traffic_split": "" })),
@@ -333,7 +334,7 @@ mod tests {
         let then = Then::build(&json!({
             "rate_limit": { "requests": 60, "per": "1m" },
             "headers": { "response": { "add": { "cache-control": "no-store" } } },
-        }))
+        }), "")
         .unwrap();
         let kinds = then
             .blocks
@@ -348,7 +349,7 @@ mod tests {
         let then = Then::build(&json!({
             "method": { "set": "delete" },
             "headers": { "request": { "add": { "x-a": "1" }, "remove": ["x-http-method-override"] } },
-        }))
+        }), "")
         .unwrap();
         let mut request = pingora::http::RequestHeader::build("POST", b"/", None).unwrap();
         request

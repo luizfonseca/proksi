@@ -25,7 +25,7 @@ pub fn validate_host(host: &Host) -> Result<(), String> {
         .map(|location| location.path.as_str())
         .collect::<Vec<_>>();
     crate::routing::paths::compile_regexes(&regexes)?;
-    crate::rules::Rules::compile(&host.rules)?;
+    crate::rules::Rules::compile(&host.rules, "")?;
 
     Ok(())
 }
@@ -54,7 +54,7 @@ fn validate_location<'a>(
         crate::routing::retry::Policy::new(retry).map_err(in_location)?;
     }
     validate_headers(location.headers.as_ref()).map_err(in_location)?;
-    let blocks = Blocks::build(location).map_err(in_location)?;
+    let blocks = Blocks::build(location, "").map_err(in_location)?;
     if !location.upstreams.is_empty()
         && blocks
             .iter()
@@ -67,7 +67,7 @@ fn validate_location<'a>(
     if let Some(rewrite) = &location.rewrite {
         rewrite.compile().map_err(in_location)?;
     }
-    crate::rules::Rules::compile(&location.rules).map_err(in_location)?;
+    crate::rules::Rules::compile(&location.rules, "").map_err(in_location)?;
     Ok(())
 }
 

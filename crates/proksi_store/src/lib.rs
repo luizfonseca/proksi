@@ -7,8 +7,10 @@
 pub mod certificates;
 mod memory_store;
 mod notify;
+mod cursors;
 mod redis_history;
 mod redis_notify;
+mod redis_cursors;
 mod redis_store;
 mod redis_waiting_room;
 mod route;
