@@ -320,7 +320,6 @@ fn process(
         "cpu_percent": if window > 0.0 { round(cpu / window * 100.0) } else { 0.0 },
         "cpu_seconds": round(latest.cpu_seconds),
         "memory_bytes": latest.rss_bytes,
-        "allocator_bytes": latest.allocator_bytes,
         "memory_limit_bytes": limits.memory_bytes,
         "cpu_limit": limits.cpus,
     })
@@ -723,7 +722,6 @@ mod tests {
         let process = crate::metrics::process::Reading {
             cpu_seconds: 0.0,
             rss_bytes: 2048,
-            allocator_bytes: 1024,
         };
         Sample::new(at, series, process)
     }
@@ -831,7 +829,8 @@ mod tests {
         // 1.5 seconds of CPU in 10 seconds
         assert_eq!(stats["process"]["cpu_percent"], json!(15.0));
         assert_eq!(stats["process"]["memory_bytes"], json!(2048));
-        assert_eq!(stats["process"]["allocator_bytes"], json!(1024));
+        // The allocator keeps no counts of its own
+        assert!(stats["process"].get("allocator_bytes").is_none());
     }
 
     #[test]

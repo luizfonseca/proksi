@@ -115,7 +115,7 @@ Hosts from the configuration file, docker labels or Kubernetes are read-only: Pr
 | `POST`, `DELETE /api/v1/session` | Sign in and out |
 | `GET /api/v1/server` | The settings read at startup, with their defaults. Each is listed explicitly, so a new setting or a secret is never shown by accident |
 
-- `stats` and `stats/stream` gain the process: CPU (time used, and % of one core over the window), resident memory, memory in use by the allocator, and in a container, its memory limit and CPU quota (cgroups). They're read once a second by the task that already snapshots the stats.
+- `stats` and `stats/stream` gain the process: CPU (time used, and % of one core over the window), resident memory (the allocator's own figure was dropped with mimalloc), and in a container, its memory limit and CPU quota (cgroups). They're read once a second by the task that already snapshots the stats.
 - `requests/stream` costs nothing while no one watches: the request path checks a count of open streams, and builds nothing when it's zero.
 - `schema` is generated from the code that reads the configuration, so the forms can't offer what Proksi wouldn't accept.
 - Every write is validated as a configuration file is, and logged: `{"admin_change": true, "token": "ops", "host": "api.example.com", "revision": 42}`.

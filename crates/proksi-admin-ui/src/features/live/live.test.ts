@@ -4,7 +4,7 @@ import { activeHosts, KEPT, keep, point, type Point, type Stats } from './live';
 const stats: Stats = {
   window_seconds: 5,
   total: { requests_per_second: 4, responses: { '2xx': 18, '5xx': 2 }, duration_ms: { p50: 3, p90: 9, p99: 40 } },
-  process: { cpu_percent: 12.5, memory_bytes: 2048, allocator_bytes: 1024, memory_limit_bytes: null, cpu_limit: null },
+  process: { cpu_percent: 12.5, memory_bytes: 2048, memory_limit_bytes: null, cpu_limit: null },
   hosts: [],
   tcp: [],
 };
@@ -21,7 +21,6 @@ describe('the live history', () => {
       p99: 40,
       cpu: 12.5,
       memory: 2048,
-      allocator: 1024,
       hosts: {},
       tcp: {},
     });

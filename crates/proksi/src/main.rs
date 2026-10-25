@@ -44,13 +44,8 @@ mod tcp;
 mod tools;
 mod wasm;
 
-// Faster than the system allocators (notably musl's) for the many small allocations
-// of each request
-#[cfg(not(test))]
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
-// The same, counting the allocations of the hot path's tests
+// The hot path's tests count allocations (the build itself uses the system's allocator: musl's,
+// in the release images, which gives memory back once traffic drops)
 #[cfg(test)]
 #[global_allocator]
 static GLOBAL: allocations::Counting = allocations::Counting;
@@ -65,7 +60,7 @@ static GLOBAL: allocations::Counting = allocations::Counting;
     clippy::complexity
 )]
 fn main() -> Result<(), anyhow::Error> {
-    // Transparent huge pages back mimalloc's memory with 2 MiB pages where the system enables
+    // Transparent huge pages back the allocator's memory with 2 MiB pages where the system enables
     // them for every process (`always`, common on servers), more than doubling what a worker
     // keeps. Turned off for this process and the workers it starts.
     #[cfg(target_os = "linux")]
@@ -78,8 +73,6 @@ fn main() -> Result<(), anyhow::Error> {
     if supervisor::should_supervise() {
         std::process::exit(supervisor::run()?);
     }
-    #[cfg(target_os = "linux")]
-    supervisor::restore_reservations();
 
     // Configuration can be refreshed on file change
     // Loads configuration from command-line, YAML or TOML sources
