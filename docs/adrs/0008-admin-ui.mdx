@@ -70,7 +70,7 @@ admin {
 
 **Changes must come from the UI's own origin.** A request that changes something with a session cookie must carry an `Origin` header naming the admin listener's own address, or it's refused. API clients using `Authorization: Bearer` are unaffected.
 
-**The pages allow nothing else.** `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'` (no inline scripts, no other origins, no framing), no CORS headers, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`.
+**The pages allow nothing else.** `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'` (no inline scripts, no other origins, no framing; `connect-src` also allows `https://api.github.com`, for the "new version" notice), no CORS headers, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`.
 
 **Failed sign-ins are limited** to 10 a minute per client, and tokens are compared in constant time.
 
