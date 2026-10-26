@@ -8,8 +8,8 @@
 <hr/>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/proksi-flow-dark.svg">
-  <img src="./docs/assets/proksi-flow-light.svg" alt="proksi.hcl and a terminal on one side; on the other, Proksi's routes and events, live: a container's host appears with a certificate, an edit to proksi.hcl applies without dropping connections, and a rule rate limits a request">
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/proksi-flow-dark.svg?v=1">
+  <img src="./docs/assets/proksi-flow-light.svg?v=1" alt="proksi.hcl and a terminal on one side; on the other, Proksi's routes and events, live: a container's host appears with a certificate, an edit to proksi.hcl applies without dropping connections, and a rule rate limits a request">
 </picture>
 
 
