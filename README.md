@@ -17,6 +17,7 @@
 
 Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, **TCP** and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in [Rust](https://www.rust-lang.org/) and uses [Pingora](https://github.com/cloudflare/pingora) as its core networking library.
 
+
 <p>
     <a href="https://discord.gg/b22TRMew2m">
         <img src="https://github.com/luizfonseca/proksi/blob/main/assets/discord.png?raw=true" alt="discord-logo" width="100"/>
@@ -59,19 +60,17 @@ Proksi is a simple, lightweight, and easy-to-use proxy server that automatically
 Of the many features Proksi offers is the ability to load balance to your infrastructure or any IP that supports your host configurations. Other features of Proksi also include:
 
 - Automatic Docker and Docker Swarm service discovery through labels
+- Kubernetes Ingress Controller, drop-in replacement to Traefik.
 - Built-in most common middlewares such as OAuth, JWT, Basic Auth, Rate Limiting, CDN Caching, static files and others
 - Traffic splits (canaries, A/B tests), request mirroring, retries and least-connections load balancing
-- The ability of running it as a single binary in your system
 - Automatic SSL through Let's Encrypt (wildcard certificates with DNS challenges) and redirection from HTTP to HTTPS
 - Hosts with their own ports, plain HTTP hosts (e.g. behind another load balancer) and a catch-all host
-- Running many servers with the same routes and certificates (Redis, SQLite, Postgres)
+- Distributed configuration: running many servers with the same routes and certificates (Redis, SQLite, Postgres)
 - TCP proxying for anything that isn't HTTP, with or without TLS
 - An **admin UI**: live traffic from clients to upstreams, the latest requests, and hosts and their rules to add and change
 - Configuration through **HCL** with support for functions (get environment variables, etc)
 - Powerful plugin system for adding new middlewares and other features using **WebAssembly (WASM)**
 - Many others.
-
-<img src="./docs/assets/admin/live-traffic.png" alt="The admin UI: a host's traffic as it happens, from clients to its locations and upstreams, with each one's requests a second, latency and errors" width="900">
 
 See the [admin UI documentation](https://docs.proksi.info/admin-ui) for a tour of its pages.
 
@@ -442,7 +441,7 @@ Locations can also answer without an upstream, with a [`redirect`](https://docs.
 
 ## Rules
 
-A rule is a condition on a request, and what to do when it holds. Rules go in the `server`, a `host` or a `location`, and run in order:
+A rule is a condition on a request that can evaluate to a desired effect. Rules go in the `server`, a `host` or a `location`, and run in order:
 
 ```hcl
 host "shop.example.com" {
@@ -467,7 +466,7 @@ host "shop.example.com" {
 }
 ```
 
-Conditions combine with `and`, `or` and `not`, on the method, host, path, query, headers, cookies or client; `then` takes the blocks a location takes, and can change the request's method and headers. See the [rules documentation](https://docs.proksi.info/rules).
+Conditions combine with `and`, `or` and `not`, on the method, host, path, query, headers, cookies or client; `then` takes the blocks a location takes, and can change the request's method and headers. See the [rules documentation](https://docs.proksi.info/rules) for more examples on how powerful the rule system can be and its performance.
 
 ## Caching
 
@@ -620,11 +619,6 @@ host:
         upstream:
           "app:8080": {}
 ```
-
-## Migrating from `routes = [...]`
-
-`routes = [...]` still works but is deprecated (Proksi logs a warning). The [HCL documentation](https://docs.proksi.info/configuration/hcl) shows how each route becomes a `host` block.
-
 
 ## What's next
 
