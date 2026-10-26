@@ -1,13 +1,9 @@
-use std::{
-    borrow::Cow,
-    collections::BTreeMap,
-    path::PathBuf,
-};
+use std::{borrow::Cow, collections::BTreeMap, path::PathBuf};
 
-use clap::{Args, Parser, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use figment::{
-    providers::{Env, Format, Serialized, Yaml},
     Figment, Provider,
+    providers::{Env, Format, Serialized, Yaml},
 };
 use hcl::Hcl;
 
@@ -16,18 +12,20 @@ use tracing::level_filters::LevelFilter;
 
 pub mod admin;
 pub mod blocks;
+pub mod check;
 pub mod deprecations;
 pub(crate) mod hcl;
 pub mod host;
 pub mod kubernetes;
 pub mod listeners;
 pub mod notify;
+pub mod schema;
 pub mod server_tls;
 pub mod tcp;
 pub mod validate;
 pub mod watch;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ValueEnum)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ValueEnum, schemars::JsonSchema)]
 pub enum StoreType {
     Memory,
     Redis,
@@ -35,9 +33,10 @@ pub enum StoreType {
     Postgres,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, schemars::JsonSchema)]
 pub struct StoreConfig {
     #[serde(deserialize_with = "store_type_deser")]
+    #[schemars(schema_with = "schema::store_type")]
     pub store_type: StoreType,
     pub redis_url: Option<String>,
 
@@ -75,7 +74,7 @@ fn default_history_per_host() -> usize {
 }
 
 /// Cache settings shared by all routes
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, schemars::JsonSchema)]
 pub struct CacheConfig {
     /// Maximum size (in MB) of cached responses kept in memory, on top of the disk cache.
     /// When reached, the least popular responses are only served from disk.
@@ -125,13 +124,13 @@ fn default_cache_path() -> PathBuf {
     PathBuf::from("/tmp")
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, ValueEnum)]
+#[derive(Debug, Serialize, Deserialize, Clone, ValueEnum, schemars::JsonSchema)]
 pub(crate) enum DockerServiceMode {
     Swarm,
     Container,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Args)]
+#[derive(Debug, Serialize, Deserialize, Clone, Args, schemars::JsonSchema)]
 #[group(id = "docker")]
 pub struct Docker {
     /// The interval (in seconds) to check for label updates
@@ -168,6 +167,7 @@ pub struct Docker {
 
     /// Mode to use for the docker service
     #[serde(deserialize_with = "docker_mode_deser")]
+    #[schemars(schema_with = "schema::docker_mode")]
     #[arg(
         long = "docker.mode",
         required = false,
@@ -188,7 +188,7 @@ impl Default for Docker {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, schemars::JsonSchema)]
 pub struct LetsEncrypt {
     /// The email to use for the let's encrypt account
     pub email: Cow<'static, str>,
@@ -207,7 +207,7 @@ pub struct LetsEncrypt {
 }
 
 /// `lets_encrypt { dns { ... } }`: where DNS-01 challenges' TXT records are written
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DnsChallenge {
     pub provider: DnsProviderKind,
@@ -216,7 +216,7 @@ pub struct DnsChallenge {
 }
 
 /// The DNS providers supported for DNS-01 challenges
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum DnsProviderKind {
     Cloudflare,
@@ -234,7 +234,7 @@ impl Default for LetsEncrypt {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, schemars::JsonSchema)]
 pub struct Path {
     // TLS
     /// Path to the certificates directory (where the certificates are stored)
@@ -264,7 +264,7 @@ impl Path {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct RouteHeaderAdd {
     /// The name of the header
     pub name: Cow<'static, str>,
@@ -273,13 +273,13 @@ pub struct RouteHeaderAdd {
     pub value: Cow<'static, str>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct RouteHeaderRemove {
     /// The name of the header to remove (ex.: "Server")
     pub name: Cow<'static, str>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct RouteHeader {
     /// The name of the header
     pub add: Option<Vec<RouteHeaderAdd>>,
@@ -292,7 +292,7 @@ pub struct RouteHeader {
     pub priority: Option<u8>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct RouteUpstream {
     /// The TCP address of the upstream (ex. 10.0.0.1/24 etc)
     pub ip: Cow<'static, str>,
@@ -331,7 +331,7 @@ impl Default for RouteUpstream {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct RouteSslCertificate {
     /// Whether to use a self-signed certificate if the certificate can't be
     /// retrieved from the path or object storage (or generated from letsencrypt)
@@ -339,21 +339,21 @@ pub struct RouteSslCertificate {
     pub self_signed_on_failure: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct RoutePathMatcher {
     /// Optional: pattern to match the path
     /// (ex: /api/v1/*)
     pub patterns: Vec<Cow<'static, str>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct RouteMatcher {
     pub path: Option<RoutePathMatcher>,
 }
 
 pub use proksi_plugins::RoutePlugin;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct RouteSslPath {
     /// Path to the certificate .key file (e.g. `/etc/proksi/certs/my-host.key`)
     pub key: PathBuf,
@@ -362,7 +362,7 @@ pub struct RouteSslPath {
     pub pem: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub enum ProtoVersion {
     V1_1,
     V1_2,
@@ -380,7 +380,7 @@ impl From<pingora::tls::ssl::SslVersion> for ProtoVersion {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct RouteSsl {
     /// If provided, will be used instead of generating certificates from
     /// Let's Encrypt or self-signed certificates.
@@ -391,6 +391,7 @@ pub struct RouteSsl {
         default = "default_proto_version_min",
         deserialize_with = "proto_version_deser"
     )]
+    #[schemars(schema_with = "schema::proto_version")]
     pub min_proto: ProtoVersion,
 
     /// The maximum protocol version that the client can use.
@@ -398,6 +399,7 @@ pub struct RouteSsl {
         default = "default_proto_version",
         deserialize_with = "proto_version_deser"
     )]
+    #[schemars(schema_with = "schema::proto_version")]
     pub max_proto: ProtoVersion,
 
     /// If the `self_signed_on_failure` is set to <true>,
@@ -413,13 +415,13 @@ pub struct RouteSsl {
     pub self_signed_fallback: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, schemars::JsonSchema)]
 pub enum RouteCacheType {
     Disk,
     MemCache,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct RouteCache {
     pub enabled: Option<bool>,
 
@@ -427,6 +429,7 @@ pub struct RouteCache {
         default = "default_cache_type",
         deserialize_with = "deserialize_cache_type"
     )]
+    #[schemars(schema_with = "schema::cache_type")]
     pub cache_type: RouteCacheType,
 
     #[serde(default = "default_cache_expire_secs")]
@@ -444,7 +447,7 @@ pub struct RouteCache {
     pub priority: Option<u8>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct Route {
     /// The hostname that the proxy will accept
     /// requests for the upstreams in the route.
@@ -478,7 +481,7 @@ pub struct Route {
     pub match_with: Option<RouteMatcher>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ValueEnum)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ValueEnum, schemars::JsonSchema)]
 pub enum LogLevel {
     Debug,
     Info,
@@ -501,7 +504,7 @@ impl From<&LogLevel> for tracing::level_filters::LevelFilter {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, Eq, PartialEq, schemars::JsonSchema)]
 pub enum LogRotation {
     #[default]
     Never,
@@ -510,13 +513,13 @@ pub enum LogRotation {
     Minutely,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ValueEnum)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ValueEnum, schemars::JsonSchema)]
 pub enum LogFormat {
     Json,
     Pretty,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Args)]
+#[derive(Debug, Serialize, Deserialize, Clone, Args, schemars::JsonSchema)]
 #[group(id = "logging", requires = "level")]
 pub struct Logging {
     /// If logging is enabled at all. Setting this to `false` will disable all logging output.
@@ -531,6 +534,7 @@ pub struct Logging {
 
     /// The level of logging to be used.
     #[serde(deserialize_with = "log_level_deser")]
+    #[schemars(schema_with = "schema::log_level")]
     #[arg(
         long = "log.level",
         required = false,
@@ -559,6 +563,7 @@ pub struct Logging {
 
     /// The format of the log output
     #[serde(deserialize_with = "log_format_deser")]
+    #[schemars(schema_with = "schema::log_format")]
     #[arg(
         long = "log.format",
         required = false,
@@ -573,10 +578,11 @@ pub struct Logging {
 
     #[clap(skip)]
     #[serde(deserialize_with = "log_rotation_deser", default)]
+    #[schemars(schema_with = "schema::log_rotation")]
     pub rotation: LogRotation,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Args)]
+#[derive(Debug, Serialize, Deserialize, Clone, Args, schemars::JsonSchema)]
 #[group(id = "auto_reload")]
 pub struct AutoReload {
     /// Enables the auto-reload service
@@ -606,7 +612,7 @@ impl Default for AutoReload {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Parser)]
+#[derive(Debug, Serialize, Deserialize, Parser, schemars::JsonSchema)]
 pub struct ServerCfg {
     /// The address to bind the HTTPS server to.
     #[arg(
@@ -662,6 +668,7 @@ pub struct ServerCfg {
         deserialize_with = "crate::rules::one_or_many",
         skip_serializing_if = "Vec::is_empty"
     )]
+    #[schemars(with = "crate::rules::schema::RuleList")]
     pub rule: Vec<crate::rules::Rule>,
 }
 
@@ -680,7 +687,7 @@ impl ServerCfg {
 /// Timeouts toward clients (`server.timeouts`), in seconds, and the defaults toward upstreams
 // Named like the other durations of the configuration (`*_secs`)
 #[allow(clippy::struct_field_names)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(default)]
 pub struct ClientTimeouts {
     /// How long a connection can wait for a request, or for each read of its headers, including
@@ -707,6 +714,17 @@ impl Default for ClientTimeouts {
             upstream: host::UpstreamTimeouts::default(),
         }
     }
+}
+
+/// What `proksi <command>` does instead of serving
+#[derive(Debug, Clone, PartialEq, Subcommand)]
+pub(crate) enum Command {
+    /// Loads and checks the configuration, as when starting, without starting anything
+    Check {
+        /// The configuration file, or a directory with `proksi.hcl` or `proksi.yaml`
+        #[arg(short, long)]
+        config_path: Option<String>,
+    },
 }
 
 /// The main configuration struct.
@@ -751,10 +769,15 @@ impl Default for ClientTimeouts {
 ///         network: "shared"
 /// ```
 ///
-#[derive(Debug, Serialize, Deserialize, Parser)]
+#[derive(Debug, Serialize, Deserialize, Parser, schemars::JsonSchema)]
 #[command(name = "Proksi")]
 #[command(version, about, long_about = None)]
 pub(crate) struct Config {
+    /// What to do instead of serving (nothing: serve)
+    #[command(subcommand)]
+    #[serde(skip)]
+    pub command: Option<Command>,
+
     /// The name of the service (will appear as a log property)
     #[serde(default)]
     #[clap(short, long, default_value = "proksi")]
@@ -851,6 +874,7 @@ pub(crate) struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
+            command: None,
             config_path: Some(Cow::Borrowed("/etc/proksi/config")),
             service_name: Cow::Borrowed("proksi"),
             server: ServerCfg {
@@ -1032,7 +1056,9 @@ pub(crate) fn load_from_path(
                 .merge(Hcl::file(format!("{config_path}/proksi.hcl")));
         } else if use_minimal_default {
             // No config files found and user didn't explicitly provide a path
-            eprintln!("Warning: No configuration files found. Using minimal default configuration with Let's Encrypt disabled.");
+            eprintln!(
+                "Warning: No configuration files found. Using minimal default configuration with Let's Encrypt disabled."
+            );
             figment = figment.merge(Serialized::defaults(create_minimal_default_config()));
         } else {
             // Use original behavior - try to load the files anyway (figment will handle missing files)

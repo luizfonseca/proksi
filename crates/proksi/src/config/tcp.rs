@@ -3,7 +3,7 @@
 
 use serde::Serialize;
 
-use super::{blocks::TlsSetting, Config, RouteUpstream};
+use super::{Config, RouteUpstream, blocks::TlsSetting};
 
 /// What happens with TLS on a TCP route
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -93,12 +93,12 @@ impl Config {
 mod tests {
     use figment::providers::Format;
 
-    use crate::config::{hcl::HclFormat, Config, RouteUpstream};
+    use crate::config::{Config, RouteUpstream, hcl::HclFormat};
 
     use super::{TcpRoute, TcpTls};
 
     fn config(hcl: &str) -> Config {
-        #[derive(serde::Deserialize)]
+        #[derive(serde::Deserialize, schemars::JsonSchema)]
         struct Doc {
             #[serde(default)]
             host: std::collections::BTreeMap<String, crate::config::blocks::HostBlock>,
@@ -294,7 +294,11 @@ host "plain.example.com" {
                 "tcp \"a\": upstream \"b\" needs a port (host:port)",
             ),
         ] {
-            assert_eq!(config(hcl).tcp_routes().err().as_deref(), Some(expected), "{hcl}");
+            assert_eq!(
+                config(hcl).tcp_routes().err().as_deref(),
+                Some(expected),
+                "{hcl}"
+            );
         }
     }
 }

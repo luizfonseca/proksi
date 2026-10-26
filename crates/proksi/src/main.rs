@@ -50,6 +50,18 @@ mod wasm;
 #[global_allocator]
 static GLOBAL: allocations::Counting = allocations::Counting;
 
+/// Before anything else: turns off transparent huge pages, and runs `proksi check` (which exits)
+fn prepare() {
+    // Transparent huge pages back the allocator's memory with 2 MiB pages where the system enables
+    // them for every process (`always`, common on servers), more than doubling what a worker
+    // keeps. Turned off for this process and the workers it starts.
+    #[cfg(target_os = "linux")]
+    let _ = nix::sys::prctl::set_thp_disable(true);
+
+    // `proksi check`: the configuration is checked, and nothing started
+    config::check::exit_if_requested("/etc/proksi/configs");
+}
+
 #[deny(
     clippy::all,
     clippy::pedantic,
@@ -60,11 +72,7 @@ static GLOBAL: allocations::Counting = allocations::Counting;
     clippy::complexity
 )]
 fn main() -> Result<(), anyhow::Error> {
-    // Transparent huge pages back the allocator's memory with 2 MiB pages where the system enables
-    // them for every process (`always`, common on servers), more than doubling what a worker
-    // keeps. Turned off for this process and the workers it starts.
-    #[cfg(target_os = "linux")]
-    let _ = nix::sys::prctl::set_thp_disable(true);
+    prepare();
 
     // Linux: a supervisor starts the worker serving requests, and replaces it without dropping
     // connections when settings change (see `supervisor`). It's started before anything else
@@ -93,7 +101,11 @@ fn main() -> Result<(), anyhow::Error> {
         config::listeners::default_addresses(&proxy_config).map_err(anyhow::Error::msg)?;
 
     // Metrics are recorded only for the admin API, unless it turns them off
-    if proxy_config.admin.as_ref().is_some_and(|admin| admin.metrics) {
+    if proxy_config
+        .admin
+        .as_ref()
+        .is_some_and(|admin| admin.metrics)
+    {
         metrics::enable();
     }
 
@@ -269,7 +281,12 @@ fn add_listeners(
             server: Some(admin::server::Settings::new(proxy_config)),
             tcp: listeners.tcp.clone(),
         };
-        handles.push(server.add_service(admin::admin_service(address, tokens, trusted_origins, instance)));
+        handles.push(server.add_service(admin::admin_service(
+            address,
+            tokens,
+            trusted_origins,
+            instance,
+        )));
     }
     if let Some(address) = listeners.metrics {
         let token = proxy_config

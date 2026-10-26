@@ -2,12 +2,12 @@ use std::{borrow::Cow, collections::BTreeMap};
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::{host::parse_upstream_address, RouteHeader, RouteUpstream};
+use crate::config::{RouteHeader, RouteUpstream, host::parse_upstream_address};
 
 use super::headers::header;
 
 /// `upstream "<host:port>" { ... }`
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpstreamBlock {
     pub weight: Option<i8>,
@@ -19,7 +19,7 @@ pub struct UpstreamBlock {
 }
 
 /// Headers added to the request sent to the upstream
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpstreamHeadersBlock {
     #[serde(default)]

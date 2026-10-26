@@ -4,7 +4,7 @@
 use std::borrow::Cow;
 
 use schemars::JsonSchema;
-use serde::{de::DeserializeOwned, Deserialize};
+use serde::{Deserialize, de::DeserializeOwned};
 
 use crate::{Kind, RoutePlugin};
 
@@ -92,6 +92,7 @@ pub struct BodyChanges {
     pub json: Option<BodyRewriteJson>,
     /// Regular expressions replaced in the body, in order
     #[serde(default, deserialize_with = "one_or_many")]
+    #[schemars(with = "OneOrMany<BodyReplace>")]
     pub replace: Vec<BodyReplace>,
 }
 
@@ -119,6 +120,21 @@ pub struct BodyReplace {
 }
 
 /// A block written once (an object) or repeated (a list)
+/// One block or a list of them, as JSON Schema (HCL gives one block as an object, and several as
+/// a list)
+pub struct OneOrMany<T>(std::marker::PhantomData<T>);
+
+impl<T: JsonSchema> JsonSchema for OneOrMany<T> {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        format!("OneOrMany_{}", T::schema_name()).into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let one = generator.subschema_for::<T>();
+        schemars::json_schema!({ "anyOf": [one, { "type": "array", "items": one }] })
+    }
+}
+
 fn one_or_many<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -513,7 +529,10 @@ pub fn schemas() -> serde_json::Map<String, serde_json::Value> {
             Kind::BandwidthLimit,
             schema(schemars::schema_for!(BandwidthLimit)),
         ),
-        (Kind::BodyRewrite, schema(schemars::schema_for!(BodyRewrite))),
+        (
+            Kind::BodyRewrite,
+            schema(schemars::schema_for!(BodyRewrite)),
+        ),
         (Kind::OpenApi, schema(schemars::schema_for!(OpenApi))),
         (
             Kind::WaitingRoom,
@@ -547,7 +566,7 @@ pub fn schemas() -> serde_json::Map<String, serde_json::Value> {
 mod tests {
     use crate::RoutePlugin;
 
-    use super::{read, schemas, Check, Oauth2, RateLimit};
+    use super::{Check, Oauth2, RateLimit, read, schemas};
 
     fn plugin(name: &str, config: serde_json::Value) -> RoutePlugin {
         serde_json::from_value(serde_json::json!({ "name": name, "config": config })).unwrap()
@@ -558,10 +577,15 @@ mod tests {
         let read_limit =
             |config| read::<RateLimit>("rate_limit", &plugin("rate_limit", config)).map(|_| ());
 
-        assert_eq!(read_limit(serde_json::json!({ "requests": 10, "per": "1m" })), Ok(()));
+        assert_eq!(
+            read_limit(serde_json::json!({ "requests": 10, "per": "1m" })),
+            Ok(())
+        );
         let unknown = read_limit(serde_json::json!({ "requests": 10, "per": "1m", "window": 5 }));
         assert!(
-            unknown.as_ref().is_err_and(|err| err.starts_with("rate_limit: unknown field `window`")),
+            unknown
+                .as_ref()
+                .is_err_and(|err| err.starts_with("rate_limit: unknown field `window`")),
             "{unknown:?}"
         );
         let mistyped = read_limit(serde_json::json!({ "requests": "ten", "per": "1m" }));

@@ -9,35 +9,54 @@ use serde::Deserialize;
 
 use crate::{
     blocks::Blocks,
-    config::{host::Location, RouteHeader, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin},
+    config::{RouteHeader, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin, host::Location},
 };
 
 type PluginConfig = HashMap<Cow<'static, str>, serde_json::Value>;
 
 /// `then { ... }` as written
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
-struct ThenBlock {
+pub(super) struct ThenBlock {
+    #[schemars(with = "Option<proksi_plugins::settings::Redirect>")]
     redirect: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::Respond>")]
     respond: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::IpFilter>")]
     ip_filter: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::RateLimit>")]
     rate_limit: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::BandwidthLimit>")]
     bandwidth_limit: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::WaitingRoom>")]
     waiting_room: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::BodyRewrite>")]
     body_rewrite: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::OpenApi>")]
     openapi: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::BodyLimit>")]
     body_limit: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::BasicAuth>")]
     basic_auth: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::Jwt>")]
     jwt: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::Oauth2>")]
     oauth2: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::ForwardAuth>")]
     forward_auth: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::Cors>")]
     cors: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::Compress>")]
     compress: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::RequestId>")]
     request_id: Option<PluginConfig>,
     headers: Option<HeaderChanges>,
     method: Option<MethodChange>,
+    /// Sends the request to this traffic split of its location, whatever its share
     traffic_split: Option<String>,
+    /// Copies the request to its location's mirror (true), or doesn't (false), whatever its share
     mirror: Option<bool>,
+    /// Whether the request can be sent to another upstream when one fails (false: never, such as for payments)
     retry: Option<bool>,
 }
 
@@ -245,7 +264,9 @@ impl Then {
 
         let split = match then.traffic_split {
             Some(name) if name.trim().is_empty() => {
-                return Err("traffic_split: the name of a traffic split of the location".to_string())
+                return Err(
+                    "traffic_split: the name of a traffic split of the location".to_string()
+                );
             }
             name => name.map(std::sync::Arc::from),
         };
@@ -331,10 +352,13 @@ mod tests {
 
     #[test]
     fn test_then_takes_location_blocks() {
-        let then = Then::build(&json!({
-            "rate_limit": { "requests": 60, "per": "1m" },
-            "headers": { "response": { "add": { "cache-control": "no-store" } } },
-        }), "")
+        let then = Then::build(
+            &json!({
+                "rate_limit": { "requests": 60, "per": "1m" },
+                "headers": { "response": { "add": { "cache-control": "no-store" } } },
+            }),
+            "",
+        )
         .unwrap();
         let kinds = then
             .blocks

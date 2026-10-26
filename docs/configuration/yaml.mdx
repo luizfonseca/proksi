@@ -5,6 +5,22 @@ description: "Proksi can be configured using YAML files."
 
 Proksi can be configured using YAML files. You have several options for specifying your configuration:
 
+## Editor completion
+
+The configuration's [JSON Schema](https://raw.githubusercontent.com/luizfonseca/proksi/main/docs/schema/proksi.schema.json) gives editors completion and the docs of every setting. With the YAML language server (VS Code's YAML extension, Neovim, Zed...), add this first line:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/luizfonseca/proksi/main/docs/schema/proksi.schema.json
+host:
+  example.com:
+    location:
+      /:
+        upstream:
+          app:3000: {}
+```
+
+To match a version of Proksi, use its tag instead of `main`, such as `.../proksi/proksi-v0.18.0/docs/schema/proksi.schema.json` (from the first release with a schema). `proksi check` (see [HCL](/configuration/hcl#checking-a-configuration)) checks a file as Proksi would.
+
 ## Configuration File Loading
 
 Proksi supports flexible configuration file loading via the `-c` flag:

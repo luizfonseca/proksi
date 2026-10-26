@@ -1,17 +1,17 @@
 use std::fmt;
 
 use serde::{
-    de::{self, MapAccess, Visitor},
     Deserialize, Deserializer, Serialize,
+    de::{self, MapAccess, Visitor},
 };
 
 use crate::config::{
-    host::{Challenge, HostTls},
     RouteSslPath,
+    host::{Challenge, HostTls},
 };
 
 /// `tls { ... }` in a host
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TlsBlock {
     /// Certificate files, used instead of Let's Encrypt
@@ -30,6 +30,19 @@ pub struct TlsBlock {
 pub enum TlsSetting {
     Enabled(bool),
     Settings(TlsBlock),
+}
+
+impl schemars::JsonSchema for TlsSetting {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "TlsSetting".into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "`tls = false` (plain HTTP), `tls = true`, or `tls { ... }`",
+            "anyOf": [{ "type": "boolean" }, generator.subschema_for::<TlsBlock>()],
+        })
+    }
 }
 
 impl TlsSetting {
@@ -85,7 +98,7 @@ mod tests {
 
     use super::{Challenge, TlsBlock, TlsSetting};
 
-    #[derive(Deserialize)]
+    #[derive(Deserialize, schemars::JsonSchema)]
     struct Doc {
         tls: TlsSetting,
     }

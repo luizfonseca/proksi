@@ -43,7 +43,9 @@ pub struct Location {
 }
 
 /// How a location's upstream is chosen for each request
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum LoadBalancing {
     /// In turn, in proportion to their weight
@@ -62,7 +64,7 @@ impl LoadBalancing {
 
 /// `retry { ... }`: requests sent to another upstream when one can't be reached, or answers
 /// with one of the statuses of `on`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Retry {
     /// Tries after the first
     #[serde(default = "Retry::default_attempts")]
@@ -85,7 +87,7 @@ impl Retry {
 
 /// `mirror { ... }`: copies of a location's requests, sent to upstreams of their own. Their
 /// answers are dropped: the requests never wait on them.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Mirror {
     /// The share of requests copied, from 0 to 100 (rules can choose others)
     #[serde(default = "Mirror::default_percent")]
@@ -119,7 +121,7 @@ impl Mirror {
 
 /// `traffic_split "<name>" { ... }`: a share of a location's clients, sent to upstreams of its
 /// own
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TrafficSplit {
     pub name: String,
     /// The share of clients, from 0 to 100
@@ -134,7 +136,9 @@ pub struct TrafficSplit {
 }
 
 /// How a client keeps its side of a traffic split
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Sticky {
     /// A random id in a cookie, set on the first response
@@ -147,7 +151,7 @@ pub enum Sticky {
 }
 
 /// `rewrite { ... }` in a location: the path sent to upstreams, instead of the request's
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PathRewrite {
     /// Removed from the start of the path (only at a segment boundary: `/api` from `/api/users`,
@@ -289,7 +293,9 @@ impl CompiledRewrite {
 /// overriding the ones of `server.timeouts`
 // Named like `server.timeouts`
 #[allow(clippy::struct_field_names)]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(deny_unknown_fields)]
 pub struct LocationTimeouts {
     /// How long each read of a request body (or websocket message) can wait
@@ -321,7 +327,9 @@ impl LocationTimeouts {
 /// `health_check { ... }` in a host, a location or a `tcp` block: a TCP connection to each
 /// upstream on an interval. An upstream is unhealthy after two failed checks in a row, and gets
 /// connections again after a successful one, or when no upstream is healthy.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(deny_unknown_fields)]
 pub struct HealthCheck {
     /// Off, upstreams are never marked unhealthy (default: on)
@@ -352,7 +360,9 @@ impl HealthCheck {
 /// Timeouts toward upstreams (`upstream { ... }` in `timeouts`), in seconds
 // Named like `server.timeouts`
 #[allow(clippy::struct_field_names)]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(deny_unknown_fields)]
 pub struct UpstreamTimeouts {
     /// How long to wait for an upstream to accept a connection
@@ -497,11 +507,13 @@ mod tests {
             ..Default::default()
         };
         assert!(regex(Some("^/a/(\\d+)$"), None).compile().is_err());
-        assert!(regex(Some("^/a/(\\d+"), Some("/b/$1"))
-            .compile()
-            .err()
-            .unwrap()
-            .starts_with("invalid `match`"));
+        assert!(
+            regex(Some("^/a/(\\d+"), Some("/b/$1"))
+                .compile()
+                .err()
+                .unwrap()
+                .starts_with("invalid `match`")
+        );
         // Too large once compiled
         assert!(regex(Some("\\w{1000}{1000}"), Some("/")).compile().is_err());
         let mut combined = regex(Some("^/a$"), Some("/b"));
@@ -544,7 +556,11 @@ mod tests {
         let measure = |name: &str, rewrite: Option<super::CompiledRewrite>| {
             let started = std::time::Instant::now();
             for i in 0..iterations {
-                let path = if i % 2 == 0 { "/users/42/profile" } else { "/users/42/posts" };
+                let path = if i % 2 == 0 {
+                    "/users/42/profile"
+                } else {
+                    "/users/42/posts"
+                };
                 let rewritten = match &rewrite {
                     Some(rewrite) => rewrite.apply(path, Some("tab=1")),
                     None => path.to_string(),

@@ -14,7 +14,7 @@ Thanks for helping. These rules are light: they keep reviews quick and the code 
 - Commit messages and pull request titles follow [Conventional Commits](https://www.conventionalcommits.org): `feat:`, `fix:`, `docs:`, `refactor:`, `ci:`, `chore:`. They become the changelog, so keep them short and say what changed for the user.
 - Run `make lint` and `make test` before pushing. Store tests run against Redis when `PROKSI_TEST_REDIS_URL` is set (e.g. `redis://127.0.0.1:6379`). For the admin UI, run `npm test` in `crates/proksi-admin-ui`.
 - Run `rustfmt` on the code you change only, not on whole files you didn't touch.
-- Update the docs (`docs/`) when behavior or configuration changes.
+- Update the docs (`docs/`) when behavior or configuration changes. When the configuration changes, its schema (`docs/schema/proksi.schema.json`) does too: CI commits it on branches of this repository; from a fork, run `make schema` and commit it.
 
 ## How the code is written
 

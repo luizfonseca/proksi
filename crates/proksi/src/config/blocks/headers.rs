@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::{RouteHeader, RouteHeaderAdd, RouteHeaderRemove};
 
 /// `headers { ... }` in a host or a location
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HeadersBlock {
     pub response: Option<ResponseHeadersBlock>,
@@ -14,7 +14,7 @@ pub struct HeadersBlock {
 }
 
 /// `response { ... }`: headers changed in responses
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ResponseHeadersBlock {
     #[serde(default)]
@@ -61,7 +61,7 @@ pub(super) fn header(name: &str, value: &str) -> RouteHeaderAdd {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{response_headers, HeadersBlock, ResponseHeadersBlock};
+    use super::{HeadersBlock, ResponseHeadersBlock, response_headers};
 
     fn block(add: &[(&str, &str)], remove: &[&str]) -> HeadersBlock {
         HeadersBlock {

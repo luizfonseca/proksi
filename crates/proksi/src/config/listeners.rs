@@ -6,10 +6,10 @@ use std::{
 };
 
 use super::{
+    Config, StoreType,
     admin::AdminConfig,
     host::Host,
     tcp::{TcpRoute, TcpTls},
-    Config, StoreType,
 };
 
 /// Addresses to open, by protocol
@@ -108,7 +108,11 @@ fn metrics_address(
     let Some(address) = admin.metrics_address()? else {
         return Ok(None);
     };
-    let admin = listeners.admin.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let admin = listeners
+        .admin
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
     if used(address, listeners) || admin.iter().any(|other| overlaps(address, other)) {
         return Err(format!(
             "admin: metrics_listen {address} is also used by the admin API, hosts or tcp blocks"
@@ -257,14 +261,14 @@ mod tests {
     use std::collections::BTreeSet;
 
     use crate::{
-        config::{blocks::HostBlock, hcl::HclFormat, Config},
+        config::{Config, blocks::HostBlock, hcl::HclFormat},
         routing::test_utils::route,
     };
 
-    use super::{listeners, Listeners};
+    use super::{Listeners, listeners};
 
     fn config(hcl: &str) -> Config {
-        #[derive(serde::Deserialize)]
+        #[derive(serde::Deserialize, schemars::JsonSchema)]
         struct Doc {
             #[serde(default)]
             host: std::collections::BTreeMap<String, HostBlock>,
@@ -438,7 +442,10 @@ host "b.test" {
         let mut config = config("host \"a.test\" {}\n");
 
         config.admin = Some(admin("0.0.0.0:9100", true));
-        assert_eq!(listeners(&config).unwrap().metrics, Some("0.0.0.0:9100".parse().unwrap()));
+        assert_eq!(
+            listeners(&config).unwrap().metrics,
+            Some("0.0.0.0:9100".parse().unwrap())
+        );
 
         for address in ["127.0.0.1:7555", "0.0.0.0:7555", "0.0.0.0:443"] {
             config.admin = Some(admin(address, true));
@@ -495,7 +502,9 @@ host "b.test" {
             });
             assert_eq!(
                 listeners(&config),
-                Err(format!("admin: address {address} is also used by hosts or tcp blocks")),
+                Err(format!(
+                    "admin: address {address} is also used by hosts or tcp blocks"
+                )),
             );
         }
     }
@@ -545,9 +554,12 @@ host "b.test" {
                 "tcp \"a\" {\n  listen = \"0.0.0.0:7\"\n  upstream \"b:1\" {}\n}\ntcp \"b\" {\n  listen = \"0.0.0.0:7\"\n  upstream \"b:1\" {}\n}\n",
                 "tcp \"a\" and tcp \"b\" can't share address 0.0.0.0:7 (only tcp blocks of different hosts with TLS can, chosen by SNI)",
             ),
-
         ] {
-            assert_eq!(listeners(&config(hcl)).err().as_deref(), Some(expected), "{hcl}");
+            assert_eq!(
+                listeners(&config(hcl)).err().as_deref(),
+                Some(expected),
+                "{hcl}"
+            );
         }
     }
 
