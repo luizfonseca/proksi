@@ -133,8 +133,8 @@ function Traffic({ host }: { host: HostData }) {
           span={300}
           format={ms}
           series={[
-            { name: 'p50', color: 'var(--chart-1)', values: read((point) => point.p50) },
-            { name: 'p99', color: 'var(--chart-3)', values: read((point) => point.p99) },
+            { name: 'p50', color: 'var(--chart-1)', values: read((point) => point.p50 ?? 0) },
+            { name: 'p99', color: 'var(--chart-3)', values: read((point) => point.p99 ?? 0) },
           ]}
         />
       </Grid>
