@@ -133,7 +133,7 @@ mod tests {
     fn errors(value: &Value) -> Vec<String> {
         validator()
             .iter_errors(value)
-            .map(|err| format!("{}: {err}", err.instance_path))
+            .map(|err| format!("{}: {err}", err.instance_path()))
             .collect()
     }
 
