@@ -1,7 +1,7 @@
 {
   "crates/plugins_api": "0.17.2",
-  "crates/proksi": "0.17.4",
-  "crates/proksi-admin-ui": "0.17.4",
-  "crates/proksi_plugins": "0.17.4",
-  "crates/proksi_store": "0.17.4"
+  "crates/proksi": "0.17.5",
+  "crates/proksi-admin-ui": "0.17.5",
+  "crates/proksi_plugins": "0.17.5",
+  "crates/proksi_store": "0.17.5"
 }

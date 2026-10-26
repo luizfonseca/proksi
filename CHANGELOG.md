@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.17.5](https://github.com/luizfonseca/proksi/compare/proksi-v0.17.4...proksi-v0.17.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* keep tokio below 1.54, which Pingora 0.9 panics with on every connection ([#593](https://github.com/luizfonseca/proksi/issues/593)) ([60a45f9](https://github.com/luizfonseca/proksi/commit/60a45f9b1f66d0a825eaaa37aea071607b468403))
+* publish the configuration's schema and adds proksi check ([#585](https://github.com/luizfonseca/proksi/issues/585)) ([cf9ee91](https://github.com/luizfonseca/proksi/commit/cf9ee916cb208037f3fe8e162636e3b548fe13ac))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi-admin-ui bumped from 0.17.4 to 0.17.5
+    * proksi_plugins bumped from 0.17.4 to 0.17.5
+    * proksi_store bumped from 0.17.4 to 0.17.5
+  * dev-dependencies
+    * proksi_plugins bumped from 0.17.4 to 0.17.5
+    * proksi_store bumped from 0.17.4 to 0.17.5
+
 ## [0.17.4](https://github.com/luizfonseca/proksi/compare/proksi-v0.17.3...proksi-v0.17.4) (2026-10-26)
 
 

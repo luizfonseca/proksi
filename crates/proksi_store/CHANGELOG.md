@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.5](https://github.com/luizfonseca/proksi/compare/proksi_store-v0.17.4...proksi_store-v0.17.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* publish the configuration's schema and adds proksi check ([#585](https://github.com/luizfonseca/proksi/issues/585)) ([cf9ee91](https://github.com/luizfonseca/proksi/commit/cf9ee916cb208037f3fe8e162636e3b548fe13ac))
+
 ## [0.17.4](https://github.com/luizfonseca/proksi/compare/proksi_store-v0.17.3...proksi_store-v0.17.4) (2026-10-26)
 
 
