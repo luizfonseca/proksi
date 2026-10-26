@@ -630,7 +630,7 @@ Documentation for Proksi can be found at [https://docs.proksi.info](https://docs
 
 
 # Contributing
-We welcome contributions to Proksi. If you have any **suggestions** or **ideas**, please feel free to open an issue or a pull request on the GitHub repository and follow the guidelines in [the Contributing guide](./CONTRIBUTING.md)
+We welcome contributions to Proksi. If you have any **suggestions** or **ideas**, please feel free to open an issue or a pull request on the GitHub repository and follow the guidelines in [the Contributing guide](./CONTRIBUTING.md).
 
 # License
 Proksi is licensed under the [MIT License](https://github.com/luizfonseca/proksi/blob/main/LICENSE), the [Apache License 2.0](https://github.com/luizfonseca/proksi/blob/main/LICENSE-APACHE) and is free to use and modify.
