@@ -12,7 +12,7 @@ use pingora::{
     http::{RequestHeader, ResponseHeader},
     proxy::Session,
 };
-use rand::RngCore;
+use rand::Rng;
 use uuid::Uuid;
 
 use crate::{RequestCtx, RoutePlugin};
@@ -75,7 +75,7 @@ impl RequestId {
             .unwrap_or_default();
         let millis = u64::try_from(since_epoch.as_millis()).unwrap_or(u64::MAX);
         let mut random = [0u8; 10];
-        rand::thread_rng().fill_bytes(&mut random);
+        rand::rng().fill_bytes(&mut random);
         let uuid = uuid::Builder::from_unix_timestamp_millis(millis, &random).into_uuid();
 
         let mut id = BytesMut::with_capacity(UUID + self.suffix.len());
