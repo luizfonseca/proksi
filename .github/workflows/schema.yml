@@ -3,16 +3,14 @@ name: Schema
 # Keeps docs/schema/proksi.schema.json, the configuration's schema, up to date. On branches of
 # this repository, a changed schema is committed to the pull request (with SCHEMA_PUSH_TOKEN, if
 # set, so the commit runs the other checks: pushes with the default token don't). Pull requests
-# from forks can't be pushed to: there, this check fails, asking for `make schema`.
+# from forks can't be pushed to: there, this check fails, asking for `make schema`. It runs on
+# every pull request, so the required check always reports: without changes to the crates, the
+# lockfile or the schema, it passes at once.
 
 on:
   pull_request:
     branches:
       - main
-    paths:
-      - "crates/**"
-      - "docs/schema/**"
-      - "Cargo.lock"
 
 permissions:
   contents: write
@@ -28,21 +26,35 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           token: ${{ secrets.SCHEMA_PUSH_TOKEN || github.token }}
+          fetch-depth: 0
+      - name: Whether the schema could have changed
+        id: changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --name-only "$BASE"...HEAD | grep -qE '^(crates/|docs/schema/|Cargo\.lock$)'; then
+            echo "schema=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No changes to the crates, the lockfile or the schema"
+          fi
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+        if: steps.changes.outputs.schema == 'true'
       - uses: actions/setup-node@v4
+        if: steps.changes.outputs.schema == 'true'
         with:
           node-version: 24
       - name: Build the admin UI
+        if: steps.changes.outputs.schema == 'true'
         working-directory: crates/proksi-admin-ui
         run: npm ci && npm run build
       - name: Check the schema (forks)
-        if: env.SAME_REPOSITORY != 'true'
+        if: steps.changes.outputs.schema == 'true' && env.SAME_REPOSITORY != 'true'
         run: make schema.check
       - name: Update the schema
-        if: env.SAME_REPOSITORY == 'true'
+        if: steps.changes.outputs.schema == 'true' && env.SAME_REPOSITORY == 'true'
         run: make schema
       - name: Commit the schema, if it changed
-        if: env.SAME_REPOSITORY == 'true'
+        if: steps.changes.outputs.schema == 'true' && env.SAME_REPOSITORY == 'true'
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
