@@ -3,7 +3,7 @@ title: "Features"
 description: "Proksi is evolving day by day, and new features are being added all the time."
 ---
 
-Proksi is evolving day by day, and new features are being added all the time. Below is a list of the features that are currently available in Proksi:
+Proksi is evolving day by day, and new features are being added with scalability in mind. Below is a list of the features that are currently available in Proksi:
 
 - [x] **HTTPS**: SSL termination, automatic redirect from HTTP and certificate renewal (Let's Encrypt)
 - [x] **DNS challenges** (Cloudflare) for wildcard certificates and hosts Let's Encrypt can't reach
@@ -47,9 +47,11 @@ Proksi is evolving day by day, and new features are being added all the time. Be
 - [x] **Rules**: conditions on the method, host, path, query, headers, cookies or client (`and`, `or`, `not`), and what to do when they hold, in the server, a host or a location (see [rules](/rules))
 - [x] **Timeouts** toward clients and upstreams, and a graceful stop that waits for open connections
 
-Planned next (see [ADR 0003](/adrs/0003-configuration-model)):
+## Planned
 
 - [ ] Gateway API resources for Kubernetes
-
+- [ ] WASM plugin interfaces
+- [ ] AI gateway routes
+- [ ] Many more
 
 We are constantly adding new features, and we welcome your feedback and contributions. If you have any suggestions or ideas, please feel free to open an issue or a pull request on the GitHub repository.

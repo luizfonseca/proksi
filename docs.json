@@ -70,7 +70,7 @@
           "href": "/configuration/hcl",
           "pages": [
             {
-              "title": "HCL",
+              "title": "Format",
               "href": "/configuration/hcl"
             },
             {
@@ -96,7 +96,7 @@
           "href": "/configuration/auto-reload"
         },
         {
-          "title": "Restarts and upgrades",
+          "title": "Zero downtime",
           "href": "/configuration/upgrades"
         },
         {
@@ -104,17 +104,17 @@
           "href": "/configuration/daemon"
         },
         {
-          "title": "Admin API and metrics",
+          "title": "Admin API & Metrics",
           "href": "/configuration/admin"
         },
         {
-          "title": "Notifications",
+          "title": "Webhooks & Notifications",
           "href": "/configuration/notify"
         }
       ]
     },
     {
-      "group": "Admin UI",
+      "group": "Admin Interface",
       "pages": [
         {
           "title": "Admin UI",
@@ -129,13 +129,13 @@
           "href": "/admin-ui/how-to"
         },
         {
-          "title": "Good practices",
+          "title": "Securing the admin",
           "href": "/admin-ui/good-practices"
         }
       ]
     },
     {
-      "group": "Storage",
+      "group": "Distributed Mode",
       "pages": [
         {
           "title": "Redis",
@@ -151,11 +151,11 @@
       "group": "Routing",
       "pages": [
         {
-          "title": "Paths",
+          "title": "Path",
           "href": "/routing/paths"
         },
         {
-          "title": "Regex locations",
+          "title": "Regex",
           "href": "/routing/regex-locations"
         },
         {
@@ -254,10 +254,10 @@
       ]
     },
     {
-      "group": "Request/Response rules",
+      "group": "Request & Response rules",
       "pages": [
         {
-          "title": "Overview",
+          "title": "The Rule system",
           "href": "/rules"
         },
         {
@@ -279,18 +279,18 @@
       ]
     },
     {
-      "group": "Migrating",
+      "group": "Migrations",
       "pages": [
         {
-          "title": "From Traefik",
+          "title": "Migrating From Traefik",
           "href": "/migrating/traefik"
         },
         {
-          "title": "From nginx",
+          "title": "Migration From nginx",
           "href": "/migrating/nginx"
         },
         {
-          "title": "From Caddy",
+          "title": "Migrating From Caddy",
           "href": "/migrating/caddy"
         }
       ]
@@ -303,11 +303,11 @@
           "href": "/examples/blocking-url-scanners"
         },
         {
-          "title": "Canary release",
+          "title": "Canary releases",
           "href": "/examples/canary-release"
         },
         {
-          "title": "Single-page app with an API",
+          "title": "SPA with an API",
           "href": "/examples/single-page-app"
         },
         {
@@ -315,7 +315,7 @@
           "href": "/examples/public-api"
         },
         {
-          "title": "Locking down an admin area",
+          "title": "Securing an admin area",
           "href": "/examples/admin-area"
         },
         {
@@ -323,11 +323,11 @@
           "href": "/examples/self-hosted-apps"
         },
         {
-          "title": "Security headers",
+          "title": "Adding Security headers",
           "href": "/examples/security-headers"
         },
         {
-          "title": "Behind Cloudflare or a load balancer",
+          "title": "Using with Cloudflare or others",
           "href": "/examples/behind-a-load-balancer"
         }
       ]
