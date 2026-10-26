@@ -9,13 +9,13 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/proksi-flow-dark.svg">
-  <img src="./docs/assets/proksi-flow-light.svg" alt="Requests from clients go through Proksi to upstreams; some are answered from its cache">
+  <img src="./docs/assets/proksi-flow-light.svg" alt="Routes from proksi.hcl, Docker labels, Kubernetes ingresses and the admin API merge into Proksi's live route table">
 </picture>
 
 
 # Proksi
 
-Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in [Rust](https://www.rust-lang.org/) and uses [Pingora](https://github.com/cloudflare/pingora) as its core networking library.
+Proksi is a simple, lightweight, and easy-to-use proxy server that automatically handles SSL, HTTP, **TCP** and DNS traffic. It is designed to be used as a standalone proxy server or as a component in a larger system. Proksi is written in [Rust](https://www.rust-lang.org/) and uses [Pingora](https://github.com/cloudflare/pingora) as its core networking library.
 
 <p>
     <a href="https://discord.gg/b22TRMew2m">

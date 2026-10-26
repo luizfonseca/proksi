@@ -1,228 +1,122 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" role="img" aria-labelledby="title desc">
-  <title id="title">Requests going through Proksi</title>
-  <desc id="desc">Clients send requests to Proksi, which handles TLS, chooses a route by host and path, applies rules and plugins, answers from its cache or proxies to upstreams, balancing between them.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" role="img" aria-labelledby="title desc">
+  <title id="title">Proksi's live route table</title>
+  <desc id="desc">Routes come from four sources: the proksi.hcl file, Docker labels, Kubernetes ingresses and the admin API. Proksi merges them into one live route table: a container started with Docker labels appears as a new host, gets a Let's Encrypt certificate, and an edit to proksi.hcl is applied without dropping connections.</desc>
   <style>
-    text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; fill: #1f2328; }
-    .label { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; fill: #59636e; letter-spacing: .06em; text-transform: uppercase; }
-    .title { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 26px; font-weight: 700; fill: #059669; }
+    text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; fill: #1f2328; }
+    .label { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; fill: #59636e; letter-spacing: .06em; text-transform: uppercase; }
+    .note { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; fill: #59636e; }
+    .title { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 24px; font-weight: 700; fill: #059669; }
     .wire { fill: none; stroke: #d1d9e0; stroke-width: 2; stroke-dasharray: 6 6; animation: flow 1.2s linear infinite; }
     @keyframes flow { to { stroke-dashoffset: -12; } }
-    @media (prefers-reduced-motion: reduce) { .packet, .glow { display: none; } .wire { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { .motion { display: none; } .wire { animation: none; } .settled { opacity: 1 !important; } }
   </style>
   <defs>
-    <path id="c0" d="M200,130 C280,130 270,210 350,210"/>
-    <path id="c1" d="M200,210 C280,210 270,210 350,210"/>
-    <path id="c2" d="M200,290 C280,290 270,210 350,210"/>
-    <path id="u0" d="M610,210 C680,210 670,100 740,100"/>
-    <path id="u1" d="M610,210 C680,210 670,180 740,180"/>
-    <path id="u2" d="M610,210 C680,210 670,240 740,240"/>
-    <path id="u3" d="M610,210 C680,210 670,320 740,320"/>
+    <path id="w-file" d="M240,110 C285,110 280,205 320,205"/>
+    <path id="w-docker" d="M240,175 C285,175 280,205 320,205"/>
+    <path id="w-k8s" d="M240,240 C285,240 280,205 320,205"/>
+    <path id="w-admin" d="M240,305 C285,305 280,205 320,205"/>
   </defs>
-  <text class="label" x="125" y="80" text-anchor="middle">Clients</text>
-  <text class="label" x="835" y="60" text-anchor="middle">Upstreams</text>
-  <use href="#c0" class="wire"/>
-  <use href="#c1" class="wire"/>
-  <use href="#c2" class="wire"/>
-  <use href="#u0" class="wire"/>
-  <use href="#u1" class="wire"/>
-  <use href="#u2" class="wire"/>
-  <use href="#u3" class="wire"/>
-  <rect x="50" y="108" width="150" height="44" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
-  <text x="125" y="135" text-anchor="middle">browser</text>
-  <rect x="50" y="188" width="150" height="44" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
-  <text x="125" y="215" text-anchor="middle">mobile app</text>
-  <rect x="50" y="268" width="150" height="44" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
-  <text x="125" y="295" text-anchor="middle">curl</text>
-  <rect x="740" y="78" width="190" height="44" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
-  <text x="835" y="105" text-anchor="middle">app:3000</text>
-  <rect x="740" y="158" width="190" height="44" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
-  <text x="835" y="185" text-anchor="middle">api-1:4000</text>
-  <rect x="740" y="218" width="190" height="44" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
-  <text x="835" y="245" text-anchor="middle">api-2:4000</text>
-  <rect x="740" y="298" width="190" height="44" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
-  <text x="835" y="325" text-anchor="middle">10.0.0.12:8080</text>
-  <path d="M932,158 q14,0 14,22 v60 q0,22 -14,22" fill="none" stroke="#59636e" stroke-width="1.5"/>
-  <text class="label" x="952" y="214" text-anchor="middle" transform="rotate(90 952 210)" style="font-size:12px">balanced</text>
-  <rect x="350" y="50" width="260" height="320" rx="18" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
-  <text class="title" x="480" y="92" text-anchor="middle">Proksi</text>
-  <rect x="362" y="120" width="236" height="42" rx="9" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.5"/>
-  <rect class="glow" x="362" y="120" width="236" height="42" rx="9" fill="none" stroke="#059669" stroke-width="2.5" opacity="0">
-    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0" keyTimes="0.0000;0.0778;0.0944;0.1278;0.2333;0.2500;0.2833;0.3889;0.4056;0.4389;0.5444;0.5611;0.5944;0.7000;0.7167;0.7500;0.8556;0.8722;0.9056;1.0000"/>
-  </rect>
-  <text x="480" y="146" text-anchor="middle">TLS · Let's Encrypt</text>
-  <rect x="362" y="178" width="236" height="42" rx="9" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.5"/>
-  <rect class="glow" x="362" y="178" width="236" height="42" rx="9" fill="none" stroke="#059669" stroke-width="2.5" opacity="0">
-    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0" keyTimes="0.0000;0.0911;0.1078;0.1411;0.2467;0.2633;0.2967;0.4022;0.4189;0.4522;0.5578;0.5744;0.6078;0.7133;0.7300;0.7633;0.8689;0.8856;0.9189;1.0000"/>
-  </rect>
-  <text x="480" y="204" text-anchor="middle">routing · host &amp; path</text>
-  <rect x="362" y="236" width="236" height="42" rx="9" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.5"/>
-  <rect class="glow" x="362" y="236" width="236" height="42" rx="9" fill="none" stroke="#059669" stroke-width="2.5" opacity="0">
-    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0" keyTimes="0.0000;0.1044;0.1211;0.1544;0.2600;0.2767;0.3100;0.4156;0.4322;0.4656;0.5711;0.5878;0.6211;0.7267;0.7433;0.7767;0.8822;0.8989;0.9322;1.0000"/>
-  </rect>
-  <text x="480" y="262" text-anchor="middle">rules · plugins</text>
-  <rect x="362" y="294" width="236" height="42" rx="9" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.5"/>
-  <rect class="glow" x="362" y="294" width="236" height="42" rx="9" fill="none" stroke="#f59e0b" stroke-width="2.5" opacity="0">
-    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0" keyTimes="0.0000;0.4289;0.4456;0.4789;1.0000"/>
-  </rect>
-  <text x="480" y="320" text-anchor="middle">cache</text>
-
-    <circle class="packet" r="5" fill="#10b981" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.0000;0.0778;1"><mpath href="#c0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.0000;0.0778"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#10b981" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.1167;0.1944;1"><mpath href="#u0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.1167;0.1944"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#6366f1" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.2222;0.3000;1"><mpath href="#u0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.2222;0.3000"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#6366f1" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.3000;0.3778;1"><mpath href="#c0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.3000;0.3778"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#10b981" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.1556;0.2333;1"><mpath href="#c1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.1556;0.2333"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#10b981" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.2722;0.3500;1"><mpath href="#u1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.2722;0.3500"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#6366f1" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.3778;0.4556;1"><mpath href="#u1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.3778;0.4556"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#6366f1" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.4556;0.5333;1"><mpath href="#c1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.4556;0.5333"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#10b981" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.3111;0.3889;1"><mpath href="#c2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.3111;0.3889"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#f59e0b" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.4444;0.5222;1"><mpath href="#c2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.4444;0.5222"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#10b981" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.4667;0.5444;1"><mpath href="#c0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.4667;0.5444"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#10b981" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.5833;0.6611;1"><mpath href="#u2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.5833;0.6611"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#6366f1" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.6889;0.7667;1"><mpath href="#u2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.6889;0.7667"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#6366f1" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.7667;0.8444;1"><mpath href="#c0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.7667;0.8444"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#10b981" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.6222;0.7000;1"><mpath href="#c1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.6222;0.7000"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#10b981" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.7389;0.8167;1"><mpath href="#u3"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.7389;0.8167"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#6366f1" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.8444;0.9222;1"><mpath href="#u3"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.8444;0.9222"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#6366f1" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.9222;1.0000;1"><mpath href="#c1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.9222;1.0000"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#10b981" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.7778;0.8556;1"><mpath href="#c2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.7778;0.8556"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#10b981" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.8944;0.9722;1"><mpath href="#u1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.8944;0.9722"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#6366f1" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.0000;0.0778;1"><mpath href="#u1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.0000;0.0778"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#6366f1" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.0778;0.1556;1"><mpath href="#c2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.0778;0.1556"/>
-    </circle>
-  <circle cx="340" cy="400" r="5" fill="#10b981"/>
-  <text class="label" x="352" y="405" style="text-transform:none;letter-spacing:0;font-size:15px">request</text>
-  <circle cx="470" cy="400" r="5" fill="#6366f1"/>
-  <text class="label" x="482" y="405" style="text-transform:none;letter-spacing:0;font-size:15px">response</text>
-  <circle cx="600" cy="400" r="5" fill="#f59e0b"/>
-  <text class="label" x="612" y="405" style="text-transform:none;letter-spacing:0;font-size:15px">from the cache</text>
+  <text class="label" x="135" y="80" text-anchor="middle">Routes from</text>
+  <use href="#w-file" class="wire"/>
+  <use href="#w-docker" class="wire"/>
+  <use href="#w-k8s" class="wire"/>
+  <use href="#w-admin" class="wire"/>
+  <rect x="30" y="88" width="210" height="44" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <circle cx="50" cy="110" r="5" fill="#059669"/>
+  <text x="64" y="115">proksi.hcl</text>
+  <rect x="30" y="153" width="210" height="44" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <circle cx="50" cy="175" r="5" fill="#0284c7"/>
+  <text x="64" y="180">docker labels</text>
+  <rect x="30" y="218" width="210" height="44" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <circle cx="50" cy="240" r="5" fill="#6366f1"/>
+  <text x="64" y="245">kubernetes ingress</text>
+  <rect x="30" y="283" width="210" height="44" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <circle cx="50" cy="305" r="5" fill="#d97706"/>
+  <text x="64" y="310">admin api · ui</text>
+  <rect x="320" y="40" width="600" height="320" rx="18" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+  <text class="title" x="344" y="80">Proksi</text>
+  <text class="label" x="896" y="78" text-anchor="end">live route table</text>
+  <text class="label" x="372" y="122">host</text>
+  <text class="label" x="528" y="122">path</text>
+  <text class="label" x="582" y="122">upstreams</text>
+  <text class="label" x="726" y="122">blocks</text>
+  <text class="label" x="888" y="122" text-anchor="middle">tls</text>
+  <g>
+    <rect x="336" y="148" width="568" height="38" rx="8" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.5"/>
+    <circle cx="354" cy="167" r="5" fill="#059669"/>
+    <text x="372" y="172">shop.example.com</text>
+    <text x="528" y="172">/</text>
+    <text x="582" y="172" class="settled" opacity="0">app-1, app-2
+      <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.6200;0.9600"/>
+    </text>
+    <text x="582" y="172" class="motion">app-1
+      <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="discrete" values="1;0;1" keyTimes="0;0.6200;0.9600"/>
+    </text>
+    <text x="726" y="172" fill="#59636e" style="fill:#59636e">cache</text>
+    <rect x="881" y="162" width="14" height="11" rx="2" fill="#059669"/><path d="M884,162 v-3 a4,4 0 0 1 8,0 v3" fill="none" stroke="#059669" stroke-width="2"/>
+    <rect class="motion" x="336" y="148" width="568" height="38" rx="8" fill="none" stroke="#059669" stroke-width="2.5" opacity="0">
+      <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0" keyTimes="0;0.6000;0.6300;0.7400;1"/>
+    </rect>
+  </g>
+  <g>
+    <rect x="336" y="194" width="568" height="38" rx="8" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.5"/>
+    <circle cx="354" cy="213" r="5" fill="#6366f1"/>
+    <text x="372" y="218">api.example.com</text>
+    <text x="528" y="218">/v1</text>
+    <text x="582" y="218">api-1, api-2</text>
+    <text x="726" y="218" fill="#59636e" style="fill:#59636e">rate_limit</text>
+    <rect x="881" y="208" width="14" height="11" rx="2" fill="#059669"/><path d="M884,208 v-3 a4,4 0 0 1 8,0 v3" fill="none" stroke="#059669" stroke-width="2"/>
+  </g>
+  <g>
+    <rect x="336" y="240" width="568" height="38" rx="8" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.5"/>
+    <circle cx="354" cy="259" r="5" fill="#d97706"/>
+    <text x="372" y="264">admin.example.com</text>
+    <text x="528" y="264">/</text>
+    <text x="582" y="264">10.0.0.12:8080</text>
+    <text x="726" y="264" fill="#59636e" style="fill:#59636e">basic_auth</text>
+    <rect x="881" y="254" width="14" height="11" rx="2" fill="#059669"/><path d="M884,254 v-3 a4,4 0 0 1 8,0 v3" fill="none" stroke="#059669" stroke-width="2"/>
+  </g>
+  <g class="settled">
+    <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;1;0;0" keyTimes="0;0.1200;0.1600;0.9200;0.9600;1"/>
+    <rect x="336" y="286" width="568" height="38" rx="8" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.5"/>
+    <circle cx="354" cy="305" r="5" fill="#0284c7"/>
+    <text x="372" y="310">whoami.local</text>
+    <text x="528" y="310">/</text>
+    <text x="582" y="310">whoami:80</text>
+    <text x="726" y="310" fill="#59636e" style="fill:#59636e">request_id</text>
+    <g class="motion">
+      <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="discrete" values="1;0;1" keyTimes="0;0.3600;0.9600"/>
+      <circle cx="888" cy="305" r="7" fill="none" stroke="#d97706" stroke-width="2" stroke-dasharray="11 33">
+        <animateTransform attributeName="transform" type="rotate" from="0 888 305" to="360 888 305" dur="1s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+    <g class="settled" opacity="0">
+      <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.3600;0.9600"/>
+      <rect x="881" y="300" width="14" height="11" rx="2" fill="#059669"/><path d="M884,300 v-3 a4,4 0 0 1 8,0 v3" fill="none" stroke="#059669" stroke-width="2"/>
+    </g>
+    <rect class="motion" x="336" y="286" width="568" height="38" rx="8" fill="none" stroke="#0284c7" stroke-width="2.5" opacity="0">
+      <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0" keyTimes="0;0.1400;0.1700;0.2800;1"/>
+    </rect>
+  </g>
+  <text class="note motion" x="620" y="346" text-anchor="middle" opacity="0">whoami started: routed from its docker labels
+    <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;1;0;0" keyTimes="0;0.1400;0.1600;0.3400;0.3600;1"/>
+  </text>
+  <text class="note motion" x="620" y="346" text-anchor="middle" opacity="0">certificate ordered from Let's Encrypt
+    <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;1;0;0" keyTimes="0;0.3600;0.3800;0.5400;0.5600;1"/>
+  </text>
+  <text class="note motion" x="620" y="346" text-anchor="middle" opacity="0">proksi.hcl changed: applied, no connection dropped
+    <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;1;0;0" keyTimes="0;0.6000;0.6200;0.8400;0.8600;1"/>
+  </text>
+  <text class="note motion" x="620" y="346" text-anchor="middle" opacity="0">whoami stopped: route removed
+    <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;1;0;0" keyTimes="0;0.9200;0.9400;0.9700;0.9900;1"/>
+  </text>
+  <circle class="motion" r="5" fill="#0284c7" opacity="0">
+    <animateMotion dur="10.0s" repeatCount="indefinite" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;0.0000;0.1200;1"><mpath href="#w-docker"/></animateMotion>
+    <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.0000;0.1200"/>
+  </circle>
+  <circle class="motion" r="5" fill="#059669" opacity="0">
+    <animateMotion dur="10.0s" repeatCount="indefinite" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;0.4800;0.6000;1"><mpath href="#w-file"/></animateMotion>
+    <animate attributeName="opacity" dur="10.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.4800;0.6000"/>
+  </circle>
+  <text class="note" x="480" y="405" text-anchor="middle">Replicas sharing a store share its routes and certificates; with Redis, rate limits too</text>
 </svg>
