@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" width="960" height="520" role="img" aria-labelledby="title desc">
   <title id="title">proksi.hcl and Proksi, live</title>
-  <desc id="desc">On the left, proksi.hcl with two hosts and a rule, and a terminal starting a container with a proksi.host label. On the right, Proksi's routes and events, live: the container's host appears and gets a Let's Encrypt certificate, a second upstream typed into proksi.hcl is applied without dropping connections, and a POST matching the rule is rate limited.</desc>
+  <desc id="desc">On the left, proksi.hcl with two hosts and a rule, and a terminal starting a container with a proksi.host label. On the right, Proksi's routes and events, live: the container's host appears and gets a Let's Encrypt certificate, a second upstream typed into proksi.hcl is applied without dropping connections, and too many login attempts are rate limited by a rule.</desc>
   <style>
     text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; fill: #1f2328; white-space: pre; }
     .k { fill: #059669; } .s { fill: #0369a1; } .m { fill: #59636e; } .f { fill: #8c959f; }
@@ -17,7 +17,7 @@
   <text class="ui" x="110" y="32">proksi.hcl</text>
   <text class="ui" x="500" y="32">Proksi · live</text>
   <line x1="480" y1="46" x2="480" y2="510" stroke="#d1d9e0" stroke-width="1.5"/>
-  <rect class="motion" x="12" y="223" width="466" height="165" fill="#e0e7ff" opacity="0">
+  <rect class="motion" x="12" y="223" width="466" height="180" fill="#e0e7ff" opacity="0">
     <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;1;0;0" keyTimes="0;0.6615;0.6846;0.8769;0.9077;1"/>
   </rect>
   <rect class="motion" x="12" y="118" width="466" height="15" fill="#d1fae5" opacity="0">
@@ -52,29 +52,31 @@
   <text class="f" x="50" y="219" text-anchor="end">10</text>
   <text x="64" y="219">  }</text>
   <text class="f" x="50" y="234" text-anchor="end">11</text>
-  <text x="64" y="234">  <tspan class="k">rule</tspan> <tspan class="s">&quot;writes&quot;</tspan> {</text>
+  <text x="64" y="234">  <tspan class="k">rule</tspan> <tspan class="s">&quot;slow down login attempts&quot;</tspan> {</text>
   <text class="f" x="50" y="249" text-anchor="end">12</text>
   <text x="64" y="249">    <tspan class="k">and</tspan> {</text>
   <text class="f" x="50" y="264" text-anchor="end">13</text>
-  <text x="64" y="264">      method { in = [<tspan class="s">&quot;POST&quot;</tspan>, <tspan class="s">&quot;PUT&quot;</tspan>] }</text>
+  <text x="64" y="264">      path { prefix = <tspan class="s">&quot;/v1/login&quot;</tspan> }</text>
   <text class="f" x="50" y="279" text-anchor="end">14</text>
-  <text x="64" y="279">    }</text>
+  <text x="64" y="279">      method { in = [<tspan class="s">&quot;POST&quot;</tspan>] }</text>
   <text class="f" x="50" y="294" text-anchor="end">15</text>
-  <text x="64" y="294">    <tspan class="k">then</tspan> {</text>
+  <text x="64" y="294">    }</text>
   <text class="f" x="50" y="309" text-anchor="end">16</text>
-  <text x="64" y="309">      rate_limit {</text>
+  <text x="64" y="309">    <tspan class="k">then</tspan> {</text>
   <text class="f" x="50" y="324" text-anchor="end">17</text>
-  <text x="64" y="324">        requests = 30</text>
+  <text x="64" y="324">      rate_limit {</text>
   <text class="f" x="50" y="339" text-anchor="end">18</text>
-  <text x="64" y="339">        per      = <tspan class="s">&quot;1m&quot;</tspan></text>
+  <text x="64" y="339">        requests = 5</text>
   <text class="f" x="50" y="354" text-anchor="end">19</text>
-  <text x="64" y="354">      }</text>
+  <text x="64" y="354">        per      = <tspan class="s">&quot;1m&quot;</tspan></text>
   <text class="f" x="50" y="369" text-anchor="end">20</text>
-  <text x="64" y="369">    }</text>
+  <text x="64" y="369">      }</text>
   <text class="f" x="50" y="384" text-anchor="end">21</text>
-  <text x="64" y="384">  }</text>
+  <text x="64" y="384">    }</text>
   <text class="f" x="50" y="399" text-anchor="end">22</text>
-  <text x="64" y="399">}</text>
+  <text x="64" y="399">  }</text>
+  <text class="f" x="50" y="414" text-anchor="end">23</text>
+  <text x="64" y="414">}</text>
   <line x1="10" y1="432" x2="480" y2="432" stroke="#d1d9e0" stroke-width="1.5"/>
   <text class="head" x="30" y="450">terminal</text>
   <text class="k" x="30" y="471">$</text>
@@ -96,7 +98,7 @@
     <text x="510" y="137">api.example.com</text>
     <text class="m" x="680" y="137">api:4000</text>
     <rect x="908" y="129" width="12" height="10" rx="2" fill="#059669"/><path d="M910.5,129 v-2.5 a3.5,3.5 0 0 1 7,0 v2.5" fill="none" stroke="#059669" stroke-width="1.8"/>
-    <text class="m" x="526" y="161">↳ rule "writes"  →  rate_limit</text>
+    <text class="m" x="526" y="161">↳ rule "slow down login attempts"  →  rate_limit</text>
   </g>
   <g class="settled">
     <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.1538;0.9846"/>
@@ -135,8 +137,8 @@
   <g class="settled" opacity="0">
     <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.6923;0.9846"/>
     <text class="f" x="500" y="356">12:00:09</text>
-    <text x="572" y="356">POST /v1/orders</text>
-    <text class="m" x="700" y="356" style="fill:#cf222e">429, rule &quot;writes&quot;</text>
+    <text x="572" y="356">POST /v1/login</text>
+    <text class="m" x="700" y="356" style="fill:#cf222e">429 (slow down login attempts)</text>
   </g>
   <rect class="motion" x="494" y="117" width="440" height="50" rx="8" fill="none" stroke="#6366f1" stroke-width="2" opacity="0">
     <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;1;0;0" keyTimes="0;0.6615;0.6846;0.8769;0.9077;1"/>
