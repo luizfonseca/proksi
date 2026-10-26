@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.5](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.17.4...proksi-admin-ui-v0.17.5) (2026-10-26)
+
+
+### Miscellaneous Chores
+
+* **proksi-admin-ui:** Synchronize proksi versions
+
 ## [0.17.4](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.17.3...proksi-admin-ui-v0.17.4) (2026-10-26)
 
 
