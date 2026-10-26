@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.4](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.17.3...proksi-admin-ui-v0.17.4) (2026-10-26)
+
+
+### Bug Fixes
+
+* draw latency at 0 when there are no requests, instead of a gap ([#582](https://github.com/luizfonseca/proksi/issues/582)) ([8b8bfc4](https://github.com/luizfonseca/proksi/commit/8b8bfc4917c1e9a9ce96c9a60d3b65cef5c73128))
+
 ## [0.17.3](https://github.com/luizfonseca/proksi/compare/proksi-admin-ui-v0.17.2...proksi-admin-ui-v0.17.3) (2026-10-25)
 
 

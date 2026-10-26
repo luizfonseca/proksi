@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.17.4](https://github.com/luizfonseca/proksi/compare/proksi_plugins-v0.17.3...proksi_plugins-v0.17.4) (2026-10-26)
+
+
+### Miscellaneous Chores
+
+* **proksi_plugins:** Synchronize proksi versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * proksi_store bumped from 0.17.3 to 0.17.4
+
 ## [0.17.3](https://github.com/luizfonseca/proksi/compare/proksi_plugins-v0.17.2...proksi_plugins-v0.17.3) (2026-10-25)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.4](https://github.com/luizfonseca/proksi/compare/proksi_store-v0.17.3...proksi_store-v0.17.4) (2026-10-26)
+
+
+### Miscellaneous Chores
+
+* **proksi_store:** Synchronize proksi versions
+
 ## [0.17.3](https://github.com/luizfonseca/proksi/compare/proksi_store-v0.17.2...proksi_store-v0.17.3) (2026-10-25)
 
 
