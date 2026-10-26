@@ -9,3 +9,7 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    ignore:
+      # Pingora 0.9 panics on every connection with tokio 1.54 (cloudflare/pingora#1059)
+      - dependency-name: "tokio"
+        versions: [">=1.54"]
