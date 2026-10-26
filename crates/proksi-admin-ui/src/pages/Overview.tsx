@@ -229,7 +229,7 @@ export function Overview() {
           series={(['p50', 'p90', 'p99'] as const).map((quantile) => ({
             name: quantile,
             color: COLORS[quantile],
-            values: take(history, (point) => point[quantile]),
+            values: take(history, (point) => point[quantile] ?? 0),
           }))}
         />
         <LineChart
