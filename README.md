@@ -9,7 +9,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/proksi-flow-dark.svg">
-  <img src="./docs/assets/proksi-flow-light.svg" alt="Routes from proksi.hcl, Docker labels, Kubernetes ingresses and the admin API merge into Proksi's live route table">
+  <img src="./docs/assets/proksi-flow-light.svg" alt="Routes from proksi.hcl, Docker labels, Kubernetes ingresses and the admin API merge into Proksi's live route table, where rules apply blocks to the requests they match">
 </picture>
 
 
