@@ -32,7 +32,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 path-tree = "0.8.3"
 pingora = { version = "0.9.0", features = ["lb", "openssl", "proxy", "cache"] }
 proksi_store = { path = "../proksi_store", version = "0.17.4" }
-rand = "0.8"
+rand = "0.10"
 regex = "1"
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "query", "native-tls-no-alpn", "charset", "http2", "system-proxy"] }
 short-crypt = "1.0.28"
