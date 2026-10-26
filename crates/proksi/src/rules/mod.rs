@@ -201,14 +201,11 @@ pub fn request_body(
         return Ok(());
     }
     let applied = std::mem::take(&mut ctx.rules);
-    let result = applied
-        .0
-        .iter()
-        .try_for_each(|then| {
-            then.blocks
-                .request_body(body, end_of_stream, ctx)
-                .map_err(|(_, err)| err)
-        });
+    let result = applied.0.iter().try_for_each(|then| {
+        then.blocks
+            .request_body(body, end_of_stream, ctx)
+            .map_err(|(_, err)| err)
+    });
     ctx.rules = applied;
     result
 }

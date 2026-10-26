@@ -231,7 +231,10 @@ pub async fn run() {
         if read_lately() {
             record();
         } else {
-            HISTORY.lock().unwrap_or_else(PoisonError::into_inner).clear();
+            HISTORY
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clear();
         }
     }
 }
@@ -296,7 +299,10 @@ fn within(lower: (f64, u64), upper: (f64, u64), rank: f64) -> f64 {
 /// Stats between `earlier` and `latest`, grouped by host, location and upstream, and by `tcp`
 /// block
 pub fn stats(earlier: &Sample, latest: &Sample) -> Value {
-    let window = latest.at.saturating_duration_since(earlier.at).as_secs_f64();
+    let window = latest
+        .at
+        .saturating_duration_since(earlier.at)
+        .as_secs_f64();
     let (hosts, tcp) = collect(earlier, latest);
     let mut stats = render(window, hosts, tcp);
     if let Some(stats) = stats.as_object_mut() {
@@ -485,8 +491,10 @@ fn render(window: f64, hosts: Hosts, tcp: BTreeMap<String, Tcp>) -> Value {
                         .map(|(upstream, stats)| {
                             // A histogram's last bucket (`+Inf`) counts every request
                             #[allow(clippy::cast_precision_loss)]
-                            let requests =
-                                stats.duration.last().map_or(0.0, |(_, count)| *count as f64);
+                            let requests = stats
+                                .duration
+                                .last()
+                                .map_or(0.0, |(_, count)| *count as f64);
                             json!({
                                 "upstream": upstream,
                                 "requests_per_second": per_second(requests),
@@ -568,11 +576,7 @@ struct Tcp {
     duration: Vec<(f64, u64)>,
 }
 
-fn location_mut<'a>(
-    hosts: &'a mut Hosts,
-    host: &str,
-    location: &str,
-) -> &'a mut Location {
+fn location_mut<'a>(hosts: &'a mut Hosts, host: &str, location: &str) -> &'a mut Location {
     hosts
         .entry(host.to_string())
         .or_default()
@@ -638,10 +642,19 @@ mod tests {
             )
         };
 
-        assert_eq!(super::pick(&samples, Duration::from_secs(5)).map(seconds), Some((5, 10)));
-        assert_eq!(super::pick(&samples, Duration::from_secs(1)).map(seconds), Some((9, 10)));
+        assert_eq!(
+            super::pick(&samples, Duration::from_secs(5)).map(seconds),
+            Some((5, 10))
+        );
+        assert_eq!(
+            super::pick(&samples, Duration::from_secs(1)).map(seconds),
+            Some((9, 10))
+        );
         // Not that old yet: since the oldest
-        assert_eq!(super::pick(&samples, Duration::from_secs(60)).map(seconds), Some((0, 10)));
+        assert_eq!(
+            super::pick(&samples, Duration::from_secs(60)).map(seconds),
+            Some((0, 10))
+        );
         assert!(super::pick(&std::collections::VecDeque::new(), Duration::from_secs(5)).is_none());
     }
 
@@ -650,13 +663,20 @@ mod tests {
         let start = Instant::now();
         let mut history = std::collections::VecDeque::new();
         for second in 0..=400 {
-            history.push_back(std::sync::Arc::new(sample(start + Duration::from_secs(second), &[])));
+            history.push_back(std::sync::Arc::new(sample(
+                start + Duration::from_secs(second),
+                &[],
+            )));
             super::thin(&mut history);
         }
 
         let ages = history
             .iter()
-            .map(|sample| (start + Duration::from_secs(400)).duration_since(sample.at).as_secs())
+            .map(|sample| {
+                (start + Duration::from_secs(400))
+                    .duration_since(sample.at)
+                    .as_secs()
+            })
             .collect::<Vec<_>>();
         // Every second of the last minute, then one every 10 seconds, up to 5 minutes
         assert!(ages.len() < 90, "{ages:?}");
@@ -677,7 +697,11 @@ mod tests {
         assert_eq!(
             sample.get(&key(
                 "proksi_requests_total",
-                &[("host", "live-sample.test"), ("location", "/"), ("status", "2xx")]
+                &[
+                    ("host", "live-sample.test"),
+                    ("location", "/"),
+                    ("status", "2xx")
+                ]
             )),
             Some(Reading::Scalar(1.0))
         );
@@ -737,7 +761,11 @@ mod tests {
     #[test]
     fn test_stats() {
         let location = [("host", "a.test"), ("location", "/")];
-        let upstream = [("host", "a.test"), ("location", "/"), ("upstream", "10.0.0.1:80")];
+        let upstream = [
+            ("host", "a.test"),
+            ("location", "/"),
+            ("upstream", "10.0.0.1:80"),
+        ];
         let requests = |status: &str| {
             key(
                 "proksi_requests_total",
@@ -752,10 +780,22 @@ mod tests {
             &[
                 (requests("2xx"), Reading::Scalar(100.0)),
                 (requests("5xx"), Reading::Scalar(0.0)),
-                (key("proksi_request_duration_seconds", &location), histogram(100, 100)),
-                (key("proksi_upstream_duration_seconds", &upstream), histogram(100, 100)),
-                (key("proksi_upstream_errors_total", &upstream), Reading::Scalar(0.0)),
-                (key("proksi_tcp_connections_total", &tcp), Reading::Scalar(1.0)),
+                (
+                    key("proksi_request_duration_seconds", &location),
+                    histogram(100, 100),
+                ),
+                (
+                    key("proksi_upstream_duration_seconds", &upstream),
+                    histogram(100, 100),
+                ),
+                (
+                    key("proksi_upstream_errors_total", &upstream),
+                    Reading::Scalar(0.0),
+                ),
+                (
+                    key("proksi_tcp_connections_total", &tcp),
+                    Reading::Scalar(1.0),
+                ),
                 (
                     key("proksi_tcp_bytes_total", &[tcp[0], ("direction", "in")]),
                     Reading::Scalar(0.0),
@@ -768,10 +808,22 @@ mod tests {
                 // 20 requests in 10 seconds: 18 fast, 2 slow; 2 errors
                 (requests("2xx"), Reading::Scalar(118.0)),
                 (requests("5xx"), Reading::Scalar(2.0)),
-                (key("proksi_request_duration_seconds", &location), histogram(118, 120)),
-                (key("proksi_upstream_duration_seconds", &upstream), histogram(118, 120)),
-                (key("proksi_upstream_errors_total", &upstream), Reading::Scalar(2.0)),
-                (key("proksi_upstream_healthy", &upstream), Reading::Scalar(1.0)),
+                (
+                    key("proksi_request_duration_seconds", &location),
+                    histogram(118, 120),
+                ),
+                (
+                    key("proksi_upstream_duration_seconds", &upstream),
+                    histogram(118, 120),
+                ),
+                (
+                    key("proksi_upstream_errors_total", &upstream),
+                    Reading::Scalar(2.0),
+                ),
+                (
+                    key("proksi_upstream_healthy", &upstream),
+                    Reading::Scalar(1.0),
+                ),
                 (
                     key(
                         "proksi_blocked_requests_total",
@@ -779,9 +831,18 @@ mod tests {
                     ),
                     Reading::Scalar(3.0),
                 ),
-                (key("proksi_tcp_connections_total", &tcp), Reading::Scalar(11.0)),
-                (key("proksi_tcp_connections_active", &tcp), Reading::Scalar(4.0)),
-                (key("proksi_tcp_upstream_errors_total", &tcp), Reading::Scalar(3.0)),
+                (
+                    key("proksi_tcp_connections_total", &tcp),
+                    Reading::Scalar(11.0),
+                ),
+                (
+                    key("proksi_tcp_connections_active", &tcp),
+                    Reading::Scalar(4.0),
+                ),
+                (
+                    key("proksi_tcp_upstream_errors_total", &tcp),
+                    Reading::Scalar(3.0),
+                ),
                 (
                     key("proksi_tcp_bytes_total", &[tcp[0], ("direction", "in")]),
                     Reading::Scalar(5000.0),
@@ -839,7 +900,11 @@ mod tests {
         let requests = |location| {
             key(
                 "proksi_requests_total",
-                &[("host", "a.test"), ("location", location), ("status", "2xx")],
+                &[
+                    ("host", "a.test"),
+                    ("location", location),
+                    ("status", "2xx"),
+                ],
             )
         };
         let duration = |location| {
@@ -864,7 +929,10 @@ mod tests {
         assert_eq!(stats["total"]["requests_per_second"], json!(4.0));
         assert_eq!(stats["total"]["responses"], json!({ "2xx": 4 }));
         // 3 fast and 1 slow: the 90th percentile is in the slow bucket
-        assert!(stats["total"]["duration_ms"]["p90"].as_f64().unwrap() > 10.0, "{stats}");
+        assert!(
+            stats["total"]["duration_ms"]["p90"].as_f64().unwrap() > 10.0,
+            "{stats}"
+        );
     }
 
     #[test]
@@ -873,7 +941,10 @@ mod tests {
         let location = [("host", "a.test"), ("location", "/")];
         let quiet = sample(
             start,
-            &[(key("proksi_request_duration_seconds", &location), histogram(0, 0))],
+            &[(
+                key("proksi_request_duration_seconds", &location),
+                histogram(0, 0),
+            )],
         );
 
         let stats = stats(&quiet, &quiet);

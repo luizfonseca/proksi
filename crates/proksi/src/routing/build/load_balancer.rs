@@ -20,8 +20,7 @@ use pingora::{
         discovery::ServiceDiscovery,
         health_check::{HealthObserve, TcpHealthCheck},
         selection::RoundRobin,
-        Backend,
-        Backends, LoadBalancer,
+        Backend, Backends, LoadBalancer,
     },
     protocols::l4::socket::SocketAddr as BackendAddr,
 };
@@ -145,7 +144,11 @@ impl HealthObserve for HealthChanges {
             location: watched.location.clone(),
             tcp: watched.tcp.clone(),
             upstream: Some(target.addr.to_string()),
-            ..crate::notify::Event::new(if healthy { Kind::UpstreamUp } else { Kind::UpstreamDown })
+            ..crate::notify::Event::new(if healthy {
+                Kind::UpstreamUp
+            } else {
+                Kind::UpstreamDown
+            })
         });
     }
 }
@@ -192,7 +195,12 @@ fn system_lookup(name: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
             addresses.dedup();
             Ok(addresses)
         }
-        Err(err) if matches!(err.kind(), LookupErrorKind::NoName | LookupErrorKind::NoData) => {
+        Err(err)
+            if matches!(
+                err.kind(),
+                LookupErrorKind::NoName | LookupErrorKind::NoData
+            ) =>
+        {
             Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("{name} doesn't exist"),
@@ -287,7 +295,10 @@ impl Resolver {
             MIN_RESOLVE_INTERVAL
         };
         {
-            let mut resolved_at = self.resolved_at.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut resolved_at = self
+                .resolved_at
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             if resolved_at.elapsed() < interval {
                 return;
             }
@@ -315,7 +326,10 @@ impl Resolver {
                     continue;
                 }
             };
-            let mut addresses = self.addresses.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut addresses = self
+                .addresses
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             if let Some(slot) = addresses.get_mut(index) {
                 follow(target, slot, resolved);
             }
@@ -324,7 +338,10 @@ impl Resolver {
 
     /// The backends of the addresses known, each with the upstream it came from
     fn backends(&self) -> BTreeSet<Backend> {
-        let addresses = self.addresses.lock().unwrap_or_else(PoisonError::into_inner);
+        let addresses = self
+            .addresses
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         let mut backends = BTreeSet::new();
         for (index, (target, addresses)) in self.targets.iter().zip(addresses.iter()).enumerate() {
             for addr in addresses {
@@ -384,7 +401,10 @@ mod tests {
 
         /// The lookup fails (a DNS outage)
         fn fail(&self, name: &str) {
-            self.0.lock().unwrap().insert(name.to_string(), vec!["fail"]);
+            self.0
+                .lock()
+                .unwrap()
+                .insert(name.to_string(), vec!["fail"]);
         }
 
         /// The name no longer exists (e.g. its container was removed)
@@ -394,8 +414,8 @@ mod tests {
 
         fn lookup(&self) -> Lookup {
             let answers = self.0.clone();
-            Arc::new(move |name: &str, port: u16| {
-                match answers.lock().unwrap().get(name) {
+            Arc::new(
+                move |name: &str, port: u16| match answers.lock().unwrap().get(name) {
                     None => Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
                     Some(addresses) if addresses == &["fail"] => {
                         Err(std::io::Error::other("no answer"))
@@ -404,8 +424,8 @@ mod tests {
                         .iter()
                         .map(|ip| SocketAddr::new(ip.parse().unwrap(), port))
                         .collect()),
-                }
-            })
+                },
+            )
         }
     }
 
@@ -432,8 +452,10 @@ mod tests {
         let dns = Dns::default();
         dns.answer("app", &["10.0.0.2", "10.0.0.3"]);
 
-        let load_balancer =
-            load_balancer_with(&[upstream("10.0.0.1", 80), upstream("app", 8080)], dns.lookup());
+        let load_balancer = load_balancer_with(
+            &[upstream("10.0.0.1", 80), upstream("app", 8080)],
+            dns.lookup(),
+        );
 
         assert_eq!(
             addresses(&load_balancer),
@@ -455,7 +477,10 @@ mod tests {
         tokio::time::sleep(super::MIN_RESOLVE_INTERVAL).await;
         load_balancer.update().await.unwrap();
 
-        assert_eq!(addresses(&load_balancer), vec![("10.0.0.9:8080".to_string(), Some(0))]);
+        assert_eq!(
+            addresses(&load_balancer),
+            vec![("10.0.0.9:8080".to_string(), Some(0))]
+        );
     }
 
     #[tokio::test]
@@ -468,7 +493,10 @@ mod tests {
         tokio::time::sleep(super::MIN_RESOLVE_INTERVAL).await;
         load_balancer.update().await.unwrap();
 
-        assert_eq!(addresses(&load_balancer), vec![("10.0.0.2:8080".to_string(), Some(0))]);
+        assert_eq!(
+            addresses(&load_balancer),
+            vec![("10.0.0.2:8080".to_string(), Some(0))]
+        );
     }
 
     #[tokio::test]
@@ -495,7 +523,10 @@ mod tests {
         tokio::time::sleep(super::MIN_RESOLVE_INTERVAL).await;
         load_balancer.update().await.unwrap();
 
-        assert_eq!(addresses(&load_balancer), vec![("10.0.0.4:8080".to_string(), Some(0))]);
+        assert_eq!(
+            addresses(&load_balancer),
+            vec![("10.0.0.4:8080".to_string(), Some(0))]
+        );
     }
 
     #[tokio::test]
@@ -508,7 +539,10 @@ mod tests {
         tokio::time::sleep(super::EMPTY_RESOLVE_INTERVAL).await;
         load_balancer.update().await.unwrap();
 
-        assert_eq!(addresses(&load_balancer), vec![("10.0.0.5:8080".to_string(), Some(0))]);
+        assert_eq!(
+            addresses(&load_balancer),
+            vec![("10.0.0.5:8080".to_string(), Some(0))]
+        );
     }
 
     #[tokio::test]
@@ -546,8 +580,14 @@ mod tests {
         .map(|backend| backend.map(|backend| backend.addr.to_string()));
 
         // In turn, as when healthy
-        assert!(selected.contains(&Some("10.0.0.1:80".to_string())), "{selected:?}");
-        assert!(selected.contains(&Some("10.0.0.2:80".to_string())), "{selected:?}");
+        assert!(
+            selected.contains(&Some("10.0.0.1:80".to_string())),
+            "{selected:?}"
+        );
+        assert!(
+            selected.contains(&Some("10.0.0.2:80".to_string())),
+            "{selected:?}"
+        );
     }
 
     #[tokio::test]
@@ -573,9 +613,16 @@ mod tests {
             let mut load_balancer =
                 load_balancer_with(&[upstream("10.0.0.1", 80)], Dns::default().lookup());
             super::set_health_check(&mut load_balancer, health_check, super::Watched::default());
-            load_balancer.health_check_frequency.map(|frequency| frequency.as_secs())
+            load_balancer
+                .health_check_frequency
+                .map(|frequency| frequency.as_secs())
         };
-        let check = |enabled, interval_secs| Some(HealthCheck { enabled, interval_secs });
+        let check = |enabled, interval_secs| {
+            Some(HealthCheck {
+                enabled,
+                interval_secs,
+            })
+        };
 
         assert_eq!(frequency(None), Some(15));
         assert_eq!(frequency(check(None, Some(3))), Some(3));
@@ -592,6 +639,9 @@ mod tests {
         dns.answer("app", &["10.0.0.9"]);
         load_balancer.update().await.unwrap();
 
-        assert_eq!(addresses(&load_balancer), vec![("10.0.0.2:8080".to_string(), Some(0))]);
+        assert_eq!(
+            addresses(&load_balancer),
+            vec![("10.0.0.2:8080".to_string(), Some(0))]
+        );
     }
 }

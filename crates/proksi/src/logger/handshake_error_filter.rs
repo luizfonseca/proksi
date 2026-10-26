@@ -70,11 +70,7 @@ mod tests {
     struct Count(Arc<AtomicUsize>);
 
     impl<S: tracing::Subscriber> Layer<S> for Count {
-        fn on_event(
-            &self,
-            _: &tracing::Event<'_>,
-            _: tracing_subscriber::layer::Context<'_, S>,
-        ) {
+        fn on_event(&self, _: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
             self.0.fetch_add(1, Ordering::Relaxed);
         }
     }

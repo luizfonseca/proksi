@@ -23,8 +23,7 @@ use tokio::{
 };
 
 use crate::{
-    metrics::TcpMetrics, proxy_server::cert_store::ServerName,
-    routing::build::select_or_resolve,
+    metrics::TcpMetrics, proxy_server::cert_store::ServerName, routing::build::select_or_resolve,
 };
 
 use super::{choose, TcpTarget};
@@ -65,7 +64,8 @@ impl TcpProxy {
             &self.targets,
             &local,
             sni.as_deref(),
-            alpn.as_ref().map(pingora::protocols::tls::CustomALPN::protocol),
+            alpn.as_ref()
+                .map(pingora::protocols::tls::CustomALPN::protocol),
         );
         if target.is_none() {
             tracing::debug!("no tcp block for a connection on {local} (server name: {sni:?})");
@@ -97,7 +97,9 @@ impl TcpProxy {
         });
 
         let mut forwarded = Forwarded::default();
-        let error = Self::copy(&mut downstream, target, &mut forwarded).await.err();
+        let error = Self::copy(&mut downstream, target, &mut forwarded)
+            .await
+            .err();
         if !crate::logger::access_logs_enabled() {
             return;
         }
@@ -142,7 +144,10 @@ impl TcpProxy {
                     Ok(Err(err)) => err.to_string(),
                     _ => format!("no answer within {:?}", target.connect_timeout),
                 };
-                tracing::warn!("{}: could not connect to upstream {addr}: {err}", target.label);
+                tracing::warn!(
+                    "{}: could not connect to upstream {addr}: {err}",
+                    target.label
+                );
                 if let Some(metrics) = &target.metrics {
                     metrics.upstream_error();
                 }
@@ -300,10 +305,7 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for Counted<'_, S> {
         Pin::new(&mut *self.inner).poll_flush(cx)
     }
 
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Pin::new(&mut *self.inner).poll_shutdown(cx)
     }
 }

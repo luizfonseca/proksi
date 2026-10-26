@@ -131,19 +131,16 @@ mod tests {
         let later = start + Duration::from_secs(120);
         assert!(hold.offer(upstream(Kind::UpstreamUp), later).is_some());
         // Again up: nothing changed
-        assert!(
-            hold.offer(upstream(Kind::UpstreamUp), later + Duration::from_secs(120))
-                .is_none()
-        );
+        assert!(hold
+            .offer(upstream(Kind::UpstreamUp), later + Duration::from_secs(120))
+            .is_none());
         // Events that don't come in pairs are always sent
-        assert!(
-            hold.offer(Event::new(Kind::ConfigReloaded), start)
-                .is_some()
-        );
-        assert!(
-            hold.offer(Event::new(Kind::ConfigReloaded), start)
-                .is_some()
-        );
+        assert!(hold
+            .offer(Event::new(Kind::ConfigReloaded), start)
+            .is_some());
+        assert!(hold
+            .offer(Event::new(Kind::ConfigReloaded), start)
+            .is_some());
     }
 
     #[test]
@@ -152,27 +149,24 @@ mod tests {
         let start = Instant::now();
         assert!(hold.offer(upstream(Kind::UpstreamDown), start).is_some());
         // Up and down again within the window: held, then nothing to send (still down)
-        assert!(
-            hold.offer(upstream(Kind::UpstreamUp), start + Duration::from_secs(5))
-                .is_none()
-        );
-        assert!(
-            hold.offer(
+        assert!(hold
+            .offer(upstream(Kind::UpstreamUp), start + Duration::from_secs(5))
+            .is_none());
+        assert!(hold
+            .offer(
                 upstream(Kind::UpstreamDown),
                 start + Duration::from_secs(10)
             )
-            .is_none()
-        );
+            .is_none());
         assert!(hold.due(start + Duration::from_secs(30)).is_empty());
         assert!(hold.due(start + Duration::from_secs(61)).is_empty());
 
         // Up within the window, and staying up: sent when the window ends
         let next = start + Duration::from_secs(200);
         assert!(hold.offer(upstream(Kind::UpstreamUp), next).is_some());
-        assert!(
-            hold.offer(upstream(Kind::UpstreamDown), next + Duration::from_secs(5))
-                .is_none()
-        );
+        assert!(hold
+            .offer(upstream(Kind::UpstreamDown), next + Duration::from_secs(5))
+            .is_none());
         assert!(hold.due(next + Duration::from_secs(30)).is_empty());
         assert_eq!(
             kinds(&hold.due(next + Duration::from_secs(61))),

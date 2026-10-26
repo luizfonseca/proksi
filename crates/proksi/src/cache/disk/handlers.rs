@@ -1,8 +1,8 @@
 use std::{
     any::Any,
-    sync::Arc,
     io::Read,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use async_trait::async_trait;

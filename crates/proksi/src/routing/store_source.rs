@@ -1,7 +1,7 @@
 //! Routes kept in the store (shared by every replica)
 
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use crate::config::notify::Kind;
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use proksi_store::{ReplicaStatus, Store, StoreError};
 
@@ -221,11 +221,11 @@ fn unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::BTreeMap,
         sync::{
             atomic::{AtomicBool, AtomicUsize, Ordering},
             Arc, Mutex,
         },
-        collections::BTreeMap,
         time::Duration,
     };
 
@@ -454,10 +454,7 @@ mod tests {
 
         // Written by another replica
         store
-            .set_certificate(
-                "a.test",
-                proksi_store::test_util::certificate("a.test", 10),
-            )
+            .set_certificate("a.test", proksi_store::test_util::certificate("a.test", 10))
             .await
             .unwrap();
         source.sync_once().await.unwrap();
@@ -478,25 +475,47 @@ mod tests {
             headers: BTreeMap::new(),
             expiring_days: 14,
         };
-        let save = |name: &str, url: &str| crate::notify::stored::encode(name, &block(url)).unwrap();
-        store.put_notify(save("ops", "https://hooks.example.com/a"), &Write::default()).await.unwrap();
+        let save =
+            |name: &str, url: &str| crate::notify::stored::encode(name, &block(url)).unwrap();
+        store
+            .put_notify(
+                save("ops", "https://hooks.example.com/a"),
+                &Write::default(),
+            )
+            .await
+            .unwrap();
         // Saved by an older or newer Proksi, or broken: skipped
-        store.put_notify(save("broken", "ftp://hooks.example.com"), &Write::default()).await.unwrap();
+        store
+            .put_notify(save("broken", "ftp://hooks.example.com"), &Write::default())
+            .await
+            .unwrap();
 
         source.sync_once().await.unwrap();
         source.sync_once().await.unwrap();
         // Used once, until they change
         assert_eq!(*USED.lock().unwrap(), vec![vec!["ops".to_string()]]);
-        store.put_notify(save("pager", "https://hooks.example.com/b"), &Write::default()).await.unwrap();
+        store
+            .put_notify(
+                save("pager", "https://hooks.example.com/b"),
+                &Write::default(),
+            )
+            .await
+            .unwrap();
         source.sync_once().await.unwrap();
-        assert_eq!(USED.lock().unwrap().last().unwrap(), &vec!["ops".to_string(), "pager".to_string()]);
+        assert_eq!(
+            USED.lock().unwrap().last().unwrap(),
+            &vec!["ops".to_string(), "pager".to_string()]
+        );
     }
 
     #[tokio::test]
     async fn test_store_source_sends_routes() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")), &Write::default())
+            .put_stored(
+                &StoredRoute::new(host("a.test", "10.0.0.1")),
+                &Write::default(),
+            )
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -528,7 +547,10 @@ mod tests {
         receiver.try_recv().unwrap();
 
         store
-            .put_stored(&StoredRoute::new(host("b.test", "10.0.0.1")), &Write::default())
+            .put_stored(
+                &StoredRoute::new(host("b.test", "10.0.0.1")),
+                &Write::default(),
+            )
             .await
             .unwrap();
 
@@ -543,7 +565,10 @@ mod tests {
         newer.schema_version = crate::stores::stored_route::ROUTE_SCHEMA_VERSION + 1;
         store.put_stored(&newer, &Write::default()).await.unwrap();
         store
-            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")), &Write::default())
+            .put_stored(
+                &StoredRoute::new(host("a.test", "10.0.0.1")),
+                &Write::default(),
+            )
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -557,7 +582,10 @@ mod tests {
     async fn test_store_source_keeps_routes_when_store_fails() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")), &Write::default())
+            .put_stored(
+                &StoredRoute::new(host("a.test", "10.0.0.1")),
+                &Write::default(),
+            )
             .await
             .unwrap();
         let (mut source, mut receiver) = source(store.clone());
@@ -575,7 +603,10 @@ mod tests {
     async fn test_store_source_reports_the_applied_revision() {
         let store = Arc::new(FlakyStore::default());
         store
-            .put_stored(&StoredRoute::new(host("a.test", "10.0.0.1")), &Write::default())
+            .put_stored(
+                &StoredRoute::new(host("a.test", "10.0.0.1")),
+                &Write::default(),
+            )
             .await
             .unwrap();
         let (mut source, _receiver) = source(store.clone());

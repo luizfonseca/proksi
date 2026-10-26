@@ -61,7 +61,7 @@ pub(super) fn header(name: &str, value: &str) -> RouteHeaderAdd {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{HeadersBlock, ResponseHeadersBlock, response_headers};
+    use super::{response_headers, HeadersBlock, ResponseHeadersBlock};
 
     fn block(add: &[(&str, &str)], remove: &[&str]) -> HeadersBlock {
         HeadersBlock {

@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::host::Host,
-    stores::stored_route::{decode_stored_route, HostStore, StoredHost, StoredRoute, StoredRouteError},
+    stores::stored_route::{
+        decode_stored_route, HostStore, StoredHost, StoredRoute, StoredRouteError,
+    },
 };
 
 /// Why a request was refused
@@ -175,13 +177,19 @@ pub async fn history(store: &dyn Store, name: &str) -> Result<History, Refused> 
 }
 
 /// The version of the host `name` saved at `revision`
-pub async fn version(store: &dyn Store, name: &str, revision: u64) -> Result<SavedVersion, Refused> {
+pub async fn version(
+    store: &dyn Store,
+    name: &str,
+    revision: u64,
+) -> Result<SavedVersion, Refused> {
     let host = name.to_lowercase();
     let saved = store
         .route_version(&host, revision)
         .await
         .map_err(refused)?
-        .ok_or(Refused::NotFound(format!("no version {revision} of host \"{host}\"")))?;
+        .ok_or(Refused::NotFound(format!(
+            "no version {revision} of host \"{host}\""
+        )))?;
     let route = decode_stored_route(&host, &saved.record.data)
         .map_err(|err| Refused::Unusable(err.error))?;
     Ok(SavedVersion {
@@ -203,11 +211,13 @@ pub async fn rollback(
     let Rollback { revision: to } = serde_json::from_slice(body)
         .map_err(|err| Refused::Invalid(format!(r#"expected {{"revision": <version>}}: {err}"#)))?;
     let target = version(store, name, to).await?;
-    crate::routing::validate::validate_host(&target.host).map_err(|err| {
-        Refused::Unusable(format!("version {to} is no longer valid: {err}"))
-    })?;
+    crate::routing::validate::validate_host(&target.host)
+        .map_err(|err| Refused::Unusable(format!("version {to} is no longer valid: {err}")))?;
     let host = name.to_lowercase();
-    let revision = store.rollback_route(&host, to, write).await.map_err(refused)?;
+    let revision = store
+        .rollback_route(&host, to, write)
+        .await
+        .map_err(refused)?;
     crate::routing::store_source::sync_now();
     Ok(Written { host, revision })
 }
@@ -257,7 +267,9 @@ fn parse(name: &str, body: &[u8]) -> Result<Host, String> {
 mod tests {
     use proksi_store::{Change, Expect, MemoryStore, Write};
 
-    use super::{deleted, delete, get, history, list, parse, put, rollback, version, Refused, Written};
+    use super::{
+        delete, deleted, get, history, list, parse, put, rollback, version, Refused, Written,
+    };
     use crate::stores::stored_route::HostStore;
 
     const JSON: &str = r#"{
@@ -267,7 +279,10 @@ mod tests {
 
     #[test]
     fn test_validate() {
-        assert_eq!(super::validate(JSON.as_bytes()), Ok(super::Valid { valid: true }));
+        assert_eq!(
+            super::validate(JSON.as_bytes()),
+            Ok(super::Valid { valid: true })
+        );
         let err = super::validate(JSON.replace("3000", "0").as_bytes());
         assert_eq!(
             err,
@@ -369,16 +384,29 @@ mod tests {
     #[tokio::test]
     async fn test_history_and_rollback() {
         let store = MemoryStore::new();
-        let first = put(&store, "api.test", &json("10.0.0.1"), &by("ana", Expect::Absent))
-            .await
-            .unwrap();
-        let second = put(&store, "api.test", &json("10.0.0.2"), &by("bo", Expect::Version(first.revision)))
-            .await
-            .unwrap();
+        let first = put(
+            &store,
+            "api.test",
+            &json("10.0.0.1"),
+            &by("ana", Expect::Absent),
+        )
+        .await
+        .unwrap();
+        let second = put(
+            &store,
+            "api.test",
+            &json("10.0.0.2"),
+            &by("bo", Expect::Version(first.revision)),
+        )
+        .await
+        .unwrap();
 
         // Each version, with who saved it
         let saved = version(&store, "API.test", first.revision).await.unwrap();
-        assert_eq!(saved.host.locations[0].upstreams[0].ip.to_string(), "10.0.0.1");
+        assert_eq!(
+            saved.host.locations[0].upstreams[0].ip.to_string(),
+            "10.0.0.1"
+        );
         assert_eq!(saved.author.as_deref(), Some("ana"));
         assert!(matches!(
             version(&store, "api.test", 99).await,
@@ -387,9 +415,14 @@ mod tests {
 
         // Rolling back, expecting the host's last change
         let body = format!(r#"{{"revision": {}}}"#, first.revision);
-        rollback(&store, "api.test", body.as_bytes(), &by("cy", Expect::Version(second.revision)))
-            .await
-            .unwrap();
+        rollback(
+            &store,
+            "api.test",
+            body.as_bytes(),
+            &by("cy", Expect::Version(second.revision)),
+        )
+        .await
+        .unwrap();
         let one = get(&store, "api.test").await.unwrap();
         assert_eq!(one.version, first.revision);
         let changes = history(&store, "api.test").await.unwrap().changes;
@@ -398,21 +431,52 @@ mod tests {
         assert_eq!(changes.len(), 3);
 
         // A change made from an older state is refused
-        let stale = put(&store, "api.test", &json("10.0.0.9"), &by("bo", Expect::Version(second.revision))).await;
-        assert_eq!(stale, Err(Refused::Conflict { version: first.revision }));
-        let stale = rollback(&store, "api.test", body.as_bytes(), &by("bo", Expect::Version(second.revision))).await;
+        let stale = put(
+            &store,
+            "api.test",
+            &json("10.0.0.9"),
+            &by("bo", Expect::Version(second.revision)),
+        )
+        .await;
+        assert_eq!(
+            stale,
+            Err(Refused::Conflict {
+                version: first.revision
+            })
+        );
+        let stale = rollback(
+            &store,
+            "api.test",
+            body.as_bytes(),
+            &by("bo", Expect::Version(second.revision)),
+        )
+        .await;
         assert!(matches!(stale, Err(Refused::Conflict { .. })));
         // A change made from the active version goes through
-        put(&store, "api.test", &json("10.0.0.3"), &by("ana", Expect::Version(first.revision)))
-            .await
-            .unwrap();
+        put(
+            &store,
+            "api.test",
+            &json("10.0.0.3"),
+            &by("ana", Expect::Version(first.revision)),
+        )
+        .await
+        .unwrap();
 
         // Bad bodies, unknown versions and hosts
         let invalid = rollback(&store, "api.test", b"{}", &Write::default()).await;
         assert!(matches!(invalid, Err(Refused::Invalid(_))), "{invalid:?}");
-        let missing = rollback(&store, "api.test", br#"{"revision": 99}"#, &Write::default()).await;
+        let missing = rollback(
+            &store,
+            "api.test",
+            br#"{"revision": 99}"#,
+            &Write::default(),
+        )
+        .await;
         assert!(matches!(missing, Err(Refused::NotFound(_))), "{missing:?}");
-        assert!(matches!(history(&store, "nope.test").await, Err(Refused::NotFound(_))));
+        assert!(matches!(
+            history(&store, "nope.test").await,
+            Err(Refused::NotFound(_))
+        ));
     }
 
     #[tokio::test]
@@ -422,15 +486,29 @@ mod tests {
             .await
             .unwrap();
         delete(&store, "api.test", &Write::default()).await.unwrap();
-        assert_eq!(deleted(&store).await.unwrap().hosts, vec!["api.test".to_string()]);
-        assert!(matches!(get(&store, "api.test").await, Err(Refused::NotFound(_))));
+        assert_eq!(
+            deleted(&store).await.unwrap().hosts,
+            vec!["api.test".to_string()]
+        );
+        assert!(matches!(
+            get(&store, "api.test").await,
+            Err(Refused::NotFound(_))
+        ));
 
         // Restoring expects the host not to have been created again since
         let body = format!(r#"{{"revision": {}}}"#, saved.revision);
-        rollback(&store, "api.test", body.as_bytes(), &by("ana", Expect::Absent))
-            .await
-            .unwrap();
-        assert_eq!(get(&store, "api.test").await.unwrap().version, saved.revision);
+        rollback(
+            &store,
+            "api.test",
+            body.as_bytes(),
+            &by("ana", Expect::Absent),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            get(&store, "api.test").await.unwrap().version,
+            saved.revision
+        );
         assert!(deleted(&store).await.unwrap().hosts.is_empty());
     }
 

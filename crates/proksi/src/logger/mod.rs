@@ -161,11 +161,7 @@ pub struct Inner {
 }
 
 impl ProxyLoggerReceiver {
-    pub fn new(
-        receiver: Receiver<Vec<u8>>,
-        dropped: Arc<AtomicU64>,
-        config: &Arc<Config>,
-    ) -> Self {
+    pub fn new(receiver: Receiver<Vec<u8>>, dropped: Arc<AtomicU64>, config: &Arc<Config>) -> Self {
         ProxyLoggerReceiver {
             receiver,
             dropped,

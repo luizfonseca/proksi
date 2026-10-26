@@ -10,7 +10,8 @@ use super::{Answer, Reply};
 
 /// Nothing but the UI's own files (and GitHub's releases, for the "new version" notice), and no
 /// framing
-const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; connect-src 'self' https://api.github.com; \
+const CONTENT_SECURITY_POLICY: &str =
+    "default-src 'self'; connect-src 'self' https://api.github.com; \
      frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
 /// How a file is sent

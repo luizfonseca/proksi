@@ -227,9 +227,9 @@ impl Store for SqlStore {
                     "SELECT r.host, r.schema_version, r.data, COALESCE(s.version, 0) AS version \
                      FROM proksi_routes r LEFT JOIN proksi_route_state s ON s.host = r.host",
                 )
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(unavailable)?;
+                .fetch_all(&pool)
+                .await
+                .map_err(unavailable)?;
                 if revision(&pool).await? != current {
                     continue;
                 }
@@ -270,7 +270,12 @@ impl Store for SqlStore {
     }
 
     async fn delete_route(&self, host: &str, write: &Write) -> Result<u64, StoreError> {
-        let task = sql_history::delete(self.pool.clone(), host.to_string(), write.clone(), self.history);
+        let task = sql_history::delete(
+            self.pool.clone(),
+            host.to_string(),
+            write.clone(),
+            self.history,
+        );
         self.run(task).await
     }
 
@@ -281,7 +286,8 @@ impl Store for SqlStore {
     }
 
     async fn route_history(&self, host: &str) -> Result<Vec<HistoryEntry>, StoreError> {
-        self.run(sql_history::history(self.pool.clone(), host.to_string())).await
+        self.run(sql_history::history(self.pool.clone(), host.to_string()))
+            .await
     }
 
     async fn route_version(
@@ -289,7 +295,12 @@ impl Store for SqlStore {
         host: &str,
         version: u64,
     ) -> Result<Option<RouteVersion>, StoreError> {
-        self.run(sql_history::version(self.pool.clone(), host.to_string(), version)).await
+        self.run(sql_history::version(
+            self.pool.clone(),
+            host.to_string(),
+            version,
+        ))
+        .await
     }
 
     async fn deleted_routes(&self) -> Result<Vec<String>, StoreError> {
@@ -429,7 +440,8 @@ impl Store for SqlStore {
 
     async fn notify_revision(&self) -> Result<u64, StoreError> {
         let pool = self.pool.clone();
-        self.run(async move { sql_notify::revision(&pool).await }).await
+        self.run(async move { sql_notify::revision(&pool).await })
+            .await
     }
 
     async fn notify_blocks(&self) -> Result<NotifySnapshot, StoreError> {
@@ -437,7 +449,8 @@ impl Store for SqlStore {
     }
 
     async fn put_notify(&self, block: NotifyRecord, write: &Write) -> Result<u64, StoreError> {
-        self.run(sql_notify::put(self.pool.clone(), block, write.clone())).await
+        self.run(sql_notify::put(self.pool.clone(), block, write.clone()))
+            .await
     }
 
     async fn delete_notify(&self, name: &str, write: &Write) -> Result<u64, StoreError> {
@@ -802,7 +815,10 @@ mod tests {
     async fn test_sqlite_doesnt_keep_cursors() {
         let (store, _dir) = sqlite_store();
         let steps = [("a".to_string(), 1)];
-        assert_eq!(store.advance_cursors("n", &steps).await.unwrap(), Vec::<u64>::new());
+        assert_eq!(
+            store.advance_cursors("n", &steps).await.unwrap(),
+            Vec::<u64>::new()
+        );
     }
 
     #[cfg(feature = "sqlite")]

@@ -7,7 +7,7 @@ use pingora::{
 };
 
 use crate::{
-    config::{Config, watch},
+    config::{watch, Config},
     routing::SnapshotSender,
 };
 

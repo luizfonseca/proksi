@@ -18,12 +18,12 @@ use futures_util::{SinkExt, StreamExt};
 use openssl::{
     asn1::Asn1Time,
     bn::{BigNum, MsbOption},
-    hash::MessageDigest,
-    pkey::PKey,
-    rsa::Rsa,
     ec::{EcGroup, EcKey},
+    hash::MessageDigest,
     nid::Nid,
+    pkey::PKey,
     pkey::Private,
+    rsa::Rsa,
     ssl::{SslConnector, SslMethod},
     x509::{
         extension::{BasicConstraints, SubjectAlternativeName},
@@ -209,16 +209,14 @@ impl Harness {
         // `PROKSI_BIN` allows running the tests against another build (e.g. a release binary)
         let bin = std::env::var("PROKSI_BIN").unwrap_or(env!("CARGO_BIN_EXE_proksi").to_string());
         // In a group of its own, so that every process it starts is stopped with it
-        harness.child = std::os::unix::process::CommandExt::process_group(
-            &mut Command::new(bin),
-            0,
-        )
-            .arg("-c")
-            .arg(harness.config_path())
-            .stdout(Stdio::from(stdout))
-            .stderr(Stdio::from(stderr))
-            .spawn()
-            .unwrap();
+        harness.child =
+            std::os::unix::process::CommandExt::process_group(&mut Command::new(bin), 0)
+                .arg("-c")
+                .arg(harness.config_path())
+                .stdout(Stdio::from(stdout))
+                .stderr(Stdio::from(stderr))
+                .spawn()
+                .unwrap();
 
         harness.wait_until_ready().await;
         harness
@@ -530,7 +528,10 @@ paths {{
                 .build()
                 .connect(&server_name, stream)
                 .map_err(|err| err.to_string())?;
-            Ok(stream.ssl().peer_cert_chain().map_or(0, |chain| chain.len()))
+            Ok(stream
+                .ssl()
+                .peer_cert_chain()
+                .map_or(0, |chain| chain.len()))
         })
         .await
         .unwrap()

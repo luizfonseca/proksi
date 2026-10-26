@@ -79,9 +79,9 @@ mod tests {
     use serde::Deserialize;
 
     use crate::config::{
-        RouteHeader, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin, RouteSslPath, RouteUpstream,
         hcl::HclFormat,
         host::{Host, HostTls, Location},
+        RouteHeader, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin, RouteSslPath, RouteUpstream,
     };
 
     use super::HostBlock;

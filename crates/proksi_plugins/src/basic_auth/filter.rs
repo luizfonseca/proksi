@@ -63,13 +63,14 @@ impl MiddlewarePlugin for BasicAuth {
         };
 
         // Get auth header but if missing returns 401
-        let auth_header = if let Some(header) = session.req_header().headers.get(header::AUTHORIZATION) {
-            header.to_str()?
-        } else {
-            let response = *Self::respond_with_authenticate(ctx.host())?;
-            respond(session, ctx, response).await?;
-            return Ok(true);
-        };
+        let auth_header =
+            if let Some(header) = session.req_header().headers.get(header::AUTHORIZATION) {
+                header.to_str()?
+            } else {
+                let response = *Self::respond_with_authenticate(ctx.host())?;
+                respond(session, ctx, response).await?;
+                return Ok(true);
+            };
 
         if !auth_header.starts_with("Basic ")
             || !Self::validate_auth_header(auth_header, &user, &pass)?

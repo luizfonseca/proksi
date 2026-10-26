@@ -5,16 +5,16 @@
 use std::{
     fmt::{self, Write},
     net::IpAddr,
-    sync::{Arc, atomic::Ordering},
+    sync::{atomic::Ordering, Arc},
     time::Duration,
 };
 
 use anyhow::Result;
 use async_trait::async_trait;
-use http::{StatusCode, header};
+use http::{header, StatusCode};
 use pingora::{http::ResponseHeader, proxy::Session};
 
-use crate::{RequestCtx, RoutePlugin, respond::respond};
+use crate::{respond::respond, RequestCtx, RoutePlugin};
 
 use super::Middleware;
 use gcra::Gcra;
@@ -164,7 +164,7 @@ mod tests {
 
     use crate::RoutePlugin;
 
-    use super::{RateLimit, RateLimitError, block_id, parse_duration, retry_after};
+    use super::{block_id, parse_duration, retry_after, RateLimit, RateLimitError};
 
     fn plugin(config: serde_json::Value) -> RoutePlugin {
         serde_json::from_value(serde_json::json!({ "name": "rate_limit", "config": config }))

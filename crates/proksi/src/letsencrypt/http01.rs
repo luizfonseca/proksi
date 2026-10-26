@@ -1,5 +1,5 @@
-use std::{sync::Arc, time::Duration};
 use crate::config::notify::Kind;
+use std::{sync::Arc, time::Duration};
 
 use acme_v2::{order::NewOrder, Account, DirectoryUrl};
 use anyhow::anyhow;
@@ -184,8 +184,7 @@ impl Acme {
 
     // Creates or retrieves the existing LetsEncrypt account
     fn get_account(&self) -> Result<Account<PersistType>, anyhow::Error> {
-        let persist =
-            crate::letsencrypt::storage::CertificatePersist::new(self.config.clone());
+        let persist = crate::letsencrypt::storage::CertificatePersist::new(self.config.clone());
 
         let dir = acme_v2::Directory::from_url(persist.get_persist()?, self.get_lets_encrypt_url())
             .map_err(|err| anyhow!("failed to create LetsEncrypt directory: {err}"))?;

@@ -11,12 +11,12 @@ use pingora::server::configuration::ServerConf;
 
 use crate::{
     config::tcp::{TcpRoute, TcpTls},
+    metrics::TcpMetrics,
+    proxy_server::cert_store::CertStore,
     proxy_server::{
         connections::Counted,
         services::{https_app, tls_acceptor},
     },
-    proxy_server::cert_store::CertStore,
-    metrics::TcpMetrics,
     routing::build::{load_balancer, set_health_check},
 };
 
@@ -101,15 +101,20 @@ pub fn tcp_services(
             tls_acceptor(protocols).map(|acceptor| (acceptor, Arc::new(app)))
         });
         let sni_router = SniRouter::new(TcpProxy::new(targets.clone()), shared.transpose()?);
-        let mut service =
-            Service::new(format!("tls passthrough on {address}"), Counted::new(sni_router));
+        let mut service = Service::new(
+            format!("tls passthrough on {address}"),
+            Counted::new(sni_router),
+        );
         service.threads = worker_threads;
         service.add_tcp(address);
         services.push(Box::new(service));
     }
 
     if !plain.is_empty() {
-        let mut service = Service::new("tcp".to_string(), Counted::new(TcpProxy::new(targets.clone())));
+        let mut service = Service::new(
+            "tcp".to_string(),
+            Counted::new(TcpProxy::new(targets.clone())),
+        );
         service.threads = worker_threads;
         for address in &plain {
             service.add_tcp(address);

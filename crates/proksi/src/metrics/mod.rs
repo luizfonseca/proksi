@@ -240,8 +240,11 @@ impl LocationMetrics {
             host: host.to_string(),
             location: location.to_string(),
             responses: std::sync::Arc::default(),
-            requests: STATUS_CLASSES
-                .map(|status| metrics.requests.with_label_values(&[host, location, status])),
+            requests: STATUS_CLASSES.map(|status| {
+                metrics
+                    .requests
+                    .with_label_values(&[host, location, status])
+            }),
             duration: metrics
                 .request_duration
                 .with_label_values(&[host, location]),
@@ -646,15 +649,24 @@ mod tests {
         metrics.bytes_out.inc_by(25);
 
         let text = gather();
-        assert!(text.contains(&format!("proksi_tcp_connections_total{{{label}}} 1")), "{text}");
+        assert!(
+            text.contains(&format!("proksi_tcp_connections_total{{{label}}} 1")),
+            "{text}"
+        );
         assert!(text.contains(&format!("proksi_tcp_connections_active{{{label}}} 1")));
-        assert!(text.contains(&format!("proksi_tcp_bytes_total{{{label},direction=\"in\"}} 10")));
-        assert!(text.contains(&format!("proksi_tcp_bytes_total{{{label},direction=\"out\"}} 25")));
+        assert!(text.contains(&format!(
+            "proksi_tcp_bytes_total{{{label},direction=\"in\"}} 10"
+        )));
+        assert!(text.contains(&format!(
+            "proksi_tcp_bytes_total{{{label},direction=\"out\"}} 25"
+        )));
 
         drop(connection);
         let text = gather();
         assert!(text.contains(&format!("proksi_tcp_connections_active{{{label}}} 0")));
-        assert!(text.contains(&format!("proksi_tcp_connection_duration_seconds_count{{{label}}} 1")));
+        assert!(text.contains(&format!(
+            "proksi_tcp_connection_duration_seconds_count{{{label}}} 1"
+        )));
     }
 
     #[test]
@@ -722,14 +734,20 @@ mod overhead {
             start.elapsed() / requests
         };
 
-        println!("1 thread: {:?} per request", per_request(&metrics, 10_000_000));
+        println!(
+            "1 thread: {:?} per request",
+            per_request(&metrics, 10_000_000)
+        );
         let threads = (0..8)
             .map(|_| {
                 let metrics = metrics.clone();
                 std::thread::spawn(move || per_request(&metrics, 2_000_000))
             })
             .collect::<Vec<_>>();
-        let times = threads.into_iter().map(|t| t.join().unwrap()).collect::<Vec<_>>();
+        let times = threads
+            .into_iter()
+            .map(|t| t.join().unwrap())
+            .collect::<Vec<_>>();
         println!("8 threads, same location: {times:?} per request");
     }
 }
@@ -760,14 +778,23 @@ mod overhead_parts {
                     })
                 })
                 .collect::<Vec<_>>();
-            threads.into_iter().map(|t| t.join().unwrap()).max().unwrap()
+            threads
+                .into_iter()
+                .map(|t| t.join().unwrap())
+                .max()
+                .unwrap()
         };
         let c = counter.clone();
-        println!("counter, 8 threads: {:?}", contended(std::sync::Arc::new(move |_| c.inc())));
+        println!(
+            "counter, 8 threads: {:?}",
+            contended(std::sync::Arc::new(move |_| c.inc()))
+        );
         let h = histogram.clone();
         println!(
             "histogram, 8 threads: {:?}",
-            contended(std::sync::Arc::new(move |i| h.observe(f64::from(i % 9000) / 1e6)))
+            contended(std::sync::Arc::new(
+                move |i| h.observe(f64::from(i % 9000) / 1e6)
+            ))
         );
         let local = std::sync::Arc::new(histogram.clone());
         println!(

@@ -70,7 +70,8 @@ impl RequestCtx for RouterContext {
             .as_ref()
             .filter(|location| location.blocks.paces())
             .cloned();
-        let blocks = location.and_then(|location| location.blocks.response_body(session, body, self));
+        let blocks =
+            location.and_then(|location| location.blocks.response_body(session, body, self));
         blocks.max(crate::rules::response_body(session, body, self))
     }
 }

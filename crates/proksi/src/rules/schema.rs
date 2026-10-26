@@ -4,7 +4,7 @@
 
 use std::borrow::Cow;
 
-use schemars::{Schema, SchemaGenerator, json_schema};
+use schemars::{json_schema, Schema, SchemaGenerator};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -263,7 +263,7 @@ fn operator_schema(operator: &Operator) -> Value {
 mod tests {
     use serde_json::json;
 
-    use super::{FIELDS, Field, OPERATORS, Operator};
+    use super::{Field, Operator, FIELDS, OPERATORS};
     use crate::rules::{Rule, Rules};
 
     /// A value each kind of field takes, for `operator`

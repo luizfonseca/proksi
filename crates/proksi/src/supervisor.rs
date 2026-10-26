@@ -12,13 +12,7 @@
 //! - `SIGUSR1`: sent by a worker once it's ready (listening, its routes applied).
 //! - `SIGTERM`, `SIGINT`: passed to the workers, which stop once their connections are closed.
 
-use std::{
-    ffi::OsString,
-    hash::Hasher,
-    path::Path,
-    process::ExitStatus,
-    sync::atomic::Ordering,
-};
+use std::{ffi::OsString, hash::Hasher, path::Path, process::ExitStatus, sync::atomic::Ordering};
 
 use nix::{sys::signal::Signal, unistd::Pid};
 use tokio::{
@@ -222,8 +216,9 @@ impl Workers {
 
     fn start_upgrade(&mut self, exe: &Path, args: &[OsString]) -> Result<u32, anyhow::Error> {
         // Checked first: the current worker stops accepting once it has handed its sockets over
-        let config = crate::config::load("/etc/proksi/configs")
-            .map_err(|err| anyhow::anyhow!("invalid configuration, keeping the current one: {err}"))?;
+        let config = crate::config::load("/etc/proksi/configs").map_err(|err| {
+            anyhow::anyhow!("invalid configuration, keeping the current one: {err}")
+        })?;
         crate::config::listeners::listeners(&config).map_err(anyhow::Error::msg)?;
 
         let previous = self.current;
@@ -284,7 +279,10 @@ mod tests {
     use super::daemon_requested;
 
     fn requested(args: &[&str], env: Option<&str>) -> bool {
-        daemon_requested(args.iter().map(OsString::from), env.map(std::ffi::OsStr::new))
+        daemon_requested(
+            args.iter().map(OsString::from),
+            env.map(std::ffi::OsStr::new),
+        )
     }
 
     #[test]

@@ -46,7 +46,10 @@ pub async fn notify_contract(store: &dyn Store) {
 
     let ops = r#"{"url":"https://hooks.example.com/a"}"#;
     let revision = store
-        .put_notify(NotifyRecord::new("ops", ops.into()), &by("ops", Expect::Absent))
+        .put_notify(
+            NotifyRecord::new("ops", ops.into()),
+            &by("ops", Expect::Absent),
+        )
         .await
         .unwrap();
     assert_eq!(revision, initial + 1);
@@ -66,19 +69,28 @@ pub async fn notify_contract(store: &dyn Store) {
 
     // Created once: a second create is refused, with the version saved
     let again = store
-        .put_notify(NotifyRecord::new("ops", "{}".into()), &by("ops", Expect::Absent))
+        .put_notify(
+            NotifyRecord::new("ops", "{}".into()),
+            &by("ops", Expect::Absent),
+        )
         .await;
     assert_eq!(again, Err(StoreError::Conflict { version: revision }));
 
     // Changed from the version read; a change from an older one is refused
     let changed = r#"{"url":"https://hooks.example.com/b"}"#;
     let next = store
-        .put_notify(NotifyRecord::new("ops", changed.into()), &by("ops", Expect::Version(revision)))
+        .put_notify(
+            NotifyRecord::new("ops", changed.into()),
+            &by("ops", Expect::Version(revision)),
+        )
         .await
         .unwrap();
     assert_eq!(next, revision + 1);
     let stale = store
-        .put_notify(NotifyRecord::new("ops", "{}".into()), &by("ops", Expect::Version(revision)))
+        .put_notify(
+            NotifyRecord::new("ops", "{}".into()),
+            &by("ops", Expect::Version(revision)),
+        )
         .await;
     assert_eq!(stale, Err(StoreError::Conflict { version: next }));
     let other = store
@@ -96,13 +108,23 @@ pub async fn notify_contract(store: &dyn Store) {
     assert_eq!(names, vec!["ops".to_string(), "pager".to_string()]);
 
     // Removed: from an older version refused, then removed; removing it again changes nothing
-    let stale = store.delete_notify("ops", &by("ops", Expect::Version(revision))).await;
+    let stale = store
+        .delete_notify("ops", &by("ops", Expect::Version(revision)))
+        .await;
     assert_eq!(stale, Err(StoreError::Conflict { version: next }));
-    let removed = store.delete_notify("ops", &by("ops", Expect::Version(next))).await.unwrap();
+    let removed = store
+        .delete_notify("ops", &by("ops", Expect::Version(next)))
+        .await
+        .unwrap();
     assert_eq!(removed, other + 1);
-    assert_eq!(store.delete_notify("ops", &Write::default()).await.unwrap(), removed);
     assert_eq!(
-        store.delete_notify("ops", &by("ops", Expect::Version(next))).await,
+        store.delete_notify("ops", &Write::default()).await.unwrap(),
+        removed
+    );
+    assert_eq!(
+        store
+            .delete_notify("ops", &by("ops", Expect::Version(next)))
+            .await,
         Err(StoreError::Conflict { version: 0 })
     );
     let blocks = store.notify_blocks().await.unwrap();
@@ -126,7 +148,10 @@ pub async fn routes_contract(store: &dyn Store) {
     let snapshot = store.routes().await.unwrap();
     assert_eq!(snapshot.revision, revision);
     // Kept as written, under the lowercase host
-    assert_eq!(written(snapshot.routes), vec![route("a.contract.test", "10.0.0.1")]);
+    assert_eq!(
+        written(snapshot.routes),
+        vec![route("a.contract.test", "10.0.0.1")]
+    );
 
     // Replacing the route of a host (hosts are case-insensitive)
     let revision = store
@@ -135,25 +160,43 @@ pub async fn routes_contract(store: &dyn Store) {
         .unwrap();
     assert_eq!(revision, initial + 2);
     let snapshot = store.routes().await.unwrap();
-    assert_eq!(written(snapshot.routes), vec![route("a.contract.test", "10.0.0.2")]);
+    assert_eq!(
+        written(snapshot.routes),
+        vec![route("a.contract.test", "10.0.0.2")]
+    );
 
     // Any schema version is kept as it is: Proksi decides what it can read
     let newer = versioned("b.contract.test", 99, "10.0.0.3");
-    let revision = store.put_route(newer.clone(), &Write::default()).await.unwrap();
+    let revision = store
+        .put_route(newer.clone(), &Write::default())
+        .await
+        .unwrap();
     let snapshot = store.routes().await.unwrap();
     assert_eq!(snapshot.revision, revision);
-    assert_eq!(written(snapshot.routes), vec![route("a.contract.test", "10.0.0.2"), newer]);
+    assert_eq!(
+        written(snapshot.routes),
+        vec![route("a.contract.test", "10.0.0.2"), newer]
+    );
 
     // Deleting
-    let revision = store.delete_route("B.contract.test", &Write::default()).await.unwrap();
+    let revision = store
+        .delete_route("B.contract.test", &Write::default())
+        .await
+        .unwrap();
     assert_eq!(revision, initial + 4);
-    let revision = store.delete_route("a.contract.test", &Write::default()).await.unwrap();
+    let revision = store
+        .delete_route("a.contract.test", &Write::default())
+        .await
+        .unwrap();
     assert_eq!(revision, initial + 5);
     assert!(store.routes().await.unwrap().routes.is_empty());
 
     // Deleting a missing route doesn't change the revision
     assert_eq!(
-        store.delete_route("missing.contract.test", &Write::default()).await.unwrap(),
+        store
+            .delete_route("missing.contract.test", &Write::default())
+            .await
+            .unwrap(),
         initial + 5
     );
 }
@@ -162,8 +205,14 @@ pub async fn routes_contract(store: &dyn Store) {
 pub async fn history_contract(store: &dyn Store) {
     let anyone = Write::default();
     let active = |routes: Vec<RouteRecord>| routes.into_iter().find(|r| r.host == "h.test");
-    let r1 = store.put_route(route("h.test", "10.0.0.1"), &by("ana", Expect::Absent)).await.unwrap();
-    let r2 = store.put_route(route("h.test", "10.0.0.2"), &by("bo", Expect::Version(r1))).await.unwrap();
+    let r1 = store
+        .put_route(route("h.test", "10.0.0.1"), &by("ana", Expect::Absent))
+        .await
+        .unwrap();
+    let r2 = store
+        .put_route(route("h.test", "10.0.0.2"), &by("bo", Expect::Version(r1)))
+        .await
+        .unwrap();
 
     // The active version
     let current = active(store.routes().await.unwrap().routes).unwrap();
@@ -173,18 +222,27 @@ pub async fn history_contract(store: &dyn Store) {
     // Every version is kept, with who saved it
     let first = store.route_version("H.test", r1).await.unwrap().unwrap();
     assert_eq!(first.record.data, route("h.test", "10.0.0.1").data);
-    assert_eq!((first.record.version, first.author.as_deref()), (r1, Some("ana")));
+    assert_eq!(
+        (first.record.version, first.author.as_deref()),
+        (r1, Some("ana"))
+    );
     assert_eq!(store.route_version("h.test", r2 + 100).await.unwrap(), None);
 
     // Rolling back makes an older version active again, as a new change
-    let r3 = store.rollback_route("h.test", r1, &by("cy", Expect::Version(r2))).await.unwrap();
+    let r3 = store
+        .rollback_route("h.test", r1, &by("cy", Expect::Version(r2)))
+        .await
+        .unwrap();
     assert_eq!(r3, r2 + 1);
     assert_eq!(store.revision().await.unwrap(), r3);
     let current = active(store.routes().await.unwrap().routes).unwrap();
     assert_eq!(current.version, r1);
     assert_eq!(current.data, route("h.test", "10.0.0.1").data);
     let history = store.route_history("h.test").await.unwrap();
-    let changes = history.iter().map(|e| (e.revision, e.change, e.author.as_deref())).collect::<Vec<_>>();
+    let changes = history
+        .iter()
+        .map(|e| (e.revision, e.change, e.author.as_deref()))
+        .collect::<Vec<_>>();
     assert_eq!(
         changes,
         vec![
@@ -195,11 +253,17 @@ pub async fn history_contract(store: &dyn Store) {
     );
 
     // Changes made from another version than the active one are refused, and change nothing
-    let stale = store.put_route(route("h.test", "10.0.0.9"), &by("bo", Expect::Version(r2))).await;
+    let stale = store
+        .put_route(route("h.test", "10.0.0.9"), &by("bo", Expect::Version(r2)))
+        .await;
     assert_eq!(stale, Err(StoreError::Conflict { version: r1 }));
-    let stale = store.rollback_route("h.test", r2, &by("bo", Expect::Version(r2))).await;
+    let stale = store
+        .rollback_route("h.test", r2, &by("bo", Expect::Version(r2)))
+        .await;
     assert_eq!(stale, Err(StoreError::Conflict { version: r1 }));
-    let exists = store.put_route(route("h.test", "10.0.0.9"), &by("bo", Expect::Absent)).await;
+    let exists = store
+        .put_route(route("h.test", "10.0.0.9"), &by("bo", Expect::Absent))
+        .await;
     assert_eq!(exists, Err(StoreError::Conflict { version: r1 }));
     assert_eq!(store.revision().await.unwrap(), r3);
     assert_eq!(store.route_history("h.test").await.unwrap().len(), 3);
@@ -209,20 +273,42 @@ pub async fn history_contract(store: &dyn Store) {
     assert_eq!(missing, Err(StoreError::NoVersion(r3 + 100)));
 
     // Deleting keeps the versions: rolling back restores the host
-    store.delete_route("h.test", &by("di", Expect::Version(r1))).await.unwrap();
+    store
+        .delete_route("h.test", &by("di", Expect::Version(r1)))
+        .await
+        .unwrap();
     assert!(active(store.routes().await.unwrap().routes).is_none());
-    assert_eq!(store.deleted_routes().await.unwrap(), vec!["h.test".to_string()]);
-    assert_eq!(store.route_history("h.test").await.unwrap()[0].change, Change::Deleted);
-    let gone = store.delete_route("h.test", &by("di", Expect::Version(r1))).await;
+    assert_eq!(
+        store.deleted_routes().await.unwrap(),
+        vec!["h.test".to_string()]
+    );
+    assert_eq!(
+        store.route_history("h.test").await.unwrap()[0].change,
+        Change::Deleted
+    );
+    let gone = store
+        .delete_route("h.test", &by("di", Expect::Version(r1)))
+        .await;
     assert_eq!(gone, Err(StoreError::Conflict { version: 0 }));
-    store.rollback_route("h.test", r2, &by("di", Expect::Absent)).await.unwrap();
-    assert_eq!(active(store.routes().await.unwrap().routes).unwrap().version, r2);
+    store
+        .rollback_route("h.test", r2, &by("di", Expect::Absent))
+        .await
+        .unwrap();
+    assert_eq!(
+        active(store.routes().await.unwrap().routes)
+            .unwrap()
+            .version,
+        r2
+    );
     assert!(store.deleted_routes().await.unwrap().is_empty());
 
     // The last 3 versions and changes are kept
     let mut last = r3;
     for upstream in ["10.0.1.1", "10.0.1.2", "10.0.1.3"] {
-        last = store.put_route(route("h.test", upstream), &anyone).await.unwrap();
+        last = store
+            .put_route(route("h.test", upstream), &anyone)
+            .await
+            .unwrap();
     }
     assert_eq!(store.route_history("h.test").await.unwrap().len(), 3);
     assert_eq!(store.route_version("h.test", r1).await.unwrap(), None);
@@ -354,17 +440,26 @@ pub async fn waiting_rooms_contract(store: &dyn Store) {
     assert_eq!(wait("b").await.unwrap(), Admission::Admitted);
     assert_eq!(
         wait("c").await.unwrap(),
-        Admission::Waiting { position: 1, waiting: 1 }
+        Admission::Waiting {
+            position: 1,
+            waiting: 1
+        }
     );
     assert_eq!(
         wait("d").await.unwrap(),
-        Admission::Waiting { position: 2, waiting: 2 }
+        Admission::Waiting {
+            position: 2,
+            waiting: 2
+        }
     );
     // Calling again keeps a slot, or a place
     assert_eq!(wait("a").await.unwrap(), Admission::Admitted);
     assert_eq!(
         wait("c").await.unwrap(),
-        Admission::Waiting { position: 1, waiting: 2 }
+        Admission::Waiting {
+            position: 1,
+            waiting: 2
+        }
     );
     // Rooms are independent
     assert_eq!(
@@ -376,9 +471,21 @@ pub async fn waiting_rooms_contract(store: &dyn Store) {
     // before `e`
     tokio::time::sleep(Duration::from_millis(1700)).await;
     assert_eq!(wait("d").await.unwrap(), Admission::Admitted);
-    assert_eq!(wait("e").await.unwrap(), Admission::Waiting { position: 1, waiting: 2 });
+    assert_eq!(
+        wait("e").await.unwrap(),
+        Admission::Waiting {
+            position: 1,
+            waiting: 2
+        }
+    );
     assert_eq!(wait("c").await.unwrap(), Admission::Admitted);
-    assert_eq!(wait("e").await.unwrap(), Admission::Waiting { position: 1, waiting: 1 });
+    assert_eq!(
+        wait("e").await.unwrap(),
+        Admission::Waiting {
+            position: 1,
+            waiting: 1
+        }
+    );
 
     // Visitors who stop waiting lose their place
     let impatient = RoomLimits {
@@ -388,9 +495,21 @@ pub async fn waiting_rooms_contract(store: &dyn Store) {
     };
     let wait = |visitor: &'static str| store.wait_in_room("sale", visitor, impatient);
     assert_eq!(wait("f").await.unwrap(), Admission::Admitted);
-    assert_eq!(wait("g").await.unwrap(), Admission::Waiting { position: 1, waiting: 1 });
+    assert_eq!(
+        wait("g").await.unwrap(),
+        Admission::Waiting {
+            position: 1,
+            waiting: 1
+        }
+    );
     tokio::time::sleep(Duration::from_millis(1200)).await;
-    assert_eq!(wait("h").await.unwrap(), Admission::Waiting { position: 1, waiting: 1 });
+    assert_eq!(
+        wait("h").await.unwrap(),
+        Admission::Waiting {
+            position: 1,
+            waiting: 1
+        }
+    );
 
     // One key, kept
     let key = store.waiting_room_key().await.unwrap();
@@ -409,10 +528,16 @@ pub(crate) async fn cursors_contract(store: &dyn Store) {
     assert!((1_990_000..=2_000_000).contains(&ahead[0]), "{ahead:?}");
     assert!((990_000..=1_000_000).contains(&ahead[1]), "{ahead:?}");
     // A cursor ahead of now moves on from where it is
-    let ahead = store.advance_cursors("n1", &[step("a", 2_000_000)]).await.unwrap();
+    let ahead = store
+        .advance_cursors("n1", &[step("a", 2_000_000)])
+        .await
+        .unwrap();
     assert!((3_980_000..=4_000_000).contains(&ahead[0]), "{ahead:?}");
     // Each namespace is its own
-    let ahead = store.advance_cursors("n2", &[step("a", 1_000_000)]).await.unwrap();
+    let ahead = store
+        .advance_cursors("n2", &[step("a", 1_000_000)])
+        .await
+        .unwrap();
     assert!((990_000..=1_000_000).contains(&ahead[0]), "{ahead:?}");
     // No step: it's read
     let ahead = store.advance_cursors("n1", &[step("b", 0)]).await.unwrap();

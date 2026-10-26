@@ -18,7 +18,9 @@ pub async fn respond(
     mut response: ResponseHeader,
 ) -> pingora::Result<()> {
     response_blocks(session, &mut response, ctx).await;
-    session.write_response_header(Box::new(response), true).await?;
+    session
+        .write_response_header(Box::new(response), true)
+        .await?;
     // Pingora sends HTTP/2 headers without ending the stream, and ends it only for sessions it
     // finishes: one dropped after an error (an upstream that can't be reached) would be reset,
     // and clients would see a failure instead of this response
@@ -131,7 +133,9 @@ pub async fn respond_with_body(
     response_blocks(session, &mut response, ctx).await;
     response.insert_header(header::CONTENT_LENGTH, body.len())?;
     let end = body.is_empty();
-    session.write_response_header(Box::new(response), end).await?;
+    session
+        .write_response_header(Box::new(response), end)
+        .await?;
     if !end {
         session.write_response_body(Some(body), true).await?;
     }

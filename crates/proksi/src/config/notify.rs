@@ -190,7 +190,7 @@ pub fn host_matches(pattern: &str, host: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Kind, NotifyBlock, host_matches};
+    use super::{host_matches, Kind, NotifyBlock};
 
     fn block(on: &[Kind], hosts: &[&str]) -> NotifyBlock {
         NotifyBlock {

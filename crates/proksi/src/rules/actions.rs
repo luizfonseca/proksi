@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use crate::{
     blocks::Blocks,
-    config::{RouteHeader, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin, host::Location},
+    config::{host::Location, RouteHeader, RouteHeaderAdd, RouteHeaderRemove, RoutePlugin},
 };
 
 type PluginConfig = HashMap<Cow<'static, str>, serde_json::Value>;

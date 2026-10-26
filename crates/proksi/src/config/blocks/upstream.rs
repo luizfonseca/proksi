@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::BTreeMap};
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::{RouteHeader, RouteUpstream, host::parse_upstream_address};
+use crate::config::{host::parse_upstream_address, RouteHeader, RouteUpstream};
 
 use super::headers::header;
 

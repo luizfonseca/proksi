@@ -2,8 +2,8 @@ use std::{borrow::Cow, collections::BTreeMap, path::PathBuf};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use figment::{
-    Figment, Provider,
     providers::{Env, Format, Serialized, Yaml},
+    Figment, Provider,
 };
 use hcl::Hcl;
 

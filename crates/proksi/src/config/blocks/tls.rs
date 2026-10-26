@@ -1,13 +1,13 @@
 use std::fmt;
 
 use serde::{
-    Deserialize, Deserializer, Serialize,
     de::{self, MapAccess, Visitor},
+    Deserialize, Deserializer, Serialize,
 };
 
 use crate::config::{
-    RouteSslPath,
     host::{Challenge, HostTls},
+    RouteSslPath,
 };
 
 /// `tls { ... }` in a host

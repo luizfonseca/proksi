@@ -5,7 +5,9 @@ use std::{error::Error, hash::RandomState, time::Duration};
 use crate::{
     certificates::Certificate,
     notify::{NotifyRecord, NotifySnapshot},
-    route::{HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write},
+    route::{
+        HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError, Write,
+    },
     waiting_room::{Admission, RoomLimits},
 };
 

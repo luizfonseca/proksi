@@ -4,7 +4,7 @@
 use std::borrow::Cow;
 
 use schemars::JsonSchema;
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Deserialize};
 
 use crate::{Kind, RoutePlugin};
 
@@ -566,7 +566,7 @@ pub fn schemas() -> serde_json::Map<String, serde_json::Value> {
 mod tests {
     use crate::RoutePlugin;
 
-    use super::{Check, Oauth2, RateLimit, read, schemas};
+    use super::{read, schemas, Check, Oauth2, RateLimit};
 
     fn plugin(name: &str, config: serde_json::Value) -> RoutePlugin {
         serde_json::from_value(serde_json::json!({ "name": name, "config": config })).unwrap()

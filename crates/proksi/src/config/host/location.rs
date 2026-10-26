@@ -507,13 +507,11 @@ mod tests {
             ..Default::default()
         };
         assert!(regex(Some("^/a/(\\d+)$"), None).compile().is_err());
-        assert!(
-            regex(Some("^/a/(\\d+"), Some("/b/$1"))
-                .compile()
-                .err()
-                .unwrap()
-                .starts_with("invalid `match`")
-        );
+        assert!(regex(Some("^/a/(\\d+"), Some("/b/$1"))
+            .compile()
+            .err()
+            .unwrap()
+            .starts_with("invalid `match`"));
         // Too large once compiled
         assert!(regex(Some("\\w{1000}{1000}"), Some("/")).compile().is_err());
         let mut combined = regex(Some("^/a$"), Some("/b"));

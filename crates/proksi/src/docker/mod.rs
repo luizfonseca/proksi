@@ -87,7 +87,10 @@ pub fn connect(config: &Config) -> Option<Docker> {
 
 // By default every container or service should have these 3 labels
 // So that Proksi can route the appropriate traffic
-pub async fn routes(docker: &Docker, mode: &DockerServiceMode) -> HashMap<String, ProksiDockerRoute> {
+pub async fn routes(
+    docker: &Docker,
+    mode: &DockerServiceMode,
+) -> HashMap<String, ProksiDockerRoute> {
     let mut filters = HashMap::new();
     filters.insert(
         "label",

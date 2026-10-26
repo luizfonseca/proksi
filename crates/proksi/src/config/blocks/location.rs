@@ -6,15 +6,15 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    RouteCache, RoutePlugin,
     host::{
         HealthCheck, LoadBalancing, Location, LocationTimeouts, Mirror, PathRewrite, Retry, Sticky,
         TrafficSplit,
     },
+    RouteCache, RoutePlugin,
 };
 
 use super::{
-    headers::{HeadersBlock, response_headers},
+    headers::{response_headers, HeadersBlock},
     upstream::UpstreamBlock,
 };
 

@@ -13,14 +13,14 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use http::{header, HeaderMap, HeaderValue, StatusCode};
-use pingora::{http::ResponseHeader, proxy::Session};
-use proksi_store::{Admission, RoomLimits, Store};
 use aws_lc_rs::{
     aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM},
     rand::{SecureRandom, SystemRandom},
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use http::{header, HeaderMap, HeaderValue, StatusCode};
+use pingora::{http::ResponseHeader, proxy::Session};
+use proksi_store::{Admission, RoomLimits, Store};
 use tokio::sync::OnceCell;
 
 use crate::{
@@ -109,7 +109,8 @@ impl WaitingRoom {
             page,
             on_store_error: settings.on_store_error,
             secret: settings.secret.map(|secret| {
-                let digest = aws_lc_rs::digest::digest(&aws_lc_rs::digest::SHA256, secret.as_bytes());
+                let digest =
+                    aws_lc_rs::digest::digest(&aws_lc_rs::digest::SHA256, secret.as_bytes());
                 let mut key = [0; 32];
                 key.copy_from_slice(digest.as_ref());
                 key
@@ -342,16 +343,18 @@ fn hex8(value: u64) -> String {
 
 fn hex(bytes: &[u8; 16]) -> String {
     use std::fmt::Write;
-    bytes.iter().fold(String::with_capacity(32), |mut text, byte| {
-        let _ = write!(text, "{byte:02x}");
-        text
-    })
+    bytes
+        .iter()
+        .fold(String::with_capacity(32), |mut text, byte| {
+            let _ = write!(text, "{byte:02x}");
+            text
+        })
 }
 
 #[cfg(test)]
 mod tests {
-    use http::HeaderMap;
     use aws_lc_rs::aead::{LessSafeKey, UnboundKey, AES_256_GCM};
+    use http::HeaderMap;
 
     use crate::RoutePlugin;
 

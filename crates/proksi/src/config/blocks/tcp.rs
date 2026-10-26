@@ -5,9 +5,9 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    RouteUpstream,
-    host::{HostTls, parse_upstream_address},
+    host::{parse_upstream_address, HostTls},
     tcp::{TcpRoute, TcpTls},
+    RouteUpstream,
 };
 
 /// How long connecting to a `tcp` block's upstream can take by default: a connection to an

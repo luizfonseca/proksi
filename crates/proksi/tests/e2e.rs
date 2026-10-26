@@ -754,7 +754,11 @@ async fn test_access_logs_name_the_upstream_connection() {
         assert!(res.starts_with("HTTP/1.1 200"), "{res}");
         let request_id = res
             .lines()
-            .find_map(|line| line.to_lowercase().strip_prefix("x-request-id: ").map(str::to_string))
+            .find_map(|line| {
+                line.to_lowercase()
+                    .strip_prefix("x-request-id: ")
+                    .map(str::to_string)
+            })
             .unwrap_or_else(|| panic!("no request id: {res}"));
         request_ids.push(request_id);
     }
@@ -789,12 +793,30 @@ async fn test_access_logs_name_the_upstream_connection() {
     let log = proksi.access_log("/forwarded");
     let log: serde_json::Value = serde_json::from_str(&log).unwrap_or_else(|_| panic!("{log}"));
     let fields = log.get("fields").unwrap_or(&log);
-    assert_eq!(fields["x_forwarded_for"], "203.0.113.7, 198.51.100.2", "{log}");
-    assert!(fields["client_ip"].as_str().unwrap_or("").starts_with("127.0.0.1:"), "{log}");
-    assert!(fields["remote_addr"].as_str().unwrap_or("").starts_with("127.0.0.1:"), "{log}");
+    assert_eq!(
+        fields["x_forwarded_for"], "203.0.113.7, 198.51.100.2",
+        "{log}"
+    );
+    assert!(
+        fields["client_ip"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("127.0.0.1:"),
+        "{log}"
+    );
+    assert!(
+        fields["remote_addr"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("127.0.0.1:"),
+        "{log}"
+    );
 
     // Health checks aren't logged
-    let res = proksi.get_http_on(proksi.http_port, "logged.test", "/ping").await.unwrap();
+    let res = proksi
+        .get_http_on(proksi.http_port, "logged.test", "/ping")
+        .await
+        .unwrap();
     assert!(res.ends_with("pong"), "{res}");
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(proksi.access_log("/ping"), "no access log");
@@ -829,16 +851,25 @@ async fn request_ids(proksi: &Harness, id: &str) -> (String, String) {
     let request = format!(
         "GET /id HTTP/1.1\r\nHost: logged.test\r\nX-Request-Id: {id}\r\nConnection: close\r\n\r\n"
     );
-    let res = proksi.raw_http_on(proksi.http_port, request.as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(proksi.http_port, request.as_bytes())
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     let sent = res
         .lines()
-        .find_map(|line| line.to_lowercase().strip_prefix("x-request-id: ").map(str::to_string))
+        .find_map(|line| {
+            line.to_lowercase()
+                .strip_prefix("x-request-id: ")
+                .map(str::to_string)
+        })
         .unwrap_or_else(|| panic!("no request id: {res}"));
     let body = res.split("\r\n\r\n").nth(1).unwrap_or_default();
-    let echoed: serde_json::Value =
-        serde_json::from_str(body).unwrap_or_else(|_| panic!("{res}"));
-    let received = echoed["headers"]["x-request-id"].as_str().unwrap_or_default().to_string();
+    let echoed: serde_json::Value = serde_json::from_str(body).unwrap_or_else(|_| panic!("{res}"));
+    let received = echoed["headers"]["x-request-id"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
     (sent, received)
 }
 
@@ -864,7 +895,10 @@ async fn test_request_ids_from_trusted_proxies_are_kept() {
     .await;
 
     let (sent, received) = request_ids(&proksi, "edge-7f3a").await;
-    assert_eq!((sent.as_str(), received.as_str()), ("edge-7f3a", "edge-7f3a"));
+    assert_eq!(
+        (sent.as_str(), received.as_str()),
+        ("edge-7f3a", "edge-7f3a")
+    );
 
     // In a header of its own
     let request = b"GET /correlated HTTP/1.1\r\nHost: logged.test\r\nX-Correlation-Id: edge-9c1d\r\nConnection: close\r\n\r\n";
@@ -919,12 +953,21 @@ async fn test_exact_and_regex_locations() {
         ("/blog/abc/posts", "blog"),
         ("/blog", "blog"),
     ] {
-        let res = proksi.get_http_on(proksi.http_port, "located.test", path).await.unwrap();
-        assert!(res.starts_with("HTTP/1.1 200") && res.ends_with(expected), "{path}: {res}");
+        let res = proksi
+            .get_http_on(proksi.http_port, "located.test", path)
+            .await
+            .unwrap();
+        assert!(
+            res.starts_with("HTTP/1.1 200") && res.ends_with(expected),
+            "{path}: {res}"
+        );
     }
 
     // Below the exact `/`: no location
-    let res = proksi.get_http_on(proksi.http_port, "located.test", "/other").await.unwrap();
+    let res = proksi
+        .get_http_on(proksi.http_port, "located.test", "/other")
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 404"), "{res}");
 
     proksi.assert_healthy();
@@ -984,7 +1027,11 @@ async fn test_compress() {
             .unwrap();
         let res = String::from_utf8_lossy(&response);
         assert!(res.starts_with("HTTP/1.1 200"), "{path} {accept}: {res}");
-        assert_eq!(header(&res, "content-encoding"), expected, "{path} {accept}: {res}");
+        assert_eq!(
+            header(&res, "content-encoding"),
+            expected,
+            "{path} {accept}: {res}"
+        );
     }
 
     proksi.assert_healthy();
@@ -1032,25 +1079,37 @@ async fn test_redirect_and_respond() {
     let mut proksi = Harness::start_without_https(HOSTS_WITH_REDIRECTS).await;
     let port = proksi.http_port;
 
-    let res = proksi.get_http_on(port, "www.moved.test", "/a/b?c=d").await.unwrap();
+    let res = proksi
+        .get_http_on(port, "www.moved.test", "/a/b?c=d")
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 301"), "{res}");
     assert_eq!(header(&res, "location"), Some("https://moved.test/a/b?c=d"));
 
-    let res = proksi.get_http_on(port, "moved.test", "/docs/intro?x=1").await.unwrap();
+    let res = proksi
+        .get_http_on(port, "moved.test", "/docs/intro?x=1")
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 302"), "{res}");
     assert_eq!(
         header(&res, "location"),
         Some("https://docs.moved.test/docs/intro?from=moved.test")
     );
 
-    let res = proksi.get_http_on(port, "moved.test", "/maintenance").await.unwrap();
+    let res = proksi
+        .get_http_on(port, "moved.test", "/maintenance")
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 503"), "{res}");
     assert_eq!(header(&res, "content-type"), Some("text/plain"));
     assert!(res.ends_with("Back soon"), "{res}");
     assert_eq!(proksi.http_upstream.hits("/maintenance"), 0);
 
     // Other locations are proxied
-    let res = proksi.get_http_on(port, "moved.test", "/other").await.unwrap();
+    let res = proksi
+        .get_http_on(port, "moved.test", "/other")
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
 
     proksi.assert_healthy();
@@ -1110,7 +1169,11 @@ async fn test_ip_filter() {
             "GET {path} HTTP/1.1\r\nHost: filtered.test\r\nX-Forwarded-For: {client}\r\nConnection: close\r\n\r\n"
         );
         let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
-        assert_eq!(res.split(' ').nth(1), Some(expected), "{path} from {client}: {res}");
+        assert_eq!(
+            res.split(' ').nth(1),
+            Some(expected),
+            "{path} from {client}: {res}"
+        );
     }
     assert_eq!(proksi.http_upstream.hits("/admin/users"), 0);
 
@@ -1171,12 +1234,18 @@ async fn test_cors() {
         header(&res, "access-control-allow-origin"),
         Some("https://app.example.com")
     );
-    assert_eq!(header(&res, "access-control-allow-methods"), Some("GET, POST"));
+    assert_eq!(
+        header(&res, "access-control-allow-methods"),
+        Some("GET, POST")
+    );
     assert_eq!(
         header(&res, "access-control-allow-headers"),
         Some("content-type, x-custom")
     );
-    assert_eq!(header(&res, "access-control-allow-credentials"), Some("true"));
+    assert_eq!(
+        header(&res, "access-control-allow-credentials"),
+        Some("true")
+    );
     assert_eq!(header(&res, "access-control-max-age"), Some("600"));
     assert_eq!(proksi.http_upstream.hits("/items"), 0);
 
@@ -1188,10 +1257,18 @@ async fn test_cors() {
     );
 
     // Other origins get no CORS headers
-    for origin in ["https://evil.test", "https://preview.example.com", "http://app.example.com"] {
+    for origin in [
+        "https://evil.test",
+        "https://preview.example.com",
+        "http://app.example.com",
+    ] {
         let res = send(preflight("/items", origin)).await;
         assert!(res.starts_with("HTTP/1.1 204"), "{origin}: {res}");
-        assert_eq!(header(&res, "access-control-allow-origin"), None, "{origin}: {res}");
+        assert_eq!(
+            header(&res, "access-control-allow-origin"),
+            None,
+            "{origin}: {res}"
+        );
     }
 
     // Requests get the headers on their response (here, from basic_auth)
@@ -1205,7 +1282,10 @@ async fn test_cors() {
         header(&res, "access-control-allow-origin"),
         Some("https://app.example.com")
     );
-    assert_eq!(header(&res, "access-control-expose-headers"), Some("X-Total-Count"));
+    assert_eq!(
+        header(&res, "access-control-expose-headers"),
+        Some("X-Total-Count")
+    );
     assert_eq!(header(&res, "vary"), Some("Origin"));
 
     // Any origin, without credentials
@@ -1299,7 +1379,10 @@ async fn test_forward_auth() {
     };
 
     // Signed in: proxied with the user the auth service answered (not the client's own)
-    let request = get("/private?x=1", "Cookie: session=ok\r\nRemote-User: mallory\r\n");
+    let request = get(
+        "/private?x=1",
+        "Cookie: session=ok\r\nRemote-User: mallory\r\n",
+    );
     let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     let body = res.split("\r\n\r\n").nth(1).unwrap_or_default();
@@ -1319,7 +1402,10 @@ async fn test_forward_auth() {
     }
 
     // Not signed in: the auth service's answer
-    let res = proksi.raw_http_on(port, get("/private", "").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, get("/private", "").as_bytes())
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 302"), "{res}");
     assert_eq!(header(&res, "location"), Some("https://auth.test/login"));
     assert_eq!(header(&res, "set-cookie"), Some("flow=1"));
@@ -1455,29 +1541,64 @@ async fn test_rules() {
     assert_eq!(header(&res, "location"), Some("https://rules.test/a?b=1"));
 
     // The host's rule: maintenance, except for the office network
-    let res = send(request("GET", "rules.test", "/shop/cart", "X-Forwarded-For: 198.51.100.7\r\n")).await;
+    let res = send(request(
+        "GET",
+        "rules.test",
+        "/shop/cart",
+        "X-Forwarded-For: 198.51.100.7\r\n",
+    ))
+    .await;
     assert!(res.starts_with("HTTP/1.1 503"), "{res}");
     assert!(res.ends_with("Back soon"), "{res}");
-    let res = send(request("GET", "rules.test", "/shop/cart", "X-Forwarded-For: 203.0.113.9\r\n")).await;
+    let res = send(request(
+        "GET",
+        "rules.test",
+        "/shop/cart",
+        "X-Forwarded-For: 203.0.113.9\r\n",
+    ))
+    .await;
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
 
     // The location's rules, in order: the first that answers ends the request
     let both = "User-Agent: Mozilla/5.0 (compatible; Bytespider)\r\nCookie: beta=1\r\n";
     let res = send(request("GET", "rules.test", "/", both)).await;
     assert!(res.starts_with("HTTP/1.1 403"), "{res}");
-    let res = send(request("GET", "rules.test", "/page", "Cookie: a=b; beta=1\r\n")).await;
+    let res = send(request(
+        "GET",
+        "rules.test",
+        "/page",
+        "Cookie: a=b; beta=1\r\n",
+    ))
+    .await;
     assert!(res.starts_with("HTTP/1.1 302"), "{res}");
-    assert_eq!(header(&res, "location"), Some("https://beta.rules.test/page"));
+    assert_eq!(
+        header(&res, "location"),
+        Some("https://beta.rules.test/page")
+    );
 
     // The method and headers changed for the upstream, and for the next rule
-    let res = send(request("POST", "rules.test", "/items/1", "X-HTTP-Method-Override: DELETE\r\n")).await;
+    let res = send(request(
+        "POST",
+        "rules.test",
+        "/items/1",
+        "X-HTTP-Method-Override: DELETE\r\n",
+    ))
+    .await;
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     let seen = upstream(&res);
     assert_eq!(seen["method"], "DELETE", "{res}");
     assert_eq!(seen["headers"]["x-overridden"], "1", "{res}");
-    assert!(seen["headers"].get("x-http-method-override").is_none(), "{res}");
+    assert!(
+        seen["headers"].get("x-http-method-override").is_none(),
+        "{res}"
+    );
     // The blocks of a matched rule take part in the later stages: its request id, its headers
-    assert!(seen["headers"]["x-request-id"].as_str().is_some_and(|id| !id.is_empty()), "{res}");
+    assert!(
+        seen["headers"]["x-request-id"]
+            .as_str()
+            .is_some_and(|id| !id.is_empty()),
+        "{res}"
+    );
     assert_eq!(header(&res, "x-rule"), Some("deletes"));
     assert!(header(&res, "x-request-id").is_some(), "{res}");
 
@@ -1605,11 +1726,20 @@ async fn test_tcp_blocks() {
         plain["upstream"],
         format!("127.0.0.1:{}", proksi.http_upstream.port)
     );
-    assert!(plain["client_ip"].as_str().unwrap().starts_with("127.0.0.1"), "{plain}");
+    assert!(
+        plain["client_ip"]
+            .as_str()
+            .unwrap()
+            .starts_with("127.0.0.1"),
+        "{plain}"
+    );
     assert!(plain["bytes_in"].as_u64().unwrap() > 40, "{plain}");
     assert!(plain["bytes_out"].as_u64().unwrap() > 100, "{plain}");
     assert!(plain["duration_ms"].as_u64().is_some(), "{plain}");
-    assert_eq!(log("tcp \"app\" in host \"a.test\"")["server_name"], "a.test");
+    assert_eq!(
+        log("tcp \"app\" in host \"a.test\"")["server_name"],
+        "a.test"
+    );
 
     proksi.assert_healthy();
 }
@@ -1779,7 +1909,11 @@ async fn test_tls_passthrough_on_the_https_port() {
 
     // Asking for pass.test: the connection reaches backend.test's address untouched
     let res = proksi
-        .tls_request(proksi.https_port, "pass.test", &get("backend.test", "/pass"))
+        .tls_request(
+            proksi.https_port,
+            "pass.test",
+            &get("backend.test", "/pass"),
+        )
         .await
         .unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
@@ -2053,7 +2187,10 @@ async fn test_admin_metrics() {
             .raw_http_on(admin_port, metrics(Some("e2e-token")).as_bytes())
             .await
             .unwrap();
-        if recorded.iter().all(|line| res.lines().any(|l| l.trim_end() == *line)) {
+        if recorded
+            .iter()
+            .all(|line| res.lines().any(|l| l.trim_end() == *line))
+        {
             break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -2074,12 +2211,20 @@ async fn test_admin_metrics() {
         "{res}"
     );
     assert_eq!(
-        line("proksi_requests_total{host=\"_unknown_host\"", "status=\"4xx\"").as_deref(),
+        line(
+            "proksi_requests_total{host=\"_unknown_host\"",
+            "status=\"4xx\""
+        )
+        .as_deref(),
         Some("1"),
         "{res}"
     );
     assert_eq!(
-        line("proksi_requests_total{host=\"_https_redirect\"", "status=\"3xx\"").as_deref(),
+        line(
+            "proksi_requests_total{host=\"_https_redirect\"",
+            "status=\"3xx\""
+        )
+        .as_deref(),
         Some("1"),
         "{res}"
     );
@@ -2123,12 +2268,20 @@ async fn test_admin_metrics() {
     );
     // TCP: the connection closed once the upstream answered
     assert_eq!(
-        line("proksi_tcp_connections_total{block=\"tcp \\\"web\\\"\"}", "").as_deref(),
+        line(
+            "proksi_tcp_connections_total{block=\"tcp \\\"web\\\"\"}",
+            ""
+        )
+        .as_deref(),
         Some("1"),
         "{res}"
     );
     assert_eq!(
-        line("proksi_tcp_connections_active{block=\"tcp \\\"web\\\"\"}", "").as_deref(),
+        line(
+            "proksi_tcp_connections_active{block=\"tcp \\\"web\\\"\"}",
+            ""
+        )
+        .as_deref(),
         Some("0"),
         "{res}"
     );
@@ -2142,7 +2295,10 @@ async fn test_admin_metrics() {
     };
     assert!(bytes("in") > 40 && bytes("out") > 100, "{res}");
     // Hosts by source
-    assert!(line("proksi_routes{source=\"file\"}", "").is_some(), "{res}");
+    assert!(
+        line("proksi_routes{source=\"file\"}", "").is_some(),
+        "{res}"
+    );
 
     // Certificate expiry, refreshed 5 seconds after starting
     let mut expiry = None;
@@ -2208,7 +2364,10 @@ async fn test_admin_live_stats() {
         .unwrap_or_else(|| panic!("{stats}"));
     let location = &host["locations"][0];
     assert_eq!(location["responses"]["2xx"], 5, "{stats}");
-    assert!(location["requests_per_second"].as_f64().unwrap() > 0.0, "{stats}");
+    assert!(
+        location["requests_per_second"].as_f64().unwrap() > 0.0,
+        "{stats}"
+    );
     assert!(location["duration_ms"]["p50"].as_f64().is_some(), "{stats}");
     assert_eq!(location["upstreams"][0]["healthy"], true, "{stats}");
 
@@ -2242,7 +2401,12 @@ async fn test_admin_live_stats() {
         received.push_str(&String::from_utf8_lossy(&buf[..read]));
     }
     assert!(received.starts_with("HTTP/1.1 200"), "{received}");
-    assert!(received.to_lowercase().contains("content-type: text/event-stream"), "{received}");
+    assert!(
+        received
+            .to_lowercase()
+            .contains("content-type: text/event-stream"),
+        "{received}"
+    );
     let event = received
         .lines()
         .find_map(|line| line.strip_prefix("data: "))
@@ -2250,15 +2414,21 @@ async fn test_admin_live_stats() {
     let event: serde_json::Value = serde_json::from_str(event).unwrap();
     assert!(event["hosts"].is_array(), "{event}");
     assert!(event["total"]["requests_per_second"].is_number(), "{event}");
-    assert!(event["process"]["memory_bytes"].as_u64().unwrap() > 0, "{event}");
+    assert!(
+        event["process"]["memory_bytes"].as_u64().unwrap() > 0,
+        "{event}"
+    );
 
     // The requests stream sends each request served while it's open
     let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", admin_port))
         .await
         .unwrap();
-    tokio::io::AsyncWriteExt::write_all(&mut stream, get("/api/v1/requests/stream?host=APP.test").as_bytes())
-        .await
-        .unwrap();
+    tokio::io::AsyncWriteExt::write_all(
+        &mut stream,
+        get("/api/v1/requests/stream?host=APP.test").as_bytes(),
+    )
+    .await
+    .unwrap();
     let mut received = String::new();
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
     while !received.contains("\"path\":\"/watched\"") && tokio::time::Instant::now() < deadline {
@@ -2311,7 +2481,10 @@ async fn test_admin_status_hosts_and_certificates() {
         format!("127.0.0.1:{}", proksi.tcp_ports[0]),
         "{status}"
     );
-    assert!(status["routes"]["by_source"]["file"].as_u64().unwrap() >= 2, "{status}");
+    assert!(
+        status["routes"]["by_source"]["file"].as_u64().unwrap() >= 2,
+        "{status}"
+    );
 
     let hosts = json(
         proksi
@@ -2327,7 +2500,10 @@ async fn test_admin_status_hosts_and_certificates() {
         .unwrap_or_else(|| panic!("{hosts}"));
     assert_eq!(limited["source"], "file");
     assert_eq!(limited["locations"][0]["location"], "/");
-    assert_eq!(limited["locations"][0]["blocks"], serde_json::json!(["rate_limit"]));
+    assert_eq!(
+        limited["locations"][0]["blocks"],
+        serde_json::json!(["rate_limit"])
+    );
     assert_eq!(limited["locations"][0]["upstreams"][0]["healthy"], true);
 
     let certificates = json(
@@ -2342,8 +2518,14 @@ async fn test_admin_status_hosts_and_certificates() {
         .iter()
         .find(|certificate| certificate["domain"] == "limited.test")
         .unwrap_or_else(|| panic!("{certificates}"));
-    assert!(certificate["days_left"].as_i64().unwrap() > 0, "{certificate}");
-    assert!(certificate["expires_at"].as_i64().is_some(), "{certificate}");
+    assert!(
+        certificate["days_left"].as_i64().unwrap() > 0,
+        "{certificate}"
+    );
+    assert!(
+        certificate["expires_at"].as_i64().is_some(),
+        "{certificate}"
+    );
 
     proksi.assert_healthy();
 }
@@ -2448,11 +2630,10 @@ async fn test_admin_routes() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_forwarded_headers() {
     let get = |forwarded: &str| {
-        format!(
-            "GET /forwarded HTTP/1.1\r\nHost: app.test\r\n{forwarded}Connection: close\r\n\r\n"
-        )
+        format!("GET /forwarded HTTP/1.1\r\nHost: app.test\r\n{forwarded}Connection: close\r\n\r\n")
     };
-    let forged = "X-Forwarded-For: 1.2.3.4\r\nX-Forwarded-Proto: http\r\nX-Forwarded-Host: forged.test\r\n";
+    let forged =
+        "X-Forwarded-For: 1.2.3.4\r\nX-Forwarded-Proto: http\r\nX-Forwarded-Host: forged.test\r\n";
     let headers = |res: &str| -> serde_json::Value {
         let body: serde_json::Value =
             serde_json::from_str(res.split("\r\n\r\n").nth(1).unwrap_or_default()).unwrap();
@@ -2523,7 +2704,10 @@ async fn test_admin_without_metrics() {
             .await
             .unwrap();
         assert!(res.starts_with("HTTP/1.1 404"), "{path}: {res}");
-        assert!(res.contains("metrics are disabled (admin.metrics = false)"), "{res}");
+        assert!(
+            res.contains("metrics are disabled (admin.metrics = false)"),
+            "{res}"
+        );
     }
     // The rest of the API still works
     let res = proksi
@@ -2559,7 +2743,9 @@ host "chain.test" {
 
     // The leaf and both intermediates, verified against the root alone
     assert_eq!(
-        proksi.verified_handshake(proksi.https_port, "chain.test").await,
+        proksi
+            .verified_handshake(proksi.https_port, "chain.test")
+            .await,
         Ok(3)
     );
     proksi.assert_healthy();
@@ -2659,14 +2845,18 @@ host "files.test" {{
     let mut proksi = Harness::start_with(vec![], &config).await;
     proksi.resolve("files.test");
     proksi.wait_for("files.test", "/", 200).await;
-    let served = proksi.served_certificate(proksi.https_port, "files.test").await;
+    let served = proksi
+        .served_certificate(proksi.https_port, "files.test")
+        .await;
     assert_eq!(served.to_pem().unwrap(), first);
 
     // Renewed by another tool, without touching the configuration
     let renewed = write("files.test");
     let mut reloaded = false;
     for _ in 0..30 {
-        let served = proksi.served_certificate(proksi.https_port, "files.test").await;
+        let served = proksi
+            .served_certificate(proksi.https_port, "files.test")
+            .await;
         if served.to_pem().unwrap() == renewed {
             reloaded = true;
             break;
@@ -2698,7 +2888,9 @@ async fn closed_within(stream: &mut tokio::net::TcpStream, timeout: std::time::D
             }
         }
     };
-    tokio::time::timeout(timeout, read_until_closed).await.is_ok()
+    tokio::time::timeout(timeout, read_until_closed)
+        .await
+        .is_ok()
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2780,8 +2972,10 @@ host "plain.test" {
                 .unwrap();
             stream
                 .write_all(
-                    format!("POST {path} HTTP/1.1\r\nHost: plain.test\r\nContent-Length: 100\r\n\r\nab")
-                        .as_bytes(),
+                    format!(
+                        "POST {path} HTTP/1.1\r\nHost: plain.test\r\nContent-Length: 100\r\n\r\nab"
+                    )
+                    .as_bytes(),
                 )
                 .await
                 .unwrap();
@@ -2820,7 +3014,9 @@ async fn negotiated_cipher(port: u16, ciphers: Option<&'static str>) -> Result<S
         let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
         connector.set_verify(SslVerifyMode::NONE);
         if let Some(ciphers) = ciphers {
-            connector.set_max_proto_version(Some(SslVersion::TLS1_2)).unwrap();
+            connector
+                .set_max_proto_version(Some(SslVersion::TLS1_2))
+                .unwrap();
             connector.set_cipher_list(ciphers).unwrap();
         }
         let stream =
@@ -2830,7 +3026,9 @@ async fn negotiated_cipher(port: u16, ciphers: Option<&'static str>) -> Result<S
             .connect("tls.test", stream)
             .map_err(|err| err.to_string())?;
         let cipher = stream.ssl().current_cipher();
-        Ok(cipher.map(|cipher| cipher.name().to_string()).unwrap_or_default())
+        Ok(cipher
+            .map(|cipher| cipher.name().to_string())
+            .unwrap_or_default())
     })
     .await
     .unwrap()
@@ -2909,8 +3107,10 @@ host "plain.test" {
                 .unwrap();
             stream
                 .write_all(
-                    format!("POST {path} HTTP/1.1\r\nHost: plain.test\r\nContent-Length: 100\r\n\r\n")
-                        .as_bytes(),
+                    format!(
+                        "POST {path} HTTP/1.1\r\nHost: plain.test\r\nContent-Length: 100\r\n\r\n"
+                    )
+                    .as_bytes(),
                 )
                 .await
                 .unwrap();
@@ -2940,7 +3140,9 @@ host "plain.test" {
         }
     };
 
-    let (elapsed, res) = trickle("/").await.expect("the body was still accepted after 3 s");
+    let (elapsed, res) = trickle("/")
+        .await
+        .expect("the body was still accepted after 3 s");
     assert!(elapsed < std::time::Duration::from_secs(2), "{elapsed:?}");
     assert!(res.is_empty() || res.starts_with("HTTP/1.1 408"), "{res}");
 
@@ -3022,7 +3224,11 @@ tcp "gone" {{
         .unwrap();
     let mut buf = [0u8; 16];
     let closed = tokio::time::timeout(Duration::from_secs(5), client.read(&mut buf)).await;
-    assert!(closed.is_ok(), "proksi didn't close the connection\n{}", proksi.logs());
+    assert!(
+        closed.is_ok(),
+        "proksi didn't close the connection\n{}",
+        proksi.logs()
+    );
 
     let expected = [
         "proksi_tls_handshake_failures_total 1",
@@ -3037,13 +3243,19 @@ tcp "gone" {{
             )
             .await
             .unwrap();
-        if expected.iter().all(|line| metrics.lines().any(|l| l.trim_end() == *line)) {
+        if expected
+            .iter()
+            .all(|line| metrics.lines().any(|l| l.trim_end() == *line))
+        {
             break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
     for line in expected {
-        assert!(metrics.lines().any(|l| l.trim_end() == line), "{line}\n{metrics}");
+        assert!(
+            metrics.lines().any(|l| l.trim_end() == line),
+            "{line}\n{metrics}"
+        );
     }
 }
 
@@ -3057,7 +3269,10 @@ async fn test_clients_giving_up_on_tls_handshakes_are_not_logged_as_errors() {
         let mut client = tokio::net::TcpStream::connect(("127.0.0.1", proksi.https_port))
             .await
             .unwrap();
-        client.write_all(&[0x16, 0x03, 0x01, 0x00, 0x40]).await.unwrap();
+        client
+            .write_all(&[0x16, 0x03, 0x01, 0x00, 0x40])
+            .await
+            .unwrap();
     }
     // A request after them: their failures were logged by then, if they were
     assert_eq!(proksi.get("app.test", "/").await.unwrap().status, 200);
@@ -3096,7 +3311,10 @@ host "solver.test" {
         .await
         .unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
-    assert!(res.contains("\"path\":\"/.well-known/acme-challenge/token-123\""), "{res}");
+    assert!(
+        res.contains("\"path\":\"/.well-known/acme-challenge/token-123\""),
+        "{res}"
+    );
 
     // Other challenges are proksi's own (none here), other paths redirected to HTTPS
     let res = proksi
@@ -3136,8 +3354,17 @@ tcp "web" {
 "#;
 
     /// Sends requests to `app.test` until stopped, counting the ones that failed
-    fn requests_in_a_loop(proksi: &Harness) -> (Arc<AtomicBool>, Arc<AtomicUsize>, tokio::task::JoinHandle<usize>) {
-        let (stop, failed) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicUsize::new(0)));
+    fn requests_in_a_loop(
+        proksi: &Harness,
+    ) -> (
+        Arc<AtomicBool>,
+        Arc<AtomicUsize>,
+        tokio::task::JoinHandle<usize>,
+    ) {
+        let (stop, failed) = (
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(AtomicUsize::new(0)),
+        );
         let client = proksi.client();
         let url = format!("https://app.test:{}/", proksi.https_port);
         let (stopping, failures) = (stop.clone(), failed.clone());
@@ -3205,7 +3432,9 @@ tcp "web" {
         let mut open = tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[0]))
             .await
             .unwrap();
-        assert!(request_on(&mut open, "/before").await.starts_with("HTTP/1.1 200"));
+        assert!(request_on(&mut open, "/before")
+            .await
+            .starts_with("HTTP/1.1 200"));
         let (stop, failed, requests) = requests_in_a_loop(&proksi);
 
         upgrade(&mut proksi);
@@ -3214,9 +3443,16 @@ tcp "web" {
         stop.store(true, Ordering::Relaxed);
         let sent = requests.await.unwrap();
 
-        assert_eq!(failed.load(Ordering::Relaxed), 0, "of {sent}:\n{}", proksi.logs());
+        assert_eq!(
+            failed.load(Ordering::Relaxed),
+            0,
+            "of {sent}:\n{}",
+            proksi.logs()
+        );
         // The connection open before the upgrade is still served
-        assert!(request_on(&mut open, "/after").await.starts_with("HTTP/1.1 200"));
+        assert!(request_on(&mut open, "/after")
+            .await
+            .starts_with("HTTP/1.1 200"));
         // The previous process stops once it's closed
         drop(open);
         wait_for_previous_to_stop(&proksi).await;
@@ -3229,7 +3465,8 @@ tcp "web" {
     async fn test_settings_changes_keep_connections() {
         assert_upgrade_keeps_connections(|proksi| {
             // Anything but hosts restarts proksi
-            proksi.rewrite_extra_config(&format!("{CONFIG}\ndocker {{\n  interval_secs = 99\n}}\n"));
+            proksi
+                .rewrite_extra_config(&format!("{CONFIG}\ndocker {{\n  interval_secs = 99\n}}\n"));
         })
         .await;
     }
@@ -3244,8 +3481,8 @@ tcp "web" {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_changes_during_an_upgrade_are_applied_after_it() {
-        let proksi = Harness::start_with(vec![Route::new("app.test", Upstream::Http)], CONFIG)
-            .await;
+        let proksi =
+            Harness::start_with(vec![Route::new("app.test", Upstream::Http)], CONFIG).await;
         let (stop, failed, requests) = requests_in_a_loop(&proksi);
 
         proksi.signal(nix::sys::signal::Signal::SIGHUP);
@@ -3257,7 +3494,12 @@ tcp "web" {
         stop.store(true, Ordering::Relaxed);
         let sent = requests.await.unwrap();
 
-        assert_eq!(failed.load(Ordering::Relaxed), 0, "of {sent}:\n{}", proksi.logs());
+        assert_eq!(
+            failed.load(Ordering::Relaxed),
+            0,
+            "of {sent}:\n{}",
+            proksi.logs()
+        );
         assert_eq!(proksi.get("app.test", "/").await.unwrap().status, 200);
         // Each worker handed over to the next one, none failed
         for _ in 0..200 {
@@ -3280,18 +3522,22 @@ tcp "web" {
             ),
         )
         .await;
-        assert!(tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[1]))
-            .await
-            .is_ok());
+        assert!(
+            tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[1]))
+                .await
+                .is_ok()
+        );
 
         proksi.rewrite_extra_config(CONFIG);
         wait_for_started(&proksi, 2).await;
         // The previous worker keeps its sockets until it stops
         wait_for_previous_to_stop(&proksi).await;
 
-        assert!(tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[1]))
-            .await
-            .is_err());
+        assert!(
+            tokio::net::TcpStream::connect(("127.0.0.1", proksi.tcp_ports[1]))
+                .await
+                .is_err()
+        );
         assert_eq!(proksi.get("app.test", "/").await.unwrap().status, 200);
     }
 }
@@ -3322,7 +3568,11 @@ tcp "gone" {
 
     // Closed by proksi (no data), soon after the connect timeout
     assert!(matches!(read, Ok(Ok(0) | Err(_))), "{read:?}");
-    assert!(started.elapsed() < std::time::Duration::from_secs(3), "{:?}", started.elapsed());
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -3350,7 +3600,11 @@ host "gone.test" {
     let res = proksi.get_http_port("gone.test", "/").await.unwrap();
 
     assert!(res.starts_with("HTTP/1.1 504"), "{res}");
-    assert!(started.elapsed() < std::time::Duration::from_secs(3), "{:?}", started.elapsed());
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -3396,7 +3650,11 @@ host "refused.test" {{
     let res = proksi.get_http_port("silent.test", "/").await.unwrap();
 
     assert!(res.starts_with("HTTP/1.1 504"), "{res}");
-    assert!(started.elapsed() < std::time::Duration::from_secs(3), "{:?}", started.elapsed());
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
 
     // Other errors of the upstream
     let res = proksi.get_http_port("refused.test", "/").await.unwrap();
@@ -3474,16 +3732,29 @@ host "plain.test" {{
     .await;
     let check = |res: &str, status: &str| {
         assert!(res.starts_with(&format!("HTTP/1.1 {status}")), "{res}");
-        let headers = res.split("\r\n\r\n").next().unwrap_or_default().to_lowercase();
+        let headers = res
+            .split("\r\n\r\n")
+            .next()
+            .unwrap_or_default()
+            .to_lowercase();
         assert!(headers.contains("x-frame-options: deny"), "{res}");
         assert!(!headers.contains("\r\nserver:"), "{res}");
     };
 
     // Proxied, then answered by `rate_limit`
-    check(&proksi.get_http_port("plain.test", "/").await.unwrap(), "200");
-    check(&proksi.get_http_port("plain.test", "/").await.unwrap(), "429");
+    check(
+        &proksi.get_http_port("plain.test", "/").await.unwrap(),
+        "200",
+    );
+    check(
+        &proksi.get_http_port("plain.test", "/").await.unwrap(),
+        "429",
+    );
     // The upstream refused the connection
-    check(&proksi.get_http_port("plain.test", "/down").await.unwrap(), "502");
+    check(
+        &proksi.get_http_port("plain.test", "/down").await.unwrap(),
+        "502",
+    );
 
     // A host proksi doesn't serve: no headers to add, nor a `Server`
     let res = proksi
@@ -3550,10 +3821,15 @@ host "starting.test" {{
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    assert!(metrics.lines().any(|line| line.trim_end() == unhealthy), "{metrics}");
+    assert!(
+        metrics.lines().any(|line| line.trim_end() == unhealthy),
+        "{metrics}"
+    );
 
     // Up now: requests get to it before its next check
-    let upstream = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.unwrap();
+    let upstream = tokio::net::TcpListener::bind(("127.0.0.1", port))
+        .await
+        .unwrap();
     tokio::spawn(async move {
         while let Ok((mut stream, _)) = upstream.accept().await {
             let mut buf = [0u8; 1024];
@@ -3687,7 +3963,16 @@ host "app.test" {
 
     for client in [proksi.client(), proksi.client_h2()] {
         // Before and after a request to a working upstream, on the same connection
-        for path in ["/answered", "/", "/answered", "/down", "/", "/down", "/down", "/"] {
+        for path in [
+            "/answered",
+            "/",
+            "/answered",
+            "/down",
+            "/",
+            "/down",
+            "/down",
+            "/",
+        ] {
             let res = client.get(url(path)).send().await.unwrap();
             let (version, status) = (res.version(), res.status());
             let body = res.text().await;
@@ -3853,7 +4138,12 @@ async fn test_jwt() {
     });
     let secret = EncodingKey::from_secret(b"e2e-secret");
     let valid = encode(&Header::default(), &claims, &secret).unwrap();
-    let wrong_key = encode(&Header::default(), &claims, &EncodingKey::from_secret(b"other")).unwrap();
+    let wrong_key = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(b"other"),
+    )
+    .unwrap();
 
     // An RSA key, published as a JWKS
     let rsa = openssl::rsa::Rsa::generate(2048).unwrap();
@@ -3867,8 +4157,7 @@ async fn test_jwt() {
         "kty": "RSA", "kid": "k2", "alg": "RS256",
         "n": base64_url(&weak.n().to_vec()), "e": base64_url(&weak.e().to_vec()),
     });
-    let jwks_port =
-        jwks_server(serde_json::json!({ "keys": [jwk, weak_jwk] }).to_string()).await;
+    let jwks_port = jwks_server(serde_json::json!({ "keys": [jwk, weak_jwk] }).to_string()).await;
     let mut jwt_header = Header::new(Algorithm::RS256);
     jwt_header.kid = Some("k1".to_string());
     let signed = encode(&jwt_header, &claims, &rsa_key).unwrap();
@@ -3890,7 +4179,10 @@ async fn test_jwt() {
     };
 
     // A valid token: proxied with its claims (not the client's own headers)
-    let request = get("/", &format!("Authorization: Bearer {valid}\r\nX-User-Id: mallory\r\n"));
+    let request = get(
+        "/",
+        &format!("Authorization: Bearer {valid}\r\nX-User-Id: mallory\r\n"),
+    );
     let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     let body = res.split("\r\n\r\n").nth(1).unwrap_or_default();
@@ -3899,7 +4191,10 @@ async fn test_jwt() {
     assert_eq!(upstream["headers"]["x-user-roles"], "admin,ops", "{res}");
 
     // No token, and an invalid one
-    let res = proksi.raw_http_on(port, get("/", "").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, get("/", "").as_bytes())
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 401"), "{res}");
     assert_eq!(header(&res, "www-authenticate"), Some("Bearer"));
     let request = get("/", &format!("Authorization: Bearer {wrong_key}\r\n"));
@@ -3911,7 +4206,10 @@ async fn test_jwt() {
     );
 
     // From a cookie
-    let request = get("/cookie", &format!("Cookie: theme=dark; session={valid}\r\n"));
+    let request = get(
+        "/cookie",
+        &format!("Cookie: theme=dark; session={valid}\r\n"),
+    );
     let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     let request = get("/cookie", &format!("Authorization: Bearer {valid}\r\n"));
@@ -3929,11 +4227,18 @@ async fn test_jwt() {
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    assert!(status.starts_with("HTTP/1.1 200"), "{status}\n{}", proksi.logs());
+    assert!(
+        status.starts_with("HTTP/1.1 200"),
+        "{status}\n{}",
+        proksi.logs()
+    );
     let request = get("/jwks", &format!("Authorization: Bearer {valid}\r\n"));
     let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 401"), "{res}");
-    let request = get("/jwks", &format!("Authorization: Bearer {weakly_signed}\r\n"));
+    let request = get(
+        "/jwks",
+        &format!("Authorization: Bearer {weakly_signed}\r\n"),
+    );
     let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 401"), "{res}");
 
@@ -3987,7 +4292,10 @@ async fn test_body_rewrite() {
             let echoed: serde_json::Value = res.json().await.unwrap();
             // Its length isn't known when it's sent: chunked (to this HTTP/1.1 upstream)
             assert_eq!(echoed["headers"]["content-length"], serde_json::Value::Null);
-            assert_eq!(echoed["headers"]["transfer-encoding"].as_str(), Some("chunked"));
+            assert_eq!(
+                echoed["headers"]["transfer-encoding"].as_str(),
+                Some("chunked")
+            );
             echoed["body"].as_str().unwrap().to_string()
         };
 
@@ -4001,11 +4309,19 @@ async fn test_body_rewrite() {
         );
 
         // Another content type: only the replacements
-        let sent = upstream(send("text/plain", "token secret-7, debug".to_string()).await.unwrap()).await;
+        let sent = upstream(
+            send("text/plain", "token secret-7, debug".to_string())
+                .await
+                .unwrap(),
+        )
+        .await;
         assert_eq!(sent, "token [redacted], debug");
 
         // Larger than a part, changed as it streams
-        let items = (0..20_000).map(|i| format!("{{\"id\":{i}}}")).collect::<Vec<_>>().join(",");
+        let items = (0..20_000)
+            .map(|i| format!("{{\"id\":{i}}}"))
+            .collect::<Vec<_>>()
+            .join(",");
         let body = format!(r#"{{"debug": 1, "items": [{items}]}}"#);
         assert!(body.len() > 200_000);
         let sent = upstream(send("application/json", body).await.unwrap()).await;
@@ -4015,16 +4331,35 @@ async fn test_body_rewrite() {
         assert_eq!(sent["source"], "proksi");
 
         // Compressed, or not text: sent as it is, with its length
-        for (content_type, encoding) in [("application/json", "gzip"), ("application/octet-stream", "identity")] {
-            let request = client.post(&url).header("content-type", content_type).header("content-encoding", encoding);
-            let res = request.body("secret-1 {\"debug\": true}").send().await.unwrap();
+        for (content_type, encoding) in [
+            ("application/json", "gzip"),
+            ("application/octet-stream", "identity"),
+        ] {
+            let request = client
+                .post(&url)
+                .header("content-type", content_type)
+                .header("content-encoding", encoding);
+            let res = request
+                .body("secret-1 {\"debug\": true}")
+                .send()
+                .await
+                .unwrap();
             let echoed: serde_json::Value = res.json().await.unwrap();
-            assert_eq!(echoed["body"], "secret-1 {\"debug\": true}", "{content_type}");
+            assert_eq!(
+                echoed["body"], "secret-1 {\"debug\": true}",
+                "{content_type}"
+            );
             assert_eq!(echoed["headers"]["content-length"], "24", "{content_type}");
         }
 
         // A body nothing applies to is sent as it is, with its length
-        let res = client.post(&url).header("content-type", "text/plain").body("nothing here").send().await.unwrap();
+        let res = client
+            .post(&url)
+            .header("content-type", "text/plain")
+            .body("nothing here")
+            .send()
+            .await
+            .unwrap();
         let echoed: serde_json::Value = res.json().await.unwrap();
         assert_eq!(echoed["body"], "nothing here");
     }
@@ -4091,17 +4426,26 @@ async fn test_openapi() {
     // Loaded in the background; `deny` answers 503 until then
     let started = std::time::Instant::now();
     while status(&send("GET", "/api/orders/1", "").await) == "503" {
-        assert!(started.elapsed() < std::time::Duration::from_secs(10), "the spec never loaded");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(10),
+            "the spec never loaded"
+        );
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 
     assert_eq!(status(&send("GET", "/api/orders/1", "").await), "200");
     assert_eq!(status(&send("GET", "/api/orders?limit=5", "").await), "200");
-    assert_eq!(status(&send("POST", "/api/orders", "X-Tenant: a\r\n").await), "200");
+    assert_eq!(
+        status(&send("POST", "/api/orders", "X-Tenant: a\r\n").await),
+        "200"
+    );
 
     let res = send("GET", "/api/orders", "").await;
     assert_eq!(status(&res), "400", "{res}");
-    assert!(res.contains("the required query parameter `limit` is missing"), "{res}");
+    assert!(
+        res.contains("the required query parameter `limit` is missing"),
+        "{res}"
+    );
     assert_eq!(status(&send("POST", "/api/orders", "").await), "400");
     let res = send("DELETE", "/api/orders/1", "").await;
     assert_eq!(status(&res), "405", "{res}");
@@ -4136,8 +4480,11 @@ async fn test_waiting_room() {
     let port = harness.http_port;
     let proksi = &harness;
     let get = |cookie: Option<String>| async move {
-        let cookie = cookie.map(|cookie| format!("Cookie: {cookie}\r\n")).unwrap_or_default();
-        let request = format!("GET / HTTP/1.1\r\nHost: line.test\r\n{cookie}Connection: close\r\n\r\n");
+        let cookie = cookie
+            .map(|cookie| format!("Cookie: {cookie}\r\n"))
+            .unwrap_or_default();
+        let request =
+            format!("GET / HTTP/1.1\r\nHost: line.test\r\n{cookie}Connection: close\r\n\r\n");
         proksi.raw_http_on(port, request.as_bytes()).await.unwrap()
     };
     let status = |res: &str| res.split(' ').nth(1).unwrap_or_default().to_string();
@@ -4183,7 +4530,10 @@ async fn test_waiting_room() {
         }
     }
     let admitted = admitted.expect("the second visitor was never let in");
-    assert!(admitted >= std::time::Duration::from_secs(2), "{admitted:?}");
+    assert!(
+        admitted >= std::time::Duration::from_secs(2),
+        "{admitted:?}"
+    );
 
     // Now the first waits
     assert_eq!(status(&get(Some(first)).await), "503");
@@ -4225,8 +4575,7 @@ host "paced.test" {
 async fn test_bandwidth_limit() {
     let files = tempfile::tempdir().unwrap();
     std::fs::write(files.path().join("big.bin"), vec![b'x'; 256 * 1024]).unwrap();
-    let config =
-        HOST_WITH_BANDWIDTH_LIMIT.replace("{files}", &files.path().display().to_string());
+    let config = HOST_WITH_BANDWIDTH_LIMIT.replace("{files}", &files.path().display().to_string());
     let mut harness = Harness::start_without_https(&config).await;
     let port = harness.http_port;
     // The upstream answers with the request's headers: about 8 KiB with this one
@@ -4250,12 +4599,19 @@ async fn test_bandwidth_limit() {
     assert!(paced >= std::time::Duration::from_millis(1200), "{paced:?}");
     // Other locations aren't paced
     let (_, unpaced) = timed(padded("/b")).await;
-    assert!(unpaced < std::time::Duration::from_millis(500), "{unpaced:?}");
+    assert!(
+        unpaced < std::time::Duration::from_millis(500),
+        "{unpaced:?}"
+    );
 
     // A file: 64 KiB at once, the other 192 KiB at 128 KiB/s
     let file = "GET /files/big.bin HTTP/1.1\r\nHost: paced.test\r\nConnection: close\r\n\r\n";
     let (res, paced) = timed(file.to_string()).await;
-    assert!(res.starts_with("HTTP/1.1 200"), "{}", &res[..res.len().min(200)]);
+    assert!(
+        res.starts_with("HTTP/1.1 200"),
+        "{}",
+        &res[..res.len().min(200)]
+    );
     assert!(res.ends_with(&"x".repeat(1024)));
     assert!(paced >= std::time::Duration::from_millis(1000), "{paced:?}");
 
@@ -4318,24 +4674,43 @@ host "files.test" {{
     let mut proksi = Harness::start_without_https(&config).await;
     let port = proksi.http_port;
     let send = |method: &str, path: &str, headers: &str| {
-        format!("{method} {path} HTTP/1.1\r\nHost: files.test\r\n{headers}Connection: close\r\n\r\n")
+        format!(
+            "{method} {path} HTTP/1.1\r\nHost: files.test\r\n{headers}Connection: close\r\n\r\n"
+        )
     };
-    let body = |res: &str| res.split_once("\r\n\r\n").map(|(_, body)| body.to_string()).unwrap_or_default();
+    let body = |res: &str| {
+        res.split_once("\r\n\r\n")
+            .map(|(_, body)| body.to_string())
+            .unwrap_or_default()
+    };
 
     // A file, by its path below the location
-    let res = proksi.raw_http_on(port, send("GET", "/static/app.js", "").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, send("GET", "/static/app.js", "").as_bytes())
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     assert_eq!(body(&res), "console.log(1)");
-    assert_eq!(header(&res, "content-type"), Some("text/javascript; charset=utf-8"));
+    assert_eq!(
+        header(&res, "content-type"),
+        Some("text/javascript; charset=utf-8")
+    );
     assert_eq!(header(&res, "cache-control"), Some("public, max-age=60"));
     let etag = header(&res, "etag").unwrap();
 
     // Without its body, and not again while it's unchanged
-    let res = proksi.raw_http_on(port, send("HEAD", "/static/app.js", "").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, send("HEAD", "/static/app.js", "").as_bytes())
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     assert_eq!(header(&res, "content-length"), Some("14"));
     assert_eq!(body(&res), "");
-    let request = send("GET", "/static/app.js", &format!("If-None-Match: {etag}\r\n"));
+    let request = send(
+        "GET",
+        "/static/app.js",
+        &format!("If-None-Match: {etag}\r\n"),
+    );
     let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
     assert!(res.starts_with("HTTP/1.1 304"), "{res}");
 
@@ -4348,29 +4723,54 @@ host "files.test" {{
 
     // The index of a directory, and the fallback for paths with no file
     for path in ["/static", "/static/", "/static/settings/profile"] {
-        let res = proksi.raw_http_on(port, send("GET", path, "").as_bytes()).await.unwrap();
+        let res = proksi
+            .raw_http_on(port, send("GET", path, "").as_bytes())
+            .await
+            .unwrap();
         assert!(res.starts_with("HTTP/1.1 200"), "{path}: {res}");
         assert_eq!(body(&res), "<h1>app</h1>", "{path}");
     }
 
     // Streamed, whole
-    let res = proksi.raw_http_on(port, send("GET", "/static/big.txt", "").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, send("GET", "/static/big.txt", "").as_bytes())
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{}", &res[..200]);
     assert_eq!(body(&res), big);
 
     // Nothing outside the directory, nor hidden files
-    for path in ["/static/../secret.txt", "/static/%2e%2e/secret.txt", "/static/.env"] {
-        let res = proksi.raw_http_on(port, send("GET", path, "").as_bytes()).await.unwrap();
-        assert!(!res.contains("outside") && !res.contains("SECRET"), "{path}: {res}");
+    for path in [
+        "/static/../secret.txt",
+        "/static/%2e%2e/secret.txt",
+        "/static/.env",
+    ] {
+        let res = proksi
+            .raw_http_on(port, send("GET", path, "").as_bytes())
+            .await
+            .unwrap();
+        assert!(
+            !res.contains("outside") && !res.contains("SECRET"),
+            "{path}: {res}"
+        );
     }
-    let res = proksi.raw_http_on(port, send("GET", "/static/.env", "").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, send("GET", "/static/.env", "").as_bytes())
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 404"), "{res}");
 
     // Rules and the other blocks apply before files are served
     std::fs::write(site.path().join("app/app.js.map"), "{}").unwrap();
-    let res = proksi.raw_http_on(port, send("GET", "/static/app.js.map", "").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, send("GET", "/static/app.js.map", "").as_bytes())
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 403"), "{res}");
-    let res = proksi.raw_http_on(port, send("GET", "/private/app.js", "").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, send("GET", "/private/app.js", "").as_bytes())
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 401"), "{res}");
     let request = send("GET", "/private/app.js", "Authorization: Basic dTpw\r\n");
     let res = proksi.raw_http_on(port, request.as_bytes()).await.unwrap();
@@ -4378,7 +4778,13 @@ host "files.test" {{
     assert_eq!(body(&res), "console.log(1)");
 
     // Only read
-    let res = proksi.raw_http_on(port, send("POST", "/static/app.js", "Content-Length: 0\r\n").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(
+            port,
+            send("POST", "/static/app.js", "Content-Length: 0\r\n").as_bytes(),
+        )
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 405"), "{res}");
     assert_eq!(header(&res, "allow"), Some("GET, HEAD"));
 
@@ -4465,32 +4871,57 @@ host "split.test" {
     let get = |path: &str, headers: &str| {
         format!("GET {path} HTTP/1.1\r\nHost: split.test\r\n{headers}Connection: close\r\n\r\n")
     };
-    let body = |res: &str| res.split_once("\r\n\r\n").map(|(_, body)| body.to_string()).unwrap_or_default();
+    let body = |res: &str| {
+        res.split_once("\r\n\r\n")
+            .map(|(_, body)| body.to_string())
+            .unwrap_or_default()
+    };
 
     // A new client gets the split, and a cookie telling nothing to keep it
-    let res = proksi.raw_http_on(port, get("/all", "").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, get("/all", "").as_bytes())
+        .await
+        .unwrap();
     assert!(res.starts_with("HTTP/1.1 200"), "{res}");
     assert_eq!(body(&res), "v2");
     let cookie = header(&res, "set-cookie").unwrap();
-    assert!(cookie.starts_with("_t") && cookie.contains("; HttpOnly"), "{cookie}");
-    assert!(!cookie.to_lowercase().contains("split") && !cookie.contains("v2"), "{cookie}");
+    assert!(
+        cookie.starts_with("_t") && cookie.contains("; HttpOnly"),
+        "{cookie}"
+    );
+    assert!(
+        !cookie.to_lowercase().contains("split") && !cookie.contains("v2"),
+        "{cookie}"
+    );
     let pair = cookie.split(';').next().unwrap().to_string();
 
     // With it, the same side, and no new cookie
-    let res = proksi.raw_http_on(port, get("/all", &format!("Cookie: {pair}\r\n")).as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, get("/all", &format!("Cookie: {pair}\r\n")).as_bytes())
+        .await
+        .unwrap();
     assert_eq!(body(&res), "v2");
     assert_eq!(header(&res, "set-cookie"), None);
 
     // At 0%, only the clients a rule sends there
-    let res = proksi.raw_http_on(port, get("/beta", "").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, get("/beta", "").as_bytes())
+        .await
+        .unwrap();
     assert_ne!(body(&res), "v2", "{res}");
-    let res = proksi.raw_http_on(port, get("/beta", "X-Beta: 1\r\n").as_bytes()).await.unwrap();
+    let res = proksi
+        .raw_http_on(port, get("/beta", "X-Beta: 1\r\n").as_bytes())
+        .await
+        .unwrap();
     assert_eq!(body(&res), "v2");
 
     // A split whose upstreams the health checks found down: the location's own
     let mut res = String::new();
     for _ in 0..50 {
-        res = proksi.raw_http_on(port, get("/down", "").as_bytes()).await.unwrap();
+        res = proksi
+            .raw_http_on(port, get("/down", "").as_bytes())
+            .await
+            .unwrap();
         if res.starts_with("HTTP/1.1 200") {
             break;
         }
@@ -4551,7 +4982,10 @@ async fn read_body(
 }
 
 /// An upstream keeping the requests it gets: request line, headers (lowercase) and body
-async fn recording() -> (u16, Arc<Mutex<Vec<(String, Vec<(String, String)>, String)>>>) {
+async fn recording() -> (
+    u16,
+    Arc<Mutex<Vec<(String, Vec<(String, String)>, String)>>>,
+) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let requests = Arc::new(Mutex::new(vec![]));

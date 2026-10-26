@@ -164,7 +164,10 @@ mod tests {
         assert_eq!(hello.len(), RECORD_HEADER + length);
 
         // Names are case-insensitive
-        assert_eq!(parse(&hello), Hello::ClientHello(Some("pass.test".to_string())));
+        assert_eq!(
+            parse(&hello),
+            Hello::ClientHello(Some("pass.test".to_string()))
+        );
     }
 
     #[test]

@@ -106,7 +106,7 @@ mod tests {
 
     use figment::providers::Format;
 
-    use crate::config::{Config, hcl::HclFormat, load_from_path};
+    use crate::config::{hcl::HclFormat, load_from_path, Config};
 
     fn validator() -> jsonschema::Validator {
         jsonschema::validator_for(&super::schema()).unwrap()

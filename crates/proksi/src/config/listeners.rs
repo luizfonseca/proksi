@@ -6,10 +6,10 @@ use std::{
 };
 
 use super::{
-    Config, StoreType,
     admin::AdminConfig,
     host::Host,
     tcp::{TcpRoute, TcpTls},
+    Config, StoreType,
 };
 
 /// Addresses to open, by protocol
@@ -261,11 +261,11 @@ mod tests {
     use std::collections::BTreeSet;
 
     use crate::{
-        config::{Config, blocks::HostBlock, hcl::HclFormat},
+        config::{blocks::HostBlock, hcl::HclFormat, Config},
         routing::test_utils::route,
     };
 
-    use super::{Listeners, listeners};
+    use super::{listeners, Listeners};
 
     fn config(hcl: &str) -> Config {
         #[derive(serde::Deserialize, schemars::JsonSchema)]

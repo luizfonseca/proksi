@@ -61,7 +61,8 @@ pub struct StoredHost {
 impl StoredRoute {
     /// The route as the store keeps it
     pub fn to_record(&self) -> Result<RouteRecord, StoreError> {
-        let data = serde_json::to_string(self).map_err(|err| StoreError::Invalid(err.to_string()))?;
+        let data =
+            serde_json::to_string(self).map_err(|err| StoreError::Invalid(err.to_string()))?;
         Ok(RouteRecord::new(&self.key(), self.schema_version, data))
     }
 }

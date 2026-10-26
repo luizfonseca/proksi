@@ -158,11 +158,9 @@ mod tests {
             admin("admin {\n  listen = \"127.0.0.1:7555\"\n}\n").address(),
             Ok("127.0.0.1:7555".parse().unwrap())
         );
-        assert!(
-            admin("admin {\n  listen = \"[::1]:7555\"\n}\n")
-                .address()
-                .is_ok()
-        );
+        assert!(admin("admin {\n  listen = \"[::1]:7555\"\n}\n")
+            .address()
+            .is_ok());
         assert_eq!(
             admin("admin {\n  listen = \"0.0.0.0:7555\"\n}\n").address(),
             Err("admin: without a `token` block, `listen` must be a loopback address (e.g. 127.0.0.1:7555), not 0.0.0.0:7555".to_string())

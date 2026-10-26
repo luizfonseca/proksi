@@ -107,7 +107,11 @@ fn header_value(claim: &Value) -> Option<String> {
 }
 
 /// `401`, saying a bearer token is needed (RFC 6750): the reason isn't given, only logged
-async fn unauthorized(session: &mut Session, ctx: &mut dyn RequestCtx, invalid: bool) -> Result<()> {
+async fn unauthorized(
+    session: &mut Session,
+    ctx: &mut dyn RequestCtx,
+    invalid: bool,
+) -> Result<()> {
     let mut response = ResponseHeader::build(401, Some(3))?;
     let challenge = if invalid {
         "Bearer error=\"invalid_token\""

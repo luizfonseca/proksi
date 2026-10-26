@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use anyhow::anyhow;
 
-use super::{Config, listeners::listeners};
+use super::{listeners::listeners, Config};
 use crate::routing::validate::{validate_host, validate_route};
 
 /// given a Config struct, validate the values to ensure

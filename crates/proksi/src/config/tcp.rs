@@ -3,7 +3,7 @@
 
 use serde::Serialize;
 
-use super::{Config, RouteUpstream, blocks::TlsSetting};
+use super::{blocks::TlsSetting, Config, RouteUpstream};
 
 /// What happens with TLS on a TCP route
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -93,7 +93,7 @@ impl Config {
 mod tests {
     use figment::providers::Format;
 
-    use crate::config::{Config, RouteUpstream, hcl::HclFormat};
+    use crate::config::{hcl::HclFormat, Config, RouteUpstream};
 
     use super::{TcpRoute, TcpTls};
 
