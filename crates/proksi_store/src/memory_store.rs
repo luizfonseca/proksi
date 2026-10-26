@@ -168,7 +168,11 @@ impl Store for MemoryStore {
     async fn put_route(&self, route: RouteRecord, write: &Write) -> Result<u64, StoreError> {
         let mut routes = self.routes();
         let host = route.host.to_lowercase();
-        routes.hosts.entry(host.clone()).or_default().check(write.expect)?;
+        routes
+            .hosts
+            .entry(host.clone())
+            .or_default()
+            .check(write.expect)?;
         routes.revision += 1;
         let revision = routes.revision;
         let state = routes.hosts.entry(host.clone()).or_default();
@@ -221,7 +225,9 @@ impl Store for MemoryStore {
     async fn route_history(&self, host: &str) -> Result<Vec<HistoryEntry>, StoreError> {
         let routes = self.routes();
         let state = routes.hosts.get(&host.to_lowercase());
-        Ok(state.map(|state| state.history.iter().cloned().collect()).unwrap_or_default())
+        Ok(state
+            .map(|state| state.history.iter().cloned().collect())
+            .unwrap_or_default())
     }
 
     async fn route_version(
@@ -258,7 +264,10 @@ impl Store for MemoryStore {
     async fn put_notify(&self, mut block: NotifyRecord, write: &Write) -> Result<u64, StoreError> {
         let mut notify = self.notify.lock().unwrap_or_else(PoisonError::into_inner);
         let (revision, blocks) = &mut *notify;
-        notify::check(write.expect, blocks.get(&block.name).map(|saved| saved.version))?;
+        notify::check(
+            write.expect,
+            blocks.get(&block.name).map(|saved| saved.version),
+        )?;
         *revision += 1;
         block.version = *revision;
         blocks.insert(block.name.clone(), block);

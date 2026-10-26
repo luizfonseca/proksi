@@ -187,10 +187,8 @@ mod tests {
             "🔴 Certificate for api.example.com could not be obtained: rate limited · proksi-1"
         );
         let discord = body(&event, Format::Discord, "proksi-1");
-        assert!(
-            discord["content"]
-                .as_str()
-                .is_some_and(|content| content.starts_with("🔴 "))
-        );
+        assert!(discord["content"]
+            .as_str()
+            .is_some_and(|content| content.starts_with("🔴 ")));
     }
 }

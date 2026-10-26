@@ -9,7 +9,6 @@ use tokio::sync::broadcast::error::RecvError;
 
 use crate::metrics::requests;
 
-
 /// Starts the events; returns whether the headers were written
 async fn start(session: &mut ServerSession) -> bool {
     let Some(mut header) = super::response_header(StatusCode::OK, "text/event-stream") else {

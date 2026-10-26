@@ -14,9 +14,7 @@
 
 use redis::Commands;
 
-use crate::route::{
-    Expect, HistoryEntry, RouteRecord, RouteVersion, StoreError, Write,
-};
+use crate::route::{Expect, HistoryEntry, RouteRecord, RouteVersion, StoreError, Write};
 
 const ROUTES_SET_KEY: &str = "proksi:routes";
 const REVISION_KEY: &str = "proksi:revision";
@@ -245,8 +243,9 @@ pub(crate) fn version(
     version: u64,
 ) -> Result<Option<RouteVersion>, StoreError> {
     let host = host.to_lowercase();
-    let fields: std::collections::HashMap<String, String> =
-        conn.hgetall(version_key(&host, version)).map_err(unavailable)?;
+    let fields: std::collections::HashMap<String, String> = conn
+        .hgetall(version_key(&host, version))
+        .map_err(unavailable)?;
     let (Some(data), Some(schema_version)) = (fields.get("data"), fields.get("schema_version"))
     else {
         return Ok(None);
@@ -288,5 +287,8 @@ pub(crate) fn versions(
         pipe.hget(format!("proksi:route:{host}:meta"), "version");
     }
     let versions: Vec<Option<u64>> = pipe.query(conn).map_err(unavailable)?;
-    Ok(versions.into_iter().map(Option::unwrap_or_default).collect())
+    Ok(versions
+        .into_iter()
+        .map(Option::unwrap_or_default)
+        .collect())
 }

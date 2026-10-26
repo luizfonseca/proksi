@@ -6,7 +6,19 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 /// What Proksi tells a webhook about
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
     /// A health check found an upstream failing
@@ -79,7 +91,9 @@ impl Kind {
 }
 
 /// How the request to the webhook is written
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Format {
     /// The event as a JSON object (`event`, `summary`, `host`, ...)
@@ -96,7 +110,7 @@ fn default_expiring_days() -> u32 {
 }
 
 /// `notify "<name>" { ... }`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NotifyBlock {
     /// Where events are sent, with a `POST`
@@ -176,7 +190,7 @@ pub fn host_matches(pattern: &str, host: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Kind, NotifyBlock, host_matches};
+    use super::{host_matches, Kind, NotifyBlock};
 
     fn block(on: &[Kind], hosts: &[&str]) -> NotifyBlock {
         NotifyBlock {

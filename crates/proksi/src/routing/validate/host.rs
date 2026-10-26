@@ -298,7 +298,10 @@ mod tests {
         exact.locations[0].exact = true;
         assert_eq!(
             validate_host(&exact),
-            Err("location \"^/x$\": exact is for paths, a regex ends where it says (with $)".to_string())
+            Err(
+                "location \"^/x$\": exact is for paths, a regex ends where it says (with $)"
+                    .to_string()
+            )
         );
     }
 

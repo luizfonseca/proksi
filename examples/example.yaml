@@ -258,7 +258,7 @@ host:
           client_secret: "<client_secret>"
           jwt_secret: "<jwt_secret>"
           validations:
-            - key: "team_id"
+            - type: "team_id"
               value:
                 - "<team_id>"
 

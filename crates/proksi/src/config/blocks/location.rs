@@ -22,7 +22,7 @@ use super::{
 type PluginConfig = HashMap<Cow<'static, str>, serde_json::Value>;
 
 /// `location "<path>" { ... }`
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LocationBlock {
     /// Only the path itself, not what's below it
@@ -32,28 +32,46 @@ pub struct LocationBlock {
     pub upstream: BTreeMap<String, UpstreamBlock>,
     pub headers: Option<HeadersBlock>,
     pub cache: Option<RouteCache>,
+    #[schemars(with = "Option<proksi_plugins::settings::BasicAuth>")]
     pub basic_auth: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::Jwt>")]
     pub jwt: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::Oauth2>")]
     pub oauth2: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::ForwardAuth>")]
     pub forward_auth: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::RequestId>")]
     pub request_id: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::IpFilter>")]
     pub ip_filter: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::Cors>")]
     pub cors: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::RateLimit>")]
     pub rate_limit: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::BandwidthLimit>")]
     pub bandwidth_limit: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::WaitingRoom>")]
     pub waiting_room: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::BodyRewrite>")]
     pub body_rewrite: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::OpenApi>")]
     pub openapi: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::BodyLimit>")]
     pub body_limit: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::Compress>")]
     pub compress: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::Redirect>")]
     pub redirect: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::Respond>")]
     pub respond: Option<PluginConfig>,
+    #[schemars(with = "Option<proksi_plugins::settings::StaticFiles>")]
     pub static_files: Option<PluginConfig>,
     pub timeouts: Option<LocationTimeouts>,
     pub rewrite: Option<PathRewrite>,
     pub health_check: Option<HealthCheck>,
     /// `rule "<name>" { ... }`, in order
     #[serde(default, deserialize_with = "crate::rules::one_or_many")]
+    #[schemars(with = "crate::rules::schema::RuleList")]
     pub rule: Vec<crate::rules::Rule>,
     /// `traffic_split "<name>" { ... }`
     #[serde(default)]
@@ -67,7 +85,7 @@ pub struct LocationBlock {
 }
 
 /// `retry { ... }` in a location
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RetryBlock {
     pub attempts: Option<u8>,
@@ -92,7 +110,7 @@ impl RetryBlock {
 }
 
 /// `mirror { ... }` in a location
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MirrorBlock {
     pub percent: Option<u8>,
@@ -118,14 +136,14 @@ impl MirrorBlock {
             Some(serde_json::Value::Number(number)) if number.as_u64() == Some(0) => 0,
             Some(serde_json::Value::String(size)) => proksi_plugins::body_limit::parse_size(size)
                 .ok_or_else(|| {
-                    in_mirror(format!(
-                        "max_body_size \"{size}\" is not a size such as \"64KiB\" or \"1MiB\""
-                    ))
-                })?,
+                in_mirror(format!(
+                    "max_body_size \"{size}\" is not a size such as \"64KiB\" or \"1MiB\""
+                ))
+            })?,
             Some(other) => {
                 return Err(in_mirror(format!(
                     "max_body_size {other} is not a size such as \"64KiB\" or \"1MiB\", or 0"
-                )))
+                )));
             }
         };
         Ok(Mirror {
@@ -143,7 +161,7 @@ impl MirrorBlock {
 }
 
 /// `traffic_split "<name>" { ... }` in a location
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TrafficSplitBlock {
     pub percent: u8,

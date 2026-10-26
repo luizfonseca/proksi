@@ -6,12 +6,12 @@ use async_trait::async_trait;
 use once_cell::sync::OnceCell;
 use pingora::{
     apps::ServerApp,
-    tls::ssl::{AlpnError, NameType, SslAcceptor, SslAcceptorBuilder, SslMethod},
     listeners::tls::TlsSettings,
     protocols::Stream,
     proxy::{http_proxy, HttpProxy},
     server::{configuration::ServerConf, ShutdownWatch},
     services::listening::Service,
+    tls::ssl::{AlpnError, NameType, SslAcceptor, SslAcceptorBuilder, SslMethod},
 };
 
 use crate::config::server_tls::ServerTls;

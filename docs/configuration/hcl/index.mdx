@@ -308,6 +308,17 @@ server {
 
 TLS 1.3 suites are always the standard ones, all of them strong. A cipher OpenSSL doesn't know makes the configuration invalid.
 
+## Checking a configuration
+
+`proksi check` loads a configuration as Proksi does when it starts, without starting anything: useful in CI, or before a deploy. It prints what it found, or why Proksi wouldn't start with it, and exits with `1` when it's invalid.
+
+```bash
+proksi check -c ./proksi.hcl
+# ./proksi.hcl: valid (3 hosts)
+```
+
+The configuration's [JSON Schema](https://raw.githubusercontent.com/luizfonseca/proksi/main/docs/schema/proksi.schema.json) describes every setting, with its docs. Editors use it for completion in YAML (see [YAML](/configuration/yaml#editor-completion)).
+
 ## Migrating from `routes = [...]`
 
 `routes = [...]` still works, but is deprecated and logs a warning. Each route corresponds to a host:

@@ -21,8 +21,8 @@ use crate::{
 
 mod access;
 mod endpoint;
-mod router;
 mod notify;
+mod router;
 pub mod routes;
 pub mod server;
 pub mod status;
@@ -223,9 +223,11 @@ impl AdminApi {
             Endpoint::Certificates => Reply::ok(&status::certificates(store).await),
             Endpoint::Routes => routes_reply(routes::list(store).await),
             Endpoint::Route(host) => routes_reply(routes::get(store, host).await),
-            Endpoint::PutRoute(host) => {
-                change_reply(routes::put(store, host, request.body, &write).await, &write, "saved")
-            }
+            Endpoint::PutRoute(host) => change_reply(
+                routes::put(store, host, request.body, &write).await,
+                &write,
+                "saved",
+            ),
             Endpoint::DeleteRoute(host) => {
                 change_reply(routes::delete(store, host, &write).await, &write, "removed")
             }
@@ -233,13 +235,11 @@ impl AdminApi {
             Endpoint::RouteVersion(host, revision) => {
                 routes_reply(routes::version(store, host, revision).await)
             }
-            Endpoint::RollbackRoute(host) => {
-                change_reply(
-                    routes::rollback(store, host, request.body, &write).await,
-                    &write,
-                    "rolled back",
-                )
-            }
+            Endpoint::RollbackRoute(host) => change_reply(
+                routes::rollback(store, host, request.body, &write).await,
+                &write,
+                "rolled back",
+            ),
             Endpoint::DeletedRoutes => routes_reply(routes::deleted(store).await),
             Endpoint::Notifications => Reply::ok(&notify::list()),
             Endpoint::PutNotification(name) => {
@@ -261,7 +261,12 @@ impl AdminApi {
 
     /// Why `caller` can't reach `endpoint`, if they can't: a change from another site or with a
     /// read-only token, or metrics that are turned off
-    fn reject_access(&self, endpoint: Endpoint<'_>, caller: &access::Caller, request: Request<'_>) -> Option<Reply> {
+    fn reject_access(
+        &self,
+        endpoint: Endpoint<'_>,
+        caller: &access::Caller,
+        request: Request<'_>,
+    ) -> Option<Reply> {
         if endpoint.metrics() && !crate::metrics::enabled() {
             return Some(Reply::error(
                 StatusCode::NOT_FOUND,
@@ -696,7 +701,8 @@ mod tests {
     async fn test_metrics() {
         crate::metrics::enable();
         let api = AdminApi::new(tokens(), instance());
-        crate::metrics::LocationMetrics::unserved(crate::metrics::Unserved::UnknownHost).record(404, Duration::from_millis(1));
+        crate::metrics::LocationMetrics::unserved(crate::metrics::Unserved::UnknownHost)
+            .record(404, Duration::from_millis(1));
 
         let reply = reply(
             api.handle(request(
@@ -823,12 +829,13 @@ mod tests {
         let api = AdminApi::new(tokens(), instance());
         let path = "/api/v1/routes/conditional.test";
         let body = br#"{"name": "conditional.test", "locations": [{ "path": "/", "upstreams": [{ "ip": "10.0.0.1", "port": 3000 }] }]}"#;
-        let put = |if_match: Option<&'static str>, if_none_match: Option<&'static str>| super::Request {
-            body,
-            if_match,
-            if_none_match,
-            ..request(&Method::PUT, path, None, Some("Bearer secret"))
-        };
+        let put =
+            |if_match: Option<&'static str>, if_none_match: Option<&'static str>| super::Request {
+                body,
+                if_match,
+                if_none_match,
+                ..request(&Method::PUT, path, None, Some("Bearer secret"))
+            };
         let json = |reply: Reply| serde_json::from_str::<serde_json::Value>(&reply.body).unwrap();
 
         // Created only if it doesn't exist
@@ -838,10 +845,16 @@ mod tests {
         assert_eq!(exists.status, StatusCode::PRECONDITION_FAILED);
 
         // Changed only from the active version
-        let one = json(reply(api.handle(request(&Method::GET, path, None, Some("Bearer secret"))).await));
+        let one = json(reply(
+            api.handle(request(&Method::GET, path, None, Some("Bearer secret")))
+                .await,
+        ));
         let version = one["version"].as_u64().unwrap();
         let quoted: &'static str = Box::leak(format!("\"{version}\"").into_boxed_str());
-        assert_eq!(reply(api.handle(put(Some(quoted), None)).await).status, StatusCode::OK);
+        assert_eq!(
+            reply(api.handle(put(Some(quoted), None)).await).status,
+            StatusCode::OK
+        );
         let stale = reply(api.handle(put(Some(quoted), None)).await);
         assert_eq!(stale.status, StatusCode::PRECONDITION_FAILED);
         assert_eq!(json(stale)["version"].as_u64(), Some(version + 1));
@@ -854,16 +867,32 @@ mod tests {
 
         // Changes are recorded with the token's name
         let history_path = "/api/v1/routes/conditional.test/history";
-        let history = json(reply(api.handle(request(&Method::GET, history_path, None, Some("Bearer read"))).await));
+        let history = json(reply(
+            api.handle(request(
+                &Method::GET,
+                history_path,
+                None,
+                Some("Bearer read"),
+            ))
+            .await,
+        ));
         assert_eq!(history["changes"][0]["author"], "ops");
         assert_eq!(history["changes"][0]["change"], "saved");
 
         // Rolling back needs write access
         let rollback = super::Request {
             body: br#"{"revision": 1}"#,
-            ..request(&Method::POST, "/api/v1/routes/conditional.test/rollback", None, Some("Bearer read"))
+            ..request(
+                &Method::POST,
+                "/api/v1/routes/conditional.test/rollback",
+                None,
+                Some("Bearer read"),
+            )
         };
-        assert_eq!(reply(api.handle(rollback).await).status, StatusCode::FORBIDDEN);
+        assert_eq!(
+            reply(api.handle(rollback).await).status,
+            StatusCode::FORBIDDEN
+        );
     }
 
     #[tokio::test]
@@ -933,9 +962,16 @@ mod tests {
         };
         let refused = reply(api.handle(proxied).await);
         assert_eq!(refused.status, StatusCode::FORBIDDEN);
-        assert!(refused.body.contains("admin.trusted_origins"), "{}", refused.body);
+        assert!(
+            refused.body.contains("admin.trusted_origins"),
+            "{}",
+            refused.body
+        );
         let api = api.with_trusted_origins(vec!["https://admin.tailnet.ts.net".to_string()]);
-        assert_ne!(reply(api.handle(proxied).await).status, StatusCode::FORBIDDEN);
+        assert_ne!(
+            reply(api.handle(proxied).await).status,
+            StatusCode::FORBIDDEN
+        );
 
         let sign_out = super::Request {
             path: "/api/v1/session",

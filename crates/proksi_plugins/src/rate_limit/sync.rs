@@ -8,8 +8,8 @@
 use std::{
     net::IpAddr,
     sync::{
-        Arc, LazyLock, Mutex, PoisonError, Weak,
         atomic::{AtomicBool, Ordering},
+        Arc, LazyLock, Mutex, PoisonError, Weak,
     },
     time::Duration,
 };
@@ -117,8 +117,8 @@ pub async fn run(store: Option<Arc<dyn Store>>, warn: bool) {
 mod tests {
     use std::{net::IpAddr, sync::atomic::Ordering};
 
-    use super::{SHARING, steps, sync_block, sync_once};
-    use crate::{RoutePlugin, rate_limit::RateLimit};
+    use super::{steps, sync_block, sync_once, SHARING};
+    use crate::{rate_limit::RateLimit, RoutePlugin};
 
     /// `sync_once` syncs every block: tests syncing take turns, so none takes another's counts
     static SYNCING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());

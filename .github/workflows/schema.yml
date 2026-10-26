@@ -1,0 +1,57 @@
+name: Schema
+
+# Keeps docs/schema/proksi.schema.json, the configuration's schema, up to date. On branches of
+# this repository, a changed schema is committed to the pull request (with SCHEMA_PUSH_TOKEN, if
+# set, so the commit runs the other checks: pushes with the default token don't). Pull requests
+# from forks can't be pushed to: there, this check fails, asking for `make schema`.
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "crates/**"
+      - "docs/schema/**"
+      - "Cargo.lock"
+
+permissions:
+  contents: write
+
+jobs:
+  schema:
+    name: Schema
+    runs-on: ubuntu-latest
+    env:
+      SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          token: ${{ secrets.SCHEMA_PUSH_TOKEN || github.token }}
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build the admin UI
+        working-directory: crates/proksi-admin-ui
+        run: npm ci && npm run build
+      - name: Check the schema (forks)
+        if: env.SAME_REPOSITORY != 'true'
+        run: make schema.check
+      - name: Update the schema
+        if: env.SAME_REPOSITORY == 'true'
+        run: make schema
+      - name: Commit the schema, if it changed
+        if: env.SAME_REPOSITORY == 'true'
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if git diff --quiet -- docs/schema; then
+            echo "The schema is up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/schema
+          git commit -m "docs: update the configuration schema"
+          git push origin "HEAD:$BRANCH"

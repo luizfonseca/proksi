@@ -110,16 +110,24 @@ mod tests {
         );
 
         // A load balancer being provisioned: nothing yet
-        let pending = service(json!({ "spec": { "type": "LoadBalancer", "clusterIP": "10.96.0.5" } }));
+        let pending =
+            service(json!({ "spec": { "type": "LoadBalancer", "clusterIP": "10.96.0.5" } }));
         assert_eq!(published(&pending), vec![]);
 
         let external = service(json!({
             "spec": { "type": "NodePort", "clusterIP": "10.96.0.5", "externalIPs": ["198.51.100.1"] },
         }));
-        assert_eq!(published(&external), vec![(Some("198.51.100.1".to_string()), None)]);
+        assert_eq!(
+            published(&external),
+            vec![(Some("198.51.100.1".to_string()), None)]
+        );
 
-        let internal = service(json!({ "spec": { "type": "ClusterIP", "clusterIP": "10.96.0.5" } }));
-        assert_eq!(published(&internal), vec![(Some("10.96.0.5".to_string()), None)]);
+        let internal =
+            service(json!({ "spec": { "type": "ClusterIP", "clusterIP": "10.96.0.5" } }));
+        assert_eq!(
+            published(&internal),
+            vec![(Some("10.96.0.5".to_string()), None)]
+        );
     }
 
     #[test]

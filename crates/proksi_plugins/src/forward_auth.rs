@@ -48,29 +48,37 @@ pub(super) struct ForwardAuth {
 impl ForwardAuth {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
         let settings: super::settings::ForwardAuth = super::settings::read("forward_auth", plugin)?;
-        let names = |key: &str, names: Option<Vec<String>>| -> Result<Option<Vec<HeaderName>>, String> {
-            names
-                .map(|names| {
-                    names
-                        .iter()
-                        .map(|name| {
-                            HeaderName::from_bytes(name.as_bytes()).map_err(|_| {
-                                format!("forward_auth: `{key}` must be a list of header names")
+        let names =
+            |key: &str, names: Option<Vec<String>>| -> Result<Option<Vec<HeaderName>>, String> {
+                names
+                    .map(|names| {
+                        names
+                            .iter()
+                            .map(|name| {
+                                HeaderName::from_bytes(name.as_bytes()).map_err(|_| {
+                                    format!("forward_auth: `{key}` must be a list of header names")
+                                })
                             })
-                        })
-                        .collect()
-                })
-                .transpose()
-        };
+                            .collect()
+                    })
+                    .transpose()
+            };
 
         let url = reqwest::Url::parse(&settings.url)
             .ok()
             .filter(|url| matches!(url.scheme(), "http" | "https"))
-            .ok_or_else(|| format!("forward_auth: {:?} isn't an http or https URL", settings.url))?;
+            .ok_or_else(|| {
+                format!(
+                    "forward_auth: {:?} isn't an http or https URL",
+                    settings.url
+                )
+            })?;
         let timeout = match settings.timeout_secs {
             None => Duration::from_secs(5),
             Some(0) => {
-                return Err("forward_auth: `timeout_secs` must be a number greater than 0".to_string())
+                return Err(
+                    "forward_auth: `timeout_secs` must be a number greater than 0".to_string(),
+                )
             }
             Some(secs) => Duration::from_secs(secs),
         };

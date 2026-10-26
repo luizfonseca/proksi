@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, net::SocketAddr};
 use serde::{Deserialize, Serialize};
 
 /// `admin { ... }`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AdminConfig {
     /// The address of the admin API (`ip:port`)
@@ -31,7 +31,7 @@ pub struct AdminConfig {
 }
 
 /// `token "name" { ... }`: a secret given in `Authorization: Bearer <secret>`, or to sign in
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Token {
     #[serde(skip_serializing)]
@@ -41,7 +41,9 @@ pub struct Token {
 }
 
 /// What a token can do: read, unless it says `access = "write"`
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Access {
     #[default]
@@ -79,7 +81,11 @@ impl AdminConfig {
         {
             return Err(format!("admin: token {name:?} has an empty secret"));
         }
-        if let Some(origin) = self.trusted_origins.iter().find(|origin| !is_origin(origin)) {
+        if let Some(origin) = self
+            .trusted_origins
+            .iter()
+            .find(|origin| !is_origin(origin))
+        {
             return Err(format!(
                 "admin: trusted_origins: {origin:?} must be a scheme and host, like \"https://admin.example.com\" or \"https://admin.example.com:8443\""
             ));
@@ -122,7 +128,7 @@ mod tests {
     use super::{Access, AdminConfig};
 
     fn admin(hcl: &str) -> AdminConfig {
-        #[derive(serde::Deserialize)]
+        #[derive(serde::Deserialize, schemars::JsonSchema)]
         struct Doc {
             admin: AdminConfig,
         }
@@ -168,7 +174,7 @@ mod tests {
 
     #[test]
     fn test_tokens_are_blocks() {
-        #[derive(Debug, serde::Deserialize)]
+        #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
         #[allow(dead_code)]
         struct Doc {
             admin: AdminConfig,
@@ -190,13 +196,20 @@ mod tests {
         assert!(admin.address().is_ok());
         assert_eq!(admin.trusted_origins.len(), 2);
 
-        for invalid in ["admin.example.com", "https://admin.example.com/", "https://", "ftp://admin.example.com"] {
+        for invalid in [
+            "admin.example.com",
+            "https://admin.example.com/",
+            "https://",
+            "ftp://admin.example.com",
+        ] {
             let admin = AdminConfig {
                 trusted_origins: vec![invalid.to_string()],
                 ..admin.clone()
             };
             assert!(
-                admin.address().is_err_and(|err| err.starts_with("admin: trusted_origins: ")),
+                admin
+                    .address()
+                    .is_err_and(|err| err.starts_with("admin: trusted_origins: ")),
                 "{invalid}"
             );
         }

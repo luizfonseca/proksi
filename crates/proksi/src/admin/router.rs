@@ -166,8 +166,17 @@ mod tests {
 
     #[test]
     fn test_paths_are_matched_as_sent() {
-        for path in ["//api/v1/status", "/api/v1/status/", "/api//v1/status", "/API/v1/status"] {
-            assert_eq!(parse(Method::GET, path, None), Err(StatusCode::NOT_FOUND), "{path}");
+        for path in [
+            "//api/v1/status",
+            "/api/v1/status/",
+            "/api//v1/status",
+            "/API/v1/status",
+        ] {
+            assert_eq!(
+                parse(Method::GET, path, None),
+                Err(StatusCode::NOT_FOUND),
+                "{path}"
+            );
         }
     }
 
@@ -190,11 +199,31 @@ mod tests {
             Ok(Endpoint::DeletedRoutes)
         );
         let refused = [
-            (Method::GET, "/api/v1/routes/a.test/history/x", StatusCode::NOT_FOUND),
-            (Method::GET, "/api/v1/routes/a.test/history/41/x", StatusCode::NOT_FOUND),
-            (Method::GET, "/api/v1/routes/a.test/rollback", StatusCode::METHOD_NOT_ALLOWED),
-            (Method::POST, "/api/v1/routes/a.test/history", StatusCode::METHOD_NOT_ALLOWED),
-            (Method::GET, "/api/v1/routes/a.test/other", StatusCode::NOT_FOUND),
+            (
+                Method::GET,
+                "/api/v1/routes/a.test/history/x",
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                Method::GET,
+                "/api/v1/routes/a.test/history/41/x",
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                Method::GET,
+                "/api/v1/routes/a.test/rollback",
+                StatusCode::METHOD_NOT_ALLOWED,
+            ),
+            (
+                Method::POST,
+                "/api/v1/routes/a.test/history",
+                StatusCode::METHOD_NOT_ALLOWED,
+            ),
+            (
+                Method::GET,
+                "/api/v1/routes/a.test/other",
+                StatusCode::NOT_FOUND,
+            ),
         ];
         for (method, path, status) in refused {
             assert_eq!(parse(method, path, None), Err(status), "{path}");

@@ -166,10 +166,7 @@ mod tests {
             target("raw", Some("a.test"), "127.0.0.1:6000", TcpTls::Passthrough),
         ];
 
-        assert_eq!(
-            chosen(&targets, "10.0.0.1:7777", None),
-            Some("game")
-        );
+        assert_eq!(chosen(&targets, "10.0.0.1:7777", None), Some("game"));
         // TLS passthrough is chosen before any handshake (`passthrough_for`), never here
         assert_eq!(chosen(&targets, "127.0.0.1:6000", None), None);
         assert_eq!(chosen(&targets, "10.0.0.1:6000", None), None);
@@ -183,14 +180,8 @@ mod tests {
             target("b", Some("b.test"), "0.0.0.0:5433", TcpTls::Terminate),
         ];
 
-        assert_eq!(
-            chosen(&targets, "10.0.0.1:5433", Some("a.test")),
-            Some("a")
-        );
-        assert_eq!(
-            chosen(&targets, "10.0.0.1:5433", Some("B.Test")),
-            Some("b")
-        );
+        assert_eq!(chosen(&targets, "10.0.0.1:5433", Some("a.test")), Some("a"));
+        assert_eq!(chosen(&targets, "10.0.0.1:5433", Some("B.Test")), Some("b"));
         // Another name (or none) never reaches a host's block, even alone on its address
         assert_eq!(chosen(&targets, "10.0.0.1:5433", Some("c.test")), None);
         assert_eq!(chosen(&targets[..1], "10.0.0.1:5433", Some("c.test")), None);
@@ -239,7 +230,10 @@ mod tests {
         assert_eq!(chosen("10.0.0.1:443", Some("other.test"), true), None);
         assert_eq!(chosen("10.0.0.1:443", None, false), None);
         // Alone on its address: every connection
-        assert_eq!(chosen("10.0.0.1:8443", Some("other.test"), false), Some("c"));
+        assert_eq!(
+            chosen("10.0.0.1:8443", Some("other.test"), false),
+            Some("c")
+        );
         assert_eq!(chosen("10.0.0.1:8443", None, false), Some("c"));
         // Unless the address is shared with HTTPS hosts
         assert_eq!(chosen("10.0.0.1:8443", Some("other.test"), true), None);

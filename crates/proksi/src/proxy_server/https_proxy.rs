@@ -1,5 +1,5 @@
-use std::time::{Duration, SystemTime};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 
@@ -366,7 +366,11 @@ impl ProxyHttp for Router {
 
         // A new client of a traffic split keeps its side
         for (name, id) in std::mem::take(&mut ctx.split_cookies) {
-            let secure = if self.listener == Listener::Https { "; Secure" } else { "" };
+            let secure = if self.listener == Listener::Https {
+                "; Secure"
+            } else {
+                ""
+            };
             upstream_response.append_header(
                 http::header::SET_COOKIE,
                 format!("{name}={id}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax{secure}"),
@@ -375,7 +379,8 @@ impl ProxyHttp for Router {
 
         if let Some(cache_state) = ctx.cache_state.filter(|_| session.cache.enabled()) {
             // indicates whether it was HIT or MISS in the cache
-            upstream_response.insert_header(HeaderName::from_static("cache-status"), cache_state)?;
+            upstream_response
+                .insert_header(HeaderName::from_static("cache-status"), cache_state)?;
 
             let elapsed = ctx.timings.request_filter_start.elapsed();
             upstream_response.insert_header(
@@ -413,7 +418,6 @@ impl ProxyHttp for Router {
         upstream_request: &mut RequestHeader,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
-
         // Who the client is, set first so the location's headers can still change them
         if let Some(peer) = session
             .client_addr()

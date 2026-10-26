@@ -672,9 +672,7 @@ mod tests {
         let _: () = conn.set("proksi:route:broken.test", "{ not json").unwrap();
         let _: () = conn.sadd("proksi:routes", "broken.test").unwrap();
 
-        let snapshot = crate::store_trait::Store::routes(&store)
-            .await
-            .unwrap();
+        let snapshot = crate::store_trait::Store::routes(&store).await.unwrap();
 
         // Proksi reports it as invalid: the store doesn't read it (schema version 0: unknown)
         assert_eq!(

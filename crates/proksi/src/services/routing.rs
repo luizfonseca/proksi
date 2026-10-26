@@ -5,7 +5,7 @@ use pingora::{
 };
 use tokio::sync::mpsc::Receiver;
 
-use crate::routing::{RouteSnapshot, service::run_reconciler};
+use crate::routing::{service::run_reconciler, RouteSnapshot};
 
 /// Service running the reconciler
 pub struct RoutingService {

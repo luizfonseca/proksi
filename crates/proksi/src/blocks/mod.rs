@@ -12,8 +12,8 @@ use pingora::{
     http::{RequestHeader, ResponseHeader},
     proxy::Session,
 };
-pub use proksi_plugins::{jwt, settings, Kind, Middleware};
 use proksi_plugins::priority;
+pub use proksi_plugins::{jwt, settings, Kind, Middleware};
 
 use crate::{config::host::Location, proxy_server::https_proxy::RouterContext};
 
@@ -86,7 +86,9 @@ impl Blocks {
         }
 
         blocks.sort_by_key(|block| (block.priority, block.kind));
-        let paces = blocks.iter().any(|block| block.kind == Kind::BandwidthLimit);
+        let paces = blocks
+            .iter()
+            .any(|block| block.kind == Kind::BandwidthLimit);
         Ok(Self { blocks, paces })
     }
 
@@ -227,11 +229,14 @@ mod tests {
 
     #[test]
     fn test_blocks_run_by_their_default_priority() {
-        let blocks = Blocks::build(&location(serde_json::json!({
-            "cache": { "enabled": true },
-            "headers": { "add": [{ "name": "x-a", "value": "1" }] },
-            "plugins": [basic_auth(), { "name": "request_id" }],
-        })), "")
+        let blocks = Blocks::build(
+            &location(serde_json::json!({
+                "cache": { "enabled": true },
+                "headers": { "add": [{ "name": "x-a", "value": "1" }] },
+                "plugins": [basic_auth(), { "name": "request_id" }],
+            })),
+            "",
+        )
         .unwrap();
 
         assert_eq!(
@@ -247,13 +252,16 @@ mod tests {
 
     #[test]
     fn test_rate_limit_runs_first_after_request_id() {
-        let blocks = Blocks::build(&location(serde_json::json!({
-            "plugins": [
-                basic_auth(),
-                { "name": "rate_limit", "config": { "requests": 10, "per": "1m" } },
-                { "name": "request_id" },
-            ],
-        })), "")
+        let blocks = Blocks::build(
+            &location(serde_json::json!({
+                "plugins": [
+                    basic_auth(),
+                    { "name": "rate_limit", "config": { "requests": 10, "per": "1m" } },
+                    { "name": "request_id" },
+                ],
+            })),
+            "",
+        )
         .unwrap();
 
         assert_eq!(
@@ -264,13 +272,16 @@ mod tests {
 
     #[test]
     fn test_body_limit_runs_before_authentication() {
-        let blocks = Blocks::build(&location(serde_json::json!({
-            "plugins": [
-                basic_auth(),
-                { "name": "body_limit", "config": { "max": "1MiB" } },
-                { "name": "rate_limit", "config": { "requests": 10, "per": "1m" } },
-            ],
-        })), "")
+        let blocks = Blocks::build(
+            &location(serde_json::json!({
+                "plugins": [
+                    basic_auth(),
+                    { "name": "body_limit", "config": { "max": "1MiB" } },
+                    { "name": "rate_limit", "config": { "requests": 10, "per": "1m" } },
+                ],
+            })),
+            "",
+        )
         .unwrap();
 
         assert_eq!(
@@ -281,10 +292,13 @@ mod tests {
 
     #[test]
     fn test_priority_overrides_the_default() {
-        let blocks = Blocks::build(&location(serde_json::json!({
-            "headers": { "add": [{ "name": "x-a", "value": "1" }], "priority": 10 },
-            "plugins": [basic_auth(), { "name": "request_id", "config": { "priority": 60 } }],
-        })), "")
+        let blocks = Blocks::build(
+            &location(serde_json::json!({
+                "headers": { "add": [{ "name": "x-a", "value": "1" }], "priority": 10 },
+                "plugins": [basic_auth(), { "name": "request_id", "config": { "priority": 60 } }],
+            })),
+            "",
+        )
         .unwrap();
 
         assert_eq!(
@@ -295,10 +309,13 @@ mod tests {
 
     #[test]
     fn test_blocks_with_the_same_priority_run_in_table_order() {
-        let blocks = Blocks::build(&location(serde_json::json!({
-            "headers": { "add": [{ "name": "x-a", "value": "1" }], "priority": 20 },
-            "plugins": [{ "name": "request_id", "config": { "priority": 20 } }, basic_auth()],
-        })), "")
+        let blocks = Blocks::build(
+            &location(serde_json::json!({
+                "headers": { "add": [{ "name": "x-a", "value": "1" }], "priority": 20 },
+                "plugins": [{ "name": "request_id", "config": { "priority": 20 } }, basic_auth()],
+            })),
+            "",
+        )
         .unwrap();
 
         assert_eq!(
@@ -309,9 +326,12 @@ mod tests {
 
     #[test]
     fn test_priority_must_be_between_0_and_100() {
-        let err = Blocks::build(&location(serde_json::json!({
-            "plugins": [{ "name": "request_id", "config": { "priority": 101 } }],
-        })), "")
+        let err = Blocks::build(
+            &location(serde_json::json!({
+                "plugins": [{ "name": "request_id", "config": { "priority": 101 } }],
+            })),
+            "",
+        )
         .err();
 
         assert_eq!(
@@ -349,11 +369,14 @@ mod tests {
 
     #[test]
     fn test_disabled_cache_and_empty_headers_add_no_blocks() {
-        let blocks = Blocks::build(&location(serde_json::json!({
-            "cache": { "enabled": false },
-            "headers": { "add": [], "remove": [] },
-            "plugins": [{ "name": "unknown" }],
-        })), "")
+        let blocks = Blocks::build(
+            &location(serde_json::json!({
+                "cache": { "enabled": false },
+                "headers": { "add": [], "remove": [] },
+                "plugins": [{ "name": "unknown" }],
+            })),
+            "",
+        )
         .unwrap();
 
         assert!(blocks.iter().next().is_none());

@@ -18,16 +18,16 @@ use pingora::{
 use serde::{Deserialize, Serialize};
 
 use bandwidth_limit::BandwidthLimit;
-use body_rewrite::BodyRewrite;
-use openapi::OpenApi;
 use basic_auth::BasicAuth;
 use body_limit::BodyLimit;
+use body_rewrite::BodyRewrite;
 use compress::Compress;
 use cors::Cors;
 use forward_auth::ForwardAuth;
 use ip_filter::IpFilter;
 use jwt::Jwt;
 use oauth2::Oauth2;
+use openapi::OpenApi;
 use rate_limit::RateLimit;
 use redirect::{Redirect, Respond};
 use request_id::RequestId;
@@ -40,7 +40,6 @@ mod bandwidth_limit;
 mod basic_auth;
 pub mod body_limit;
 mod body_rewrite;
-pub mod openapi;
 mod compress;
 mod cors;
 mod filter;
@@ -49,6 +48,7 @@ mod ip_filter;
 pub mod ip_set;
 pub mod jwt;
 mod oauth2;
+pub mod openapi;
 mod priority;
 pub mod rate_limit;
 mod redirect;
@@ -66,7 +66,7 @@ pub use priority::{plugin_priority, priority};
 static GLOBAL: allocations::Counting = allocations::Counting;
 
 /// A plugin of a location, as configured: its name, and its settings
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, schemars::JsonSchema)]
 pub struct RoutePlugin {
     /// The name of the plugin (must be a valid plugin name)
     pub name: Cow<'static, str>,

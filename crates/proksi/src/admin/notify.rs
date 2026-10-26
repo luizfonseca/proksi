@@ -8,9 +8,9 @@ use proksi_store::{Expect, Store, Write};
 use serde::Serialize;
 
 use super::{
-    Reply, conflict,
+    conflict,
     routes::{self, Refused},
-    routes_reply,
+    routes_reply, Reply,
 };
 use crate::{
     config::notify::{Kind, NotifyBlock},
@@ -186,7 +186,7 @@ fn keep_secrets(block: &mut serde_json::Value, saved: Option<&NotifyBlock>) -> R
 mod tests {
     use proksi_store::{Expect, MemoryStore, Store, Write};
 
-    use super::{Refused, delete, put};
+    use super::{delete, put, Refused};
     use crate::notify::stored;
 
     fn by(expect: Expect) -> Write {
@@ -254,18 +254,16 @@ mod tests {
             refused(put(&store, "a/b", br#"{"url":"https://x"}"#, &Write::default()).await)
                 .contains("names")
         );
-        assert!(
-            refused(
-                put(
-                    &store,
-                    "ops",
-                    br#"{"url":"https://x","other":1}"#,
-                    &Write::default()
-                )
-                .await
+        assert!(refused(
+            put(
+                &store,
+                "ops",
+                br#"{"url":"https://x","other":1}"#,
+                &Write::default()
             )
-            .contains("other")
-        );
+            .await
+        )
+        .contains("other"));
         assert!(store.notify_blocks().await.unwrap().blocks.is_empty());
     }
 

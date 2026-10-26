@@ -19,7 +19,7 @@ pub use tcp::TcpBlock;
 pub use tls::TlsSetting;
 
 /// `host "<name>" { ... }`
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HostBlock {
     /// Addresses the host is served on (`ip:port`), instead of the default ones
@@ -40,6 +40,7 @@ pub struct HostBlock {
     pub tcp: BTreeMap<String, TcpBlock>,
     /// `rule "<name>" { ... }`, in order: before the location is chosen
     #[serde(default, deserialize_with = "crate::rules::one_or_many")]
+    #[schemars(with = "crate::rules::schema::RuleList")]
     pub rule: Vec<crate::rules::Rule>,
 }
 
@@ -85,7 +86,7 @@ mod tests {
 
     use super::HostBlock;
 
-    #[derive(Deserialize)]
+    #[derive(Deserialize, schemars::JsonSchema)]
     struct Doc {
         host: BTreeMap<String, HostBlock>,
     }
@@ -576,10 +577,21 @@ host "app.test" {
                 .find(|location| location.path == path)
                 .and_then(|location| location.timeouts)
                 .and_then(|timeouts| timeouts.upstream)
-                .map(|t| (t.connect_secs, t.tls_secs, t.read_secs, t.write_secs, t.idle_secs))
+                .map(|t| {
+                    (
+                        t.connect_secs,
+                        t.tls_secs,
+                        t.read_secs,
+                        t.write_secs,
+                        t.idle_secs,
+                    )
+                })
         };
 
-        assert_eq!(upstream("/reports"), Some((Some(2), None, Some(600), None, Some(5))));
+        assert_eq!(
+            upstream("/reports"),
+            Some((Some(2), None, Some(600), None, Some(5)))
+        );
         assert_eq!(upstream("/"), Some((Some(2), None, Some(30), None, None)));
     }
 

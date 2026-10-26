@@ -10,9 +10,7 @@
 
 use sqlx::{AnyConnection, AnyPool, Row};
 
-use crate::route::{
-    Change, Expect, HistoryEntry, RouteRecord, RouteVersion, StoreError, Write,
-};
+use crate::route::{Change, Expect, HistoryEntry, RouteRecord, RouteVersion, StoreError, Write};
 
 fn unavailable(err: impl std::fmt::Display) -> StoreError {
     StoreError::Unavailable(err.to_string())
@@ -188,7 +186,10 @@ async fn trim_versions(tx: &mut AnyConnection, host: &str, keep: i64) -> Result<
             removable.push(revision);
         }
     }
-    for revision in removable.into_iter().take(usize::try_from(excess).unwrap_or_default()) {
+    for revision in removable
+        .into_iter()
+        .take(usize::try_from(excess).unwrap_or_default())
+    {
         sqlx::query("DELETE FROM proksi_route_versions WHERE host = $1 AND revision = $2")
             .bind(host)
             .bind(revision)
@@ -223,7 +224,13 @@ pub(crate) async fn put(
     .execute(&mut *tx)
     .await
     .map_err(unavailable)?;
-    activate(&mut tx, &host, Some((schema_version, &route.data)), revision).await?;
+    activate(
+        &mut tx,
+        &host,
+        Some((schema_version, &route.data)),
+        revision,
+    )
+    .await?;
     record(&mut tx, &host, revision, Change::Saved, &write, keep).await?;
     tx.commit().await.map_err(unavailable)?;
     Ok(revision)
@@ -271,7 +278,15 @@ pub(crate) async fn rollback(
     let schema_version: i64 = version.try_get("schema_version").map_err(invalid)?;
     let data: String = version.try_get("data").map_err(invalid)?;
     activate(&mut tx, &host, Some((schema_version, &data)), to).await?;
-    record(&mut tx, &host, revision, Change::RolledBack { to }, &write, keep).await?;
+    record(
+        &mut tx,
+        &host,
+        revision,
+        Change::RolledBack { to },
+        &write,
+        keep,
+    )
+    .await?;
     tx.commit().await.map_err(unavailable)?;
     Ok(revision)
 }
@@ -294,7 +309,11 @@ fn entry(row: &sqlx::any::AnyRow) -> Result<HistoryEntry, StoreError> {
         "saved" => Change::Saved,
         "deleted" => Change::Deleted,
         "rolled_back" => Change::RolledBack {
-            to: to_u64(row.try_get::<Option<i64>, _>("target").map_err(invalid)?.unwrap_or_default())?,
+            to: to_u64(
+                row.try_get::<Option<i64>, _>("target")
+                    .map_err(invalid)?
+                    .unwrap_or_default(),
+            )?,
         },
         other => return Err(StoreError::Invalid(format!("unknown change {other:?}"))),
     };

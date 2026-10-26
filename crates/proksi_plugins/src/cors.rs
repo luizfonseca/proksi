@@ -82,15 +82,16 @@ impl Cors {
     pub(super) fn new(plugin: &RoutePlugin) -> Result<Self, String> {
         let settings: super::settings::Cors = super::settings::read("cors", plugin)?;
         // A list as a header value (`GET, POST`)
-        let joined = |key: &str, values: Option<Vec<String>>| -> Result<Option<HeaderValue>, String> {
-            values
-                .filter(|values| !values.is_empty())
-                .map(|values| {
-                    HeaderValue::from_str(&values.join(", "))
-                        .map_err(|_| format!("cors: `{key}` has an invalid value"))
-                })
-                .transpose()
-        };
+        let joined =
+            |key: &str, values: Option<Vec<String>>| -> Result<Option<HeaderValue>, String> {
+                values
+                    .filter(|values| !values.is_empty())
+                    .map(|values| {
+                        HeaderValue::from_str(&values.join(", "))
+                            .map_err(|_| format!("cors: `{key}` has an invalid value"))
+                    })
+                    .transpose()
+            };
 
         if settings.origins.is_empty() {
             return Err("cors: `origins` is required".to_string());

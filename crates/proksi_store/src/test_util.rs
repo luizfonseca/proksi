@@ -49,10 +49,7 @@ pub fn certificate(domain: &str, days: u32) -> Certificate {
 ///
 /// When OpenSSL fails to create it
 #[must_use]
-pub fn signed(
-    name: &str,
-    issuer: Option<&(X509, PKey<Private>)>,
-) -> (X509, PKey<Private>) {
+pub fn signed(name: &str, issuer: Option<&(X509, PKey<Private>)>) -> (X509, PKey<Private>) {
     let group = EcGroup::from_curve_name(Nid::X9_62_PRIME256V1).unwrap();
     let key = PKey::from_ec_key(EcKey::generate(&group).unwrap()).unwrap();
     let mut subject = X509Name::builder().unwrap();

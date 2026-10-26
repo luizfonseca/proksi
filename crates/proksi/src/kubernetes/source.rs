@@ -147,7 +147,11 @@ async fn publish_status(
 ) -> Result<(), String> {
     let store = crate::stores::global::get_store();
     let leader = store
-        .try_lock(STATUS_LEASE, crate::stores::replica_id(), STATUS_INTERVAL * 3)
+        .try_lock(
+            STATUS_LEASE,
+            crate::stores::replica_id(),
+            STATUS_INTERVAL * 3,
+        )
         .await
         .unwrap_or(true);
     if !leader {
@@ -163,7 +167,10 @@ async fn publish_status(
         .map_err(|err| format!("failed to read service {publish}: {err}"))?;
     let addresses = status::addresses(&service);
 
-    let ingresses = ingresses.iter().map(|ingress| &***ingress).collect::<Vec<&Ingress>>();
+    let ingresses = ingresses
+        .iter()
+        .map(|ingress| &***ingress)
+        .collect::<Vec<&Ingress>>();
     for (namespace, name) in status::outdated(&ingresses, &addresses) {
         let patch = serde_json::json!({ "status": { "loadBalancer": { "ingress": addresses } } });
         Api::<Ingress>::namespaced(client.clone(), &namespace)

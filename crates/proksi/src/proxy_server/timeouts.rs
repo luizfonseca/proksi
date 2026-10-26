@@ -27,7 +27,10 @@ pub fn client_timeouts() -> ClientTimeouts {
 
 /// The timeouts toward upstreams of `server.timeouts`
 pub fn upstream_timeouts() -> crate::config::host::UpstreamTimeouts {
-    TIMEOUTS.get().map(|timeouts| timeouts.upstream).unwrap_or_default()
+    TIMEOUTS
+        .get()
+        .map(|timeouts| timeouts.upstream)
+        .unwrap_or_default()
 }
 
 /// An HTTP app whose clients get the configured timeouts: Pingora's own leave connections
@@ -85,6 +88,9 @@ impl<A: HttpServerApp + Send + Sync + 'static> HttpServerApp for WithTimeouts<A>
         stream: Stream,
         shutdown: &ShutdownWatch,
     ) -> Option<Stream> {
-        self.app.clone().process_custom_session(stream, shutdown).await
+        self.app
+            .clone()
+            .process_custom_session(stream, shutdown)
+            .await
     }
 }

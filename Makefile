@@ -10,3 +10,7 @@ build.dev:
 	cargo build
 dev:
 	cargo watch -c -x run -d 1 -i data -i dist
+schema:
+	PROKSI_WRITE_SCHEMA=1 cargo test -p proksi --bin proksi config::schema::tests::test_the_published_schema_is_up_to_date
+schema.check:
+	PROKSI_CHECK_SCHEMA=1 cargo test -p proksi --bin proksi config::schema::tests::test_the_published_schema_is_up_to_date

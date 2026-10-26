@@ -319,9 +319,22 @@ mod tests {
         let trusted = vec!["https://host.tailnet.ts.net:9200".to_string()];
         // Behind a proxy sending its own Host
         let host = Some("127.0.0.1:7555");
-        assert!(allowed_origin(Some("https://host.tailnet.ts.net:9200"), host, &trusted));
-        assert!(allowed_origin(Some("https://HOST.tailnet.ts.net:9200"), host, &trusted));
-        for origin in [Some("https://host.tailnet.ts.net"), Some("http://host.tailnet.ts.net:9200"), Some("null"), None] {
+        assert!(allowed_origin(
+            Some("https://host.tailnet.ts.net:9200"),
+            host,
+            &trusted
+        ));
+        assert!(allowed_origin(
+            Some("https://HOST.tailnet.ts.net:9200"),
+            host,
+            &trusted
+        ));
+        for origin in [
+            Some("https://host.tailnet.ts.net"),
+            Some("http://host.tailnet.ts.net:9200"),
+            Some("null"),
+            None,
+        ] {
             assert!(!allowed_origin(origin, host, &trusted), "{origin:?}");
         }
         // The listener's own address still is

@@ -80,7 +80,11 @@ impl LazyMemoryCache {
     pub fn get(&self) -> Option<&MemoryCache> {
         self.cache
             .get_or_init(|| {
-                let limit_mb = self.limit_mb.get().copied().unwrap_or(DEFAULT_MEMORY_LIMIT_MB);
+                let limit_mb = self
+                    .limit_mb
+                    .get()
+                    .copied()
+                    .unwrap_or(DEFAULT_MEMORY_LIMIT_MB);
                 (limit_mb > 0).then(|| MemoryCache::new(limit_mb))
             })
             .as_ref()

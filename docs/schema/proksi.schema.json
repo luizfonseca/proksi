@@ -1,0 +1,4564 @@
+{
+  "$defs": {
+    "Access": {
+      "description": "What a token can do: read, unless it says `access = \"write\"`",
+      "enum": [
+        "read",
+        "write"
+      ],
+      "type": "string"
+    },
+    "AdminConfig": {
+      "additionalProperties": false,
+      "description": "`admin { ... }`",
+      "properties": {
+        "listen": {
+          "description": "The address of the admin API (`ip:port`)",
+          "type": "string"
+        },
+        "metrics": {
+          "default": true,
+          "description": "Record metrics (`/metrics` and live stats). Off, requests don't record anything.",
+          "type": "boolean"
+        },
+        "metrics_listen": {
+          "description": "Another address serving only `/metrics` (`ip:port`), for scrapers that mustn't reach\nthe rest of the API",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metrics_token": {
+          "description": "Required in `Authorization: Bearer <token>` on `metrics_listen`, if set",
+          "type": [
+            "string",
+            "null"
+          ],
+          "writeOnly": true
+        },
+        "token": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Token"
+          },
+          "description": "`token \"name\" { secret = \"...\", access = \"write\" }`, by name. Without one, `listen` must\nbe a loopback address.",
+          "type": "object",
+          "writeOnly": true
+        },
+        "trusted_origins": {
+          "description": "Origins the UI is served from behind a proxy that changes `Host` (nginx, a tunnel...):\nchanges from them are accepted, as from the listener's own address",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "listen"
+      ],
+      "type": "object"
+    },
+    "Algorithm": {
+      "description": "A compression algorithm",
+      "enum": [
+        "zstd",
+        "br",
+        "gzip"
+      ],
+      "type": "string"
+    },
+    "AutoReload": {
+      "properties": {
+        "enabled": {
+          "description": "Enables the auto-reload service",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "interval_secs": {
+          "description": "The interval (in seconds) to check for changes in the configuration file",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "BandwidthLimit": {
+      "additionalProperties": false,
+      "description": "`bandwidth_limit`: paces the responses sent to each client",
+      "properties": {
+        "burst": {
+          "description": "Bytes sent at full speed first, such as \"10MiB\" (default: one second of `rate`)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rate": {
+          "description": "Bytes per second for each client, such as \"512KiB\" or \"1MiB\"",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rate"
+      ],
+      "type": "object"
+    },
+    "BasicAuth": {
+      "additionalProperties": false,
+      "description": "`basic_auth`: asks for a user and password",
+      "properties": {
+        "pass": {
+          "type": "string"
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "user",
+        "pass"
+      ],
+      "type": "object"
+    },
+    "BodyChanges": {
+      "additionalProperties": false,
+      "description": "`request { json { ... } replace { ... } }` of `body_rewrite`",
+      "properties": {
+        "json": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BodyRewriteJson"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Changes to JSON bodies (`Content-Type: application/json`, or `+json`), by path"
+        },
+        "replace": {
+          "$ref": "#/$defs/OneOrMany_BodyReplace",
+          "description": "Regular expressions replaced in the body, in order"
+        }
+      },
+      "type": "object"
+    },
+    "BodyLimit": {
+      "additionalProperties": false,
+      "description": "`body_limit`: answers `413` to requests with a larger body",
+      "properties": {
+        "max": {
+          "description": "The largest body accepted, such as \"512KiB\", \"1MiB\" or \"10MB\"",
+          "type": "string"
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "max"
+      ],
+      "type": "object"
+    },
+    "BodyReplace": {
+      "additionalProperties": false,
+      "description": "`replace { pattern = \"...\", with = \"...\" }` of `body_rewrite`",
+      "properties": {
+        "max_match": {
+          "description": "The longest match, such as \"1KiB\" (default): longer ones may be missed where parts of\nthe body meet",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pattern": {
+          "description": "A regular expression",
+          "type": "string"
+        },
+        "with": {
+          "description": "What replaces each match: `$1`, `$name` are its groups (`$$` for a `$`)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern",
+        "with"
+      ],
+      "type": "object"
+    },
+    "BodyRewrite": {
+      "additionalProperties": false,
+      "description": "`body_rewrite`: changes bodies as they stream through (the request's)",
+      "properties": {
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BodyChanges"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Changes to the request's body, before it's sent upstream"
+        }
+      },
+      "type": "object"
+    },
+    "BodyRewriteJson": {
+      "additionalProperties": false,
+      "description": "`json { set = { ... }, remove = [...] }` of `body_rewrite`",
+      "properties": {
+        "remove": {
+          "description": "Members or elements removed, by path, such as `[\"$.debug\"]`",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "set": {
+          "additionalProperties": true,
+          "description": "Values set, by path, such as `{ \"$.user.role\" = \"guest\" }`",
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "CacheConfig": {
+      "description": "Cache settings shared by all routes",
+      "properties": {
+        "memory_limit_mb": {
+          "default": 256,
+          "description": "Maximum size (in MB) of cached responses kept in memory, on top of the disk cache.\nWhen reached, the least popular responses are only served from disk.\n`0` disables keeping responses in memory.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "Challenge": {
+      "description": "How Let's Encrypt checks that a host is ours (ADR 0009)",
+      "oneOf": [
+        {
+          "const": "http-01",
+          "description": "A token served over HTTP, on port 80",
+          "type": "string"
+        },
+        {
+          "const": "dns-01",
+          "description": "A TXT record at `_acme-challenge.<name>`, set through the DNS provider",
+          "type": "string"
+        }
+      ]
+    },
+    "Changes": {
+      "additionalProperties": false,
+      "properties": {
+        "add": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Headers added, replacing any with the same name",
+          "type": "object"
+        },
+        "remove": {
+          "default": [],
+          "description": "Headers removed",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "Check": {
+      "description": "What an `oauth2` validation checks",
+      "enum": [
+        "email",
+        "username",
+        "team_id",
+        "org_id"
+      ],
+      "type": "string"
+    },
+    "ClientTimeouts": {
+      "description": "Timeouts toward clients (`server.timeouts`), in seconds, and the defaults toward upstreams",
+      "properties": {
+        "body_secs": {
+          "default": null,
+          "description": "How long the whole body of a request can take to arrive, after its headers (default: no\nlimit)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "idle_secs": {
+          "default": 60,
+          "description": "How long a connection can wait for a request, or for each read of its headers, including\nbetween requests on a kept-alive connection (HTTP/2: without any request)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "read_secs": {
+          "default": 60,
+          "description": "How long each read of a request body can wait",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "upstream": {
+          "$ref": "#/$defs/UpstreamTimeouts",
+          "default": {
+            "connect_secs": null,
+            "idle_secs": null,
+            "read_secs": null,
+            "tls_secs": null,
+            "write_secs": null
+          },
+          "description": "Toward upstreams, unless a host or location sets them"
+        },
+        "write_secs": {
+          "default": 60,
+          "description": "How long each write of a response can wait for the client to read",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "Compress": {
+      "additionalProperties": false,
+      "description": "`compress`: compresses responses",
+      "properties": {
+        "algorithms": {
+          "description": "The algorithms used (default: all three)",
+          "items": {
+            "$ref": "#/$defs/Algorithm"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "level": {
+          "description": "The level of every algorithm (default: 3 for zstd, 4 for brotli, 6 for gzip)",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Cors": {
+      "additionalProperties": false,
+      "description": "`cors`: answers browsers' cross-origin requests",
+      "properties": {
+        "credentials": {
+          "description": "Whether the browser sends cookies and `Authorization` (default: false)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "expose_headers": {
+          "description": "Response headers the page can read, besides the basic ones",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "headers": {
+          "description": "The request headers allowed (default: those the browser asks for)",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "max_age_secs": {
+          "description": "How long browsers keep a preflight's answer, in seconds",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "methods": {
+          "description": "The methods allowed (default: GET, HEAD, POST, PUT, PATCH, DELETE)",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "origins": {
+          "description": "The origins accepted: exact (`https://app.example.com`), subdomains\n(`https://*.example.com`) or any (`*`)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "origins"
+      ],
+      "type": "object"
+    },
+    "DnsChallenge": {
+      "additionalProperties": false,
+      "description": "`lets_encrypt { dns { ... } }`: where DNS-01 challenges' TXT records are written",
+      "properties": {
+        "api_token": {
+          "description": "A token allowed to edit the DNS records of the zones served (`Zone:DNS:Edit`)",
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/DnsProviderKind"
+        }
+      },
+      "required": [
+        "provider",
+        "api_token"
+      ],
+      "type": "object"
+    },
+    "DnsProviderKind": {
+      "description": "The DNS providers supported for DNS-01 challenges",
+      "enum": [
+        "cloudflare"
+      ],
+      "type": "string"
+    },
+    "Docker": {
+      "properties": {
+        "enabled": {
+          "description": "Enables the docker label service\n(default: false)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "endpoint": {
+          "description": "The docker endpoint to connect to (can be a unix socket or a tcp address)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "interval_secs": {
+          "description": "The interval (in seconds) to check for label updates\n(default: every 15 seconds)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "mode": {
+          "description": "Mode to use for the docker service",
+          "enum": [
+            "container",
+            "CONTAINER",
+            "swarm",
+            "SWARM"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Format": {
+      "description": "How the request to the webhook is written",
+      "oneOf": [
+        {
+          "const": "json",
+          "description": "The event as a JSON object (`event`, `summary`, `host`, ...)",
+          "type": "string"
+        },
+        {
+          "const": "slack",
+          "description": "A message for a Slack incoming webhook (`{\"text\": ...}`)",
+          "type": "string"
+        },
+        {
+          "const": "discord",
+          "description": "A message for a Discord webhook (`{\"content\": ...}`)",
+          "type": "string"
+        }
+      ]
+    },
+    "ForwardAuth": {
+      "additionalProperties": false,
+      "description": "`forward_auth`: asks another service whether requests may go through",
+      "properties": {
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "request_headers": {
+          "description": "Only these headers of the request are sent to it (default: all)",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "response_headers": {
+          "description": "Headers of its answer added to the request sent to the upstream",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "description": "How long it has to answer, in seconds (default: 5)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "The auth service's endpoint (http or https)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "HeaderChanges": {
+      "additionalProperties": false,
+      "description": "`headers`: changes the request's headers, or the response's",
+      "properties": {
+        "priority": {
+          "description": "When the response's are changed among the blocks, from 0 to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Changes"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The request's headers, as the next rules and the upstream see them"
+        },
+        "response": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Changes"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The response's headers"
+        }
+      },
+      "type": "object"
+    },
+    "HeadersBlock": {
+      "additionalProperties": false,
+      "description": "`headers { ... }` in a host or a location",
+      "properties": {
+        "priority": {
+          "description": "When the headers are changed, among the blocks of a location (0-100)",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "response": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResponseHeadersBlock"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "HealthCheck": {
+      "additionalProperties": false,
+      "description": "`health_check { ... }` in a host, a location or a `tcp` block: a TCP connection to each\nupstream on an interval. An upstream is unhealthy after two failed checks in a row, and gets\nconnections again after a successful one, or when no upstream is healthy.",
+      "properties": {
+        "enabled": {
+          "description": "Off, upstreams are never marked unhealthy (default: on)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "interval_secs": {
+          "description": "How often each upstream is checked (default: 15)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "HostBlock": {
+      "additionalProperties": false,
+      "description": "`host \"<name>\" { ... }`",
+      "properties": {
+        "headers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HeadersBlock"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Headers for every location of the host"
+        },
+        "health_check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HealthCheck"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How the upstreams of every location and `tcp` block of the host are checked"
+        },
+        "listen": {
+          "default": [],
+          "description": "Addresses the host is served on (`ip:port`), instead of the default ones",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "location": {
+          "additionalProperties": {
+            "$ref": "#/$defs/LocationBlock"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "rule": {
+          "$ref": "#/$defs/RuleList",
+          "default": [],
+          "description": "`rule \"<name>\" { ... }`, in order: before the location is chosen"
+        },
+        "tcp": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TcpBlock"
+          },
+          "default": {},
+          "description": "TCP proxying with the host's certificate (or its TLS forwarded, or plain TCP)",
+          "type": "object"
+        },
+        "timeouts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocationTimeouts"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Timeouts for every location of the host (a location can set its own)"
+        },
+        "tls": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TlsSetting"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`tls = false` (plain HTTP) or `tls { ... }`"
+        }
+      },
+      "type": "object"
+    },
+    "IpFilter": {
+      "additionalProperties": false,
+      "description": "`ip_filter`: answers `403` to clients it doesn't accept",
+      "properties": {
+        "allow": {
+          "description": "Addresses and networks accepted (\"203.0.113.9\", \"10.0.0.0/8\"); when set, every other\nclient is refused",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "deny": {
+          "description": "Addresses and networks refused, even when `allow` includes them",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Jwt": {
+      "additionalProperties": false,
+      "description": "`jwt`: lets through requests with a valid JSON Web Token, and answers `401` to the others",
+      "properties": {
+        "audience": {
+          "description": "Tokens must name one of these audiences (`aud`)",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "claims_to_headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Claims sent to the upstream as headers, by claim (`{ sub = \"X-User-Id\" }`). Headers of\nthe same names sent by the client are removed.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "cookie": {
+          "description": "Read the token from this cookie, instead of `Authorization: Bearer`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issuer": {
+          "description": "The issuer tokens must name (`iss`)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "jwks_url": {
+          "description": "Where the issuer publishes its public keys (JWKS), fetched in the background",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "public_key": {
+          "description": "The public key of signed tokens, in PEM (RSA, ECDSA or Ed25519)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "secret": {
+          "description": "The shared secret of HMAC tokens (HS256, HS384, HS512)",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Kind": {
+      "description": "What Proksi tells a webhook about",
+      "oneOf": [
+        {
+          "const": "upstream_down",
+          "description": "A health check found an upstream failing",
+          "type": "string"
+        },
+        {
+          "const": "upstream_up",
+          "description": "A failing upstream passes its health checks again",
+          "type": "string"
+        },
+        {
+          "const": "certificate_issued",
+          "description": "Let's Encrypt gave a certificate for a new domain",
+          "type": "string"
+        },
+        {
+          "const": "certificate_renewed",
+          "description": "A certificate was renewed",
+          "type": "string"
+        },
+        {
+          "const": "certificate_failed",
+          "description": "Ordering or renewing a certificate failed",
+          "type": "string"
+        },
+        {
+          "const": "certificate_expiring",
+          "description": "A certificate has fewer days left than `expiring_days`",
+          "type": "string"
+        },
+        {
+          "const": "config_reloaded",
+          "description": "The configuration file changed, and was applied",
+          "type": "string"
+        },
+        {
+          "const": "config_reload_failed",
+          "description": "The configuration file changed, but is invalid: it was kept as it was",
+          "type": "string"
+        },
+        {
+          "const": "host_changed",
+          "description": "A host in the store was saved, removed or rolled back",
+          "type": "string"
+        },
+        {
+          "const": "store_down",
+          "description": "The shared store stopped answering",
+          "type": "string"
+        },
+        {
+          "const": "store_up",
+          "description": "The shared store answers again",
+          "type": "string"
+        },
+        {
+          "const": "instance_started",
+          "description": "An instance started serving",
+          "type": "string"
+        },
+        {
+          "const": "instance_stopping",
+          "description": "An instance is shutting down",
+          "type": "string"
+        },
+        {
+          "const": "test",
+          "description": "Sent from the admin UI or API, to check a webhook",
+          "type": "string"
+        }
+      ]
+    },
+    "KubernetesConfig": {
+      "additionalProperties": false,
+      "description": "`kubernetes { ... }`",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "ingress_class": {
+          "default": "proksi",
+          "description": "The `IngressClass` proksi serves (`spec.ingressClassName` of its `Ingress`es)",
+          "type": "string"
+        },
+        "namespaces": {
+          "default": [],
+          "description": "Namespaces watched (empty: all of them)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "publish_service": {
+          "default": null,
+          "description": "`namespace/name` of proksi's `Service`, whose address is written to each `Ingress`'\nstatus",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "LetsEncrypt": {
+      "properties": {
+        "dns": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DnsChallenge"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The DNS provider for DNS-01 challenges (ADR 0009)"
+        },
+        "email": {
+          "description": "The email to use for the let's encrypt account",
+          "type": "string"
+        },
+        "enabled": {
+          "description": "Whether to enable the background service that renews the certificates (default: true)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "renew_interval_secs": {
+          "description": "Renewal check interval in seconds (default: 84600 - a day)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "staging": {
+          "description": "Use the staging let's encrypt server (default: true)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "LoadBalancing": {
+      "description": "How a location's upstream is chosen for each request",
+      "oneOf": [
+        {
+          "const": "round_robin",
+          "description": "In turn, in proportion to their weight",
+          "type": "string"
+        },
+        {
+          "const": "least_connections",
+          "description": "The one with the fewest requests in progress, for its weight",
+          "type": "string"
+        }
+      ]
+    },
+    "LocationBlock": {
+      "additionalProperties": false,
+      "description": "`location \"<path>\" { ... }`",
+      "properties": {
+        "bandwidth_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BandwidthLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "basic_auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BasicAuth"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "body_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BodyLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "body_rewrite": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BodyRewrite"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cache": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteCache"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "compress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Compress"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cors": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Cors"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exact": {
+          "default": false,
+          "description": "Only the path itself, not what's below it",
+          "type": "boolean"
+        },
+        "forward_auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ForwardAuth"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HeadersBlock"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "health_check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HealthCheck"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ip_filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IpFilter"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "jwt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Jwt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "load_balancing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoadBalancing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`round_robin` (default) or `least_connections`"
+        },
+        "mirror": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MirrorBlock"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`mirror { ... }`"
+        },
+        "oauth2": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Oauth2"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "openapi": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OpenApi"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rate_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RateLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "redirect": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Redirect"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "respond": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Respond"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetryBlock"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`retry { ... }`"
+        },
+        "rewrite": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PathRewrite"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rule": {
+          "$ref": "#/$defs/RuleList",
+          "default": [],
+          "description": "`rule \"<name>\" { ... }`, in order"
+        },
+        "static_files": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StaticFiles"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timeouts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocationTimeouts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "traffic_split": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TrafficSplitBlock"
+          },
+          "default": {},
+          "description": "`traffic_split \"<name>\" { ... }`",
+          "type": "object"
+        },
+        "upstream": {
+          "additionalProperties": {
+            "$ref": "#/$defs/UpstreamBlock"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "waiting_room": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WaitingRoom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "LocationTimeouts": {
+      "additionalProperties": false,
+      "description": "Timeouts of a location's requests (`timeouts { ... }` in a host or location), in seconds,\noverriding the ones of `server.timeouts`",
+      "properties": {
+        "body_secs": {
+          "description": "How long the whole body of a request can take to arrive, after its headers",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "read_secs": {
+          "description": "How long each read of a request body (or websocket message) can wait",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "upstream": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UpstreamTimeouts"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Toward the location's upstreams"
+        },
+        "write_secs": {
+          "description": "How long each write of a response can wait for the client to read",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Logging": {
+      "properties": {
+        "access_logs_enabled": {
+          "description": "Whether to log access logs (request, duration, headers etc).",
+          "type": "boolean"
+        },
+        "enabled": {
+          "description": "If logging is enabled at all. Setting this to `false` will disable all logging output.",
+          "type": "boolean"
+        },
+        "error_logs_enabled": {
+          "description": "Whether to log error logs (errors, panics, etc) from the Rust runtime.",
+          "type": "boolean"
+        },
+        "format": {
+          "description": "The format of the log output",
+          "enum": [
+            "json",
+            "JSON",
+            "pretty",
+            "PRETTY"
+          ],
+          "type": "string"
+        },
+        "level": {
+          "description": "The level of logging to be used.",
+          "enum": [
+            "trace",
+            "TRACE",
+            "debug",
+            "DEBUG",
+            "info",
+            "INFO",
+            "warn",
+            "WARN",
+            "error",
+            "ERROR"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "description": "If set, logs will be written to the specified file",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rotation": {
+          "default": "Never",
+          "description": "When log files start over",
+          "enum": [
+            "never",
+            "NEVER",
+            "daily",
+            "DAILY",
+            "hourly",
+            "HOURLY",
+            "minutely",
+            "MINUTELY"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "MethodChange": {
+      "additionalProperties": false,
+      "description": "`method`: changes the request's method",
+      "properties": {
+        "set": {
+          "description": "The method sent to the upstream, such as \"DELETE\"",
+          "type": "string"
+        }
+      },
+      "required": [
+        "set"
+      ],
+      "type": "object"
+    },
+    "MirrorBlock": {
+      "additionalProperties": false,
+      "description": "`mirror { ... }` in a location",
+      "properties": {
+        "max_body_size": {
+          "description": "A size such as \"64KiB\", or 0 for requests without a body only"
+        },
+        "max_in_flight": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "percent": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "upstream": {
+          "additionalProperties": {
+            "$ref": "#/$defs/UpstreamBlock"
+          },
+          "default": {},
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "NotifyBlock": {
+      "additionalProperties": false,
+      "description": "`notify \"<name>\" { ... }`",
+      "properties": {
+        "expiring_days": {
+          "default": 14,
+          "description": "`certificate_expiring` is sent once a day when a certificate has fewer days left",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "format": {
+          "$ref": "#/$defs/Format",
+          "default": "json"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Headers added to each request, such as `{ authorization = env(\"TOKEN\") }`",
+          "type": "object"
+        },
+        "hosts": {
+          "description": "Only the events of these hosts (`api.example.com`, `*.example.com`, `*`): events that\naren't about a host (the store, an instance, the configuration) are always sent",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "on": {
+          "description": "The events sent: all of them when left out",
+          "items": {
+            "$ref": "#/$defs/Kind"
+          },
+          "type": "array"
+        },
+        "url": {
+          "description": "Where events are sent, with a `POST`",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "Oauth2": {
+      "additionalProperties": false,
+      "description": "`oauth2`: signs users in with an `OAuth2` provider",
+      "properties": {
+        "client_id": {
+          "type": "string"
+        },
+        "client_secret": {
+          "type": "string"
+        },
+        "jwt_secret": {
+          "description": "Signs the session cookie (at least 64 characters)",
+          "type": "string"
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "provider": {
+          "$ref": "#/$defs/Provider"
+        },
+        "validations": {
+          "description": "Who's let in (default: anyone the provider signs in)",
+          "items": {
+            "$ref": "#/$defs/Validation"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "provider",
+        "client_id",
+        "client_secret",
+        "jwt_secret"
+      ],
+      "type": "object"
+    },
+    "OnMissingSpec": {
+      "description": "What `openapi` does with requests before its spec was ever loaded",
+      "oneOf": [
+        {
+          "const": "allow",
+          "description": "Lets them through, unchecked",
+          "type": "string"
+        },
+        {
+          "const": "deny",
+          "description": "Answers `503`",
+          "type": "string"
+        }
+      ]
+    },
+    "OnStoreError": {
+      "description": "What a waiting room does when the store can't be reached",
+      "oneOf": [
+        {
+          "const": "admit",
+          "description": "Lets visitors through",
+          "type": "string"
+        },
+        {
+          "const": "wait",
+          "description": "Keeps visitors on the waiting page",
+          "type": "string"
+        }
+      ]
+    },
+    "OneOrMany_BodyReplace": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BodyReplace"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/BodyReplace"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "OpenApi": {
+      "additionalProperties": false,
+      "description": "`openapi`: only lets through requests in an API's contract (`OpenAPI` 3, JSON or YAML)",
+      "properties": {
+        "base_path": {
+          "description": "Removed from a request's path before it's matched, such as \"/api\" for a spec whose paths\nstart at \"/users\"",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "description": "The spec's file, JSON or YAML",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "on_missing_spec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnMissingSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Requests before the spec was ever loaded: \"allow\" (default) or \"deny\" (`503`)"
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "refresh": {
+          "description": "How often the spec is looked at for a change, such as \"1m\" (default)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "The spec's URL, instead of a file",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Path": {
+      "properties": {
+        "lets_encrypt": {
+          "description": "Path to the certificates directory (where the certificates are stored)",
+          "type": "string"
+        },
+        "openapi": {
+          "default": null,
+          "description": "Where `openapi` keeps compiled contracts (default: `openapi` next to `lets_encrypt`)",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PathRewrite": {
+      "additionalProperties": false,
+      "description": "`rewrite { ... }` in a location: the path sent to upstreams, instead of the request's",
+      "properties": {
+        "add_prefix": {
+          "description": "Added to the start of the path, after `strip_prefix`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "match": {
+          "description": "A regular expression the path is matched against, replaced by `replace`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replace": {
+          "description": "What a path matching `match` becomes (`$1`, `${name}` for its groups)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strip_prefix": {
+          "description": "Removed from the start of the path (only at a segment boundary: `/api` from `/api/users`,\nnot from `/apis`)",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Provider": {
+      "description": "An `oauth2` provider",
+      "enum": [
+        "github",
+        "workos"
+      ],
+      "type": "string"
+    },
+    "RateLimit": {
+      "additionalProperties": false,
+      "description": "`rate_limit`: answers `429` to clients over the limit",
+      "properties": {
+        "burst": {
+          "description": "Requests a client may make at once on top of `requests`, refilled at the same rate (more\nthan 0)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "per": {
+          "description": "The period, such as \"10s\", \"1m\" or \"1h\"",
+          "type": "string"
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "requests": {
+          "description": "Requests allowed for each client in each period (more than 0)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "requests",
+        "per"
+      ],
+      "type": "object"
+    },
+    "Redirect": {
+      "additionalProperties": false,
+      "description": "`redirect`: sends requests elsewhere",
+      "properties": {
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "301, 302, 303, 307 or 308 (default: 302)",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "to": {
+          "description": "Where requests are sent; `{uri}`, `{path}`, `{query}` and `{host}` are replaced with the\nrequest's",
+          "type": "string"
+        }
+      },
+      "required": [
+        "to"
+      ],
+      "type": "object"
+    },
+    "RequestId": {
+      "additionalProperties": false,
+      "description": "`request_id`: gives each request an ID, as `X-Request-Id`",
+      "properties": {
+        "header_name": {
+          "description": "The header the ID is sent and kept in (default: `X-Request-Id`)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "suffix": {
+          "description": "Added to the IDs proksi makes, after a `-`, such as the server's name or region (1 to\n32 letters, digits, `-`, `_` or `.`)",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Respond": {
+      "additionalProperties": false,
+      "description": "`respond`: answers requests itself",
+      "properties": {
+        "body": {
+          "description": "The body (default: none)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_type": {
+          "description": "Its `Content-Type`, such as \"text/plain\"",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "The status, from 200 to 599 (default: 200)",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ResponseHeadersBlock": {
+      "additionalProperties": false,
+      "description": "`response { ... }`: headers changed in responses",
+      "properties": {
+        "add": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "remove": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "RetryBlock": {
+      "additionalProperties": false,
+      "description": "`retry { ... }` in a location",
+      "properties": {
+        "attempts": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "on": {
+          "description": "`\"connect\"`, and statuses (as `\"502\"` or `502`)",
+          "items": true,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Route": {
+      "properties": {
+        "cache": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteCache"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteHeader"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Header modifications for the given route (remove, add, etc. )"
+        },
+        "host": {
+          "description": "The hostname that the proxy will accept\nrequests for the upstreams in the route.\n(ex: 'example.com', 'www.example.com', etc.)\n\nThis is the host header that the proxy will match and will\nalso be used to create the certificate for the domain when `letsencrypt` is enabled.",
+          "type": "string"
+        },
+        "match_with": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteMatcher"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The matcher for the route\n(ex: path, query, etc.)"
+        },
+        "plugins": {
+          "description": "Plugins that will be applied to the route/host\n(ex: rate limiting, oauth2, etc.)",
+          "items": {
+            "$ref": "#/$defs/RoutePlugin"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "ssl": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteSsl"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "SSL configuration for the route"
+        },
+        "ssl_certificate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteSslCertificate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "SSL certificate configurations for the given host\n(ex: self-signed, path/object storage, etc.)"
+        },
+        "upstreams": {
+          "description": "The upstreams to which the request will be proxied,",
+          "items": {
+            "$ref": "#/$defs/RouteUpstream"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "host",
+        "upstreams"
+      ],
+      "type": "object"
+    },
+    "RouteCache": {
+      "properties": {
+        "cache_type": {
+          "default": "MemCache",
+          "description": "Where cached responses are kept",
+          "enum": [
+            "memcache",
+            "MEMCACHE",
+            "disk",
+            "DISK"
+          ],
+          "type": "string"
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "expires_in_secs": {
+          "default": 3600,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "default": "/tmp",
+          "type": "string"
+        },
+        "priority": {
+          "description": "When the cache is enabled for a request, among the blocks of a location (0-100)",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stale_if_error_secs": {
+          "default": 60,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stale_while_revalidate_secs": {
+          "default": 60,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "RouteHeader": {
+      "properties": {
+        "add": {
+          "description": "The name of the header",
+          "items": {
+            "$ref": "#/$defs/RouteHeaderAdd"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "priority": {
+          "description": "When response headers are changed, among the blocks of a location (0-100)",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "remove": {
+          "description": "The value of the header",
+          "items": {
+            "$ref": "#/$defs/RouteHeaderRemove"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RouteHeaderAdd": {
+      "properties": {
+        "name": {
+          "description": "The name of the header",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value of the header",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object"
+    },
+    "RouteHeaderRemove": {
+      "properties": {
+        "name": {
+          "description": "The name of the header to remove (ex.: \"Server\")",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "RouteMatcher": {
+      "properties": {
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoutePathMatcher"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RoutePathMatcher": {
+      "properties": {
+        "patterns": {
+          "description": "Optional: pattern to match the path\n(ex: /api/v1/*)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "patterns"
+      ],
+      "type": "object"
+    },
+    "RoutePlugin": {
+      "description": "A plugin of a location, as configured: its name, and its settings",
+      "properties": {
+        "config": {
+          "additionalProperties": true,
+          "description": "The configuration for the plugin - we are not enforcing a specific format.\nEach plugin is in charge of parsing the configuration.\nThe configuration is a key-value pair where the key is a string and\nthe value is a JSON object (ex: `{ \"key\": \"value\" }`)",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The name of the plugin (must be a valid plugin name)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "RouteSsl": {
+      "properties": {
+        "max_proto": {
+          "default": "V1_3",
+          "description": "The maximum protocol version that the client can use.",
+          "enum": [
+            "v1.1",
+            "V1.1",
+            "v1.2",
+            "V1.2",
+            "v1.3",
+            "V1.3"
+          ],
+          "type": "string"
+        },
+        "min_proto": {
+          "default": "V1_2",
+          "description": "The minimum and maximum protocol versions that the client can use.",
+          "enum": [
+            "v1.1",
+            "V1.1",
+            "v1.2",
+            "V1.2",
+            "v1.3",
+            "V1.3"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteSslPath"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "If provided, will be used instead of generating certificates from\nLet's Encrypt or self-signed certificates."
+        },
+        "self_signed_fallback": {
+          "default": true,
+          "description": "If the `self_signed_on_failure` is set to <true>,\nthe server will use a self-signed certificate if the Let's Encrypt certificate\nissuance fails. This is useful for development and testing purposes.\n\nIf the `self_signed_on_failure` is set to <false>\nand let's encrypt fails to issue a certificate,\nthe server will respond with a SNI error that closes the connection.\n\nThe default value is <true>.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "RouteSslCertificate": {
+      "properties": {
+        "self_signed_on_failure": {
+          "description": "Whether to use a self-signed certificate if the certificate can't be\nretrieved from the path or object storage (or generated from letsencrypt)\n(defaults to true)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RouteSslPath": {
+      "properties": {
+        "key": {
+          "description": "Path to the certificate .key file (e.g. `/etc/proksi/certs/my-host.key`)",
+          "type": "string"
+        },
+        "pem": {
+          "description": "Path to the certificate .pem file (e.g. `/etc/proksi/certs/my-host.pem`)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "pem"
+      ],
+      "type": "object"
+    },
+    "RouteUpstream": {
+      "properties": {
+        "headers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteHeader"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ip": {
+          "description": "The TCP address of the upstream (ex. 10.0.0.1/24 etc)",
+          "type": "string"
+        },
+        "name": {
+          "description": "What the address came from, when it isn't the one written: a docker label's upstream, or\na Kubernetes service (`name.namespace:port`)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "network": {
+          "description": "The network of the upstream (ex: 'public', 'shared') -- useful for docker discovery",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "port": {
+          "description": "The port of the upstream (ex: 3000, 5000, etc.)",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sni": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight": {
+          "description": "Optional: The weight of the upstream (ex: 1, 2, 3, etc.) --\nused for weight-based load balancing.",
+          "format": "int8",
+          "maximum": 127,
+          "minimum": -128,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "ip",
+        "port"
+      ],
+      "type": "object"
+    },
+    "Rule": {
+      "additionalProperties": false,
+      "description": "A rule (ADR 0007): what requests it matches, and what is done to them",
+      "properties": {
+        "and": {
+          "$ref": "#/$defs/RuleConditions"
+        },
+        "name": {
+          "description": "What the rule is for",
+          "type": "string"
+        },
+        "not": {
+          "$ref": "#/$defs/RuleConditions"
+        },
+        "or": {
+          "$ref": "#/$defs/RuleConditions"
+        },
+        "then": {
+          "$ref": "#/$defs/ThenBlock"
+        }
+      },
+      "required": [
+        "name",
+        "then"
+      ],
+      "type": "object"
+    },
+    "RuleConditions": {
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "and": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuleConditions"
+            },
+            {
+              "items": {
+                "$ref": "#/$defs/RuleConditions"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "client": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "description": "The client's address (behind trusted proxies, the one they forwarded)",
+              "maxProperties": 1,
+              "minProperties": 1,
+              "properties": {
+                "eq": {
+                  "description": "is",
+                  "type": "string"
+                },
+                "in": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "is one of"
+                },
+                "neq": {
+                  "description": "is not",
+                  "type": "string"
+                },
+                "not_in": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "is none of"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "items": {
+                "additionalProperties": false,
+                "description": "The client's address (behind trusted proxies, the one they forwarded)",
+                "maxProperties": 1,
+                "minProperties": 1,
+                "properties": {
+                  "eq": {
+                    "description": "is",
+                    "type": "string"
+                  },
+                  "in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is one of"
+                  },
+                  "neq": {
+                    "description": "is not",
+                    "type": "string"
+                  },
+                  "not_in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is none of"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "cookie": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "description": "The value of a cookie",
+                "maxProperties": 1,
+                "minProperties": 1,
+                "properties": {
+                  "contains": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "contains one of"
+                  },
+                  "eq": {
+                    "description": "is",
+                    "type": "string"
+                  },
+                  "exists": {
+                    "description": "is there",
+                    "type": "boolean"
+                  },
+                  "in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is one of"
+                  },
+                  "matches": {
+                    "description": "matches the regular expression",
+                    "type": "string"
+                  },
+                  "neq": {
+                    "description": "is not",
+                    "type": "string"
+                  },
+                  "not_in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is none of"
+                  },
+                  "prefix": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "starts with one of"
+                  },
+                  "suffix": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "ends with one of"
+                  },
+                  "wildcard": {
+                    "description": "matches (* is any text)",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "additionalProperties": false,
+                  "description": "The value of a cookie",
+                  "maxProperties": 1,
+                  "minProperties": 1,
+                  "properties": {
+                    "contains": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "contains one of"
+                    },
+                    "eq": {
+                      "description": "is",
+                      "type": "string"
+                    },
+                    "exists": {
+                      "description": "is there",
+                      "type": "boolean"
+                    },
+                    "in": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "is one of"
+                    },
+                    "matches": {
+                      "description": "matches the regular expression",
+                      "type": "string"
+                    },
+                    "neq": {
+                      "description": "is not",
+                      "type": "string"
+                    },
+                    "not_in": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "is none of"
+                    },
+                    "prefix": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "starts with one of"
+                    },
+                    "suffix": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "ends with one of"
+                    },
+                    "wildcard": {
+                      "description": "matches (* is any text)",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "description": "The value of a cookie",
+          "type": "object"
+        },
+        "header": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "description": "The value of a request header; names ignore case",
+                "maxProperties": 1,
+                "minProperties": 1,
+                "properties": {
+                  "contains": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "contains one of"
+                  },
+                  "eq": {
+                    "description": "is",
+                    "type": "string"
+                  },
+                  "exists": {
+                    "description": "is there",
+                    "type": "boolean"
+                  },
+                  "in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is one of"
+                  },
+                  "matches": {
+                    "description": "matches the regular expression",
+                    "type": "string"
+                  },
+                  "neq": {
+                    "description": "is not",
+                    "type": "string"
+                  },
+                  "not_in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is none of"
+                  },
+                  "prefix": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "starts with one of"
+                  },
+                  "suffix": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "ends with one of"
+                  },
+                  "wildcard": {
+                    "description": "matches (* is any text)",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "additionalProperties": false,
+                  "description": "The value of a request header; names ignore case",
+                  "maxProperties": 1,
+                  "minProperties": 1,
+                  "properties": {
+                    "contains": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "contains one of"
+                    },
+                    "eq": {
+                      "description": "is",
+                      "type": "string"
+                    },
+                    "exists": {
+                      "description": "is there",
+                      "type": "boolean"
+                    },
+                    "in": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "is one of"
+                    },
+                    "matches": {
+                      "description": "matches the regular expression",
+                      "type": "string"
+                    },
+                    "neq": {
+                      "description": "is not",
+                      "type": "string"
+                    },
+                    "not_in": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "is none of"
+                    },
+                    "prefix": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "starts with one of"
+                    },
+                    "suffix": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "ends with one of"
+                    },
+                    "wildcard": {
+                      "description": "matches (* is any text)",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "description": "The value of a request header; names ignore case",
+          "type": "object"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "description": "The host the request is for, without its port, ignoring case",
+              "maxProperties": 1,
+              "minProperties": 1,
+              "properties": {
+                "contains": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "contains one of"
+                },
+                "eq": {
+                  "description": "is",
+                  "type": "string"
+                },
+                "in": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "is one of"
+                },
+                "matches": {
+                  "description": "matches the regular expression",
+                  "type": "string"
+                },
+                "neq": {
+                  "description": "is not",
+                  "type": "string"
+                },
+                "not_in": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "is none of"
+                },
+                "prefix": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "starts with one of"
+                },
+                "suffix": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "ends with one of"
+                },
+                "wildcard": {
+                  "description": "matches (* is any text)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "items": {
+                "additionalProperties": false,
+                "description": "The host the request is for, without its port, ignoring case",
+                "maxProperties": 1,
+                "minProperties": 1,
+                "properties": {
+                  "contains": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "contains one of"
+                  },
+                  "eq": {
+                    "description": "is",
+                    "type": "string"
+                  },
+                  "in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is one of"
+                  },
+                  "matches": {
+                    "description": "matches the regular expression",
+                    "type": "string"
+                  },
+                  "neq": {
+                    "description": "is not",
+                    "type": "string"
+                  },
+                  "not_in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is none of"
+                  },
+                  "prefix": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "starts with one of"
+                  },
+                  "suffix": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "ends with one of"
+                  },
+                  "wildcard": {
+                    "description": "matches (* is any text)",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "method": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "description": "The method (GET, POST...), ignoring case",
+              "maxProperties": 1,
+              "minProperties": 1,
+              "properties": {
+                "eq": {
+                  "description": "is",
+                  "type": "string"
+                },
+                "in": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "is one of"
+                },
+                "neq": {
+                  "description": "is not",
+                  "type": "string"
+                },
+                "not_in": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "is none of"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "items": {
+                "additionalProperties": false,
+                "description": "The method (GET, POST...), ignoring case",
+                "maxProperties": 1,
+                "minProperties": 1,
+                "properties": {
+                  "eq": {
+                    "description": "is",
+                    "type": "string"
+                  },
+                  "in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is one of"
+                  },
+                  "neq": {
+                    "description": "is not",
+                    "type": "string"
+                  },
+                  "not_in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is none of"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "not": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuleConditions"
+            },
+            {
+              "items": {
+                "$ref": "#/$defs/RuleConditions"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "or": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuleConditions"
+            },
+            {
+              "items": {
+                "$ref": "#/$defs/RuleConditions"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "description": "The path, as used to choose locations",
+              "maxProperties": 1,
+              "minProperties": 1,
+              "properties": {
+                "contains": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "contains one of"
+                },
+                "eq": {
+                  "description": "is",
+                  "type": "string"
+                },
+                "in": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "is one of"
+                },
+                "matches": {
+                  "description": "matches the regular expression",
+                  "type": "string"
+                },
+                "neq": {
+                  "description": "is not",
+                  "type": "string"
+                },
+                "not_in": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "is none of"
+                },
+                "prefix": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "starts with one of"
+                },
+                "suffix": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ],
+                  "description": "ends with one of"
+                },
+                "wildcard": {
+                  "description": "matches (* is any text)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "items": {
+                "additionalProperties": false,
+                "description": "The path, as used to choose locations",
+                "maxProperties": 1,
+                "minProperties": 1,
+                "properties": {
+                  "contains": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "contains one of"
+                  },
+                  "eq": {
+                    "description": "is",
+                    "type": "string"
+                  },
+                  "in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is one of"
+                  },
+                  "matches": {
+                    "description": "matches the regular expression",
+                    "type": "string"
+                  },
+                  "neq": {
+                    "description": "is not",
+                    "type": "string"
+                  },
+                  "not_in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is none of"
+                  },
+                  "prefix": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "starts with one of"
+                  },
+                  "suffix": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "ends with one of"
+                  },
+                  "wildcard": {
+                    "description": "matches (* is any text)",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "query": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "description": "The value of a query parameter, decoded",
+                "maxProperties": 1,
+                "minProperties": 1,
+                "properties": {
+                  "contains": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "contains one of"
+                  },
+                  "eq": {
+                    "description": "is",
+                    "type": "string"
+                  },
+                  "exists": {
+                    "description": "is there",
+                    "type": "boolean"
+                  },
+                  "in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is one of"
+                  },
+                  "matches": {
+                    "description": "matches the regular expression",
+                    "type": "string"
+                  },
+                  "neq": {
+                    "description": "is not",
+                    "type": "string"
+                  },
+                  "not_in": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "is none of"
+                  },
+                  "prefix": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "starts with one of"
+                  },
+                  "suffix": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "ends with one of"
+                  },
+                  "wildcard": {
+                    "description": "matches (* is any text)",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "additionalProperties": false,
+                  "description": "The value of a query parameter, decoded",
+                  "maxProperties": 1,
+                  "minProperties": 1,
+                  "properties": {
+                    "contains": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "contains one of"
+                    },
+                    "eq": {
+                      "description": "is",
+                      "type": "string"
+                    },
+                    "exists": {
+                      "description": "is there",
+                      "type": "boolean"
+                    },
+                    "in": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "is one of"
+                    },
+                    "matches": {
+                      "description": "matches the regular expression",
+                      "type": "string"
+                    },
+                    "neq": {
+                      "description": "is not",
+                      "type": "string"
+                    },
+                    "not_in": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "is none of"
+                    },
+                    "prefix": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "starts with one of"
+                    },
+                    "suffix": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      ],
+                      "description": "ends with one of"
+                    },
+                    "wildcard": {
+                      "description": "matches (* is any text)",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "description": "The value of a query parameter, decoded",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "RuleList": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Rule"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/Rule"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "ServerCfg": {
+      "properties": {
+        "http_address": {
+          "description": "The address used to solve challenges (only HTTP)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "https_address": {
+          "description": "The address to bind the HTTPS server to.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rule": {
+          "$ref": "#/$defs/RuleList",
+          "description": "`rule \"<name>\" { ... }`, in order: every request, before its host is chosen (ADR 0007)"
+        },
+        "shutdown_timeout_secs": {
+          "description": "How long open connections are given to finish when proksi stops, in seconds (default:\n30). Proksi stops as soon as they're all closed.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "timeouts": {
+          "$ref": "#/$defs/ClientTimeouts",
+          "default": {
+            "body_secs": null,
+            "idle_secs": 60,
+            "read_secs": 60,
+            "upstream": {
+              "connect_secs": null,
+              "idle_secs": null,
+              "read_secs": null,
+              "tls_secs": null,
+              "write_secs": null
+            },
+            "write_secs": 60
+          },
+          "description": "Timeouts toward clients, and toward upstreams unless a host or location sets them"
+        },
+        "tls": {
+          "$ref": "#/$defs/ServerTls",
+          "default": {
+            "min_version": "1.2"
+          },
+          "description": "TLS versions and cipher suites accepted from clients"
+        },
+        "trusted_proxies": {
+          "description": "Proxies (addresses or networks) in front of proksi, whose `X-Forwarded-For` is trusted\nto find the client of a request (for `rate_limit` and access logs)",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "work_stealing": {
+          "description": "Whether worker threads take over each other's connections (default: `true`). Without it,\neach connection stays on the thread that accepted it: less CPU per request with cores to\nspare, less throughput when proksi gets less CPU than it has threads.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ServerTls": {
+      "additionalProperties": false,
+      "properties": {
+        "ciphers": {
+          "description": "TLS 1.2 cipher suites, by their OpenSSL names, in order of preference (default: forward\nsecret ones with an AEAD). TLS 1.3 suites are always the standard ones.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "min_version": {
+          "$ref": "#/$defs/TlsVersion",
+          "default": "1.2",
+          "description": "The oldest version accepted (`\"1.2\"` by default, or `\"1.3\"`)"
+        }
+      },
+      "type": "object"
+    },
+    "StaticFiles": {
+      "additionalProperties": false,
+      "description": "`static_files`: answers with the files of a directory, by their path below the location",
+      "properties": {
+        "cache_control": {
+          "description": "The `Cache-Control` of the files, such as `public, max-age=3600`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "directory": {
+          "description": "The directory files are served from (an absolute path)",
+          "type": "string"
+        },
+        "fallback": {
+          "description": "The file served for paths with none, such as `/index.html` for single-page apps\n(default: `404`)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index": {
+          "description": "Files served for a directory's path (default: `[\"index.html\"]`)",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "directory"
+      ],
+      "type": "object"
+    },
+    "Sticky": {
+      "description": "How a client keeps its side of a traffic split",
+      "oneOf": [
+        {
+          "const": "cookie",
+          "description": "A random id in a cookie, set on the first response",
+          "type": "string"
+        },
+        {
+          "const": "client_ip",
+          "description": "The client's address",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "Each request is chosen on its own",
+          "type": "string"
+        }
+      ]
+    },
+    "StoreConfig": {
+      "properties": {
+        "database_url": {
+          "default": null,
+          "description": "Connection string for SQL stores (sqlite, postgres)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "history_per_host": {
+          "default": 50,
+          "description": "Versions kept for each host, to roll back to (besides the active one)",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "redis_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "store_type": {
+          "description": "Where certificates, routes and shared state are kept",
+          "enum": [
+            "memory",
+            "MEMORY",
+            "redis",
+            "REDIS",
+            "sqlite",
+            "SQLITE",
+            "postgres",
+            "POSTGRES"
+          ],
+          "type": "string"
+        },
+        "sync_interval_secs": {
+          "default": 10,
+          "description": "How often (in seconds) routes are synced from the store",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "TcpBlock": {
+      "additionalProperties": false,
+      "description": "`tcp \"<name>\" { ... }`",
+      "properties": {
+        "alpn": {
+          "default": [],
+          "description": "Protocols (ALPN) the block is chosen by, so a host can be HTTPS and TCP on one address",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "connect_timeout_secs": {
+          "description": "How long connecting to an upstream can take (default: 5)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "health_check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HealthCheck"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How the upstreams are checked"
+        },
+        "idle_timeout_secs": {
+          "description": "How long a connection can go without bytes either way before it's closed (default: never)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "listen": {
+          "description": "The address connections are accepted on (`ip:port`)",
+          "type": "string"
+        },
+        "tls": {
+          "description": "`\"passthrough\"`: forward TLS untouched instead of terminating it (in a host)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "upstream": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TcpUpstreamBlock"
+          },
+          "default": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "listen"
+      ],
+      "type": "object"
+    },
+    "TcpUpstreamBlock": {
+      "additionalProperties": false,
+      "description": "`upstream \"<host:port>\" { ... }` of a `tcp` block",
+      "properties": {
+        "weight": {
+          "format": "int8",
+          "maximum": 127,
+          "minimum": -128,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ThenBlock": {
+      "additionalProperties": false,
+      "description": "`then { ... }` as written",
+      "properties": {
+        "bandwidth_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BandwidthLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "basic_auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BasicAuth"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "body_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BodyLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "body_rewrite": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BodyRewrite"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "compress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Compress"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cors": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Cors"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "forward_auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ForwardAuth"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HeaderChanges"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ip_filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IpFilter"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "jwt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Jwt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "method": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MethodChange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mirror": {
+          "description": "Copies the request to its location's mirror (true), or doesn't (false), whatever its share",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "oauth2": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Oauth2"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "openapi": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OpenApi"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rate_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RateLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "redirect": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Redirect"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "respond": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Respond"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry": {
+          "description": "Whether the request can be sent to another upstream when one fails (false: never, such as for payments)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "traffic_split": {
+          "description": "Sends the request to this traffic split of its location, whatever its share",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "waiting_room": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WaitingRoom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "TlsBlock": {
+      "additionalProperties": false,
+      "description": "`tls { ... }` in a host",
+      "properties": {
+        "certificate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteSslPath"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Certificate files, used instead of Let's Encrypt"
+        },
+        "challenge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Challenge"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How Let's Encrypt checks the host is ours (`http-01` by default, ADR 0009)"
+        },
+        "self_signed_on_failure": {
+          "default": false,
+          "description": "Use a self-signed certificate if no other certificate can be obtained",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "TlsSetting": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/$defs/TlsBlock"
+        }
+      ],
+      "description": "`tls = false` (plain HTTP), `tls = true`, or `tls { ... }`"
+    },
+    "TlsVersion": {
+      "enum": [
+        "1.2",
+        "1.3"
+      ],
+      "type": "string"
+    },
+    "Token": {
+      "additionalProperties": false,
+      "description": "`token \"name\" { ... }`: a secret given in `Authorization: Bearer <secret>`, or to sign in",
+      "properties": {
+        "access": {
+          "$ref": "#/$defs/Access",
+          "default": "read"
+        },
+        "secret": {
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "secret"
+      ],
+      "type": "object"
+    },
+    "TrafficSplitBlock": {
+      "additionalProperties": false,
+      "description": "`traffic_split \"<name>\" { ... }` in a location",
+      "properties": {
+        "cookie": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "percent": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sticky": {
+          "$ref": "#/$defs/Sticky",
+          "default": "cookie"
+        },
+        "upstream": {
+          "additionalProperties": {
+            "$ref": "#/$defs/UpstreamBlock"
+          },
+          "default": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "percent"
+      ],
+      "type": "object"
+    },
+    "UpstreamBlock": {
+      "additionalProperties": false,
+      "description": "`upstream \"<host:port>\" { ... }`",
+      "properties": {
+        "headers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UpstreamHeadersBlock"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "network": {
+          "description": "Docker network to reach the upstream through",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sni": {
+          "description": "SNI sent to the upstream (for HTTPS upstreams)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight": {
+          "format": "int8",
+          "maximum": 127,
+          "minimum": -128,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "UpstreamHeadersBlock": {
+      "additionalProperties": false,
+      "description": "Headers added to the request sent to the upstream",
+      "properties": {
+        "add": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "UpstreamTimeouts": {
+      "additionalProperties": false,
+      "description": "Timeouts toward upstreams (`upstream { ... }` in `timeouts`), in seconds",
+      "properties": {
+        "connect_secs": {
+          "description": "How long to wait for an upstream to accept a connection",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "idle_secs": {
+          "description": "How long a connection is kept open between requests, to be reused",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "read_secs": {
+          "description": "How long each read of a response can wait, including for its headers",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tls_secs": {
+          "description": "How long the TLS handshake with an HTTPS upstream can take, after connecting",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "write_secs": {
+          "description": "How long each write of a request can wait for the upstream to read",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Validation": {
+      "additionalProperties": false,
+      "description": "Users are let in only if their `type` is one of `value`",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/Check",
+          "description": "`key` in earlier documentation"
+        },
+        "value": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "type": "object"
+    },
+    "WaitingRoom": {
+      "additionalProperties": false,
+      "description": "`waiting_room`: lets a number of visitors in at once, the others wait in line",
+      "properties": {
+        "active": {
+          "description": "Visitors let in at once (more than 0)",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The room's name: locations and rules of a host with the same name share it (default:\nthe location's path)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "on_store_error": {
+          "$ref": "#/$defs/OnStoreError",
+          "description": "What to do when the store can't be reached: \"admit\" (let visitors through) or \"wait\""
+        },
+        "page": {
+          "description": "An HTML file for the waiting page, with `{position}`, `{waiting}` and `{refresh}`",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "description": "When it runs among the blocks of its location, from 0 (first) to 100",
+          "format": "uint8",
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "refresh": {
+          "description": "How often the waiting page refreshes, such as \"10s\" (default). Visitors who stop\nrefreshing for three times as long lose their place.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "secret": {
+          "description": "A secret the visitors' cookies are encrypted with, the same on every server (default:\na key kept in the store)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session": {
+          "description": "How long a visitor's place is kept after their last request, such as \"5m\" (default)",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "active",
+        "on_store_error"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://raw.githubusercontent.com/luizfonseca/proksi/main/docs/schema/proksi.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The main configuration struct.\nA configuration file (YAML, TOML or through ENV) will be parsed into this struct.\nExample:\n\n```yaml\n\n# Example configuration file\nservice_name: \"proksi\"\nlogging:\n  level: \"INFO\"\n  access_logs_enabled: true\n  error_logs_enabled: false\nletsencrypt:\n  enabled: true\n  email: \"youremail@example.com\"\n  production: true\npaths:\n  config_file: \"/etc/proksi/config.toml\"\n  lets_encrypt: \"/etc/proksi/letsencrypt\"\nroutes:\n  - host: \"example.com\"\n    match_with:\n      path:\n        patterns:\n         - \"/api/v1/*\"\n    headers:\n      add:\n        - name: \"X-Forwarded-For\"\n          value: \"<value>\"\n        - name: \"X-Api-Version\"\n          value: \"1.0\"\n      remove:\n        - name: \"Server\"\n    upstreams:\n      - ip: \"10.1.2.24/24\"\n        port: 3000\n        network: \"public\"\n      - ip: \"10.1.2.23/24\"\n        port: 3000\n        network: \"shared\"\n```",
+  "properties": {
+    "admin": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AdminConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The admin API and metrics (`admin { ... }`, ADR 0004), off without it"
+    },
+    "auto_reload": {
+      "$ref": "#/$defs/AutoReload"
+    },
+    "cache": {
+      "$ref": "#/$defs/CacheConfig",
+      "default": {
+        "memory_limit_mb": 256
+      },
+      "description": "Cache configuration (shared by all routes)"
+    },
+    "config_path": {
+      "description": "The PATH to the configuration file to be used.\n\nThe configuration file should be named either `proksi.hcl` or `proksi.yaml`\n\nand be present in that path. If no path is provided, a minimal default\nconfiguration will be used.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "daemon": {
+      "description": "Runs the service in the background (daemon mode)",
+      "type": "boolean"
+    },
+    "docker": {
+      "$ref": "#/$defs/Docker"
+    },
+    "host": {
+      "additionalProperties": {
+        "$ref": "#/$defs/HostBlock"
+      },
+      "default": {},
+      "description": "Hosts defined with `host \"<name>\" { ... }` blocks (ADR 0003)",
+      "type": "object"
+    },
+    "kubernetes": {
+      "$ref": "#/$defs/KubernetesConfig",
+      "default": {
+        "enabled": false,
+        "ingress_class": "proksi",
+        "namespaces": [],
+        "publish_service": null
+      },
+      "description": "The Kubernetes ingress controller (`kubernetes { ... }`, ADR 0005)"
+    },
+    "lets_encrypt": {
+      "$ref": "#/$defs/LetsEncrypt"
+    },
+    "logging": {
+      "$ref": "#/$defs/Logging",
+      "description": "General config"
+    },
+    "notify": {
+      "additionalProperties": {
+        "$ref": "#/$defs/NotifyBlock"
+      },
+      "description": "Webhooks told about what happens to Proksi (`notify \"<name>\" { ... }`)",
+      "type": "object"
+    },
+    "paths": {
+      "$ref": "#/$defs/Path",
+      "description": "Configuration for paths (TLS, config file, etc.)"
+    },
+    "routes": {
+      "description": "The routes to be proxied to (deprecated: use `host` blocks).",
+      "items": {
+        "$ref": "#/$defs/Route"
+      },
+      "type": "array"
+    },
+    "server": {
+      "$ref": "#/$defs/ServerCfg"
+    },
+    "service_name": {
+      "default": "",
+      "description": "The name of the service (will appear as a log property)",
+      "type": "string"
+    },
+    "store": {
+      "$ref": "#/$defs/StoreConfig",
+      "description": "Store configuration for certificate storage"
+    },
+    "tcp": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TcpBlock"
+      },
+      "default": {},
+      "description": "TCP proxying without a host (`tcp \"<name>\" { ... }`, ADR 0003)",
+      "type": "object"
+    },
+    "upgrade": {
+      "description": "Upgrades the service from an existing running instance",
+      "type": "boolean"
+    },
+    "worker_threads": {
+      "description": "The number of worker threads to be used by the HTTPS proxy service.\nDefaults to 80% of the available CPUs (at least 2).\n\nFor background services the default is always (1) and cannot be changed.",
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "title": "Proksi configuration",
+  "type": "object"
+}

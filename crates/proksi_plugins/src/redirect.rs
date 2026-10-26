@@ -183,17 +183,23 @@ mod tests {
     #[test]
     fn test_redirect_placeholders() {
         let to = redirect(serde_json::json!({ "to": "https://{host}.example.com{uri}" })).unwrap();
-        assert_eq!(to.location("/a", Some("b=1"), "www"), "https://www.example.com/a?b=1");
+        assert_eq!(
+            to.location("/a", Some("b=1"), "www"),
+            "https://www.example.com/a?b=1"
+        );
         assert_eq!(to.location("/a", None, "www"), "https://www.example.com/a");
         assert_eq!(to.status, 302);
 
-        let to = redirect(serde_json::json!({ "to": "/new{path}?{query}", "status": 308 }))
-            .unwrap();
+        let to =
+            redirect(serde_json::json!({ "to": "/new{path}?{query}", "status": 308 })).unwrap();
         assert_eq!(to.location("/old", Some("x=1"), "a.test"), "/new/old?x=1");
         assert_eq!(to.status, 308);
 
         let to = redirect(serde_json::json!({ "to": "https://example.com" })).unwrap();
-        assert_eq!(to.location("/a", Some("b"), "a.test"), "https://example.com");
+        assert_eq!(
+            to.location("/a", Some("b"), "a.test"),
+            "https://example.com"
+        );
     }
 
     #[test]
@@ -225,9 +231,10 @@ mod tests {
 
         assert!(Respond::new(&plugin("respond", serde_json::json!({ "status": 99 }))).is_err());
         assert!(Respond::new(&plugin("respond", serde_json::json!({ "body": 1 }))).is_err());
-        assert!(
-            Respond::new(&plugin("respond", serde_json::json!({ "content_type": "a\nb" })))
-                .is_err()
-        );
+        assert!(Respond::new(&plugin(
+            "respond",
+            serde_json::json!({ "content_type": "a\nb" })
+        ))
+        .is_err());
     }
 }

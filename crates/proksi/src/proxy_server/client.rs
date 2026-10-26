@@ -64,9 +64,11 @@ impl TrustedProxies {
 
 /// An address of `X-Forwarded-For`, with or without a port (`1.2.3.4:80`, `[2001:db8::1]:80`)
 fn parse_hop(hop: &str) -> Option<IpAddr> {
-    hop.parse::<IpAddr>()
-        .ok()
-        .or_else(|| hop.parse::<std::net::SocketAddr>().ok().map(|addr| addr.ip()))
+    hop.parse::<IpAddr>().ok().or_else(|| {
+        hop.parse::<std::net::SocketAddr>()
+            .ok()
+            .map(|addr| addr.ip())
+    })
 }
 
 /// The `X-Forwarded-*` headers of a request, as received
@@ -200,16 +202,20 @@ mod tests {
     }
 
     fn trusted(proxies: &[&str]) -> TrustedProxies {
-        TrustedProxies::parse(&proxies.iter().map(ToString::to_string).collect::<Vec<_>>())
-            .unwrap()
+        TrustedProxies::parse(&proxies.iter().map(ToString::to_string).collect::<Vec<_>>()).unwrap()
     }
 
     #[test]
     fn test_parse() {
-        assert!(TrustedProxies::parse(&["10.0.0.0/8".into(), "127.0.0.1".into(), "::1".into()]).is_ok());
+        assert!(
+            TrustedProxies::parse(&["10.0.0.0/8".into(), "127.0.0.1".into(), "::1".into()]).is_ok()
+        );
         assert_eq!(
             TrustedProxies::parse(&["10.0.0".into()]),
-            Err("trusted_proxies: \"10.0.0\" is not an address or a network (10.0.0.0/8)".to_string())
+            Err(
+                "trusted_proxies: \"10.0.0\" is not an address or a network (10.0.0.0/8)"
+                    .to_string()
+            )
         );
     }
 
@@ -218,15 +224,24 @@ mod tests {
         let proxies = trusted(&["10.0.0.0/8"]);
 
         // Whatever they send
-        assert_eq!(proxies.client(ip("203.0.113.9"), Some("1.2.3.4")), ip("203.0.113.9"));
-        assert_eq!(TrustedProxies::default().client(ip("10.0.0.1"), Some("1.2.3.4")), ip("10.0.0.1"));
+        assert_eq!(
+            proxies.client(ip("203.0.113.9"), Some("1.2.3.4")),
+            ip("203.0.113.9")
+        );
+        assert_eq!(
+            TrustedProxies::default().client(ip("10.0.0.1"), Some("1.2.3.4")),
+            ip("10.0.0.1")
+        );
     }
 
     #[test]
     fn test_behind_trusted_proxies() {
         let proxies = trusted(&["10.0.0.0/8", "192.168.1.1"]);
 
-        assert_eq!(proxies.client(ip("10.0.0.1"), Some("203.0.113.9")), ip("203.0.113.9"));
+        assert_eq!(
+            proxies.client(ip("10.0.0.1"), Some("203.0.113.9")),
+            ip("203.0.113.9")
+        );
         // A chain of trusted proxies
         assert_eq!(
             proxies.client(ip("10.0.0.1"), Some("203.0.113.9, 192.168.1.1, 10.1.1.1")),
@@ -238,9 +253,18 @@ mod tests {
             ip("203.0.113.9")
         );
         // Several headers are joined with commas by the time they're read; IPv6, ports
-        assert_eq!(proxies.client(ip("10.0.0.1"), Some(" 2001:db8::1 ")), ip("2001:db8::1"));
-        assert_eq!(proxies.client(ip("10.0.0.1"), Some("203.0.113.9:4711")), ip("203.0.113.9"));
-        assert_eq!(proxies.client(ip("10.0.0.1"), Some("[2001:db8::1]:4711")), ip("2001:db8::1"));
+        assert_eq!(
+            proxies.client(ip("10.0.0.1"), Some(" 2001:db8::1 ")),
+            ip("2001:db8::1")
+        );
+        assert_eq!(
+            proxies.client(ip("10.0.0.1"), Some("203.0.113.9:4711")),
+            ip("203.0.113.9")
+        );
+        assert_eq!(
+            proxies.client(ip("10.0.0.1"), Some("[2001:db8::1]:4711")),
+            ip("2001:db8::1")
+        );
     }
 
     #[test]
@@ -251,9 +275,15 @@ mod tests {
         assert_eq!(proxies.client(ip("10.0.0.1"), None), ip("10.0.0.1"));
         assert_eq!(proxies.client(ip("10.0.0.1"), Some("")), ip("10.0.0.1"));
         // Only trusted proxies: the furthest one
-        assert_eq!(proxies.client(ip("10.0.0.1"), Some("10.0.0.2, 10.0.0.3")), ip("10.0.0.2"));
+        assert_eq!(
+            proxies.client(ip("10.0.0.1"), Some("10.0.0.2, 10.0.0.3")),
+            ip("10.0.0.2")
+        );
         // Garbage stops the walk: the last address that was valid
-        assert_eq!(proxies.client(ip("10.0.0.1"), Some("unknown, 10.0.0.2")), ip("10.0.0.2"));
+        assert_eq!(
+            proxies.client(ip("10.0.0.1"), Some("unknown, 10.0.0.2")),
+            ip("10.0.0.2")
+        );
     }
 
     fn text(value: &http::HeaderValue) -> &str {
@@ -286,7 +316,10 @@ mod tests {
         );
         let forwarded =
             proxies.forwarded(ip("2001:db8::1"), super::Incoming::default, "https", None);
-        assert_eq!(headers(&forwarded), ("2001:db8::1", "https", None, "2001:db8::1"));
+        assert_eq!(
+            headers(&forwarded),
+            ("2001:db8::1", "https", None, "2001:db8::1")
+        );
     }
 
     #[test]
@@ -308,8 +341,7 @@ mod tests {
             )
         );
         // Without headers: as for any client
-        let forwarded =
-            proxies.forwarded(ip("10.0.0.1"), super::Incoming::default, "https", None);
+        let forwarded = proxies.forwarded(ip("10.0.0.1"), super::Incoming::default, "https", None);
         assert_eq!(headers(&forwarded), ("10.0.0.1", "https", None, "10.0.0.1"));
     }
 }

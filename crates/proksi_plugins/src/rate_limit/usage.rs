@@ -7,8 +7,8 @@ use std::{
     hash::{BuildHasherDefault, Hasher},
     net::IpAddr,
     sync::{
-        Mutex, PoisonError, TryLockError,
         atomic::{AtomicBool, Ordering},
+        Mutex, PoisonError, TryLockError,
     },
 };
 

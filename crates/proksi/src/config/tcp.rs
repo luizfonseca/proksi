@@ -98,7 +98,7 @@ mod tests {
     use super::{TcpRoute, TcpTls};
 
     fn config(hcl: &str) -> Config {
-        #[derive(serde::Deserialize)]
+        #[derive(serde::Deserialize, schemars::JsonSchema)]
         struct Doc {
             #[serde(default)]
             host: std::collections::BTreeMap<String, crate::config::blocks::HostBlock>,
@@ -294,7 +294,11 @@ host "plain.example.com" {
                 "tcp \"a\": upstream \"b\" needs a port (host:port)",
             ),
         ] {
-            assert_eq!(config(hcl).tcp_routes().err().as_deref(), Some(expected), "{hcl}");
+            assert_eq!(
+                config(hcl).tcp_routes().err().as_deref(),
+                Some(expected),
+                "{hcl}"
+            );
         }
     }
 }

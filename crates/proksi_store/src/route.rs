@@ -124,7 +124,10 @@ impl fmt::Display for StoreError {
             StoreError::Invalid(err) => write!(f, "invalid data: {err}"),
             StoreError::Conflict { version: 0 } => write!(f, "the host isn't in the store"),
             StoreError::Conflict { version } => {
-                write!(f, "the host was changed by someone else: it's on version {version}")
+                write!(
+                    f,
+                    "the host was changed by someone else: it's on version {version}"
+                )
             }
             StoreError::NoVersion(version) => write!(f, "no version {version} of the host"),
         }

@@ -137,7 +137,10 @@ impl Collected {
         let blocks = match blocks(cluster, ingress, &namespace) {
             Ok(blocks) => blocks,
             Err(reason) => {
-                self.invalid.push(Invalid { ingress: id, reason });
+                self.invalid.push(Invalid {
+                    ingress: id,
+                    reason,
+                });
                 return;
             }
         };
@@ -303,7 +306,11 @@ fn secret_certificates<'a>(
 
 /// The blocks of an `Ingress` (`proksi.ingress/blocks`), as a location without upstreams, with the
 /// settings of its auth secret
-fn blocks(cluster: &Cluster, ingress: &Ingress, namespace: &str) -> Result<Option<Location>, String> {
+fn blocks(
+    cluster: &Cluster,
+    ingress: &Ingress,
+    namespace: &str,
+) -> Result<Option<Location>, String> {
     let Some(text) = annotation(ingress, BLOCKS) else {
         return Ok(None);
     };
@@ -328,7 +335,9 @@ fn blocks(cluster: &Cluster, ingress: &Ingress, namespace: &str) -> Result<Optio
             })
             .and_then(|secret| secret.data.as_ref())
             .ok_or_else(|| {
-                format!("auth secret {namespace}/{name} not found (it needs the label {AUTH_LABEL})")
+                format!(
+                    "auth secret {namespace}/{name} not found (it needs the label {AUTH_LABEL})"
+                )
             })?;
         add_auth_settings(&mut location, data);
     }
@@ -702,12 +711,14 @@ mod tests {
                     "rules": [rule(Some(&format!("{name}.test")), json!([path(None, "Prefix", "web", json!({ "number": 80 }))]))],
                 }),
             );
-            ingress.metadata.annotations = Some(
-                [("kubernetes.io/ingress.class".to_string(), class.to_string())].into(),
-            );
+            ingress.metadata.annotations =
+                Some([("kubernetes.io/ingress.class".to_string(), class.to_string())].into());
             ingress
         };
-        let mut cluster = cluster(vec![annotated("mine", "proksi"), annotated("theirs", "traefik")]);
+        let mut cluster = cluster(vec![
+            annotated("mine", "proksi"),
+            annotated("theirs", "traefik"),
+        ]);
         // Even when proksi's class is the default one, Ingresses annotated for another aren't served
         cluster.ingress_classes = vec![Arc::new(object(json!({
             "metadata": {
@@ -949,11 +960,10 @@ mod tests {
         assert_eq!(upstreams(&hosts[0], 0), vec!["10.96.0.10:80"]);
     }
 
-    fn with_annotations(
-        mut cluster: Cluster,
-        annotations: &[(&str, &str)],
-    ) -> Cluster {
-        Arc::make_mut(&mut cluster.ingresses[0]).metadata.annotations = Some(
+    fn with_annotations(mut cluster: Cluster, annotations: &[(&str, &str)]) -> Cluster {
+        Arc::make_mut(&mut cluster.ingresses[0])
+            .metadata
+            .annotations = Some(
             annotations
                 .iter()
                 .map(|(name, value)| (name.to_string(), value.to_string()))
@@ -1054,7 +1064,11 @@ mod tests {
             // The Ingress isn't served
             assert_eq!(hosts, vec![], "{annotations:?}");
             assert_eq!(invalid.len(), 1);
-            assert!(invalid[0].reason.starts_with(reason), "{}", invalid[0].reason);
+            assert!(
+                invalid[0].reason.starts_with(reason),
+                "{}",
+                invalid[0].reason
+            );
         }
     }
 }

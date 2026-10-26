@@ -15,7 +15,7 @@ use crate::config::{
 const DEFAULT_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// `tcp "<name>" { ... }`
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TcpBlock {
     /// The address connections are accepted on (`ip:port`)
@@ -36,7 +36,7 @@ pub struct TcpBlock {
 }
 
 /// `upstream "<host:port>" { ... }` of a `tcp` block
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TcpUpstreamBlock {
     pub weight: Option<i8>,

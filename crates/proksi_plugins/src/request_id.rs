@@ -56,7 +56,9 @@ impl RequestId {
         let valid = |byte: &u8| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.');
         if suffix.is_empty() || suffix.len() > MAX_SUFFIX || !suffix.bytes().all(|b| valid(&b)) {
             let allowed = "letters, digits, `-`, `_` or `.`";
-            return Err(format!("request_id: suffix {suffix:?} must be 1 to {MAX_SUFFIX} {allowed}"));
+            return Err(format!(
+                "request_id: suffix {suffix:?} must be 1 to {MAX_SUFFIX} {allowed}"
+            ));
         }
         Ok(Self {
             header,
@@ -68,14 +70,20 @@ impl RequestId {
     /// A UUID v7 (it starts with the time, so IDs sort by when requests came) and the suffix.
     /// `Uuid::now_v7` would do, but it takes a global lock for each ID.
     fn generate(&self) -> HeaderValue {
-        let since_epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+        let since_epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
         let millis = u64::try_from(since_epoch.as_millis()).unwrap_or(u64::MAX);
         let mut random = [0u8; 10];
         rand::thread_rng().fill_bytes(&mut random);
         let uuid = uuid::Builder::from_unix_timestamp_millis(millis, &random).into_uuid();
 
         let mut id = BytesMut::with_capacity(UUID + self.suffix.len());
-        id.extend_from_slice(uuid.hyphenated().encode_lower(&mut Uuid::encode_buffer()).as_bytes());
+        id.extend_from_slice(
+            uuid.hyphenated()
+                .encode_lower(&mut Uuid::encode_buffer())
+                .as_bytes(),
+        );
         id.extend_from_slice(self.suffix.as_bytes());
         HeaderValue::from_maybe_shared(id.freeze()).unwrap_or_else(|_| HeaderValue::from_static(""))
     }

@@ -31,7 +31,7 @@ pub struct Host {
     pub rules: Vec<crate::rules::Rule>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct HostTls {
     /// Serve the host over HTTPS (`false`: plain HTTP on the HTTP port, without certificates)
     #[serde(default = "enabled_by_default")]
@@ -58,7 +58,7 @@ impl Default for HostTls {
 }
 
 /// How Let's Encrypt checks that a host is ours (ADR 0009)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub enum Challenge {
     /// A token served over HTTP, on port 80
     #[serde(rename = "http-01")]

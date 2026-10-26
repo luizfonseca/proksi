@@ -304,7 +304,7 @@ host "example.com" {
       client_id     = "<client_id>"
       client_secret = "<client_secret>"
       jwt_secret    = "<jwt_secret>"
-      validations   = [{ key = "team_id", value = ["<team_id>"] }]
+      validations   = [{ type = "team_id", value = ["<team_id>"] }]
     }
   }
 

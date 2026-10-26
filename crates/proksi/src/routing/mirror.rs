@@ -300,7 +300,13 @@ mod tests {
         let none = mirror(0, 1024);
         let decided = |mirror: &std::sync::Arc<Mirror>, ruled: Option<bool>| {
             let mut state = State::default();
-            start(&mut state, Some(mirror), ruled, &request(), std::iter::empty());
+            start(
+                &mut state,
+                Some(mirror),
+                ruled,
+                &request(),
+                std::iter::empty(),
+            );
             copied(&state).is_some()
         };
         assert!(decided(&all, None));
@@ -356,7 +362,10 @@ mod tests {
         body(&mut state, Some(&Bytes::from_static(b"9")), false);
         assert!(matches!(state, State::Off));
         assert_eq!(
-            mirror.counts.too_large.load(std::sync::atomic::Ordering::Relaxed),
+            mirror
+                .counts
+                .too_large
+                .load(std::sync::atomic::Ordering::Relaxed),
             1
         );
     }
@@ -365,10 +374,22 @@ mod tests {
     fn test_retries_are_copied_again() {
         let mirror = mirror(100, 1024);
         let mut state = State::default();
-        start(&mut state, Some(&mirror), None, &request(), std::iter::empty());
+        start(
+            &mut state,
+            Some(&mirror),
+            None,
+            &request(),
+            std::iter::empty(),
+        );
         body(&mut state, Some(&Bytes::from_static(b"part")), false);
         // Sent to an upstream again: its body is proxied again too
-        start(&mut state, Some(&mirror), None, &request(), std::iter::empty());
+        start(
+            &mut state,
+            Some(&mirror),
+            None,
+            &request(),
+            std::iter::empty(),
+        );
         assert_eq!(copied(&state).unwrap().size, 0);
     }
 

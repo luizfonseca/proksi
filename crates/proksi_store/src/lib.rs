@@ -5,12 +5,12 @@
 //! look inside them.
 
 pub mod certificates;
+mod cursors;
 mod memory_store;
 mod notify;
-mod cursors;
+mod redis_cursors;
 mod redis_history;
 mod redis_notify;
-mod redis_cursors;
 mod redis_store;
 mod redis_waiting_room;
 mod route;
@@ -35,8 +35,8 @@ pub use memory_store::MemoryStore;
 pub use notify::{NotifyRecord, NotifySnapshot};
 pub use redis_store::RedisStore;
 pub use route::{
-    Change, Expect, HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot, StoreError,
-    Write, DEFAULT_HISTORY,
+    Change, Expect, HistoryEntry, ReplicaStatus, RouteRecord, RouteVersion, RoutesSnapshot,
+    StoreError, Write, DEFAULT_HISTORY,
 };
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use sql_store::SqlStore;

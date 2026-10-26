@@ -5,14 +5,14 @@
 use std::{
     collections::BTreeMap,
     sync::{
-        Arc, LazyLock, Mutex, PoisonError,
         atomic::{AtomicBool, Ordering},
+        Arc, LazyLock, Mutex, PoisonError,
     },
     time::{Duration, Instant, SystemTime},
 };
 
 use arc_swap::ArcSwap;
-use tokio::sync::{Semaphore, mpsc};
+use tokio::sync::{mpsc, Semaphore};
 
 use crate::config::notify::{Kind, NotifyBlock};
 
@@ -133,7 +133,11 @@ fn combine() {
         .iter()
         .map(|(name, stored)| (name.clone(), stored.block.clone()))
         .collect();
-    blocks.extend(FILE.load().iter().map(|(name, block)| (name.clone(), block.clone())));
+    blocks.extend(
+        FILE.load()
+            .iter()
+            .map(|(name, block)| (name.clone(), block.clone())),
+    );
     ENABLED.store(!blocks.is_empty(), Ordering::Relaxed);
     BLOCKS.store(Arc::new(blocks));
 }
@@ -323,15 +327,17 @@ mod tests {
     use std::{
         collections::BTreeMap,
         sync::{
-            Arc, Mutex,
             atomic::{AtomicBool, Ordering},
+            Arc, Mutex,
         },
         time::{Duration, Instant},
     };
 
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    use super::{Event, Stored, blocks, configure, configure_stored, deliveries, emit, in_file, test};
+    use super::{
+        blocks, configure, configure_stored, deliveries, emit, in_file, test, Event, Stored,
+    };
     use crate::config::notify::{Format, Kind, NotifyBlock};
 
     /// The blocks in use are shared: these tests take turns
@@ -446,7 +452,10 @@ mod tests {
         };
         configure_stored(BTreeMap::from([
             ("ops".to_string(), saved("https://stored.example.com/ops")),
-            ("pager".to_string(), saved("https://stored.example.com/pager")),
+            (
+                "pager".to_string(),
+                saved("https://stored.example.com/pager"),
+            ),
         ]));
         configure(BTreeMap::from([(
             "ops".to_string(),

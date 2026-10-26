@@ -26,7 +26,8 @@ pub fn check_config(config: &Config) -> Result<(), anyhow::Error> {
         .tls
         .validate()
         .map_err(|err| anyhow!("server.tls.{err}"))?;
-    crate::rules::Rules::compile(&config.server.rule, "").map_err(|err| anyhow!("server: {err}"))?;
+    crate::rules::Rules::compile(&config.server.rule, "")
+        .map_err(|err| anyhow!("server: {err}"))?;
     for (name, block) in &config.notify {
         block.check(name).map_err(|err| anyhow!(err))?;
     }
@@ -395,7 +396,10 @@ mod tests {
 
         let err = check_config(&config).unwrap_err();
 
-        assert_eq!(err.to_string(), "store.history_per_host must be greater than 0");
+        assert_eq!(
+            err.to_string(),
+            "store.history_per_host must be greater than 0"
+        );
     }
 
     #[test]
@@ -414,7 +418,7 @@ mod tests {
     }
 
     fn config_with_host_block(hcl: &str) -> Config {
-        #[derive(serde::Deserialize)]
+        #[derive(serde::Deserialize, schemars::JsonSchema)]
         struct Doc {
             host: std::collections::BTreeMap<String, crate::config::blocks::HostBlock>,
         }
@@ -515,7 +519,7 @@ host "a.test" {
 
     #[test]
     fn test_dns_provider() {
-        #[derive(serde::Deserialize)]
+        #[derive(serde::Deserialize, schemars::JsonSchema)]
         struct Doc {
             lets_encrypt: crate::config::LetsEncrypt,
         }

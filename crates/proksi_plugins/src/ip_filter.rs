@@ -3,10 +3,10 @@
 
 use std::net::IpAddr;
 
+use crate::ip_set::{network, IpSet};
 use anyhow::Result;
 use async_trait::async_trait;
 use http::{header, StatusCode};
-use crate::ip_set::{network, IpSet};
 use pingora::{http::ResponseHeader, proxy::Session};
 
 use crate::{respond::respond, RequestCtx, RoutePlugin};
@@ -112,7 +112,9 @@ mod tests {
             Some("ip_filter: `allow` or `deny` is required")
         );
         assert_eq!(
-            filter(serde_json::json!({ "allow": ["10.0.0"] })).err().as_deref(),
+            filter(serde_json::json!({ "allow": ["10.0.0"] }))
+                .err()
+                .as_deref(),
             Some("ip_filter: \"10.0.0\" is not an address or a network")
         );
         assert!(filter(serde_json::json!({ "deny": "10.0.0.1" })).is_err());
