@@ -3513,7 +3513,7 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "aws-lc-rs",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "cookie",
  "http",

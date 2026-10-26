@@ -18,7 +18,7 @@ test-util = []
 anyhow = "1.0.104"
 arc-swap = "1.7.1"
 async-trait = "0.1.89"
-base64 = "0.22"
+base64 = "0.23"
 bytes = "1.11.1"
 cookie = { version = "0.18.1", features = ["private"] }
 http = "1.2.0"
