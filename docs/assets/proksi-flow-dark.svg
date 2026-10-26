@@ -1,228 +1,149 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" role="img" aria-labelledby="title desc">
-  <title id="title">Requests going through Proksi</title>
-  <desc id="desc">Clients send requests to Proksi, which handles TLS, chooses a route by host and path, applies rules and plugins, answers from its cache or proxies to upstreams, balancing between them.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 610" width="960" height="610" role="img" aria-labelledby="title desc">
+  <title id="title">proksi.hcl and Proksi, live</title>
+  <desc id="desc">On the left, proksi.hcl with two hosts and a rule, and a terminal starting a container with a proksi.host label. On the right, Proksi's routes and events, live: the container's host appears and gets a Let's Encrypt certificate, a second upstream typed into proksi.hcl is applied without dropping connections, and too many login attempts are rate limited by a rule.</desc>
   <style>
-    text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; fill: #e6edf3; }
-    .label { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; fill: #9198a1; letter-spacing: .06em; text-transform: uppercase; }
-    .title { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 26px; font-weight: 700; fill: #34d399; }
-    .wire { fill: none; stroke: #3d444d; stroke-width: 2; stroke-dasharray: 6 6; animation: flow 1.2s linear infinite; }
-    @keyframes flow { to { stroke-dashoffset: -12; } }
-    @media (prefers-reduced-motion: reduce) { .packet, .glow { display: none; } .wire { animation: none; } }
+    text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; fill: #e6edf3; white-space: pre; }
+    .k { fill: #34d399; } .s { fill: #7dd3fc; } .m { fill: #9198a1; } .f { fill: #6e7681; }
+    .ui { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 12.5px; fill: #9198a1; }
+    .head { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 11.5px; fill: #9198a1; letter-spacing: .06em; text-transform: uppercase; }
+    @media (prefers-reduced-motion: reduce) { .motion { display: none; } .settled { opacity: 1 !important; } .typed { width: 600px !important; } }
   </style>
+  <rect x="10" y="10" width="940" height="590" rx="14" fill="#0d1117" stroke="#3d444d" stroke-width="1.5"/>
+  <path d="M10,24 a14,14 0 0 1 14,-14 h912 a14,14 0 0 1 14,14 v22 h-940 z" fill="#151b23"/>
+  <line x1="10" y1="46" x2="950" y2="46" stroke="#3d444d" stroke-width="1.5"/>
+  <circle cx="32" cy="28" r="5.5" fill="#ff5f57"/>
+  <circle cx="50" cy="28" r="5.5" fill="#febc2e"/>
+  <circle cx="68" cy="28" r="5.5" fill="#28c840"/>
+  <text class="ui" x="110" y="32">proksi.hcl</text>
+  <text class="ui" x="500" y="32">Proksi · live</text>
+  <line x1="480" y1="46" x2="480" y2="600" stroke="#3d444d" stroke-width="1.5"/>
+  <rect class="motion" x="12" y="271" width="466" height="204" fill="#1e1b4b" opacity="0">
+    <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;1;0;0" keyTimes="0;0.6615;0.6846;0.8769;0.9077;1"/>
+  </rect>
+  <rect class="motion" x="12" y="135" width="466" height="17" fill="#0f2f25" opacity="0">
+    <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;1;0;0" keyTimes="0;0.3692;0.3846;0.5385;0.5692;1"/>
+  </rect>
   <defs>
-    <path id="c0" d="M200,130 C280,130 270,210 350,210"/>
-    <path id="c1" d="M200,210 C280,210 270,210 350,210"/>
-    <path id="c2" d="M200,290 C280,290 270,210 350,210"/>
-    <path id="u0" d="M610,210 C680,210 670,100 740,100"/>
-    <path id="u1" d="M610,210 C680,210 670,180 740,180"/>
-    <path id="u2" d="M610,210 C680,210 670,240 740,240"/>
-    <path id="u3" d="M610,210 C680,210 670,320 740,320"/>
+    <clipPath id="typing-line"><rect class="typed" x="64" y="134" height="17" width="0">
+      <animate attributeName="width" dur="13.0s" repeatCount="indefinite" calcMode="linear" values="0;0;220;220;0" keyTimes="0;0.3692;0.4462;0.9846;1"/>
+    </rect></clipPath>
+    <clipPath id="typing-command"><rect class="typed" x="46" y="550" height="20" width="0">
+      <animate attributeName="width" dur="13.0s" repeatCount="indefinite" calcMode="linear" values="0;0;358;358;0" keyTimes="0;0.0231;0.1231;0.9846;1"/>
+    </rect></clipPath>
   </defs>
-  <text class="label" x="125" y="80" text-anchor="middle">Clients</text>
-  <text class="label" x="835" y="60" text-anchor="middle">Upstreams</text>
-  <use href="#c0" class="wire"/>
-  <use href="#c1" class="wire"/>
-  <use href="#c2" class="wire"/>
-  <use href="#u0" class="wire"/>
-  <use href="#u1" class="wire"/>
-  <use href="#u2" class="wire"/>
-  <use href="#u3" class="wire"/>
-  <rect x="50" y="108" width="150" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
-  <text x="125" y="135" text-anchor="middle">browser</text>
-  <rect x="50" y="188" width="150" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
-  <text x="125" y="215" text-anchor="middle">mobile app</text>
-  <rect x="50" y="268" width="150" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
-  <text x="125" y="295" text-anchor="middle">curl</text>
-  <rect x="740" y="78" width="190" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
-  <text x="835" y="105" text-anchor="middle">app:3000</text>
-  <rect x="740" y="158" width="190" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
-  <text x="835" y="185" text-anchor="middle">api-1:4000</text>
-  <rect x="740" y="218" width="190" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
-  <text x="835" y="245" text-anchor="middle">api-2:4000</text>
-  <rect x="740" y="298" width="190" height="44" rx="10" fill="#151b23" stroke="#3d444d" stroke-width="1.5"/>
-  <text x="835" y="325" text-anchor="middle">10.0.0.12:8080</text>
-  <path d="M932,158 q14,0 14,22 v60 q0,22 -14,22" fill="none" stroke="#9198a1" stroke-width="1.5"/>
-  <text class="label" x="952" y="214" text-anchor="middle" transform="rotate(90 952 210)" style="font-size:12px">balanced</text>
-  <rect x="350" y="50" width="260" height="320" rx="18" fill="#0b2a22" stroke="#10b981" stroke-width="2"/>
-  <text class="title" x="480" y="92" text-anchor="middle">Proksi</text>
-  <rect x="362" y="120" width="236" height="42" rx="9" fill="#0f1f1a" stroke="#1f5f4a" stroke-width="1.5"/>
-  <rect class="glow" x="362" y="120" width="236" height="42" rx="9" fill="none" stroke="#34d399" stroke-width="2.5" opacity="0">
-    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0" keyTimes="0.0000;0.0778;0.0944;0.1278;0.2333;0.2500;0.2833;0.3889;0.4056;0.4389;0.5444;0.5611;0.5944;0.7000;0.7167;0.7500;0.8556;0.8722;0.9056;1.0000"/>
+  <text class="f" x="50" y="96" text-anchor="end">1</text>
+  <text x="64" y="96"><tspan class="k">host</tspan> <tspan class="s">&quot;shop.example.com&quot;</tspan> {</text>
+  <text class="f" x="50" y="113" text-anchor="end">2</text>
+  <text x="64" y="113">  <tspan class="k">location</tspan> <tspan class="s">&quot;/&quot;</tspan> {</text>
+  <text class="f" x="50" y="130" text-anchor="end">3</text>
+  <text x="64" y="130">    <tspan class="k">upstream</tspan> <tspan class="s">&quot;app-1:3000&quot;</tspan> {}</text>
+  <text class="f" x="50" y="147" text-anchor="end">4</text>
+  <text x="64" y="147" clip-path="url(#typing-line)">    <tspan class="k">upstream</tspan> <tspan class="s">&quot;app-2:3000&quot;</tspan> {}</text>
+  <text class="f" x="50" y="164" text-anchor="end">5</text>
+  <text x="64" y="164">  }</text>
+  <text class="f" x="50" y="181" text-anchor="end">6</text>
+  <text x="64" y="181">}</text>
+  <text class="f" x="50" y="198" text-anchor="end">7</text>
+  <text x="64" y="198"></text>
+  <text class="f" x="50" y="215" text-anchor="end">8</text>
+  <text x="64" y="215"><tspan class="k">host</tspan> <tspan class="s">&quot;api.example.com&quot;</tspan> {</text>
+  <text class="f" x="50" y="232" text-anchor="end">9</text>
+  <text x="64" y="232">  <tspan class="k">location</tspan> <tspan class="s">&quot;/v1&quot;</tspan> {</text>
+  <text class="f" x="50" y="249" text-anchor="end">10</text>
+  <text x="64" y="249">    <tspan class="k">upstream</tspan> <tspan class="s">&quot;api:4000&quot;</tspan> {}</text>
+  <text class="f" x="50" y="266" text-anchor="end">11</text>
+  <text x="64" y="266">  }</text>
+  <text class="f" x="50" y="283" text-anchor="end">12</text>
+  <text x="64" y="283">  <tspan class="k">rule</tspan> <tspan class="s">&quot;slow down login attempts&quot;</tspan> {</text>
+  <text class="f" x="50" y="300" text-anchor="end">13</text>
+  <text x="64" y="300">    <tspan class="k">and</tspan> {</text>
+  <text class="f" x="50" y="317" text-anchor="end">14</text>
+  <text x="64" y="317">      path { prefix = <tspan class="s">&quot;/v1/login&quot;</tspan> }</text>
+  <text class="f" x="50" y="334" text-anchor="end">15</text>
+  <text x="64" y="334">      method { in = [<tspan class="s">&quot;POST&quot;</tspan>] }</text>
+  <text class="f" x="50" y="351" text-anchor="end">16</text>
+  <text x="64" y="351">    }</text>
+  <text class="f" x="50" y="368" text-anchor="end">17</text>
+  <text x="64" y="368">    <tspan class="k">then</tspan> {</text>
+  <text class="f" x="50" y="385" text-anchor="end">18</text>
+  <text x="64" y="385">      rate_limit {</text>
+  <text class="f" x="50" y="402" text-anchor="end">19</text>
+  <text x="64" y="402">        requests = 5</text>
+  <text class="f" x="50" y="419" text-anchor="end">20</text>
+  <text x="64" y="419">        per      = <tspan class="s">&quot;1m&quot;</tspan></text>
+  <text class="f" x="50" y="436" text-anchor="end">21</text>
+  <text x="64" y="436">      }</text>
+  <text class="f" x="50" y="453" text-anchor="end">22</text>
+  <text x="64" y="453">    }</text>
+  <text class="f" x="50" y="470" text-anchor="end">23</text>
+  <text x="64" y="470">  }</text>
+  <text class="f" x="50" y="487" text-anchor="end">24</text>
+  <text x="64" y="487">}</text>
+  <line x1="10" y1="512" x2="480" y2="512" stroke="#3d444d" stroke-width="1.5"/>
+  <text class="head" x="30" y="540">terminal</text>
+  <text class="k" x="30" y="566">$</text>
+  <text x="46" y="566" clip-path="url(#typing-command)">docker run -l proksi.host=whoami.local whoami</text>
+  <text class="head" x="500" y="84">routes</text>
+  <g>
+    <rect x="496" y="104" width="436" height="34" rx="8" fill="#151b23"/>
+    <text x="510" y="125">shop.example.com</text>
+    <text class="m motion" x="680" y="125">app-1
+      <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="discrete" values="1;0;1" keyTimes="0;0.4615;0.9846"/>
+    </text>
+    <text class="m settled" x="680" y="125" opacity="0">app-1, app-2
+      <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.4615;0.9846"/>
+    </text>
+    <rect x="908" y="117" width="12" height="10" rx="2" fill="#34d399"/><path d="M910.5,117 v-2.5 a3.5,3.5 0 0 1 7,0 v2.5" fill="none" stroke="#34d399" stroke-width="1.8"/>
+  </g>
+  <g>
+    <rect x="496" y="154" width="436" height="60" rx="8" fill="#151b23"/>
+    <text x="510" y="175">api.example.com</text>
+    <text class="m" x="680" y="175">api:4000</text>
+    <rect x="908" y="167" width="12" height="10" rx="2" fill="#34d399"/><path d="M910.5,167 v-2.5 a3.5,3.5 0 0 1 7,0 v2.5" fill="none" stroke="#34d399" stroke-width="1.8"/>
+    <text class="m" x="526" y="204">↳ rule "slow down login attempts"  →  rate_limit</text>
+  </g>
+  <g class="settled">
+    <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.1538;0.9846"/>
+    <rect x="496" y="230" width="436" height="34" rx="8" fill="#151b23"/>
+    <text x="510" y="251">whoami.local</text>
+    <text class="m" x="680" y="251">whoami:80</text>
+    <g class="motion"><animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="discrete" values="1;0;1" keyTimes="0;0.2769;0.9846"/>
+      <circle cx="914" cy="247" r="6" fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="9 29">
+        <animateTransform attributeName="transform" type="rotate" from="0 914 247" to="360 914 247" dur="1s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+    <g class="settled" opacity="0"><animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.2769;0.9846"/><rect x="908" y="243" width="12" height="10" rx="2" fill="#34d399"/><path d="M910.5,243 v-2.5 a3.5,3.5 0 0 1 7,0 v2.5" fill="none" stroke="#34d399" stroke-width="1.8"/></g>
+  </g>
+  <text class="head" x="500" y="330">events</text>
+  <g class="settled" opacity="0">
+    <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.1538;0.9846"/>
+    <text class="f" x="500" y="366">12:00:02</text>
+    <text x="572" y="366">whoami.local</text>
+    <text class="m" x="692" y="366">routed from its docker labels</text>
+  </g>
+  <g class="settled" opacity="0">
+    <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.2769;0.9846"/>
+    <text class="f" x="500" y="398">12:00:03</text>
+    <text x="572" y="398">whoami.local</text>
+    <text class="m" x="692" y="398">certificate issued</text>
+  </g>
+  <g class="settled" opacity="0">
+    <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.4615;0.9846"/>
+    <text class="f" x="500" y="430">12:00:06</text>
+    <text x="572" y="430">proksi.hcl</text>
+    <text class="m" x="692" y="430">applied, 0 connections dropped</text>
+  </g>
+  <rect class="motion" x="494" y="102" width="440" height="38" rx="9" fill="none" stroke="#34d399" stroke-width="2" opacity="0">
+    <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0" keyTimes="0;0.4615;0.4846;0.5692;1"/>
   </rect>
-  <text x="480" y="146" text-anchor="middle">TLS · Let's Encrypt</text>
-  <rect x="362" y="178" width="236" height="42" rx="9" fill="#0f1f1a" stroke="#1f5f4a" stroke-width="1.5"/>
-  <rect class="glow" x="362" y="178" width="236" height="42" rx="9" fill="none" stroke="#34d399" stroke-width="2.5" opacity="0">
-    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0" keyTimes="0.0000;0.0911;0.1078;0.1411;0.2467;0.2633;0.2967;0.4022;0.4189;0.4522;0.5578;0.5744;0.6078;0.7133;0.7300;0.7633;0.8689;0.8856;0.9189;1.0000"/>
+  <g class="settled" opacity="0">
+    <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="discrete" values="0;1;0" keyTimes="0;0.6923;0.9846"/>
+    <text class="f" x="500" y="462">12:00:09</text>
+    <text x="572" y="462">POST /v1/login</text>
+    <text class="m" x="692" y="462" style="fill:#f87171">429 (slow down login attempts)</text>
+  </g>
+  <rect class="motion" x="494" y="152" width="440" height="64" rx="9" fill="none" stroke="#818cf8" stroke-width="2" opacity="0">
+    <animate attributeName="opacity" dur="13.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;1;0;0" keyTimes="0;0.6615;0.6846;0.8769;0.9077;1"/>
   </rect>
-  <text x="480" y="204" text-anchor="middle">routing · host &amp; path</text>
-  <rect x="362" y="236" width="236" height="42" rx="9" fill="#0f1f1a" stroke="#1f5f4a" stroke-width="1.5"/>
-  <rect class="glow" x="362" y="236" width="236" height="42" rx="9" fill="none" stroke="#34d399" stroke-width="2.5" opacity="0">
-    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0;1;0;0" keyTimes="0.0000;0.1044;0.1211;0.1544;0.2600;0.2767;0.3100;0.4156;0.4322;0.4656;0.5711;0.5878;0.6211;0.7267;0.7433;0.7767;0.8822;0.8989;0.9322;1.0000"/>
-  </rect>
-  <text x="480" y="262" text-anchor="middle">rules · plugins</text>
-  <rect x="362" y="294" width="236" height="42" rx="9" fill="#0f1f1a" stroke="#1f5f4a" stroke-width="1.5"/>
-  <rect class="glow" x="362" y="294" width="236" height="42" rx="9" fill="none" stroke="#fbbf24" stroke-width="2.5" opacity="0">
-    <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="linear" values="0;0;1;0;0" keyTimes="0.0000;0.4289;0.4456;0.4789;1.0000"/>
-  </rect>
-  <text x="480" y="320" text-anchor="middle">cache</text>
-
-    <circle class="packet" r="5" fill="#34d399" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.0000;0.0778;1"><mpath href="#c0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.0000;0.0778"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#34d399" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.1167;0.1944;1"><mpath href="#u0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.1167;0.1944"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#818cf8" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.2222;0.3000;1"><mpath href="#u0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.2222;0.3000"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#818cf8" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.3000;0.3778;1"><mpath href="#c0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.3000;0.3778"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#34d399" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.1556;0.2333;1"><mpath href="#c1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.1556;0.2333"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#34d399" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.2722;0.3500;1"><mpath href="#u1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.2722;0.3500"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#818cf8" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.3778;0.4556;1"><mpath href="#u1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.3778;0.4556"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#818cf8" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.4556;0.5333;1"><mpath href="#c1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.4556;0.5333"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#34d399" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.3111;0.3889;1"><mpath href="#c2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.3111;0.3889"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#fbbf24" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.4444;0.5222;1"><mpath href="#c2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.4444;0.5222"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#34d399" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.4667;0.5444;1"><mpath href="#c0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.4667;0.5444"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#34d399" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.5833;0.6611;1"><mpath href="#u2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.5833;0.6611"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#818cf8" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.6889;0.7667;1"><mpath href="#u2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.6889;0.7667"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#818cf8" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.7667;0.8444;1"><mpath href="#c0"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.7667;0.8444"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#34d399" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.6222;0.7000;1"><mpath href="#c1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.6222;0.7000"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#34d399" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.7389;0.8167;1"><mpath href="#u3"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.7389;0.8167"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#818cf8" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.8444;0.9222;1"><mpath href="#u3"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.8444;0.9222"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#818cf8" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.9222;1.0000;1"><mpath href="#c1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.9222;1.0000"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#34d399" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.7778;0.8556;1"><mpath href="#c2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.7778;0.8556"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#34d399" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="0;0;1;1" keyTimes="0;0.8944;0.9722;1"><mpath href="#u1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.8944;0.9722"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#818cf8" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.0000;0.0778;1"><mpath href="#u1"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.0000;0.0778"/>
-    </circle>
-
-    <circle class="packet" r="5" fill="#818cf8" opacity="0">
-      <animateMotion dur="9.0s" repeatCount="indefinite" calcMode="linear"
-        keyPoints="1;1;0;0" keyTimes="0;0.0778;0.1556;1"><mpath href="#c2"/></animateMotion>
-      <animate attributeName="opacity" dur="9.0s" repeatCount="indefinite" calcMode="discrete"
-        values="0;1;0" keyTimes="0;0.0778;0.1556"/>
-    </circle>
-  <circle cx="340" cy="400" r="5" fill="#34d399"/>
-  <text class="label" x="352" y="405" style="text-transform:none;letter-spacing:0;font-size:15px">request</text>
-  <circle cx="470" cy="400" r="5" fill="#818cf8"/>
-  <text class="label" x="482" y="405" style="text-transform:none;letter-spacing:0;font-size:15px">response</text>
-  <circle cx="600" cy="400" r="5" fill="#fbbf24"/>
-  <text class="label" x="612" y="405" style="text-transform:none;letter-spacing:0;font-size:15px">from the cache</text>
+  <text class="ui" x="500" y="572">Docker labels, Kubernetes ingresses and the admin API feed the same routes.</text>
 </svg>
