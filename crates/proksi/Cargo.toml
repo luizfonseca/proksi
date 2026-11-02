@@ -50,7 +50,7 @@ bytes = "1.11.1"
 clap = { version = "4.5.53", features = ["derive", "cargo"] }
 dashmap = "6.1.0"
 figment = { version = "0.10.19", features = ["yaml", "env"] }
-hcl-rs = "0.19.4"
+hcl-rs = "0.20.0"
 http = "1.2.0"
 ipnet = "2.11.0"
 nix = { version = "0.31.3", features = ["signal", "hostname", "process", "resource", "feature"] }
