@@ -2,7 +2,7 @@
 
 ## pingora-proxy
 
-Unmodified `pingora-proxy` 0.9.0 from crates.io, with two changes (marked with
+Unmodified `pingora-proxy` 0.9.1 from crates.io, with two changes (marked with
 `proksi:`).
 
 ### Websockets closed after their upgrade (`src/proxy_h1.rs`)
